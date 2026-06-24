@@ -4,7 +4,7 @@ Cursor Agent Skills 集合。
 
 | 技能 | 说明 |
 |------|------|
-| [content-structuring](./content-structuring/SKILL.md) | 内容结构化整理（v5.22） |
+| [content-structuring](./content-structuring/SKILL.md) | 内容结构化整理 |
 | [ai-agent-update-brief](./ai-agent-update-brief/SKILL.md) | AI 编码 Agent / IDE / CLI 工具更新简报生成 |
 
 目录结构：
