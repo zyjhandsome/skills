@@ -6,6 +6,7 @@ Cursor Agent Skills 集合。
 |------|------|
 | [content-structuring](./content-structuring/SKILL.md) | 内容结构化整理 |
 | [ai-agent-update-brief](./ai-agent-update-brief/SKILL.md) | AI 编码 Agent / IDE / CLI 工具更新简报生成 |
+| [github-repo-usage-article](./github-repo-usage-article/SKILL.md) | GitHub 仓库「使用示例」深度文章（房屋风格） |
 | [md2html-lecture](./md2html-lecture/SKILL.md) | 将 content-structuring 的整理稿转换成单文件 HTML 阅读页 |
 
 目录结构：
@@ -18,6 +19,12 @@ content-structuring/
 
 ai-agent-update-brief/
 └── SKILL.md              # AI Agent 工具更新简报规范
+
+github-repo-usage-article/
+├── SKILL.md              # 技能加载器（工作流、五件套、验收闸门、防模板污染）
+├── TEMPLATE.md           # 带注释的文章骨架模板
+├── EXAMPLE.md            # 黄金范例（Codebase Memory MCP 使用示例全文）
+└── fix-beginner-sections.py  # 批量修正常见新手专区 MCP 模板污染
 
 md2html-lecture/
 ├── SKILL.md              # 技能加载器（工作流、MD 格式约定、验收清单）
