@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fix cross-article MCP template contamination in 新手专区 sections."""
+"""Fix cross-article MCP template contamination in legacy 新手专区 sections (deprecated section;存量修稿用)."""
 
 from __future__ import annotations
 
