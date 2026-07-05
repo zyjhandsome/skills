@@ -88,6 +88,44 @@ def paragraphs(lines):
     return ["<p>%s</p>" % inline(b) for b in blocks]
 
 
+def _is_table_separator(line):
+    s = line.strip()
+    return bool(re.fullmatch(r"\|?[\s:|-]+\|?", s)) and "-" in s and "|" in s
+
+
+def render_blocks(lines):
+    """Render a body into <p>, markdown tables, and bullet lists.
+
+    Blocks are separated by blank lines / horizontal rules. Each block is
+    classified: a pipe row followed by a separator row → table; lines all
+    starting with '- '/'* ' → unordered list; otherwise a paragraph.
+    """
+    out, block = [], []
+
+    def flush():
+        if not block:
+            return
+        if len(block) >= 2 and block[0].strip().startswith("|") and _is_table_separator(block[1]):
+            out.append(render_table(block))
+        elif all(re.match(r"^\s*[-*]\s+\S", l) for l in block):
+            items = "".join(
+                "<li>%s</li>" % inline(re.sub(r"^\s*[-*]\s+", "", l).strip())
+                for l in block
+            )
+            out.append("<ul>%s</ul>" % items)
+        else:
+            out.append("<p>%s</p>" % inline(" ".join(l.strip() for l in block)))
+
+    for l in lines:
+        if l.strip() == "" or re.fullmatch(r"-{3,}|\*{3,}|_{3,}", l.strip()):
+            flush()
+            block = []
+        else:
+            block.append(l)
+    flush()
+    return out
+
+
 def blockquote_text(lines, strip_label=False):
     """Join consecutive '> ' lines; optionally drop a leading '**label**：'."""
     qs = [re.sub(r"^>\s?", "", l) for l in lines if l.strip().startswith(">")]
@@ -177,7 +215,7 @@ def render_content_section(title, body):
         out.append(
             '<h3 id="%s-analysis" class="layer-heading layer-analysis">深度解析</h3>' % sid
         )
-        out.append("\n".join(paragraphs(subs["深度解析"])))
+        out.append("\n".join(render_blocks(subs["深度解析"])))
     if "对谈实录" in subs:
         out.append(
             '<h3 id="%s-dialogue" class="layer-heading layer-dialogue">对谈实录</h3>' % sid
