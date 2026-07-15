@@ -1,11 +1,12 @@
 ---
 name: delivery-execute-verify
 description: >-
-  Use when implementing an approved task set, fixing a scoped defect, debugging
-  unexpected behavior, or verifying development work — e.g. “开始实施”, apply
-  tasks.md, TDD, SubAgent waves, fresh tests, code review, mark verified.
-  Ends at verified handoff; does not sync or archive OpenSpec changes — that
-  belongs to OpenSpec archive (`/opsx-archive` / openspec-archive-change).
+  Use when implementing an approved task set or a user-approved scoped defect/debug
+  contract, or when verifying development work — e.g. “开始实施”, “按 tasks.md 执行”,
+  “按已批准范围修复缺陷”, “跑新鲜验证”, or “确认是否已完成”. Applies TDD,
+  SubAgent waves, fresh tests, and code review. Ends at verified handoff; does not
+  sync or archive OpenSpec changes — that belongs to the resolved OpenSpec
+  `archive_change` operation.
 ---
 
 # Delivery Execute Verify
@@ -14,16 +15,16 @@ description: >-
 
 1. No mutation without a recorded explicit user go for this route (including Quick/Debug-Low).
 2. No completion / merge / “done” language while required validation is failing or stale.
-3. Ends at `overall_status: verified` + `archive: deferred_to_openspec` — **never** sync/archive OpenSpec inside this skill.
+3. Ends at `overall_status: verified` + `stage_payload.archive.status: deferred_to_openspec` — **never** sync/archive OpenSpec inside this skill.
 4. Default execute inline; parallel SubAgents only when independence checks pass. Trust diffs and reviews, not SubAgent summaries alone.
-5. Stage end: emit the **required handoff subset**. If chaining is unsupported, tell the user to run OpenSpec archive:「请使用 /opsx-archive」or「请执行 openspec-archive-change」; ask before any commit/PR.
+5. Stage end: emit one complete `delivery-handoff/v1` object, including in-progress, blocked, verified, and end states. If chaining is unsupported, tell the user to run the resolved OpenSpec archive operation only after verified; ask before any commit/PR.
 6. Do **not** invent a parallel `delivery-archive` skill; do **not** paste long system essays into this `SKILL.md`.
 
 ## Overview
 
 Implement only approved scope, keep authoritative tasks synchronized, switch to evidence-driven debugging on failure, and require fresh runtime plus specification evidence before completion.
 
-**Close-out rule:** When the Fresh Verification Gate and review gates pass and all authoritative tasks are complete, this skill ends at `overall_status: verified`. Write verification evidence, offer next steps, and **do not** sync delta specs or archive the OpenSpec change here. Hand archive to OpenSpec `archive` (`/opsx-archive` / `openspec-archive-change`) so its sync summary and confirmations stay intact. Commit / push / PR remain user-gated and are never auto-executed.
+**Close-out rule:** When the Fresh Verification Gate and review gates pass and all authoritative tasks are complete, this skill ends at `overall_status: verified`. Write verification evidence, offer next steps, and **do not** sync delta specs or archive the OpenSpec change here. Hand archive to the resolved OpenSpec `archive_change` operation so the installed version's sync summary and confirmations stay intact. Commit / push / PR remain user-gated and are never auto-executed.
 
 ## Language and artifacts
 
@@ -36,6 +37,7 @@ Implement only approved scope, keep authoritative tasks synchronized, switch to 
 
 Standard/High require:
 
+- a compatible `delivery-handoff/v1` snapshot whose source/artifact revision matches current OpenSpec state;
 - unique state source;
 - approved plan/tasks;
 - route/risk and implementation-gate record;
@@ -44,12 +46,13 @@ Standard/High require:
 
 Quick/Debug require:
 
+- a compatible handoff/contract revision matching the current lightweight change;
 - goal and non-goals;
 - affected/candidate files or symbols;
 - observable acceptance or reproduction;
 - validation command;
 - risk/unknowns;
-- a recorded explicit user go for implementation (contract approval with approver/time).
+- a recorded explicit user go for implementation bound to the current contract/artifact revision (approver/time/revision and accepted warning IDs).
 
 For Debug:
 
@@ -63,9 +66,9 @@ If inputs are missing, return to `delivery-frame-spec` or `delivery-plan-tasks`.
 
 ## Capability Adapters
 
-Codebase Memory MCP, OpenSpec, Superpowers, and all four `delivery-*` skills are **hard prerequisites** of this family, assumed co-installed (cross-skill `../delivery-*/references/…` paths depend on it). Treat any absence as an exception to report, not a normal mode; without OpenSpec only Read-only routes work — there is no substitute Markdown backend.
+Treat the four `delivery-*` skills and shared references as one atomic Family (`../delivery-frame-spec/references/family-contract.md`). OpenSpec is mandatory for mutating routes; Memory and Superpowers are preferred but degradable; SubAgent/worktree and structured UI are optional accelerators. Never invent a substitute Markdown artifact backend.
 
-Expect a `capability_snapshot` in the incoming handoff (format defined in `delivery-frame-spec`, Prerequisite preflight section). Trust nominal values; re-probe only anomalies and capabilities this stage relies on whose state may have changed (index freshness after edits, OpenSpec reachability before verify). If no snapshot arrived, run that preflight once here and record it. Update the snapshot on state changes and include the final state in the handoff.
+Expect compatible `family_version`, `capability_snapshot`, and `capability_bindings` in the incoming handoff. Trust nominal health but resolve/re-probe operations this stage relies on whose binding or state may have changed (index freshness after edits, OpenSpec reachability before verify). If the Family major is unsupported, stop automatic chaining; if bindings are absent, run the shared preflight/adapter discovery once here. Update both health and bindings in the final handoff.
 
 **Preflight failure — fixed 3-line report (Chinese):**
 
@@ -75,19 +78,21 @@ Expect a `capability_snapshot` in the incoming handoff (format defined in `deliv
 下一步请你：<例如：恢复 OpenSpec 后再继续 / 接受 Memory degraded 并记录>
 ```
 
-Naming convention: refer to external capabilities as repo + capability — e.g. Superpowers `systematic-debugging`, OpenSpec `apply` (`/opsx-apply`), Codebase Memory MCP `trace_path`. Inside a subsection titled with the owning repo, bare capability names refer to that repo. Bare skill names elsewhere are reserved for the `delivery-*` family.
+Naming convention: refer to external capabilities as repo + semantic capability — e.g. Superpowers `systematic-debugging`, OpenSpec `apply_tasks`, Codebase Memory MCP `trace_path`. Inside a subsection titled with the owning repo, bare capability names refer to that repo. Bare skill names elsewhere are reserved for the `delivery-*` family.
 
 ### OpenSpec — the only execution backend
 
+Read `../delivery-frame-spec/references/openspec-adapter.md`, reuse or refresh `capability_bindings.openspec`, and resolve `inspect_change`, `apply_tasks`, `continue_artifacts`, `validate_structure`, `verify_coherence`, and `archive_change` as needed.
+
 - OpenSpec tasks are the only task state.
-- Use OpenSpec `apply` (`/opsx-apply`) for implementation and OpenSpec `update` (`/opsx-update`) when artifacts must change.
-- Use OpenSpec `verify` (`/opsx-verify`) for specification–implementation coherence.
-- **Do not** run OpenSpec `archive` (`/opsx-archive` / `openspec-archive-change`) inside this skill, and do not silently sync delta specs into `openspec/specs/`. After verified close-out, set handoff `next_action` to invoke OpenSpec archive (user or agent), preserving its change selection, incomplete-artifact warnings, and sync-summary prompts.
+- Use resolved `apply_tasks` for implementation and `continue_artifacts` when artifacts must change.
+- Use resolved `validate_structure` / `verify_coherence` for specification–implementation coherence.
+- **Do not** invoke `archive_change` inside this skill, and do not silently sync delta specs into the canonical specs area. After verified close-out, set handoff `next_action` to the resolved archive operation, preserving the current OpenSpec version's warnings and confirmation flow.
 - Do not create duplicate Markdown tasks or treat verify as runtime proof.
 
 If the active OpenSpec backend becomes unavailable, stop implementation and verification actions that depend on it. Restore OpenSpec before continuing. Never create emergency Markdown state beside an unresolved OpenSpec change.
 
-Every route arrives with an OpenSpec change created in `delivery-frame-spec`: Quick/Debug-Low a lightweight change (`proposal.md` contract + minimal `tasks.md`), Standard/High a full change. Record verification inside the change (attachment under `spec-driven`, or a managed `verification.md` artifact under a custom schema); never as a second state source. If Quick/Debug-Low work escalates, re-enter `delivery-frame-spec` to upgrade the same change.
+Every route arrives with an OpenSpec change created in `delivery-frame-spec`: Quick/Debug-Low a lightweight change, Standard/High a full change. Use the current schema's resolved slots for tasks and verification evidence; common filenames are documented in the adapter but never override the active schema. If Quick/Debug-Low work escalates, re-enter `delivery-frame-spec` to upgrade the same change.
 
 ### Codebase Memory MCP — impact evidence
 
@@ -124,8 +129,8 @@ If the snapshot marks `superpowers: partial | missing` for a listed skill (excep
 Before editing:
 
 1. Recover state and current task.
-2. Verify the implementation gate and an explicit user go for this route — including Quick and Debug-Low. If no recorded approval exists, stop and obtain a click-first go (see **User decision clicks**) before any mutation.
-3. Confirm exact task scope, files/symbols, validation, and dependencies.
+2. Verify the implementation gate and explicit user go are bound to the current artifact revision — including Quick and Debug-Low. If approval is missing or its revision differs, stop, mark it stale, and obtain a click-first go (see **User decision clicks**) before any mutation.
+3. Confirm exact task scope, files/symbols, validation, dependencies, and that no unresolved alignment decision remains. Route any new uncertainty through **Decision Routing and Alignment Backflow** before mutation.
 4. Inspect full repository status, including staged, unstaged, and untracked files; preserve unrelated user changes.
 5. Check whether planned target files collide with user changes.
 6. Run or confirm the task's baseline validation.
@@ -134,9 +139,9 @@ Before editing:
 
 ## Automatic SubAgent Orchestration
 
-After preflight, choose execution mode from task facts (do not ask the user unless isolation, uncommitted state, cost, or destructive integration requires a decision — then use **User decision clicks**).
+After preflight, resolve and record `capability_bindings.subagents`: availability, actual maximum concurrency, worktree support, and independent-review availability. Unknown concurrency defaults to one/inline; never infer capacity from desired parallelism. Then choose execution mode from task facts (do not ask the user unless isolation, uncommitted state, cost, or destructive integration requires a decision — then use **User decision clicks**).
 
-**Default: inline.** Use sequential fresh SubAgents when multiple well-specified tasks need clean context + two-stage review but shared integration makes parallel unsafe. Use parallel batches only when 2+ tasks are dependency-ready with no overlapping files/shared mutable state, independent validation, and isolated workspaces — never to fill idle Agents.
+**Default: inline.** Use sequential fresh SubAgents when multiple well-specified tasks need clean context + two-stage review but shared integration makes parallel unsafe. Use parallel batches only when 2+ tasks are dependency-ready with no overlapping files/shared mutable state, independent validation, isolated workspaces, and available concurrency slots — never exceed the resolved maximum or parallelize to fill idle Agents.
 
 Build a dependency/file-ownership graph from approved `tasks.md` (Quick/Debug contract = single node unless it defines independent subtasks). Same-file tasks run sequentially; after each wave: review, integrate, validate, then next wave.
 
@@ -150,7 +155,7 @@ Read `references/subagent-orchestration.md` for Chinese templates; `references/s
 
 ## User decision clicks
 
-Whenever this stage needs a fixed-choice user decision (missing implementation go, degradation acceptance, unsafe worktree / colliding user changes, destructive git, mode override), follow `../delivery-frame-spec/references/batch-clarification.md`: click first, typing fallback; no named IDE/tool; gate decisions separate from product waves; independent blockers in one wave; every question needs「推荐：」+「建议：」; never「全部按推荐」; High five facets never become a user quiz. Scope ambiguity returns to `delivery-frame-spec`.
+Whenever this stage needs a fixed-choice user decision (missing implementation go, degradation acceptance, unsafe worktree / colliding user changes, destructive or irreversible external action, cost/isolation-affecting mode override, commit/PR/merge choice), follow `../delivery-frame-spec/references/batch-clarification.md`: click first, typing fallback; no named IDE/tool; gate decisions separate from product waves; independent blockers in one wave; every question needs「推荐：」+「建议：」; multi-question waves never use「全部按推荐」; High five facets never become a user quiz. When a host question tool is available, map the wave through `../delivery-frame-spec/references/question-ui-adapters.md`. Reuse a recorded authorization while its exact operation and conditions remain unchanged. Scope ambiguity returns to `delivery-frame-spec`; design/task ambiguity returns to `delivery-plan-tasks`.
 
 ## Task Loop
 
@@ -177,6 +182,13 @@ Use test-driven development for behavior changes and bug fixes when infrastructu
 - GREEN: minimal implementation, observed passing.
 - REFACTOR: cleanup while all relevant tests remain green.
 
+**Timing guard (required):** Do **not** issue the failing-test edit and the production-code edit in the same parallel tool batch. Sequence must be:
+
+1. write/adjust the failing test only;
+2. run it and **observe** RED (import error / assertion failure for the intended reason);
+3. only then write minimal implementation;
+4. run and observe GREEN.
+
 If this agent wrote implementation before its test, remove that unverified implementation and restart the behavior with RED. Do not delete pre-existing user code.
 
 If TDD is genuinely unsuitable, record why, the approved alternative, and residual coverage gap. Do not install a large framework solely for ceremony.
@@ -197,16 +209,31 @@ reproduce
 
 Do not classify a failure as flaky because a retry passes. Require evidence of nondeterministic infrastructure/timing rather than product behavior.
 
-## Artifact Backflow
+## Decision Routing and Alignment Backflow
 
 | Discovery | Return/update |
 |---|---|
+| fact can be established from code/tests/logs/config | investigate and record evidence in the current task; do not ask the user |
 | behavior or acceptance is wrong/unknown | `delivery-frame-spec`; brief/spec and approval |
-| design/task decomposition is wrong | `delivery-plan-tasks`; plan/tasks/readiness |
-| implementation detail only | current task |
+| design/task decomposition, cost, migration, compatibility, rollback, or operational plan is wrong/unknown | `delivery-plan-tasks`; design/tasks/readiness and implementation gate |
+| low-risk reversible implementation detail inside approved scope | decide in the current task and record rationale; do not ask the user |
+| current-stage authorization/exception is required | ask here through **User decision clicks** and record the decision |
 | impact expands or red-line domain appears | `delivery-frame-spec`; risk/route/gates |
 
-Update authoritative artifacts before continuing code.
+Pause affected mutation before backflow. Update authoritative artifacts before continuing code. Every return to frame/plan must carry this packet in the task/verification record and handoff:
+
+```text
+alignment_backflow:
+  discovery: <what changed or became unknown>
+  evidence: <code/test/log/diff anchors>
+  affected_scope: <requirements/design/tasks/validation affected>
+  invalidated_artifacts: <artifacts and approvals now stale>
+  decision_needed: <one concrete decision or correction required>
+  recommended_resolution: <recommendation + material impact>
+  resume_point: <task/check to resume after re-approval>
+```
+
+Do not make the user reconstruct context. If several independent backflow decisions share the same owner stage, that stage presents them in one wave; dependent decisions remain sequenced.
 
 ### Cascading invalidation and re-entry
 
@@ -265,21 +292,23 @@ Trigger (all required):
 2. Every task in the authoritative `tasks.md` is `- [x]` (or the Quick/Debug lightweight contract is fully done).
 3. Fresh Verification Gate just passed with recorded commands/time/results (runtime/static as required by the plan).
 4. Spec coherence check done (OpenSpec `validate` / verify or equivalent) with no blocking gaps.
-5. Code review gate satisfied for the route risk (independent review when required; recorded degradation only where this skill already allows Low + explicit user acceptance).
+5. Code review gate satisfied for the route risk:
+   - **Medium/High:** an **independent** reviewer (separate SubAgent or human) must return `pass` or `warn` with no CRITICAL; record `code_review.mode: independent` and `independent_review: required_pass|required_warn_accepted`. **`self_fresh_context` never closes Medium/High.**
+   - **Low:** independent preferred; if unavailable, `independent_review: low_accepted` only with explicit user acceptance of residual risk.
 6. No open **blocking** residual (CRITICAL findings, failing required tests, incomplete required tasks).
 
 Then, **in the same turn**:
 
 1. Write/update `verification.md` (or equivalent attachment) under the change with evidence and residuals.
-2. Set handoff `overall_status: verified` and `archive: deferred_to_openspec`.
-3. State clearly that OpenSpec sync/archive is **not** done by this skill; recommended next step is OpenSpec `archive` (`/opsx-archive` / `openspec-archive-change`) for the active change — keep its interactive sync summary and confirms.
+2. Set handoff `stage_payload.overall_status: verified` and `stage_payload.archive.status: deferred_to_openspec`.
+3. State clearly that OpenSpec sync/archive is **not** done by this skill; recommended next step is the resolved `archive_change` operation for the active change — keep its interactive sync summary and confirms.
 4. Offer optional next steps: OpenSpec archive, then commit / PR / merge / keep working tree — **ask** before any git mutation.
 
 **Must not claim verified when:**
 
 - any required validation failed or was not freshly run;
 - any authoritative task remains `- [ ]`;
-- Medium/High independent review is still required and missing;
+- Medium/High independent review is still required and missing, or review `mode` is `self_fresh_context`;
 - OpenSpec backend is `unavailable` when verify depends on it.
 
 **Non-blocking residuals do not block verified close-out** when recorded in verification evidence, for example:
@@ -309,7 +338,7 @@ Only after all gates pass:
 
 1. mark final task/verification state complete;
 2. run the **Verified close-out protocol** (evidence + `verified` handoff) — do **not** sync or archive OpenSpec here;
-3. point `next_action` at OpenSpec `archive` (`/opsx-archive` / `openspec-archive-change`), then offer branch/PR/merge/keep options without destructive cleanup (**ask** before commit/push/merge);
+3. point `next_action` at the resolved OpenSpec `archive_change` operation, then offer branch/PR/merge/keep options without destructive cleanup (**ask** before commit/push/merge);
 4. decide whether to update README, CONTEXT, ADR, Wiki, routing rules, or a reusable Skill (canonical OpenSpec `specs/` updates happen during OpenSpec archive/sync, not here);
 5. explicitly record `no writeback needed` when applicable;
 6. report evidence, residual risks, and that archive is deferred to OpenSpec.
@@ -320,35 +349,18 @@ Never commit, push, or merge merely because a manager requests success wording. 
 
 ## Handoff
 
-Return a compact handoff with the **required subset** (Chinese labels: `references/handoff-template.md`): `stage`, `state_source`, `capability_snapshot`, `gate_status`, `evidence_mode`, `next_action` (stands in for `next_skill`), `required_inputs`, `stop_condition`.
+Before handing off, read `../delivery-frame-spec/references/handoff-contract.md` and emit one complete, strictly parseable `delivery-handoff/v1` JSON object using `references/handoff-template.md`. Put execution, verification, review, archive deferral, and alignment backflow in `stage_payload`. When local Python is available, validate the final object with `../delivery-frame-spec/scripts/validate_handoff.py` before output.
 
-```text
-stage: delivery-execute-verify
-overall_status: in_progress | blocked | verified
-state_source:
-risk/gates:
-capability_snapshot:
-evidence_mode:
-gate_status:
-task_status:
-current_failures_or_blocks:
-artifact_backflow:
-fresh_verification_evidence:
-spec_coherence:
-code_review:
-archive: deferred_to_openspec | not_applicable | blocked(<reason>)
-asset_writeback:
-next_action:
-required_inputs:
-stop_condition:
-```
+Presentation projection is view-only: when supported, show `tasks` from authoritative task state, `review` from fresh verification/code review, and `handoff` for continuation, backflow, or OpenSpec archive. Otherwise render the same information as Markdown. Never project `closed` or an archive path before OpenSpec archive actually completes.
+
+Record `presentation_capability` using the shared contract. For `delivery-ui/v1` or `legacy-v0`, follow `../delivery-frame-spec/references/structured-presentation-adapter.md`; when capability is unknown, use Markdown. Preserve canonical capability enums and map them only in the UI projection.
 
 Rules:
 
 - Do not use optimistic completion language while any required gate is failing or stale.
 - When gates pass, `overall_status` is `verified` and `archive` is `deferred_to_openspec` (unless genuinely N/A); `next_action` must name OpenSpec archive when a change remains active.
 - Pass the final `capability_snapshot` forward; update it if Memory/OpenSpec/Superpowers state changed during execution.
-- If skill chaining is unsupported, stop after this handoff and tell the user exactly:「请使用 /opsx-archive」(or「请执行 openspec-archive-change」); ask before commit/PR.
+- If skill chaining is unsupported, stop after this handoff and tell the user the exact resolved `archive_change` command/operation; if no binding exists, report that instead of guessing an alias. Ask before commit/PR.
 
 ## References
 
@@ -361,6 +373,13 @@ Read as needed:
 - `references/subagent-orchestration.md`
 - `references/subagent-orchestration-test.md`
 - `references/workflow-system-regression-test.md`
+- `scripts/validate_delivery_change.py`
+- `../delivery-frame-spec/scripts/validate_handoff.py`
+- `../delivery-frame-spec/references/family-contract.md`
+- `../delivery-frame-spec/references/openspec-adapter.md`
+- `../delivery-frame-spec/references/handoff-contract.md`
+- `../delivery-frame-spec/references/question-ui-adapters.md`
+- `../delivery-frame-spec/references/structured-presentation-adapter.md`
 
 ## Red Flags
 
@@ -378,9 +397,12 @@ Read as needed:
 - A SubAgent receives vague scope, whole-chat context, or permission to edit global task state.
 - SubAgent summary is trusted without diff, review, and integration validation.
 - A fresh-context self-review is labeled independent.
+- Medium/High `verified` with `code_review.mode: self_fresh_context` or missing `independent_review`.
 - User uncommitted changes are stashed/committed/discarded to make worktrees convenient.
 - Random multi-fix debugging.
 - Scope expands without artifact/risk backflow.
+- Asking the user to resolve product/design ambiguity inside execute, or returning upstream without the evidence-backed `alignment_backflow` packet.
+- Re-asking an unchanged, already recorded authorization.
 - Review is skipped because the release window is closing.
 - Merge recommendation or “done” language before evidence.
 - Syncing delta specs into `openspec/specs/` or moving the change to `openspec/changes/archive/` from this skill (bypasses OpenSpec archive).

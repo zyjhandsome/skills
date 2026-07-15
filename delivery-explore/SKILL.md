@@ -3,9 +3,10 @@ name: delivery-explore
 description: >-
   Use when product direction is open, the user wants feature/idea suggestions,
   opportunity/tradeoff maps, or codebase-grounded exploration before committing
-  to a change — e.g. “还想加啥/给建议/机会地图/what's missing”. Evidence-first via
-  Codebase Memory MCP; does not implement or approve requirements. Hands off only
-  to delivery-frame-spec — never to plan or execute.
+  to a change — e.g. “还想加啥/给建议/机会地图/what's missing”, “探索产品方向”,
+  “做机会或权衡地图”, or “基于代码看看还能做什么”. Evidence-first via Codebase
+  Memory MCP; does not implement or approve requirements. Hands off only to
+  delivery-frame-spec — never to plan or execute.
 ---
 
 # Delivery Explore
@@ -15,7 +16,7 @@ description: >-
 1. No implementation code; no formal OpenSpec delivery state; the map is never an approved spec.
 2. Memory-first evidence; if Memory is down/stale, degrade and say so (`evidence_mode: degraded`).
 3. Next skill only: `delivery-frame-spec` (or end). Never hand off to plan or execute.
-4. Stage end: emit the **required handoff subset** (see `references/handoff-template.md`). If skill chaining is unsupported, tell the user to say「请使用 delivery-frame-spec」.
+4. Stage end: emit one complete `delivery-handoff/v1` object (see `references/handoff-template.md`), including terminal/end states. If skill chaining is unsupported, tell the user to say「请使用 delivery-frame-spec」when a transition is allowed.
 5. Do **not** add a fifth user-visible router skill; do **not** paste long system essays into this `SKILL.md`.
 
 ## Overview
@@ -61,13 +62,13 @@ Do **not** use this skill when:
 
 ## Capability Adapters
 
-Use capabilities by role; never make them competing workflow owners. Codebase Memory MCP, OpenSpec, Superpowers, and all four `delivery-*` skills are **hard prerequisites** of this family, assumed co-installed (cross-skill `../delivery-*/references/…` paths depend on it). Treat any absence as an exception to report, not a normal mode; without OpenSpec only Read-only routes work — there is no substitute Markdown backend.
+Use capabilities by role; never make them competing workflow owners. Treat the four `delivery-*` skills and shared references as one atomic Family (`../delivery-frame-spec/references/family-contract.md`). OpenSpec is mandatory for mutating routes; Memory and Superpowers are preferred but degradable; SubAgent/worktree and structured UI are optional accelerators. Never invent a substitute Markdown artifact backend.
 
-Naming convention: refer to external capabilities as repo + capability — e.g. Superpowers `brainstorming`, OpenSpec `explore` (`/opsx-explore`), Codebase Memory MCP `get_architecture`. Inside a subsection titled with the owning repo, bare capability names refer to that repo. Bare skill names elsewhere are reserved for the `delivery-*` family.
+Naming convention: refer to external capabilities as repo + semantic capability — e.g. Superpowers `brainstorming`, OpenSpec `inspect_change`, Codebase Memory MCP `get_architecture`. Record actual aliases in `capability_bindings`; bare skill names elsewhere are reserved for the `delivery-*` family.
 
 ### Prerequisite preflight
 
-When this skill starts the family (usual case), probe the three prerequisites once and record a `capability_snapshot` (format and exception rules defined in `delivery-frame-spec`, Prerequisite preflight section):
+When this skill starts the family (usual case), probe the three external capabilities once and record `family_version`, a `capability_snapshot`, and only the `capability_bindings` actually resolved (formats defined in `delivery-frame-spec` and `../delivery-frame-spec/references/family-contract.md`):
 
 ```text
 capability_snapshot:
@@ -101,13 +102,13 @@ This is **code memory**, not a product decision engine and not an artifact store
 
 ### OpenSpec — read-only context only
 
-If the repo uses OpenSpec, you may **read** active changes and main specs to avoid duplicate or conflicting suggestions. Do not create a change, do not rewrite proposal/design/tasks as the explore outcome, and do not become a second state source.
+If the repo uses OpenSpec, resolve only the required read/status capability through `../delivery-frame-spec/references/openspec-adapter.md`, then **read** active changes and main specs to avoid duplicate or conflicting suggestions. Do not create a change, do not rewrite proposal/design/tasks as the explore outcome, and do not become a second state source.
 
 Optional: if the user explicitly asks to keep notes, offer a disposable exploration note path they choose; default is **inline only**. Capturing a formal change belongs to `delivery-frame-spec` after they pick a direction.
 
 ### OpenSpec `explore` / Superpowers `brainstorming` — method reuse, not owners
 
-Reuse useful stance from OpenSpec `explore` (the `/opsx-explore` workflow: curious, visual, multi-thread OK) and disciplines from Superpowers `brainstorming` (2–3 options, tradeoffs, recommendation). Do **not** invoke them as parallel workflow owners. Do **not** write Superpowers design docs under `docs/superpowers/specs/` from this skill. This skill owns the delivery-family exploration stage.
+Reuse useful stance from a resolved OpenSpec exploration/read capability and disciplines from the resolved Superpowers `brainstorming` method (2–3 options, tradeoffs, recommendation). Do **not** invoke them as parallel workflow owners or write their native design artifacts from this skill. This skill owns the delivery-family exploration stage.
 
 ## Start Here
 
@@ -117,18 +118,42 @@ Reuse useful stance from OpenSpec `explore` (the `/opsx-explore` workflow: curio
 4. Separate **Fact / Inference / Decision** on every material claim.
 5. Produce an exploration map (see Output Contract).
 6. Help the user select or refine **one** candidate direction.
-7. Hand off to `delivery-frame-spec` with the compact block, or end if they only wanted advice.
+7. Run the **Direction Alignment Exit Check** below.
+8. Emit the explore `delivery-handoff/v1` (validate with `validate_handoff.py`). Only after this handoff may framing create an OpenSpec change.
+9. Hand off to `delivery-frame-spec`, or end if they only wanted advice.
+
+### Checkpoint — no formal change yet
+
+**Before the explore handoff is emitted and validated, it is forbidden to:**
+
+- call OpenSpec `create_change` / `openspec new change` / equivalent;
+- write `openspec/changes/<id>/` proposal, design, specs, or tasks as delivery state;
+- invent a parallel Markdown state file for the exploration outcome.
+
+Read-only OpenSpec `list` / `show` / main specs is allowed. Creating the change belongs exclusively to `delivery-frame-spec` after direction selection.
 
 ## Stance
 
 - Evidence before opinions.
 - Multiple interesting directions are allowed; do not funnel into a single interrogative path too early.
 - Prefer diagrams/tables when they clarify architecture or tradeoffs.
-- When product choices become blocking for *which* direction to pursue, use **batch clarification** aligned with `delivery-frame-spec` (`../delivery-frame-spec/references/batch-clarification.md`; click first, typing fallback; no named IDE/agent/tool):
+- When product choices become blocking for *which* direction to pursue, use **batch clarification** aligned with `delivery-frame-spec` (`../delivery-frame-spec/references/batch-clarification.md`; click first, typing fallback; no named IDE/agent/tool). When a host question tool is available, map the wave through `../delivery-frame-spec/references/question-ui-adapters.md`:
   1. Show the candidate directions (map). Each fixed-choice question must include a recommendation (`推荐：…` + recommended option prefixed with「建议：」+ one-sentence rationale). Recommendation ≠ decision.
-  2. Direction selection is usually a **single** question after the map. If multiple **independent** forks remain, list those forks together in one wave. The user must select — **no**「按推荐方向」/ bulk-accept shortcut.
+  2. Direction selection is usually a **single** question after the map. If multiple **independent** forks remain, list those forks together in one wave. For a single question, an unambiguous「按推荐方向」counts as selecting that direction; a multi-fork wave still requires per-item choices.
   3. Prefer click/select UI when available; otherwise Markdown typing fallback (multi-answer codes allowed for a multi-fork wave). Do not switch modes solely to obtain a choice UI.
 - Gate asks (specification / implementation) are owned by `delivery-frame-spec` / `delivery-plan-tasks` and use the **single go** shape in `batch-clarification.md`; explore only uses batch clarification for **direction** forks, not High five-facet quizzes.
+
+## Direction Alignment Exit Check
+
+Before handing a selected direction to `delivery-frame-spec`, verify:
+
+- `chosen_direction` states one candidate in the user's terms and names the problem/value it targets;
+- every unresolved fork that could change the chosen direction is decided; independent forks followed batch clarification;
+- `non_goals` captures known boundaries, or explicitly says which boundaries remain for framing;
+- evidence-findable gaps were investigated; remaining uncertainty is listed under `unknowns` without inventing decisions;
+- `direction_alignment` is `selected`. If a direction-changing fork remains, use `needs_choice`, remain in explore, and open the next clarification wave; if the user only wanted advice, end without framing.
+
+This is candidate-direction alignment, not specification approval. Do not ask frame-owned scope, acceptance, or irreversible product questions merely to make explore look complete; pass them as `unknowns`.
 
 ## Output Contract
 
@@ -137,6 +162,7 @@ Default: keep the map **inline** in the conversation. Structure:
 ```text
 ## 探索结论（非正式）
 证据模式：full | degraded
+方向对齐状态：selected | needs_choice
 代码锚点：<paths / symbols / clusters>
 
 ### 方向清单
@@ -181,34 +207,26 @@ If during `delivery-frame-spec` the direction is still genuinely open, that skil
 
 ## Handoff
 
-Return a compact handoff with the **required subset** (Chinese labels: `references/handoff-template.md`): `stage`, `state_source`, `capability_snapshot`, `gate_status`, `evidence_mode`, `next_skill`, `required_inputs`, `stop_condition`.
+Before handing off, read `../delivery-frame-spec/references/handoff-contract.md` and emit one complete, strictly parseable `delivery-handoff/v1` JSON object using `references/handoff-template.md`. Put direction-specific fields in `stage_payload`; keep the common contract canonical. When local Python is available, validate the final object with `../delivery-frame-spec/scripts/validate_handoff.py` before output.
 
-```text
-stage: delivery-explore
-state_source: none (exploration is informal)
-evidence_mode: full | degraded
-capability_snapshot:
-gate_status: n/a (informal)
-chosen_direction:
-non_goals:
-code_anchors:
-risk_signal:
-unknowns:
-next_skill: delivery-frame-spec
-required_inputs: user confirms the chosen direction as this change's goal (or a revised goal statement)
-stop_condition: user only wanted advice, or declines framing
-```
+Presentation projection is view-only: when the host supports structured delivery rendering, show `pipeline` with explore active, then show `handoff` only after `direction_alignment: selected`. Otherwise render the same fields as Markdown. Never let a presentation view create state or imply approval.
+
+Record `presentation_capability` once using the shared contract. When its mode is `delivery-ui/v1` or `legacy-v0`, read `../delivery-frame-spec/references/structured-presentation-adapter.md`; when unknown, use Markdown. Keep `capability_snapshot` canonical and apply compatibility mapping only at the presentation boundary.
 
 If automatic skill loading is unsupported, stop after this handoff and tell the user exactly:「请使用 delivery-frame-spec」.
 
+Set `next_skill: delivery-frame-spec` only when `direction_alignment: selected`. `needs_choice` is not a frame handoff state: continue explore clarification, or end if the user declines to select a direction.
+
 ## Red Flags
 
-- Creating OpenSpec/Markdown delivery state from explore.
+- Creating OpenSpec/Markdown delivery state from explore — including calling `create_change` before the explore handoff is emitted/validated.
+- Filling both `next_skill` and `next_action` with non-null values in the explore handoff.
 - Handing off to plan or execute.
 - Treating Memory clusters/hotspots as product priorities without user intent.
 - Writing implementation, scaffolds, or “quick spikes” that mutate the repo.
 - Running unbounded repo-wide dumps instead of targeted Memory/source queries.
 - Letting OpenSpec `explore` or Superpowers `brainstorming` redefine scope or own artifacts.
 - Presenting the exploration map as an approved spec.
+- Marking `direction_alignment: selected` while a direction-changing fork remains unresolved.
 
 Any red flag: stop, correct course, and remain in explore or hand off cleanly to `delivery-frame-spec` without carrying false approval.

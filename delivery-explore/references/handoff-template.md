@@ -1,45 +1,96 @@
 # 交接摘要模板
 
-## 必填子集（四阶段共用）
+输出前读取 `../../delivery-frame-spec/references/handoff-contract.md`。交接必须是一个可严格解析的 `delivery-handoff/v1` JSON 对象；下列模板只填写已经存在的事实。
 
-下列字段每阶段交接都必须出现（explore 的闸门可写 `n/a (informal)`）：
+```delivery-handoff
+{
+  "schema_version": "delivery-handoff/v1",
+  "family_version": "delivery-family/1.1",
+  "type": "delivery-handoff",
+  "handoff_id": "<unique-id>",
+  "generated_at": "<RFC3339 timestamp>",
+  "stage": "delivery-explore",
+  "source_revision": {
+    "repo_head": null,
+    "artifact_revision": null,
+    "state_observed_at": "<RFC3339 timestamp>"
+  },
+  "state_source": {
+    "kind": "none",
+    "label": "none（探索非正式）",
+    "anchor": null
+  },
+  "capability_snapshot": {
+    "memory": "<ok|stale-index|down>",
+    "openspec": "<initialized|cli-only|unavailable>",
+    "superpowers": "<loaded|partial(<missing>)|missing>"
+  },
+  "capability_bindings": {
+    "openspec": {},
+    "memory": {},
+    "superpowers": {},
+    "subagents": {}
+  },
+  "presentation_capability": {
+    "mode": "<delivery-ui/v1|legacy-v0|markdown>",
+    "source": "<host-declared|detected|unknown>"
+  },
+  "gate_status": {
+    "status": "n/a",
+    "summary": "探索非正式，无规格闸门",
+    "evidence": [],
+    "approved_by": null,
+    "approved_at": null,
+    "binds_to_revision": null,
+    "accepted_warning_ids": []
+  },
+  "evidence_mode": "<full|degraded>",
+  "next_skill": "delivery-frame-spec",
+  "next_action": null,
+  "required_inputs": [
+    "用户确认将该方向作为本次变更目标，或提供修订后的目标表述"
+  ],
+  "stop_condition": "",
+  "stage_payload": {
+    "direction_alignment": "selected",
+    "chosen_direction": "<已选方向及目标价值>",
+    "non_goals": [],
+    "code_anchors": [],
+    "risk_signal": "<none|standard-likely|high-likely>",
+    "unknowns": []
+  },
+  "presentation": {
+    "schema": "delivery-presentation/v1",
+    "from_task": "探索·方向对齐",
+    "to_task": "定框·路由与需求边界",
+    "summary": "<方向状态 + 已选方向>",
+    "evidence": [],
+    "continue_prompt": "请使用 delivery-frame-spec"
+  }
+}
+```
 
-| 机读键 | 中文标签 | 说明 |
-|---|---|---|
-| `stage` | 当前阶段 | 本文件为 `delivery-explore` |
-| `state_source` | 状态源 | explore 恒为 `none（探索非正式）` |
-| `capability_snapshot` | 能力快照 | `memory` / `openspec` / `superpowers` |
-| `gate_status` | 闸门状态 | explore：`n/a (informal)` |
-| `evidence_mode` | 证据模式 | `full` \| `degraded` |
-| `next_skill` | 下一技能标识 | 仅 `delivery-frame-spec`（或 end） |
-| `required_inputs` | 下一阶段必需输入 | 用户确认方向等 |
-| `stop_condition` | 停止条件 | 仅建议 / 拒绝 framing |
+**互斥（强制）：** `next_skill` 与 `next_action` **最多一个非 null**。Explore 成功交接只填 `next_skill`，**必须** `next_action: null`。结束/未选方向时两者皆 `null`。切勿把「下一步说明」写进 `next_action`。
 
-## 模板
+成功路径填写示例（`direction_alignment: selected`）：
 
-```text
-当前阶段：delivery-explore
-状态源：none（探索非正式）
-证据模式：full | degraded
-能力快照（capability_snapshot）：
-  memory: ok | stale-index | down
-  openspec: initialized | cli-only | unavailable
-  superpowers: loaded | partial(<缺失项>) | missing
-闸门状态：n/a (informal)
-已选方向：
-非目标：
-代码锚点：
-风险信号提示：none | standard-likely | high-likely
-未知项：
-下一技能标识：delivery-frame-spec
-下一阶段必需输入：用户确认将该方向作为本次变更目标（或修订后的目标表述）
-停止条件：用户仅需建议、或拒绝进入 framing
-宿主续接话术（链式加载不可用时原样提示用户）：请使用 delivery-frame-spec
+```json
+"next_skill": "delivery-frame-spec",
+"next_action": null
+```
+
+未选方向 / 仅建议结束：
+
+```json
+"next_skill": null,
+"next_action": null
 ```
 
 规则：
 
-- 状态源恒为 `none`：探索不创建正式状态源。
-- 能力快照的键与枚举值保持英文（机器可读）；explore 作为家族入口时首测生成，`delivery-frame-spec` 默认复用其中的正常值，仅重测异常项。
-- 风险信号只是给 `delivery-frame-spec` 的路由线索：`none` → 倾向 Quick/Standard；`standard-likely` → 倾向 Standard（默认风险 Medium）；`high-likely` → 倾向 High。framing 阶段基于证据重新定路由与风险，explore 不得自批。
-- 宿主不支持自动技能加载时，输出本交接块后停止，并**原样**提示用户：「请使用 delivery-frame-spec」。
+- 状态源恒为 `none`：探索不创建正式状态源。**在本 handoff 输出之前，禁止调用 OpenSpec `create_change` / 写入 `openspec/changes/`。**
+- 只有会改变方向选择的分叉均已决定时才写 `direction_alignment: selected` 并把 `next_skill` 设为 `delivery-frame-spec`（同时 `next_action: null`）。`needs_choice` 或结束状态保持 `next_skill: null`，并填写真实 `stop_condition` / `presentation`。
+- 风险信号只是 Frame 的路由线索；Frame 必须基于新鲜证据重新定级。
+- 根据 `presentation_capability.mode` 选择 `delivery-ui/v1`、`legacy-v0` 或 Markdown；投影规则见 `../../delivery-frame-spec/references/structured-presentation-adapter.md`。
+- 输出前用 `python ../../delivery-frame-spec/scripts/validate_handoff.py <handoff.json>` 校验；失败不得交接。
+- 链式加载不可用时，输出交接后停止，并原样提示用户：「请使用 delivery-frame-spec」。

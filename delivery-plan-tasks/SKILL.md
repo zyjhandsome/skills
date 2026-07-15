@@ -3,10 +3,10 @@ name: delivery-plan-tasks
 description: >-
   Use when an approved software requirement needs a technical design, executable
   task breakdown, implementation-readiness review, or implementation gate —
-  e.g. “写设计与任务/拆分实现任务”, after delivery-frame-spec approved Standard/High
-  (or Debug-Medium/High) scope, write design.md/tasks.md, vertical slices,
-  validation matrix. Does not implement. Hands off to delivery-execute-verify
-  after explicit user go.
+  e.g. “写技术方案”, “拆分实现任务”, “做实现就绪审查”, or “过实现闸门”, after
+  delivery-frame-spec approved Standard/High (or Debug-Medium/High) scope. Writes
+  design.md/tasks.md, vertical slices, and a validation matrix. Does not implement.
+  Hands off to delivery-execute-verify after explicit user go.
 ---
 
 # Delivery Plan Tasks
@@ -17,7 +17,7 @@ description: >-
 2. OpenSpec `design.md` / `tasks.md` are the only plan/tasks truth — no parallel Markdown copies.
 3. Vertical behavior slices with real paths/symbols and falsifiable validation; no horizontal “all types → all backend → tests last.”
 4. Implementation go = **one** user ask (High: same ask + cost/risk/rollback summary; five facets Agent-internal).
-5. Stage end: emit the **required handoff subset**. If chaining is unsupported, tell the user「请使用 delivery-execute-verify」.
+5. Stage end: emit one complete `delivery-handoff/v1` object, including blocked/end states. If chaining is unsupported, tell the user「请使用 delivery-execute-verify」only after the implementation gate permits transition.
 6. Do **not** add a fifth user-visible router skill; do **not** paste long system essays into this `SKILL.md`.
 
 ## Overview
@@ -37,6 +37,7 @@ Turn an approved requirement into one trustworthy technical plan and executable 
 
 Require:
 
+- a compatible `delivery-handoff/v1` transport snapshot whose `source_revision` still matches current state;
 - approved brief/spec or equivalent;
 - route/risk and specification-gate record;
 - current code facts and project constraints;
@@ -47,9 +48,9 @@ If the spec has blocking ambiguity, code facts are stale, or planning would chan
 
 ## Capability Adapters
 
-Codebase Memory MCP, OpenSpec, Superpowers, and all four `delivery-*` skills are **hard prerequisites** of this family, assumed co-installed (cross-skill `../delivery-*/references/…` paths depend on it). Treat any absence as an exception to report, not a normal mode; without OpenSpec only Read-only routes work — there is no substitute Markdown backend.
+Treat the four `delivery-*` skills and shared references as one atomic Family (`../delivery-frame-spec/references/family-contract.md`). OpenSpec is mandatory for mutating routes; Memory and Superpowers are preferred but degradable; SubAgent/worktree and structured UI are optional accelerators. Never invent a substitute Markdown artifact backend.
 
-Expect a `capability_snapshot` in the incoming handoff (format defined in `delivery-frame-spec`, Prerequisite preflight section). Trust nominal values; re-probe only anomalies and capabilities this stage relies on whose state may have changed (e.g. index freshness after a rebase). If no snapshot arrived, run that preflight once here and record it. Update the snapshot on state changes and pass it forward.
+Expect compatible `family_version`, `capability_snapshot`, and `capability_bindings` in the incoming handoff. Trust nominal health but resolve/re-probe operations this stage relies on whose binding or state may have changed. If the Family major is unsupported, stop automatic chaining; if bindings are absent, run the shared preflight/adapter discovery once here. Update both health and bindings on change.
 
 **Preflight failure — fixed 3-line report (Chinese):**
 
@@ -59,7 +60,7 @@ Expect a `capability_snapshot` in the incoming handoff (format defined in `deliv
 下一步请你：<例如：恢复 openspec CLI / 刷新 Memory 索引>
 ```
 
-Naming convention: refer to external capabilities as repo + capability — e.g. Superpowers `writing-plans`, OpenSpec `apply` (`/opsx-apply`), Codebase Memory MCP `trace_path`. Inside a subsection titled with the owning repo, bare capability names refer to that repo. Bare skill names elsewhere are reserved for the `delivery-*` family.
+Naming convention: refer to external capabilities as repo + semantic capability — e.g. Superpowers `writing-plans`, OpenSpec `continue_artifacts`, Codebase Memory MCP `trace_path`. Record actual aliases in `capability_bindings`; bare skill names elsewhere are reserved for the `delivery-*` family.
 
 ### Codebase Memory MCP — path and impact verification
 
@@ -78,16 +79,16 @@ This is code memory (evidence only). It is never the plan/tasks backend or state
 
 ### OpenSpec — the only artifact backend
 
-OpenSpec design/tasks are the only planning truth:
+Read `../delivery-frame-spec/references/openspec-adapter.md`, reuse or refresh `capability_bindings.openspec`, and resolve the current schema plus `inspect_change`, `continue_artifacts`, and `validate_structure` operations. OpenSpec design/tasks remain the only planning truth:
 
 - recover the active change and dependencies;
 - check other active changes for overlapping specs, files, or capabilities; sequence the work or report the conflict instead of planning over it;
-- generate/update design and tasks in that change (OpenSpec `continue`/`update`, host command `/opsx-continue` / `/opsx-update`);
-- run strict structural validation where supported (OpenSpec `validate`);
+- generate/update design and tasks through the resolved `continue_artifacts` operation;
+- run the resolved `validate_structure` operation where supported;
 - keep requirement/scenario traceability;
 - do not create a second Markdown plan/tasks set.
 
-This skill is normally reached on the Standard/High route (including Debug-Medium/High mutation) with an active OpenSpec change created in `delivery-frame-spec`. Map the plan to `design.md` and tasks to `tasks.md` in that change; do not create parallel `plan.md`/`tasks.md` beside the OpenSpec artifacts.
+This skill is normally reached on the Standard/High route with an active OpenSpec change created in `delivery-frame-spec`. Map plan/tasks to the slots reported by the current schema; `design.md` / `tasks.md` are common defaults, not an instruction to create parallel files when the schema differs.
 
 If the OpenSpec backend becomes unavailable, stop. Restore OpenSpec before continuing; never improvise a duplicate backend.
 
@@ -116,15 +117,31 @@ Update the existing brief **Code Facts** block (and Evidence Table) or record a 
 
 1. Restate approved goals, non-goals, risk, and constraints.
 2. Confirm real integration points and validation infrastructure.
-3. Present 2–3 viable approaches when trade-offs are material.
-4. Compare compatibility, reversibility, complexity, risk, testability, and migration.
-5. Recommend one approach with evidence (also stamp the recommended option with「建议：」when asking the user to pick).
-6. Define data/control flow, interfaces, failure handling, observability, migration, and rollback as applicable.
-7. Build a requirement → design → task → validation traceability matrix.
-8. Split implementation into ordered vertical tasks.
-9. Run readiness review.
+3. Inventory material decision points and classify authority using **Technical Decision Authority** below.
+4. Present 2–3 viable approaches only when the trade-off is material; do not manufacture alternatives for agent-owned details.
+5. Compare compatibility, reversibility, complexity, risk, testability, migration, operations, and cost as applicable.
+6. Recommend one approach with evidence. Decide and record agent-owned choices; ask the user only for user-required choices.
+7. Define data/control flow, interfaces, failure handling, observability, migration, and rollback as applicable.
+8. Build a requirement → design → task → validation traceability matrix.
+9. Split implementation into ordered vertical tasks.
+10. Run readiness review.
 
 Do not manufacture alternatives for trivial choices. Do not skip alternatives for expensive or irreversible choices.
+
+## Technical Decision Authority
+
+Classify every planning uncertainty before asking the user:
+
+| Class | Action |
+|---|---|
+| Evidence-findable fact | Inspect code/tests/config/approved artifacts; update Code Facts; do not ask the user |
+| Agent-owned implementation detail | If inside approved behavior, low-risk, reversible, and not material to user constraints, decide with evidence and record the rationale in `design.md` |
+| Spec-affecting product decision | If it changes behavior, scope, acceptance, product risk, or an irreversible product boundary, return to `delivery-frame-spec` |
+| User-required technical decision | If it materially changes cost/deployment, migration/compatibility, rollback/operations, security posture, an irreversible technical choice, or an explicit user constraint, record it in the **Technical Decision Inventory** and ask the user |
+
+Before any user-required plan ask, show the complete current inventory. Batch all independent blockers in one wave; hold dependent choices until their premise is decided. Record every result in `design.md`. Reuse recorded decisions while the authoritative artifacts and conditions remain unchanged.
+
+Before readiness, run the shared **Clarification completeness sweep** limited to plan-owned decision dimensions and record the result in `design.md` / readiness. Product discoveries backflow to frame; do not reopen them as technical choices.
 
 ## Artifact Rules
 
@@ -206,7 +223,16 @@ Do not parallelize merely to keep three agents busy.
 
 ## Readiness Review
 
-Before the readiness checklist below, run `../delivery-execute-verify/references/artifact-gate-checks.md` items G1–G3 (and G5 if Medium/High). Any FAIL is a **阻塞项**.
+Before the readiness checklist below, run `../delivery-execute-verify/references/artifact-gate-checks.md` items G1–G3, **G8**, and G5 when Medium/High. Any FAIL is a **阻塞项**.
+
+### Active-change path overlap (G8)
+
+Before readiness pass:
+
+1. List other active OpenSpec changes (`openspec list` or equivalent).
+2. Collect this change's allowed paths/symbols from `tasks.md` / design.
+3. Collect overlapping paths from other changes' `tasks.md` / proposal Impact sections when available.
+4. If any path/symbol overlaps → record a **阻塞项** unless the user explicitly accepts the sequencing risk and the acceptance is listed in the implementation-gate summary (`accepted_warning_ids` or equivalent). Do not silently plan parallel edits on the same files.
 
 Human-facing findings use the Chinese labels in `references/readiness-review.md`:
 
@@ -221,52 +247,43 @@ Check:
 1. approved spec coverage;
 2. current paths/symbols and blast radius;
 3. no scope creep;
-4. failure and edge behavior;
-5. compatibility, migration, rollback, security, performance, observability as applicable;
-6. vertical task size and ordering;
-7. executable, falsifiable validation;
-8. parallel ownership and integration conflicts;
-9. no unresolved overlap with other active changes (shared specs, files, or capabilities);
-10. artifact backend structural validation.
+4. no unresolved user-required technical decision; agent-owned decisions have rationale and spec-affecting decisions have completed frame backflow;
+5. the plan-owned clarification completeness sweep is recorded with no remaining material blocker;
+6. failure and edge behavior;
+7. compatibility, migration, rollback, security, performance, observability as applicable;
+8. vertical task size and ordering;
+9. executable, falsifiable validation;
+10. parallel ownership and integration conflicts;
+11. no unresolved overlap with other active changes (shared specs, files, or capabilities);
+12. artifact backend structural validation.
 
 ## Implementation Gate
 
 Every route requires an explicit user go before implementation; artifact completeness alone never authorizes it.
 
 - Quick: lightweight contract is complete **and the user explicitly approved implementation** (usually recorded in `delivery-frame-spec`; this skill is usually skipped).
-- Medium: no blocking finding, warnings resolved/accepted, user confirms implementation (single go ask).
-- High: no blocking finding; Agent **internally** verifies design, tasks, rollback, security, and validation and records that checklist in the state source; user confirms implementation with the **same single go ask** as Medium, plus a short cost/risk/rollback summary. Do **not** quiz the user facet-by-facet.
+- Medium: no blocking finding; warnings are resolved or explicitly listed in the visible go summary for acceptance; user confirms implementation (single go ask).
+- High: no blocking finding; warnings are resolved or explicitly listed in the visible go summary; Agent **internally** verifies design, tasks, rollback, security, and validation and records that checklist in the state source; user confirms implementation with the **same single go ask** as Medium, plus a short cost/risk/rollback summary. Do **not** quiz the user facet-by-facet.
 
-Persist the gate (approver/time; High also: internal five-facet checklist result) in the unique state source.
+Persist the gate in the unique state source with approver, time, current artifact revision, explicitly accepted warning IDs, and—on High—the internal five-facet checklist result. Any artifact revision change invalidates that gate until readiness and approval are re-established.
+
+An implementation go may accept only warning items explicitly shown in the gate summary. Hidden, newly discovered, or materially changed warnings remain unresolved and invalidate the go.
 
 ### Gate and approach clarification (batch clarification)
 
-Fixed-choice moments in this stage use the same family rule as `delivery-frame-spec`: follow `../delivery-frame-spec/references/batch-clarification.md` (click first, typing fallback; platform-agnostic). **Only explicit per-item choice** — never「全部按推荐」or bulk-accept. **Every fixed-choice question must include a recommendation** (`推荐：…` +「建议：」on the recommended option + rationale). Do not switch modes solely to obtain a choice UI. Keep implementation gates separate from product-clarification waves.
+Fixed-choice moments in this stage use the same family rule as `delivery-frame-spec`: follow `../delivery-frame-spec/references/batch-clarification.md` (click first, typing fallback; platform-agnostic). When a host question tool is available, map the wave through `../delivery-frame-spec/references/question-ui-adapters.md`. **Only explicit per-item choice** — never「全部按推荐」or bulk-accept. **Every fixed-choice question must include a recommendation** (`推荐：…` +「建议：」on the recommended option + rationale). Do not switch modes solely to obtain a choice UI. Keep implementation gates separate from product-clarification waves.
 
-**Approach pick** (Design Process steps 3–5, when trade-offs are material): after showing 2–3 approaches with tradeoffs inline, ask one fixed-choice question whose options are the approaches (impact on each label; recommended option prefixed with「建议：」; prompt states `推荐：…` + rationale; optional escape「其他（我来说明）」). The user must select; do not auto-apply the recommendation.
+**Technical decision wave** (Design Process steps 3–6): ask only decisions classified as user-required. Show the complete current Technical Decision Inventory, then ask all independent blockers in one wave using the shared protocol; dependent choices wait for the next wave. If only one approach-level decision exists, one fixed-choice question is enough. Agent-owned details are decided and recorded without user interruption; spec-affecting decisions return to frame.
 
-**Implementation go — Medium and High:** one fixed-choice question only (see `batch-clarification.md` **Gate ask shape**). Options: `建议：开始实施` / `先不实施` / `有修改（说明）`. High must include a short plain-language summary of scope, cost/risk, rollback, and next skill/task id. If any internal High facet fails readiness, do **not** ask for go — fix artifacts first. User「开始实施」approves the go package after Agent self-check; it is not bulk-accept of unresolved product questions.
+**Implementation go — Medium and High:** one fixed-choice question only (see `batch-clarification.md` **Gate ask shape**). Options: `建议：开始实施` / `先不实施` / `有修改（说明）`. Include every warning proposed for acceptance in the visible summary; High also includes scope, cost/risk, rollback, and next skill/task id. If any internal High facet or user-required technical decision fails readiness, do **not** ask for go — fix artifacts first. User「开始实施」approves only the displayed go package and accepts only its listed warnings; it is not acceptance of hidden warnings or unresolved decisions.
 
 ## Handoff
 
-Return a compact handoff with the **required subset** (Chinese labels: `references/handoff-template.md`): `stage`, `state_source`, `capability_snapshot`, `gate_status`, `evidence_mode`, `next_skill`, `required_inputs`, `stop_condition`.
+Before handing off, read `../delivery-frame-spec/references/handoff-contract.md` and emit one complete, strictly parseable `delivery-handoff/v1` JSON object using `references/handoff-template.md`. Put plan/tasks, decisions, traceability, readiness, validation, gates, and parallel ownership in `stage_payload`. When local Python is available, validate the final object with `../delivery-frame-spec/scripts/validate_handoff.py` before output.
 
-```text
-stage: delivery-plan-tasks
-state_source:
-capability_snapshot:
-evidence_mode:
-gate_status:
-plan/tasks:
-traceability:
-readiness_result:
-validation_plan:
-risk/gates:
-parallel_ownership:
-next_skill: delivery-execute-verify
-required_inputs:
-stop_condition:
-```
+Presentation projection is view-only: when supported, show `pipeline` for plan/gates, `tasks` projected from authoritative `tasks.md`, `review` projected from readiness findings, and `handoff` only after the implementation gate passes. Otherwise render the same information as Markdown. Never let presentation status replace OpenSpec task truth.
+
+Record `presentation_capability` using the shared contract. For `delivery-ui/v1` or `legacy-v0`, follow `../delivery-frame-spec/references/structured-presentation-adapter.md`; when capability is unknown, use Markdown. Preserve canonical capability enums and map them only in the UI projection.
 
 If skill chaining is unsupported, stop and tell the user exactly:「请使用 delivery-execute-verify」.
 
@@ -279,6 +296,8 @@ If skill chaining is unsupported, stop and tell the user exactly:「请使用 de
 - Tasks without exact paths, symbols, or expected validation.
 - Parallel agents editing the same files without ownership.
 - Plan changes requirements without returning to framing.
+- Asking the user to decide an evidence-findable fact or a low-risk reversible implementation detail.
+- Entering readiness or the implementation gate with an unresolved user-required technical decision, hidden warning, or incomplete frame backflow.
 - Structural validation treated as semantic readiness.
 - Any CRITICAL ignored because of deadline or manager request.
 - Binding gate questions to a named IDE/agent/tool, expanding High’s internal five facets into a user quiz (or dribbling them across messages), omitting the required recommendation on a fixed-choice question, switching mode only to obtain a choice UI, or offering「全部按推荐」/ bulk-accept that skips per-question user choice.

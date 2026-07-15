@@ -3,10 +3,10 @@ name: delivery-frame-spec
 description: >-
   Use when starting, resuming, investigating, or reframing a software development
   request before implementation readiness is established — e.g. “请处理这个开发需求”,
-  add/change a feature, clarify scope, route Quick/Standard/High/Debug, or recover
-  an OpenSpec change. Default entry when the change intent is clear. Hands off to
-  delivery-plan-tasks or delivery-execute-verify (or delivery-explore if direction
-  is still open).
+  “给需求定框”, “明确需求边界”, “判断 Quick/Standard/High”, add/change a feature,
+  clarify scope, route Quick/Standard/High/Debug, or recover an OpenSpec change.
+  Default entry when the change intent is clear. Hands off to delivery-plan-tasks
+  or delivery-execute-verify (or delivery-explore if direction is still open).
 ---
 
 # Delivery Frame Spec
@@ -17,7 +17,7 @@ description: >-
 2. OpenSpec is the only artifact/state backend — never invent parallel Markdown state beside a change.
 3. If direction is still open, hand to `delivery-explore`; do not invent a locked goal.
 4. Specification gate = **one** user ask. High’s five facets stay Agent-internal — never a user multi-quiz.
-5. Stage end: emit the **required handoff subset**. If chaining is unsupported, tell the user「请使用 delivery-plan-tasks」or「请使用 delivery-execute-verify」(or explore) as applicable.
+5. Stage end: emit one complete `delivery-handoff/v1` object, including read-only, blocked, and end states. If chaining is unsupported, tell the user「请使用 delivery-plan-tasks」or「请使用 delivery-execute-verify」(or explore) only when that transition is allowed.
 6. Do **not** add a fifth user-visible router skill; do **not** paste long system essays into this `SKILL.md`.
 
 ## Overview
@@ -44,7 +44,7 @@ Unable to judge → bias higher. Red-line hit → **not** Quick (see `references
 
 - This `SKILL.md` is English.
 - **All human-facing Markdown artifacts default to Chinese** (brief/spec/contract bodies, headings, tables, prose), following the Chinese templates under `references/`. Only these stay English: paths, commands, code identifiers, machine-readable keys/enums (e.g. `capability_snapshot` keys, `medium`/`high`), and OpenSpec's machine-parsed skeleton (below).
-- **OpenSpec backend exception:** `openspec validate` parses English structural markers. In OpenSpec-held specs keep `## Purpose`, `## Requirements`, `## ADDED/MODIFIED/REMOVED/RENAMED Requirements`, the `### Requirement:` / `#### Scenario:` header prefixes, and the `SHALL`/`MUST` keyword inside each requirement statement — write everything else (requirement names, scenario names, bodies) in Chinese, e.g. `### Requirement: 转写历史跨重启保留` + “系统 SHALL 在重启后仍显示历史记录”. `proposal.md`/`design.md` prose is fully Chinese.
+- **OpenSpec backend exception:** inspect the current OpenSpec schema first. When it declares English structural markers such as `## Requirements`, `### Requirement:` / `#### Scenario:`, or `SHALL`/`MUST`, preserve exactly those machine-parsed markers and write the remaining prose in Chinese. Do not assume an older skeleton when the active schema reports a different one.
 - If the user works in another language, follow the user's language instead; the machine-parsed skeleton still stays English.
 - Refer to brief parts by **stable English names** below. Do not use section numbers (`§`, `§§1–4`, etc.).
 
@@ -88,9 +88,9 @@ When chaining is unsupported, stop after the handoff and tell the user「请使�
 
 ## Capability Adapters
 
-Use capabilities by role; never make them competing workflow owners. Codebase Memory MCP, OpenSpec, Superpowers, and all four `delivery-*` skills are **hard prerequisites** of this family, assumed co-installed (cross-skill `../delivery-*/references/…` paths depend on it). Treat any absence as an exception to report, not a normal mode; without OpenSpec only Read-only routes work — there is no substitute Markdown backend.
+Use capabilities by role; never make them competing workflow owners. Treat the four `delivery-*` skills and shared references as one atomic Family (`references/family-contract.md`). OpenSpec is mandatory for mutating routes; Memory and Superpowers are preferred but degradable; SubAgent/worktree and structured UI are optional accelerators. Never invent a substitute Markdown artifact backend.
 
-Naming convention: refer to external capabilities as repo + capability — e.g. Superpowers `brainstorming`, OpenSpec `apply` (`/opsx-apply`), Codebase Memory MCP `trace_path`. Inside a subsection titled with the owning repo, bare capability names refer to that repo. Bare skill names elsewhere are reserved for the `delivery-*` family.
+Naming convention: refer to external capabilities as repo + semantic capability — e.g. Superpowers `brainstorming`, OpenSpec `create_change`, Codebase Memory MCP `trace_path`. Record actual aliases in `capability_bindings`; bare skill names elsewhere are reserved for the `delivery-*` family.
 
 ### Prerequisite preflight — capability snapshot
 
@@ -103,19 +103,22 @@ capability_snapshot:
   superpowers: loaded | partial(<missing>) | missing
 ```
 
+Also record `family_version: delivery-family/1.1` and the actually resolved `capability_bindings` shape from `references/family-contract.md`. Health and binding are separate: `ok` does not imply a particular tool name or OpenSpec alias.
+
 Rules:
 
-- If no snapshot arrived from `delivery-explore`, probe the three prerequisites once here (entry preflight) and record the snapshot.
-- Installation is assumed, so `memory: stale-index|down`, `openspec: unavailable`, and `superpowers: partial|missing` are exceptions: report them and apply the matching adapter degradation. `openspec: cli-only` is a normal repo state and only drives the `openspec init` proposal; if the user declines init, routes that need formal artifacts stop with a reported stop condition instead of inventing a substitute backend.
+- If no snapshot arrived from `delivery-explore`, probe the three external capabilities once here (entry preflight) and record the snapshot.
+- Installation is expected, so `memory: stale-index|down`, `openspec: unavailable`, and `superpowers: partial|missing` are exceptions: report them and apply the dependency behavior in `references/family-contract.md`. `openspec: cli-only` is a normal repo state and only drives the resolved `initialize_repo` proposal; if the user declines initialization, routes that need formal artifacts stop with a reported stop condition.
 - Trust nominal values from an incoming snapshot; re-probe only anomalies and capabilities this stage is about to rely on whose state may have changed (e.g. repo init state before creating a change).
 - Update the snapshot when a capability's state changes, and pass it forward in the handoff.
+- If `family_version` major is unsupported or an operation binding required by this route cannot be resolved, stop automatic chaining and report the exact incompatibility.
 
 **Preflight failure — fixed 3-line report (Chinese):** whenever any prerequisite is non-nominal in a way that blocks or degrades this stage, tell the user exactly:
 
 ```text
 缺什么：<memory|openspec|superpowers 的具体异常枚举>
 能否降级：<可 degraded 继续 / 必须恢复后才能变更 / 仅只读>
-下一步请你：<例如：同意 openspec init / 修复 Memory 索引 / 仅继续只读调查>
+下一步请你：<例如：同意已解析的 initialize_repo 操作 / 修复 Memory 索引 / 仅继续只读调查>
 ```
 
 ### Codebase Memory MCP — evidence provider
@@ -138,9 +141,9 @@ When project docs such as OpenWiki / ADR / glossary exist and are in scope, read
 
 ### OpenSpec — the only artifact backend
 
-The OpenSpec CLI is a default-installed prerequisite. Repo-level adoption (`openspec init`) is tracked as `openspec: initialized | cli-only` in the snapshot. If the repository is not initialized, propose `openspec init`; if the user declines, mutating routes stop with a reported stop condition — there is no substitute Markdown backend.
+Read `references/openspec-adapter.md` and resolve the semantic operations required by the selected route. Record actual version/schema/operation bindings in `capability_bindings.openspec`. Repo-level adoption is tracked as `openspec: initialized | cli-only`; if not initialized, propose the resolved `initialize_repo` operation. If the user declines, mutating routes stop.
 
-- Recover/create one change (typically via OpenSpec `new`/`propose`, host command `/opsx-new` / `/opsx-propose`).
+- Recover/create one change through the resolved `inspect_change` / `create_change` operations.
 - Treat OpenSpec status and artifacts as the only state source.
 - Do not create parallel state files, duplicate specs, or duplicate tasks.
 - This skill owns framing and gates; OpenSpec owns physical change/artifact state.
@@ -152,11 +155,11 @@ Every mutating route walks through an OpenSpec change. Routes differ in artifact
 | Route | Change artifacts | Next stage |
 |---|---|---|
 | Read-only | none (no change) | end |
-| Quick / Debug-Low | lightweight change: `proposal.md` carries the contract, minimal `tasks.md`; no `design.md` or delta spec required | `delivery-execute-verify` |
+| Quick / Debug-Low | lightweight change: `proposal.md` carries the contract, minimal `tasks.md`; **`design.md` not required**. If the active OpenSpec schema's `validate` requires ≥1 delta (common on `spec-driven`), add a **minimal** `specs/<cap>/spec.md` with one `### Requirement:` + `#### Scenario:` — do not expand into Standard depth. | `delivery-execute-verify` |
 | Standard / High | full change: `proposal.md` (brief) + delta spec now; `design.md` + `tasks.md` in `delivery-plan-tasks` | `delivery-plan-tasks` |
 | Debug — Medium / High mutation | Standard / High artifacts respectively | `delivery-plan-tasks` |
 
-When OpenSpec holds a change, map artifacts to its slots instead of adding parallel files: `proposal.md` (why/what ≈ brief), `changes/<id>/specs/<cap>/spec.md` (delta spec), `design.md` (≈ plan), `tasks.md`. Non-native artifacts such as `verification.md` may attach under the default `spec-driven` schema, or become managed artifacts via a custom schema (`openspec schema init/fork`).
+When OpenSpec holds a change, discover its active schema and map Delivery artifacts to the reported slots instead of adding parallel files. Common `spec-driven` defaults are documented in `references/openspec-adapter.md`; use them only when the current schema confirms them.
 
 When a Quick task escalates to Standard, upgrade the same change with the full artifact set; never start a second state source.
 
@@ -170,13 +173,17 @@ When a `delivery-explore` handoff is present, consume these fields explicitly (d
 
 | Incoming field | How this skill consumes it |
 |---|---|
+| `family_version` | Must be a supported Delivery Family major before automatic chaining |
+| `source_revision` | Compare with current repo/artifact state; mismatch makes the handoff stale and triggers state recovery |
 | `capability_snapshot` | Reuse nominal values; re-probe only anomalies and capabilities about to be relied on |
+| `capability_bindings` | Reuse resolved aliases/versions that are still valid; refresh route-required operations when missing or changed |
 | `evidence_mode` | Carry forward; if `degraded`, keep Memory degradation marking in the brief |
-| `chosen_direction` | Seed **Intent** goal (user may revise; confirmation is still required) |
-| `non_goals` | Seed **Intent** boundaries / non-goals |
-| `code_anchors` | Starting points for **Code Facts** / **Mount Points** targeted inspection |
-| `risk_signal` | Routing **hint only** (`none` → likely Quick/Standard; `standard-likely` → Standard/Medium; `high-likely` → High). Re-derive route/risk from evidence; never treat explore’s signal as an approved risk level |
-| `unknowns` | Candidate entries for **Open Questions** (not automatic decisions) |
+| `stage_payload.direction_alignment` | Must be `selected` before framing; `needs_choice` returns to `delivery-explore` instead of inventing a locked goal |
+| `stage_payload.chosen_direction` | Seed **Intent** goal (user may revise; confirmation is still required) |
+| `stage_payload.non_goals` | Seed **Intent** boundaries / non-goals |
+| `stage_payload.code_anchors` | Starting points for **Code Facts** / **Mount Points** targeted inspection |
+| `stage_payload.risk_signal` | Routing **hint only** (`none` → likely Quick/Standard; `standard-likely` → Standard/Medium; `high-likely` → High). Re-derive route/risk from evidence; never treat explore’s signal as an approved risk level |
+| `stage_payload.unknowns` | Candidate entries for **Open Questions** (not automatic decisions) |
 | `state_source` | Must be `none`; this skill creates/recovers the OpenSpec change as the sole state source |
 | `required_inputs` / `stop_condition` | Honor stop; otherwise require user confirmation of the chosen (or revised) direction before the specification gate |
 
@@ -238,12 +245,13 @@ Create a lightweight contract containing:
 - minimum validation;
 - forbidden scope;
 - risk and unknowns.
+- clarification completeness sweep result.
 
 Optionally include open product questions; when blocking, clarify them with batch clarification (rules below).
 
-Present the contract to the user and obtain an explicit go (e.g. “开始实施”). Record the approval (approver/time) in the contract, then hand off to `delivery-execute-verify`. A complete contract without a recorded user go does not authorize implementation.
+Present the contract to the user and obtain an explicit go (e.g. “开始实施”). Record approver, time, the current contract/artifact revision, and any explicitly accepted warning IDs in the contract, then hand off to `delivery-execute-verify`. A complete contract without a revision-bound user go does not authorize implementation.
 
-Persist the contract as a lightweight OpenSpec change (`proposal.md` carries the contract, minimal `tasks.md`; no `design.md` or delta spec). If the work later escalates, upgrade the same change to the full Standard/High artifact set.
+Persist the contract as a lightweight OpenSpec change (`proposal.md` carries the contract, minimal `tasks.md`; no `design.md`). On schemas where `openspec validate` requires deltas (e.g. `spec-driven`), also add a **minimal** delta spec (one Requirement + Scenario) that restates the observable contract — not a full Standard brief/design. If the work later escalates, upgrade the same change to the full Standard/High artifact set.
 
 ### Standard
 
@@ -278,7 +286,7 @@ If a table row cannot be satisfied for High, the work stays blocked; do not quie
 
 Use for failures, regressions, flaky tests, or unexpected behavior.
 
-Output a scoped debug contract: symptom, reproduction entry, candidate boundary, non-goals, regression command, route risk, and approval state.
+Output a scoped debug contract: symptom, reproduction entry, candidate boundary, non-goals, regression command, route risk, clarification completeness sweep result for any proposed mutation, and approval state.
 
 - Low-risk scoped diagnosis may proceed read-only; a Low-risk fix (any mutation) requires explicit user approval of the debug contract before handing off to `delivery-execute-verify`.
 - Medium-risk mutation must enter the Standard route, complete brief/spec plus `delivery-plan-tasks`, and pass the Standard/Medium gates.
@@ -344,6 +352,7 @@ Two phases for Standard/High (and whenever Quick has blocking questions):
 6. Clarify with **batch clarification** (rules below): one wave lists every currently independent blocking question together. Prefer click/select UI; typing is the fallback.
 7. Record every answer in **Open Questions** only; update **Intent** boundaries/scenarios. Do not treat Evidence Table or **State Source** as the product-decision register.
 8. After answers, skip any conditional questions that no longer apply. If answers spawn new blocking decisions, open the next wave. Stop when remaining answers would no longer materially change scope, acceptance, risk, or irreversible behavior; record the rest in **Open Questions** as non-blocking with the assumed default.
+9. Before declaring clarification complete — including when no user question was needed — run the **clarification completeness sweep** in `references/batch-clarification.md`. Resolve evidence-findable gaps yourself; add only newly discovered material product decisions to **Open Questions** and open another wave when needed. Record the sweep result in the brief/contract.
 
 Then write/update the delta spec and run the Specification Gate.
 
@@ -371,6 +380,7 @@ Showing the full **Open Questions** list before the first clarification wave is 
 - **Ordering — dependency root first:** put questions whose answers decide whether others still matter at the earliest wave; after each wave, drop dependents whose trigger was not met. Within a wave (no remaining dependency), order by impact on scope or acceptance.
 - **No hard question-count budget:** ask every materially blocking item; do not pad; non-material topics stay out of the quiz and may be recorded as assumed defaults.
 - **Stop condition:** stop as soon as remaining answers would not materially change scope, acceptance, risk, or irreversible behavior. Never stop early by bulk-accepting defaults for still-blocking items.
+- **Concrete uncertainty only:** convert uncertainty into a specific missing fact or decision; investigate facts, clarify material decisions, and stop when no material blocker remains.
 
 ### Question structure
 
@@ -403,8 +413,13 @@ Read the templates only when needed:
 - `references/spec-template.md`
 - `references/routing-and-gates.md`
 - `references/batch-clarification.md` — family batch clarification (click first, typing fallback; platform-agnostic)
+- `references/question-ui-adapters.md` — load only when mapping a clarification wave to the current host's question tool
 - `references/clarification-example.md`
+- `references/family-contract.md` — atomic Family version, dependency levels, capability binding shape
+- `references/openspec-adapter.md` — resolve semantic OpenSpec operations and current artifact schema
 - `references/handoff-template.md`
+- `references/handoff-contract.md` — read before every cross-stage handoff; authoritative JSON serialization and presentation capability negotiation
+- `references/structured-presentation-adapter.md` — load only when the host supports structured `delivery-*` rendering
 
 ## Specification Gate
 
@@ -416,6 +431,7 @@ Before handing off to `delivery-plan-tasks`, verify (Agent checklist — not a u
 - inferences are labeled;
 - code-incapable product decisions are confirmed in **Open Questions** (blocking items decided or explicitly deferred as non-blocking);
 - no implementation-blocking TBD remains;
+- the clarification completeness sweep is recorded; any applicable dimension is resolved, explicitly out of scope/not applicable, or represented by a decided/non-blocking **Open Questions** entry;
 - requirements have falsifiable scenarios and failure behavior;
 - applicable non-functional constraints (performance, security/privacy, observability, compatibility) are captured with acceptance criteria in the spec, or explicitly marked out of scope — not deferred silently to planning;
 - route and risk match evidence (**Risk Rating** writing complete);
@@ -424,24 +440,15 @@ Before handing off to `delivery-plan-tasks`, verify (Agent checklist — not a u
 
 If any check fails, remain in this skill.
 
-When the checklist passes, ask the user **one** scope-approval question (see `references/batch-clarification.md` **Gate ask shape**): approve scope → enter `delivery-plan-tasks`; do not ask them to re-confirm every Open Question or every spec scenario. Persist their answer in **State Source**. The Explore-handoff checkbox block in `proposal.md` must already satisfy the consume self-check.
+When the checklist passes, ask the user **one** scope-approval question (see `references/batch-clarification.md` **Gate ask shape**): approve scope → enter `delivery-plan-tasks`; do not ask them to re-confirm every Open Question or every spec scenario. Persist their answer, time, approver, current artifact revision, and accepted warning IDs in **State Source**. The Explore-handoff checkbox block in `proposal.md` must already satisfy the consume self-check.
 
 ## Handoff
 
-Return a compact handoff with the **required subset** (Chinese labels: `references/handoff-template.md`): `stage`, `state_source`, `capability_snapshot`, `gate_status`, `evidence_mode`, `next_skill`, `required_inputs`, `stop_condition`.
+Before handing off, read `references/handoff-contract.md` and emit one complete, strictly parseable `delivery-handoff/v1` JSON object using `references/handoff-template.md`. Put route, risk, confirmed artifacts, forbidden scope, and open questions in `stage_payload`. When local Python is available, validate the final object with `scripts/validate_handoff.py` before output.
 
-```text
-stage: delivery-frame-spec
-route/risk:
-state_source:
-confirmed_artifacts:
-evidence_mode:
-capability_snapshot:
-gate_status:
-next_skill:
-required_inputs:
-stop_condition:
-```
+Presentation projection is view-only: when supported, show `pipeline` with the current route, risk, stage, and gate results, then show `handoff` only when the authoritative gate permits transition. Otherwise render the same fields as Markdown. Presentation never authorizes implementation or replaces OpenSpec state.
+
+Record `presentation_capability` using the shared contract. For `delivery-ui/v1` or `legacy-v0`, follow `references/structured-presentation-adapter.md`; when capability is unknown, use Markdown. Preserve canonical capability enums and map them only in the UI projection.
 
 Automatic skill loading is optional. If unsupported, stop after this handoff and tell the user exactly「请使用 <next_skill>」(e.g.「请使用 delivery-plan-tasks」).
 

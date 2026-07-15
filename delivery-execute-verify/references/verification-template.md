@@ -47,7 +47,7 @@
 规则补充：
 
 - 当「是否达到已验证」为「是」时，本技能结束于已验证交接；Agent MUST NOT 在本技能内同步 delta 到 `openspec/specs/` 或移动 change 到 archive。
-- 下一步应由用户或 Agent 调用 OpenSpec archive（`/opsx-archive` / `openspec-archive-change`），保留其 sync 摘要与确认交互。
+- 下一步应由用户或 Agent 调用已解析的 OpenSpec `archive_change` 操作，保留当前版本的 sync 摘要与确认交互。
 - 非阻塞残余（如发布前可选手册冒烟）写入「降级项与残余风险」，不得单独用来阻止已验证收尾。
 - git commit / push / PR 仍须用户显式授权，与 OpenSpec 归档分离。
 

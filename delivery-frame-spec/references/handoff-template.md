@@ -1,42 +1,96 @@
 # 交接摘要模板
 
-## 必填子集（四阶段共用）
+输出前读取 `handoff-contract.md`。交接必须是一个可严格解析的 `delivery-handoff/v1` JSON 对象；下列模板只填写已经存在的事实。
 
-| 机读键 | 中文标签 | 说明 |
-|---|---|---|
-| `stage` | 当前阶段 | `delivery-frame-spec` |
-| `state_source` | 状态源 | 唯一 OpenSpec change 路径 |
-| `capability_snapshot` | 能力快照 | `memory` / `openspec` / `superpowers` |
-| `gate_status` | 闸门状态 | 规格闸门 / 契约 go 等 |
-| `evidence_mode` | 证据模式 | `full` \| `degraded` |
-| `next_skill` | 下一技能标识 | `delivery-plan-tasks` \| `delivery-execute-verify` \| `delivery-explore` \| end |
-| `required_inputs` | 下一阶段必需输入 | |
-| `stop_condition` | 停止条件 | |
+```delivery-handoff
+{
+  "schema_version": "delivery-handoff/v1",
+  "family_version": "delivery-family/1.1",
+  "type": "delivery-handoff",
+  "handoff_id": "<unique-id>",
+  "generated_at": "<RFC3339 timestamp>",
+  "stage": "delivery-frame-spec",
+  "source_revision": {
+    "repo_head": null,
+    "artifact_revision": null,
+    "state_observed_at": "<RFC3339 timestamp>"
+  },
+  "state_source": {
+    "kind": "<none|openspec_change>",
+    "label": "<none（只读/返回探索）|change #id>",
+    "anchor": null
+  },
+  "capability_snapshot": {
+    "memory": "<ok|stale-index|down>",
+    "openspec": "<initialized|cli-only|unavailable>",
+    "superpowers": "<loaded|partial(<missing>)|missing>"
+  },
+  "capability_bindings": {
+    "openspec": {},
+    "memory": {},
+    "superpowers": {},
+    "subagents": {}
+  },
+  "presentation_capability": {
+    "mode": "<delivery-ui/v1|legacy-v0|markdown>",
+    "source": "<host-declared|detected|unknown>"
+  },
+  "gate_status": {
+    "status": "<pending|pass|warn|block>",
+    "summary": "<规格闸门、轻量契约 go、返回探索或只读结论>",
+    "evidence": [],
+    "approved_by": null,
+    "approved_at": null,
+    "binds_to_revision": null,
+    "accepted_warning_ids": []
+  },
+  "evidence_mode": "<full|degraded>",
+  "next_skill": null,
+  "next_action": null,
+  "required_inputs": [],
+  "stop_condition": "",
+  "stage_payload": {
+    "route": "<Read-only|Quick|Standard|High|Debug>",
+    "risk": "<none|low|medium|high>",
+    "confirmed_artifacts": [],
+    "forbidden_scope": [],
+    "open_questions": []
+  },
+  "presentation": {
+    "schema": "delivery-presentation/v1",
+    "from_task": "<定框·规格闸门通过|定框·轻量契约已批准|定框·需返回探索|只读结束>",
+    "to_task": "<技术设计与任务拆解|按轻量任务实施|探索方向|结束>",
+    "summary": "<车道/风险 + 已批准、阻塞或只读结论>",
+    "evidence": [],
+    "continue_prompt": "<请使用下一技能；结束时写 end>"
+  }
+}
+```
 
-可选但推荐（跨会话恢复）：`route/risk`、`confirmed_artifacts`、禁止范围、未提交改动碰撞。
+**互斥（强制）：** `next_skill` 与 `next_action` **最多一个非 null**。Frame 成功交接只填 `next_skill`，**必须** `next_action: null`。结束/阻塞时两者皆 `null`。
 
-## 模板
+成功路径示例（规格闸门通过 → plan）：
 
-```text
-当前阶段：delivery-frame-spec
-车道/风险：
-状态源：
-已确认工件：
-证据模式：full | degraded
-能力快照（capability_snapshot）：
-  memory: ok | stale-index | down
-  openspec: initialized | cli-only | unavailable
-  superpowers: loaded | partial(<缺失项>) | missing
-闸门状态：
-下一技能标识：
-下一阶段必需输入：
-停止条件：
-宿主续接话术（链式加载不可用时原样提示用户）：请使用 <下一技能标识>
+```json
+"next_skill": "delivery-plan-tasks",
+"next_action": null
+```
+
+Quick / Debug-Low 契约 go → execute：
+
+```json
+"next_skill": "delivery-execute-verify",
+"next_action": null
 ```
 
 规则：
 
-- 能力快照的键与枚举值保持英文（机器可读）；定义见 `delivery-frame-spec` 的 Prerequisite preflight 一节。
-- 下游阶段默认信任快照中的正常值，只对异常值和本阶段即将依赖且可能变化的能力重新探测。
-- 若上一阶段为 `delivery-explore`，入站字段消费规则见 `delivery-frame-spec` SKILL 的 **Input Contract from explore handoff** 与 **Explore-handoff consume self-check**；`risk_signal` 仅作路由线索，必须基于代码事实重算定级。物理落点：活跃 change 的 `proposal.md` 中「Explore 交接消费」五条勾选（见 `brief-template.md`）；空摘要或未勾选不得放行规格闸门 / Quick 契约 go。
-- 链式加载不可用时，停止并提示用户说「请使用 delivery-plan-tasks」或「请使用 delivery-execute-verify」或「请使用 delivery-explore」（与 `next_skill` 一致）。
+- Read-only、阻塞或结束时允许 `state_source.kind: none`、`next_skill: null`。返回 Explore 但尚未创建 change 时也使用 `none`；已有 change 时保留真实 OpenSpec anchor。
+- **本阶段才允许** OpenSpec `create_change`（或恢复已有 change）。若上游 explore 违规已建 change，在 **State Source** 记录该违规并继续以该 change 为唯一状态源，勿再建第二个。
+- `next_skill` 只填写当前闸门允许的下一技能；成功转换时替换模板中的 `null`，并保持 `next_action: null`。
+- 下游默认信任能力快照中的正常值，只重测异常项和即将依赖且可能变化的能力。
+- 若来自 Explore，必须先完成活跃 `proposal.md` 中的「Explore 交接消费」自检；`risk_signal` 仅作线索。
+- `presentation` 只投影车道、风险、闸门、状态源与证据，不得产生实施授权。
+- 根据 `presentation_capability.mode` 选择 `delivery-ui/v1`、`legacy-v0` 或 Markdown；投影规则见 `structured-presentation-adapter.md`。
+- 输出前：`python scripts/validate_handoff.py <handoff.json>`（相对本 skill 目录）。失败不得交接。
+- 链式加载不可用时，停止并原样提示「请使用 <next_skill>」。

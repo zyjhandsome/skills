@@ -5,7 +5,10 @@
 ```markdown
 ## 子代理调度决策
 - 执行模式：主代理内联 / 顺序子代理 / 并行子代理批次
-- 宿主能力：
+- 子代理可用性：unknown / available / unavailable
+- 最大并发：
+- worktree 支持：unknown / available / unavailable
+- 独立审查：unknown / available / unavailable
 - 选择依据：
 - 降级项：
 - staged 文件：
@@ -21,7 +24,7 @@
 - 与目标行为独立的证据：
 - 未受影响的目标检查：
 - 降级批准人/时间/期限：
-- 独立审查能力：
+- 实际使用并发（不得超过最大并发）：
 ```
 
 ## 依赖波次
