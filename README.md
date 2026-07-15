@@ -4,14 +4,64 @@ Cursor Agent Skills 集合。
 
 | 技能 | 说明 |
 |------|------|
+| [delivery-explore](./delivery-explore/SKILL.md) | 交付探索：机会地图与方向选型（不实现、不立项） |
+| [delivery-frame-spec](./delivery-frame-spec/SKILL.md) | 交付立项：路由 / 澄清 / Brief·Spec 闸门 |
+| [delivery-plan-tasks](./delivery-plan-tasks/SKILL.md) | 交付规划：design / tasks / 实现闸门（不实现） |
+| [delivery-execute-verify](./delivery-execute-verify/SKILL.md) | 交付实施与验证：按任务实现、调试、新鲜证据验收 |
 | [content-structuring](./content-structuring/SKILL.md) | 内容结构化整理 |
 | [ai-agent-update-brief](./ai-agent-update-brief/SKILL.md) | AI 编码 Agent / IDE / CLI 工具更新简报生成 |
 | [github-repo-usage-article](./github-repo-usage-article/SKILL.md) | GitHub 仓库「使用示例」深度文章（房屋风格） |
 | [md2html-lecture](./md2html-lecture/SKILL.md) | 将 content-structuring 的整理稿转换成单文件 HTML 阅读页 |
 
+## Delivery 流水线
+
+四个 skill 按阶段串联（探索可选）：
+
+```
+delivery-explore  →  delivery-frame-spec  →  delivery-plan-tasks  →  delivery-execute-verify
+     （可选）              （默认入口）            （Standard/High）           （实现与验收）
+```
+
+归档仍交给 OpenSpec（`/opsx-archive` / `openspec-archive-change`），不在 execute 技能内完成。
+
 目录结构：
 
 ```
+delivery-explore/
+├── SKILL.md
+└── references/
+    ├── explore-output-template.md
+    └── handoff-template.md
+
+delivery-frame-spec/
+├── SKILL.md
+└── references/
+    ├── batch-clarification.md
+    ├── brief-template.md
+    ├── clarification-example.md
+    ├── handoff-template.md
+    ├── routing-and-gates.md
+    └── spec-template.md
+
+delivery-plan-tasks/
+├── SKILL.md
+└── references/
+    ├── handoff-template.md
+    ├── plan-template.md
+    ├── readiness-review.md
+    └── tasks-template.md
+
+delivery-execute-verify/
+├── SKILL.md
+└── references/
+    ├── artifact-gate-checks.md
+    ├── handoff-template.md
+    ├── implementation-loop.md
+    ├── subagent-orchestration.md
+    ├── subagent-orchestration-test.md
+    ├── verification-template.md
+    └── workflow-system-regression-test.md
+
 content-structuring/
 ├── SKILL.md              # 技能加载器
 └── references/
