@@ -6,7 +6,6 @@
 
 ```text
 ## 探索结论（非正式）
-证据模式：full | degraded
 方向对齐状态：selected | needs_choice
 代码锚点：
 
@@ -27,7 +26,7 @@
 
 ## 交接块
 
-使用 `handoff-template.md` 输出一个完整、有效的 `delivery-handoff/v1` JSON 对象。公共字段遵守 `../../delivery-frame-spec/references/handoff-contract.md`；方向、非目标、锚点、风险信号和未知项写入 `stage_payload`，不要再输出平行的伪 YAML 交接块。
+使用共享模板 `../../delivery-frame-spec/references/handoff-template.md`（Explore 差异块）输出一个完整、有效的 `delivery-handoff/v1` JSON 对象。公共字段遵守 `../../delivery-frame-spec/references/handoff-contract.md`；方向、非目标、锚点、风险信号和未知项写入 `stage_payload`，不要再输出平行的伪 YAML 交接块。
 
 ## 与 framing 的最小差异检查
 

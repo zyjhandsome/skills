@@ -1,13 +1,2 @@
-# This repository is initialized in-place inside the global Cursor skills directory
-# (~/.cursor/skills). It intentionally tracks ONLY the four delivery-* skills.
-# Everything else in this directory is ignored.
-/*
-!/.gitignore
-!/delivery-explore/
-!/delivery-frame-spec/
-!/delivery-plan-tasks/
-!/delivery-execute-verify/
-
-# Never track Python bytecode caches (created when running the validator scripts)
 __pycache__/
 *.pyc

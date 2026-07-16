@@ -15,7 +15,7 @@ from typing import Any
 # so additive minor bumps do not require editing this validator. CURRENT_FAMILY_VERSION is
 # the version the templates currently emit; it is informational only.
 SUPPORTED_FAMILY_MAJOR = 1
-CURRENT_FAMILY_VERSION = "delivery-family/1.1"
+CURRENT_FAMILY_VERSION = "delivery-family/1.2"
 SCHEMA_VERSION = "delivery-handoff/v1"
 STAGES = {
     "delivery-explore",
@@ -44,6 +44,13 @@ TOP_LEVEL = {
     "stage_payload",
     "presentation",
 }
+# Optional additive keys (delivery-family/1.2): accepted when present, never required.
+OPTIONAL_TOP_LEVEL = {"previous_handoff_id"}
+# Hard-prerequisite profile (delivery-family/1.2 default): OpenSpec, Codebase Memory MCP,
+# Superpowers, and SubAgents are assumed installed and nominal. A non-nominal snapshot may
+# still be reported, but it must not carry a stage transition, and degraded evidence does
+# not exist. Use --profile legacy to validate pre-1.2 handoffs.
+NOMINAL_SNAPSHOT = {"memory": "ok", "openspec": "initialized", "superpowers": "loaded"}
 STAGE_PAYLOAD_KEYS = {
     "delivery-explore": {
         "direction_alignment",
@@ -124,15 +131,19 @@ def require_keys(obj: dict[str, Any], keys: set[str], path: str, errors: list[st
         errors.append(f"{path} missing keys: {', '.join(missing)}")
 
 
-def validate(data: Any) -> list[str]:
+def validate(data: Any, profile: str = "hard") -> list[str]:
     errors: list[str] = []
     root = require_object(data, "$", errors)
     require_keys(root, TOP_LEVEL, "$", errors)
     # Forward-compatible extension: keys prefixed with "x_" are reserved for additive,
     # non-authoritative extensions and are ignored by this validator.
-    extras = sorted(k for k in set(root) - TOP_LEVEL if not k.startswith("x_"))
+    extras = sorted(k for k in set(root) - TOP_LEVEL - OPTIONAL_TOP_LEVEL if not k.startswith("x_"))
     if extras:
         errors.append(f"$ has unsupported top-level keys: {', '.join(extras)}")
+    if "previous_handoff_id" in root:
+        prev = root.get("previous_handoff_id")
+        if prev is not None and (not isinstance(prev, str) or not prev):
+            errors.append("previous_handoff_id must be a non-empty string or null")
 
     if root.get("schema_version") != SCHEMA_VERSION:
         errors.append(f"schema_version must be {SCHEMA_VERSION}")
@@ -233,6 +244,22 @@ def validate(data: Any) -> list[str]:
         errors.append("evidence_mode must be full or degraded")
     if root.get("next_skill") is not None and root.get("next_action") is not None:
         errors.append("next_skill and next_action cannot both be non-null")
+
+    if profile == "hard":
+        if root.get("evidence_mode") != "full":
+            errors.append("hard profile: evidence_mode must be full (no degraded evidence mode)")
+        has_transition = root.get("next_skill") is not None or root.get("next_action") is not None
+        non_nominal = sorted(
+            f"{key}={snapshot.get(key)!r}"
+            for key, nominal in NOMINAL_SNAPSHOT.items()
+            if snapshot.get(key) != nominal
+        )
+        if has_transition and non_nominal:
+            errors.append(
+                "hard profile: a non-nominal capability_snapshot cannot carry a stage "
+                f"transition ({', '.join(non_nominal)}); report the failure with "
+                "next_skill/next_action null and a stop_condition instead"
+            )
     require_array(root.get("required_inputs"), "required_inputs", errors)
     if not isinstance(root.get("stop_condition"), str):
         errors.append("stop_condition must be a string")
@@ -329,6 +356,16 @@ def validate(data: Any) -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", help="JSON file path, or - for stdin")
+    parser.add_argument(
+        "--profile",
+        choices=("hard", "legacy"),
+        default="hard",
+        help=(
+            "hard (default): enforce the delivery-family/1.2 hard-prerequisite profile "
+            "(nominal snapshot required for transitions, evidence_mode must be full); "
+            "legacy: accept pre-1.2 degradation states"
+        ),
+    )
     args = parser.parse_args()
 
     try:
@@ -338,12 +375,12 @@ def main() -> int:
         print(f"INVALID JSON: {exc}", file=sys.stderr)
         return 2
 
-    errors = validate(data)
+    errors = validate(data, profile=args.profile)
     if errors:
         for error in errors:
             print(f"ERROR: {error}", file=sys.stderr)
         return 1
-    print("PASS: valid delivery-handoff/v1")
+    print(f"PASS: valid delivery-handoff/v1 ({args.profile} profile)")
     return 0
 
 

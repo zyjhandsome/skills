@@ -5,12 +5,9 @@
 ```markdown
 ## 子代理调度决策
 - 执行模式：主代理内联 / 顺序子代理 / 并行子代理批次
-- 子代理可用性：unknown / available / unavailable
-- 最大并发：
-- worktree 支持：unknown / available / unavailable
-- 独立审查：unknown / available / unavailable
+- 最大并发（宿主实际上限）：
+- worktree 支持：available / unavailable
 - 选择依据：
-- 降级项：
 - staged 文件：
 - unstaged 文件：
 - untracked 文件：
@@ -85,11 +82,10 @@
 - 修正与复审：
 - 集成后验证：
 - 权威任务状态更新：
-- 独立审查：已完成 / 不可用
-- 审查模式：independent_agent / human / self_fresh_context
+- 独立审查：已完成（Medium/High 必需）
+- 审查模式：independent_agent / human
 - 审查清单与发现：
 - 处理结果：
-- 审查降级与残余风险：
 - 是否释放下一波次：
 ```
 
