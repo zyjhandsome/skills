@@ -19,7 +19,7 @@ Shared family protocol: `../delivery-frame-spec/references/family-contract.md`. 
 2. OpenSpec `design.md` / `tasks.md` (per the active schema's slots) are the only plan/tasks truth — no parallel Markdown copies.
 3. Vertical behavior slices with real paths/symbols and falsifiable validation; no horizontal “all types → all backend → tests last.”
 4. Implementation go = **one** user ask (High: same ask + cost/risk/rollback summary; five facets Agent-internal).
-5. Stage end: emit one complete `delivery-handoff/v1` object (including blocked/end states), validate, persist. Only after the gate permits transition, follow the chain relay rule (`family-contract.md` §1): if the host can load skill files directly (e.g. Cursor), read `delivery-execute-verify/SKILL.md` and continue in the same session; only when the host cannot, tell the user「请使用 delivery-execute-verify」.
+5. Stage end: emit one complete `delivery-handoff/v1` object (including blocked/end states), validate, persist. Only after the gate permits transition, follow the chain relay rule (`family-contract.md` §1): if the host can load skill files directly (e.g. Claude Code), read `delivery-execute-verify/SKILL.md` and continue in the same session; only when the host cannot, tell the user「请使用 delivery-execute-verify」.
 6. Hard prerequisites are assumed available; on a real runtime failure stop and report per `family-contract.md` — no degraded planning mode.
 
 ## Overview

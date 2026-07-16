@@ -18,7 +18,7 @@ Shared family protocol: `../delivery-frame-spec/references/family-contract.md`. 
 1. No implementation code; no formal OpenSpec delivery state; the map is never an approved spec.
 2. Memory-first evidence; bind claims to paths/symbols/clusters.
 3. Next skill only: `delivery-frame-spec` (or end). Never hand off to plan or execute.
-4. Stage end: emit one complete `delivery-handoff/v1` object (including end states), validate it. When a transition is allowed, follow the chain relay rule (`family-contract.md` §1): if the host can load skill files directly (e.g. Cursor), read `delivery-frame-spec/SKILL.md` and continue in the same session; only when the host cannot, tell the user「请使用 delivery-frame-spec」.
+4. Stage end: emit one complete `delivery-handoff/v1` object (including end states), validate it. When a transition is allowed, follow the chain relay rule (`family-contract.md` §1): if the host can load skill files directly (e.g. Claude Code), read `delivery-frame-spec/SKILL.md` and continue in the same session; only when the host cannot, tell the user「请使用 delivery-frame-spec」.
 5. Hard prerequisites (OpenSpec/Memory/Superpowers/SubAgent) are assumed available; on a real runtime failure stop and report per `family-contract.md` — no degraded exploration mode.
 
 ## Overview

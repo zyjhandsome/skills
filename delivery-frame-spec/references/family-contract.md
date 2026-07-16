@@ -28,7 +28,7 @@ visible_skills:
 
 四个 Skill 和共享 references 必须原子安装/升级。发现缺失阶段或共享文件时停止跨阶段转换并报告缺失项；不要临时复制规则或创建替代 Router。
 
-**链式接力（宿主适配）：** handoff 校验通过且允许转换时，若宿主允许 Agent 直接读取技能文件（如 Cursor：技能位于本地目录，`SKILL.md` 可直接 Read），应在**同一会话**读取下一技能的 `SKILL.md` 并继续执行，不停下等用户复述；仅当宿主无法加载下一技能、或转换本身被闸门/阻塞项挡住时，才停止并提示「请使用 <next_skill>」。跨会话恢复走 `handoff-contract.md` 的持久化槽位（change 目录内 `handoff.json`）。
+**链式接力（宿主无关，按能力判定）：** handoff 校验通过且允许转换时，判定标准只有一条——**当前宿主能否让 Agent 直接读取下一技能的 `SKILL.md`**（多数本地技能目录宿主均可，如 Claude Code）。能读取则在**同一会话**读取并继续执行，不停下等用户复述；仅当宿主确实无法加载下一技能、或转换本身被闸门/阻塞项挡住时，才停止并提示「请使用 <next_skill>」。不为任何具体宿主写定制适配；换宿主时本规则无需修改。跨会话恢复走 `handoff-contract.md` 的持久化槽位（change 目录内 `handoff.json`）。
 
 **版本权威源与兼容口径：** 本文件是 `family_version` 的唯一权威声明；其他文件中的版本字符串只是当前值的复制。兼容性按 **major** 判定：同 major 的 minor 递增是向后兼容的加法式变更（新增可选字段、`x_` 扩展键），不触发停机。`validate_handoff.py` 只校验 major（接受 `delivery-family/1.x`）。
 
