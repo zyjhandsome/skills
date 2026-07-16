@@ -132,10 +132,11 @@
   "risk_gates": [],
   "parallel_ownership": []
 },
-"presentation": { "from_task": "计划·就绪审查完成", "to_task": "实施·按 tasks.md 执行", "continue_prompt": "请使用 delivery-execute-verify", "...": "..." }
+"presentation": { "from_task": "计划·就绪审查完成", "to_task": "实施·按 tasks.md 执行（任务勾选属 Execute 阶段）", "continue_prompt": "请使用 delivery-execute-verify", "...": "..." }
 ```
 
 - 实现闸门批准且绑定当前 `artifact_revision` 后，才 `next_skill: delivery-execute-verify`；否则保持 `null` 并填真实 `stop_condition`。
+- 状态文案：Plan 结束时 tasks **全部未勾选属预期**；`summary` 说「计划完成，任务待实施」，不要把 0/N 已勾选当缺陷呈现。
 - 实现 go 只覆盖 `gate_status.summary` 明确展示的 warnings。
 
 ## Execute 差异块

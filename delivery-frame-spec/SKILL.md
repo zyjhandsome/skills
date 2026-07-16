@@ -80,7 +80,7 @@ Explanation or investigation without requested changes. Output: conclusion, evid
 
 ### Quick
 
-Only when impact is bounded and **no** red-line domain is involved (auth, payment, permission, privacy, migration, concurrency, public API/protocol, destructive behavior, core business paths are **never** Quick). Create the lightweight contract (`references/routing-and-gates.md` has the shape): goal/non-goals, affected files/symbols, observable behavior, minimum validation, forbidden scope, risk/unknowns, clarification completeness sweep result. Clarify blocking product questions via batch clarification. Present the contract, obtain an explicit go (e.g. “开始实施”), record approver/time/contract revision/accepted warning IDs, then hand off to `delivery-execute-verify`. A complete contract without a revision-bound go does not authorize implementation.
+Only when impact is bounded and **no** red-line domain is involved (auth, payment, permission, privacy, migration, concurrency, public API/protocol, destructive behavior, core business paths are **never** Quick). Create the lightweight contract (`references/routing-and-gates.md` has the shape): goal/non-goals, affected files/symbols, observable behavior, minimum validation, forbidden scope, risk/unknowns, clarification completeness sweep result. Prefer scaffolding it: `scripts/delivery_scaffold.py quick-pack --change-dir openspec/changes/<id> --capability <cap> --goal … --impact …` emits proposal/minimal delta spec/tasks with the exact machine anchors `validate_delivery_change.py` reads — fill the placeholders, then run the schema's `validate`. Quick has no `design.md` **by design**: when `openspec status` shows design incomplete, tell the user that is expected for this lane; never write a filler design to satisfy status. Clarify blocking product questions via batch clarification. Present the contract, obtain an explicit go (e.g. “开始实施”), record approver/time/contract revision/accepted warning IDs, then hand off to `delivery-execute-verify`. A complete contract without a revision-bound go does not authorize implementation.
 
 ### Standard
 
@@ -151,7 +151,7 @@ When Execute returns here with an `alignment_backflow` packet, complete the thre
 
 ## Handoff
 
-Follow `references/handoff-contract.md` + `references/handoff-template.md` (Frame block). Put route, risk, confirmed artifacts, forbidden scope, and open questions in `stage_payload`.
+Follow `references/handoff-contract.md` + `references/handoff-template.md` (Frame block). Put route, risk, confirmed artifacts, forbidden scope, and open questions in `stage_payload`. Generate the skeleton instead of typing it: `scripts/delivery_scaffold.py new-handoff delivery-frame-spec --change-dir <change>` (computes `artifact_revision` and timestamps; you fill only business fields and the gate).
 
 ## Red Flags
 

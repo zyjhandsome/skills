@@ -1,0 +1,66 @@
+{
+  "schema_version": "delivery-handoff/v1",
+  "family_version": "delivery-family/1.2",
+  "type": "delivery-handoff",
+  "handoff_id": "fixture-neg-needs-choice",
+  "previous_handoff_id": null,
+  "generated_at": "2026-07-17T00:00:00Z",
+  "stage": "delivery-explore",
+  "source_revision": {
+    "repo_head": "abc123",
+    "artifact_revision": null,
+    "state_observed_at": "2026-07-17T00:00:00Z"
+  },
+  "state_source": {
+    "kind": "none",
+    "label": "none（探索非正式）",
+    "anchor": null
+  },
+  "capability_snapshot": {
+    "memory": "ok",
+    "openspec": "initialized",
+    "superpowers": "loaded"
+  },
+  "capability_bindings": {
+    "openspec": {},
+    "memory": {},
+    "superpowers": {},
+    "subagents": {}
+  },
+  "presentation_capability": {
+    "mode": "markdown",
+    "source": "unknown"
+  },
+  "gate_status": {
+    "status": "n/a",
+    "summary": "探索非正式，无规格闸门",
+    "evidence": [],
+    "approved_by": null,
+    "approved_at": null,
+    "binds_to_revision": null,
+    "accepted_warning_ids": []
+  },
+  "evidence_mode": "full",
+  "next_skill": "delivery-frame-spec",
+  "next_action": null,
+  "required_inputs": [],
+  "stop_condition": "",
+  "stage_payload": {
+    "direction_alignment": "needs_choice",
+    "chosen_direction": "导出纯文本",
+    "non_goals": [],
+    "code_anchors": [
+      "src/export.py"
+    ],
+    "risk_signal": "standard-likely",
+    "unknowns": []
+  },
+  "presentation": {
+    "schema": "delivery-presentation/v1",
+    "from_task": "探索·方向对齐",
+    "to_task": "定框·路由与需求边界",
+    "summary": "已选方向：导出纯文本",
+    "evidence": [],
+    "continue_prompt": "请使用 delivery-frame-spec"
+  }
+}

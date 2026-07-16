@@ -1,0 +1,79 @@
+{
+  "schema_version": "delivery-handoff/v1",
+  "family_version": "delivery-family/1.2",
+  "type": "delivery-handoff",
+  "handoff_id": "fixture-neg-n5",
+  "previous_handoff_id": "fixture-plan-1",
+  "generated_at": "2026-07-17T00:00:00Z",
+  "stage": "delivery-execute-verify",
+  "source_revision": {
+    "repo_head": "def456",
+    "artifact_revision": "sha256:ccc",
+    "state_observed_at": "2026-07-17T00:00:00Z"
+  },
+  "state_source": {
+    "kind": "openspec_change",
+    "label": "change #fixture",
+    "anchor": "openspec/changes/fixture"
+  },
+  "capability_snapshot": {
+    "memory": "ok",
+    "openspec": "initialized",
+    "superpowers": "loaded"
+  },
+  "capability_bindings": {
+    "openspec": {},
+    "memory": {},
+    "superpowers": {},
+    "subagents": {}
+  },
+  "presentation_capability": {
+    "mode": "markdown",
+    "source": "unknown"
+  },
+  "gate_status": {
+    "status": "pass",
+    "summary": "新鲜验证与独立审查通过",
+    "evidence": [],
+    "approved_by": "user",
+    "approved_at": "2026-07-17T00:00:00Z",
+    "binds_to_revision": "sha256:ccc",
+    "accepted_warning_ids": []
+  },
+  "evidence_mode": "full",
+  "next_skill": null,
+  "next_action": "openspec archive fixture",
+  "required_inputs": [],
+  "stop_condition": "",
+  "stage_payload": {
+    "overall_status": "verified",
+    "task_status": [],
+    "current_failures_or_blocks": [],
+    "artifact_backflow": "none",
+    "alignment_backflow": null,
+    "fresh_verification_evidence": [
+      "pytest -q: 24 passed"
+    ],
+    "spec_coherence": "pass",
+    "code_review": {
+      "status": "pass",
+      "mode": "independent",
+      "independent_review": "required_pass",
+      "reviewer": "subagent-review-1",
+      "findings": []
+    },
+    "archive": {
+      "status": "closed",
+      "reason": "premature"
+    },
+    "asset_writeback": []
+  },
+  "presentation": {
+    "schema": "delivery-presentation/v1",
+    "from_task": "实施·验证",
+    "to_task": "OpenSpec 归档",
+    "summary": "verified；归档移交 OpenSpec",
+    "evidence": [],
+    "continue_prompt": "openspec archive fixture"
+  }
+}

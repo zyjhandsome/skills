@@ -120,6 +120,8 @@ Trigger (all required): implementation go recorded; every authoritative task `- 
 
 Then, in the same turn: write/update `verification.md` (template: `references/verification-template.md`) with evidence and residuals → set `overall_status: verified` + `archive.status: deferred_to_openspec` → state that sync/archive is not done here and the next step is the resolved `archive_change` operation → offer optional next steps (archive, then commit/PR/merge/keep) — **ask** before any git mutation.
 
+Use the close-out wizard to eliminate hand-written close-out JSON: `../delivery-frame-spec/scripts/delivery_scaffold.py close-out --change-dir <change> --review-status pass --reviewer <id> --evidence "<command: result>" [--approved-by <who>]`. It runs `validate_delivery_change --claim-verified`, computes the revision, emits and validates the verified handoff, and persists `handoff.json` — it never runs archive or git. The review/evidence flags describe work that already happened; the wizard is a recorder, not a substitute for the gates.
+
 Must not claim verified when any required validation failed or was not freshly run, any authoritative task remains open, or Medium/High independent review is missing. Non-blocking residuals (optional release smoke, accepted WARNINGs, `no writeback needed`) do not block close-out when recorded in evidence.
 
 After close-out, decide whether to update README, CONTEXT, ADR, Wiki, or a reusable Skill (canonical `specs/` updates happen during OpenSpec archive, not here); record `no writeback needed` when applicable.
@@ -141,7 +143,8 @@ Read as needed:
 - `references/artifact-gate-checks.md` — G1–G8
 - `references/subagent-orchestration.md` — Chinese templates and checklists
 - `scripts/validate_delivery_change.py`
-- `tests/` — dev-time regression scripts; read only when changing orchestration or cross-stage contracts
+- `../delivery-frame-spec/scripts/delivery_scaffold.py` — new-handoff / quick-pack / close-out scaffolds
+- `tests/` — dev-time regression scripts; run `tests/test_template_anchor_consistency.py` whenever templates or `validate_delivery_change.py` anchors change
 
 ## Red Flags
 

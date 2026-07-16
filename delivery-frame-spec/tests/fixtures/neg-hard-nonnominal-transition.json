@@ -1,0 +1,65 @@
+{
+  "schema_version": "delivery-handoff/v1",
+  "family_version": "delivery-family/1.2",
+  "type": "delivery-handoff",
+  "handoff_id": "fixture-neg-hard-snapshot",
+  "previous_handoff_id": null,
+  "generated_at": "2026-07-17T00:00:00Z",
+  "stage": "delivery-frame-spec",
+  "source_revision": {
+    "repo_head": "abc123",
+    "artifact_revision": "sha256:aaa",
+    "state_observed_at": "2026-07-17T00:00:00Z"
+  },
+  "state_source": {
+    "kind": "openspec_change",
+    "label": "change #fixture",
+    "anchor": "openspec/changes/fixture"
+  },
+  "capability_snapshot": {
+    "memory": "down",
+    "openspec": "initialized",
+    "superpowers": "loaded"
+  },
+  "capability_bindings": {
+    "openspec": {},
+    "memory": {},
+    "superpowers": {},
+    "subagents": {}
+  },
+  "presentation_capability": {
+    "mode": "markdown",
+    "source": "unknown"
+  },
+  "gate_status": {
+    "status": "pass",
+    "summary": "规格闸门通过",
+    "evidence": [],
+    "approved_by": "user",
+    "approved_at": "2026-07-17T00:00:00Z",
+    "binds_to_revision": "sha256:aaa",
+    "accepted_warning_ids": []
+  },
+  "evidence_mode": "full",
+  "next_skill": "delivery-plan-tasks",
+  "next_action": null,
+  "required_inputs": [],
+  "stop_condition": "",
+  "stage_payload": {
+    "route": "Standard",
+    "risk": "medium",
+    "confirmed_artifacts": [
+      "proposal.md"
+    ],
+    "forbidden_scope": [],
+    "open_questions": []
+  },
+  "presentation": {
+    "schema": "delivery-presentation/v1",
+    "from_task": "定框·规格闸门通过",
+    "to_task": "技术设计与任务拆解",
+    "summary": "Standard/Medium 已批准",
+    "evidence": [],
+    "continue_prompt": "请使用 delivery-plan-tasks"
+  }
+}
