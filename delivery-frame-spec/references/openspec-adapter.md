@@ -57,6 +57,8 @@
 2. 分隔线后接 Delivery 中文简报全文（见 `brief-template.md`），含 Explore 交接消费与状态源。
 3. Quick / Debug-Low：OpenSpec Why/What 可极简；主体用轻量契约；仍不要另建 `brief.md`。若 `openspec validate` 报「must have at least one delta」，补最小 `specs/<cap>/spec.md`（一条 Requirement + Scenario），不要因此升到 Standard。
 
+**Quick 车道的 status 解读（防展示噪音）：** `inspect_change` / `openspec status` 在 Quick 下显示 design 槽未完成（如 3/4）**属预期**——Quick 按定义不产 `design.md`。判定完整性以「轻量契约 + 最小 delta + `validate` 通过」为准；向用户呈现 status 时附一句解释，不要为凑满槽位写假 design 或空占位文件。
+
 Capabilities 中的 kebab-case 名必须与后续 `specs/<name>/spec.md` 一致。
 
 ## 4. 失败与升级

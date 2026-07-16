@@ -127,8 +127,39 @@ def check_verification_template() -> list[str]:
     return errors
 
 
+# P3-2 lock: the accepted limited synonym set, and writings that must stay rejected.
+# Extending FIELD_PATTERNS without updating both lists here is a test failure by design.
+ACCEPTED_ALIASES = {
+    "target": ["目标文件/符号", "文件/符号", "Exact files/symbols", "Target files/symbols"],
+    "command": ["验证命令/动作", "验证命令", "验证动作", "验证", "Validation command/action", "Validation command"],
+    "expected": ["预期结果", "预期", "期望结果", "Expected result"],
+}
+REJECTED_LABELS = {
+    "target": ["目标", "涉及文件", "改动文件"],
+    "command": ["最小验证", "命令", "测试命令", "失败测试或已批准替代验证"],
+    "expected": ["结果", "验收标准", "完成定义"],
+}
+
+
+def check_synonym_lock() -> list[str]:
+    errors: list[str] = []
+    for field, aliases in ACCEPTED_ALIASES.items():
+        pattern = vdc.FIELD_PATTERNS[field]
+        for alias in aliases:
+            if not pattern.search(f"  - {alias}：样例值\n"):
+                errors.append(f"accepted alias no longer matches FIELD_PATTERNS[{field!r}]: {alias!r}")
+    for field, labels in REJECTED_LABELS.items():
+        pattern = vdc.FIELD_PATTERNS[field]
+        for label in labels:
+            if pattern.search(f"  - {label}：样例值\n"):
+                errors.append(
+                    f"FIELD_PATTERNS[{field!r}] became over-broad: undocumented label {label!r} matches"
+                )
+    return errors
+
+
 def main() -> int:
-    errors = check_tasks_template() + check_verification_template()
+    errors = check_tasks_template() + check_verification_template() + check_synonym_lock()
     if errors:
         return fail(errors)
     print("PASS: template machine anchors are consistent with validate_delivery_change.py")

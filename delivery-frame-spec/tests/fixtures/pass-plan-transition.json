@@ -1,0 +1,79 @@
+{
+  "schema_version": "delivery-handoff/v1",
+  "family_version": "delivery-family/1.2",
+  "type": "delivery-handoff",
+  "handoff_id": "fixture-plan-1",
+  "previous_handoff_id": "fixture-frame-1",
+  "generated_at": "2026-07-17T00:00:00Z",
+  "stage": "delivery-plan-tasks",
+  "source_revision": {
+    "repo_head": "abc123",
+    "artifact_revision": "sha256:aaa",
+    "state_observed_at": "2026-07-17T00:00:00Z"
+  },
+  "state_source": {
+    "kind": "openspec_change",
+    "label": "change #fixture",
+    "anchor": "openspec/changes/fixture"
+  },
+  "capability_snapshot": {
+    "memory": "ok",
+    "openspec": "initialized",
+    "superpowers": "loaded"
+  },
+  "capability_bindings": {
+    "openspec": {},
+    "memory": {},
+    "superpowers": {},
+    "subagents": {}
+  },
+  "presentation_capability": {
+    "mode": "markdown",
+    "source": "unknown"
+  },
+  "gate_status": {
+    "status": "pass",
+    "summary": "实现闸门通过",
+    "evidence": [],
+    "approved_by": "user",
+    "approved_at": "2026-07-17T00:00:00Z",
+    "binds_to_revision": "sha256:aaa",
+    "accepted_warning_ids": []
+  },
+  "evidence_mode": "full",
+  "next_skill": "delivery-execute-verify",
+  "next_action": null,
+  "required_inputs": [],
+  "stop_condition": "",
+  "stage_payload": {
+    "plan_tasks": [
+      {
+        "task": 1,
+        "title": "示例任务"
+      }
+    ],
+    "plan_decisions": {
+      "agent_decided": [],
+      "user_decided": [],
+      "returned_to_frame": [],
+      "remaining_blockers": []
+    },
+    "traceability": [],
+    "readiness_result": {
+      "blockers": [],
+      "warnings": [],
+      "suggestions": []
+    },
+    "validation_plan": [],
+    "risk_gates": [],
+    "parallel_ownership": []
+  },
+  "presentation": {
+    "schema": "delivery-presentation/v1",
+    "from_task": "计划·就绪审查完成",
+    "to_task": "实施·按 tasks.md 执行（任务勾选属 Execute 阶段）",
+    "summary": "计划完成，任务待实施",
+    "evidence": [],
+    "continue_prompt": "请使用 delivery-execute-verify"
+  }
+}

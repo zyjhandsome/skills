@@ -19,7 +19,7 @@ Shared family protocol (versioning, hard prerequisites, language rules, naming):
 2. OpenSpec is the only artifact/state backend — never invent parallel Markdown state beside a change.
 3. If direction is still open, hand to `delivery-explore`; do not invent a locked goal.
 4. Specification gate = **one** user ask. High’s five facets stay Agent-internal — never a user multi-quiz.
-5. Stage end: emit one complete `delivery-handoff/v1` object (including read-only, blocked, and end states), validate, persist per the handoff contract. If chaining is unsupported, tell the user「请使用 <next_skill>」.
+5. Stage end: emit one complete `delivery-handoff/v1` object (including read-only, blocked, and end states), validate, persist per the handoff contract. When a transition is allowed, follow the chain relay rule (`family-contract.md` §1): if the host can load skill files directly (e.g. Cursor), read the next skill's `SKILL.md` and continue in the same session; only when the host cannot, tell the user「请使用 <next_skill>」.
 6. OpenSpec / Codebase Memory MCP / Superpowers / SubAgent are hard prerequisites: use them directly; on a real runtime failure stop and report per `family-contract.md` — no degraded modes, no substitute backends.
 
 ## Overview

@@ -15,10 +15,22 @@ TASK_START = re.compile(r"(?m)^- \[(?P<status>[ xX])\] .+$")
 # (tasks-template.md, verification-template.md). Accept both ASCII ":" and fullwidth "："
 # because the Chinese templates emit the fullwidth colon. Do not reword the labels in the
 # templates without updating these patterns.
+#
+# Limited synonym set (delivery-family/1.2, P3-2): the aliases below are the near-synonym
+# labels observed in real field use (R3). They are ACCEPTED on read so a hand-written task
+# does not force a full revision re-bind, but templates and delivery_scaffold.py MUST keep
+# emitting only the canonical labels (first alternative in each group). Do not extend this
+# list without adding the new alias to tests/test_template_anchor_consistency.py first.
 FIELD_PATTERNS = {
-    "target": re.compile(r"(?mi)^\s+-\s+(?:目标文件/符号|Exact files/symbols)\s*[:：]\s*(\S.*)$"),
-    "command": re.compile(r"(?mi)^\s+-\s+(?:验证命令/动作|Validation command/action)\s*[:：]\s*(\S.*)$"),
-    "expected": re.compile(r"(?mi)^\s+-\s+(?:预期结果|Expected result)\s*[:：]\s*(\S.*)$"),
+    "target": re.compile(
+        r"(?mi)^\s+-\s+(?:目标文件/符号|文件/符号|Exact files/symbols|Target files/symbols)\s*[:：]\s*(\S.*)$"
+    ),
+    "command": re.compile(
+        r"(?mi)^\s+-\s+(?:验证命令/动作|验证命令|验证动作|验证|Validation command/action|Validation command)\s*[:：]\s*(\S.*)$"
+    ),
+    "expected": re.compile(
+        r"(?mi)^\s+-\s+(?:预期结果|预期|期望结果|Expected result)\s*[:：]\s*(\S.*)$"
+    ),
 }
 VERIFICATION_PATTERNS = {
     "command": re.compile(r"(?mi)^\s*(?:[-*]\s*)?(?:命令(?:/动作)?|command(?:/action)?)\s*[:：]\s*(\S.*)$"),

@@ -89,7 +89,7 @@
 
 - `handoff_id`：本次交付内唯一（建议 `<change-id>-<stage>-<序号>`）。`previous_handoff_id`（可选，可 `null`）：指向本次交付链中上一个 handoff，含回流；家族首个 handoff 为 `null`。
 - `state_source.kind`：Explore 恒为 `none`；正式 OpenSpec change 使用 `openspec_change` 并填写真实 `anchor`。
-- `source_revision`：记录生成时观测到的 repo HEAD、权威工件修订和时间。`artifact_revision` 优先使用 OpenSpec 原生 revision；否则运行 `scripts/hash_change_artifacts.py`（按路径排序的规范化相对路径 + 原始字节的 SHA-256）。不得用时间戳或聊天轮次冒充修订。
+- `source_revision`：记录生成时观测到的 repo HEAD、权威工件修订和时间。`artifact_revision` 优先使用 OpenSpec 原生 revision；否则运行 `../scripts/hash_change_artifacts.py`（按路径排序的规范化相对路径 + 原始字节的 SHA-256）。不得用时间戳或聊天轮次冒充修订。
 - `capability_snapshot`：硬前提 profile 下预期恒为标称值（见 `family-contract.md`）。出现非标称值时不得携带阶段转换。
 - `capability_bindings`：形状见 `family-contract.md`；记录实际解析结果。
 - `gate_status.status`：Explore 可用 `n/a`；未放行用 `pending`/`block`；有已公开且允许继续的警告用 `warn`；完全通过用 `pass`。

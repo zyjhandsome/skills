@@ -19,7 +19,7 @@ Shared family protocol: `../delivery-frame-spec/references/family-contract.md`. 
 2. No completion / merge / “done” language while required validation is failing or stale.
 3. Ends at `overall_status: verified` + `stage_payload.archive.status: deferred_to_openspec` — **never** sync/archive OpenSpec inside this skill.
 4. Default execute inline; parallel SubAgents only when independence checks pass. Trust diffs and reviews, not SubAgent summaries alone.
-5. Stage end: emit one complete `delivery-handoff/v1` object (in-progress, blocked, verified, and end states), validate, persist. If chaining is unsupported, tell the user the resolved archive operation only after verified; ask before any commit/PR.
+5. Stage end: emit one complete `delivery-handoff/v1` object (in-progress, blocked, verified, and end states), validate, persist. After verified, state the resolved archive operation (`next_action`); ask before any commit/PR. Backflow returns to frame/plan follow the chain relay rule (`family-contract.md` §1): continue in the same session when the host can load the upstream skill directly.
 6. Hard prerequisites are assumed available; on a real runtime failure stop and report per `family-contract.md` — no degraded execution or verification mode.
 
 ## Overview

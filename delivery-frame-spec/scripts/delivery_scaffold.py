@@ -355,7 +355,7 @@ def cmd_close_out(args: argparse.Namespace) -> int:
     # 1. Machine checks on tasks/verification (the R3 rework hotspot).
     claim = subprocess.run(
         [sys.executable, str(VALIDATE_DELIVERY_CHANGE), str(change_dir), "--claim-verified"],
-        capture_output=True, text=True,
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     sys.stderr.write(claim.stderr)
     print(claim.stdout.strip())

@@ -9,7 +9,8 @@
 3. 能力绑定记录
 4. 语言与命名约定（全家族）
 5. Memory 索引新鲜度规则
-6. 升级与兼容规则
+6. 交付自检
+7. 升级与兼容规则
 
 ## 1. Family 版本
 
@@ -100,7 +101,17 @@ visible_skills:
 
 执行阶段编辑代码后，依赖影响面证据前先确认索引新鲜度。
 
-## 6. 升级与兼容规则
+## 6. 交付自检
+
+修改任何 `delivery-*` 文件（SKILL、references、scripts、templates）后，发版/交付前运行一键自检：
+
+```text
+python delivery-frame-spec/tests/run_all.py
+```
+
+覆盖：引用存在性与版本一致性、模板机读锚点与有限同义词锁、handoff 正/负夹具、单链四阶段（含失效级联与 High 切片）。任何一项失败都不得交付；某个 `neg-*` 夹具开始通过意味着护栏被削弱，须先恢复或给出替代控制。
+
+## 7. 升级与兼容规则
 
 1. 先比较 `family_version` 与 `handoff_schema`；只按 major 判兼容；major 不受支持时停止自动链式转换。
 2. 外部能力按语义操作解析（OpenSpec 规则见 `openspec-adapter.md`），不把命令别名当稳定 API。
