@@ -386,12 +386,7 @@ Showing the full **Open Questions** list before the first clarification wave is 
 
 Do not ask the user for information that can be established from code, tests, logs, configuration, or approved artifacts. Ask only when a product choice materially changes scope, acceptance, risk, or irreversible behavior.
 
-Each question uses this structure (Chinese example: `references/clarification-example.md`):
-
-1. **Why this is being asked** — one concise sentence tied to verified code facts.
-2. **Options** — normally 2–4 concrete choices; each label carries the material scope, risk, migration, privacy, or UX consequence in short form. If the question is genuinely open-ended and options cannot be honestly enumerated, do not fabricate choices — ask in prose for freeform input. Include at most one escape option such as「其他（我来说明）」when fixed choices might not cover the user.
-3. **Recommendation (required on fixed-choice)** — state the recommended option and one evidence-based reason in the prompt (`推荐：B — …`); prefix that option’s label with「建议：». Distinguish recommendation from decision; the user must still choose.
-4. **The ask** — present the whole independent wave together (click first, typing fallback). Never offer「全部按推荐」as an option.
+Each question's structure — why (one code-fact sentence) / 2–4 concrete options carrying their material consequence (or freeform prose when options cannot be honestly enumerated, plus at most one「其他（我来说明）」escape) / required recommendation on fixed-choice (`推荐：… ` +「建议：」on that option) / present the whole independent wave (click first, typing fallback, never「全部按推荐」) — follows the authoritative **Question fields** in `references/batch-clarification.md`. Chinese example: `references/clarification-example.md`. Do not restate that structure divergently here.
 
 Use sensible defaults without asking only when the choice is low-risk, reversible, inside approved scope, and does not alter observable product behavior. Record the assumption in the brief. Never use a default to bypass a Medium/High gate or a product decision listed as blocking in **Open Questions**.
 

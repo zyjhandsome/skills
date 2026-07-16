@@ -68,14 +68,7 @@ Naming convention: refer to external capabilities as repo + semantic capability 
 
 ### Prerequisite preflight
 
-When this skill starts the family (usual case), probe the three external capabilities once and record `family_version`, a `capability_snapshot`, and only the `capability_bindings` actually resolved (formats defined in `delivery-frame-spec` and `../delivery-frame-spec/references/family-contract.md`):
-
-```text
-capability_snapshot:
-  memory: ok | stale-index | down
-  openspec: initialized | cli-only | unavailable
-  superpowers: loaded | partial(<missing>) | missing
-```
+When this skill starts the family (usual case), probe the three external capabilities once and record `family_version`, a `capability_snapshot`, and only the `capability_bindings` actually resolved. The `capability_snapshot` enum and `capability_bindings` shape are owned by `delivery-frame-spec` (**Prerequisite preflight — capability snapshot**) and `../delivery-frame-spec/references/family-contract.md`; use those definitions rather than a local copy.
 
 Non-nominal `memory`/`superpowers` values and `openspec: unavailable` are exceptions to report (installation is assumed); `openspec: cli-only` is a normal repo state. Pass the snapshot forward in the handoff so `delivery-frame-spec` does not re-probe nominal capabilities.
 

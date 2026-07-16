@@ -25,6 +25,8 @@ visible_skills:
 
 四个 Skill 和共享 references 必须原子安装/升级。发现缺失阶段或共享文件时停止跨阶段转换并报告缺失项；不要临时复制规则或创建替代 Router。
 
+**版本权威源与兼容口径：** 本文件（`family-contract.md`）是 `family_version` 的唯一权威声明；其他文件与模板中出现的 `delivery-family/1.1` 只是当前值的复制示例，升级时以本文件为准。兼容性按 **major** 判定：同一 major 下的 minor 递增视为**向后兼容的加法式变更**（新增可选字段、新增 `x_` 扩展键），不触发停机。`validate_handoff.py` 据此只校验 major（接受 `delivery-family/1.x`），因此 minor bump 不需要改校验器。只有 major 不受支持时才停止自动链式转换。
+
 ## 2. 能力依赖等级
 
 | 能力 | 等级 | 缺失行为 |
@@ -83,7 +85,7 @@ visible_skills:
 
 ## 4. 升级与兼容规则
 
-1. 先比较 `family_version` 和 `handoff_schema`；不支持的 major 版本停止自动链式转换。
+1. 先比较 `family_version` 和 `handoff_schema`；只按 **major** 判定兼容，同 major 的 minor 递增须保持加法式向后兼容（新增可选字段或 `x_` 扩展键，不改已有语义）；major 不受支持时停止自动链式转换。
 2. 外部能力按语义操作解析，不把命令别名当成稳定 API。OpenSpec 规则见 `openspec-adapter.md`。
 3. Memory 调用前发现当前 MCP schema；Superpowers 记录实际加载的方法来源；SubAgent 使用宿主实际并发上限。
 4. 外部能力升级后，只重新验证受影响的 adapter、工件和 gate，不无条件重跑所有阶段。

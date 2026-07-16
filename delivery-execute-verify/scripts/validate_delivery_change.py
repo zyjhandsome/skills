@@ -11,15 +11,19 @@ from pathlib import Path
 
 
 TASK_START = re.compile(r"(?m)^- \[(?P<status>[ xX])\] .+$")
+# Field labels below are STABLE MACHINE ANCHORS shared with the Chinese/English templates
+# (tasks-template.md, verification-template.md). Accept both ASCII ":" and fullwidth "："
+# because the Chinese templates emit the fullwidth colon. Do not reword the labels in the
+# templates without updating these patterns.
 FIELD_PATTERNS = {
-    "target": re.compile(r"(?mi)^\s+-\s+(?:目标文件/符号|Exact files/symbols)\s*:\s*(\S.*)$"),
-    "command": re.compile(r"(?mi)^\s+-\s+(?:验证命令/动作|Validation command/action)\s*:\s*(\S.*)$"),
-    "expected": re.compile(r"(?mi)^\s+-\s+(?:预期结果|Expected result)\s*:\s*(\S.*)$"),
+    "target": re.compile(r"(?mi)^\s+-\s+(?:目标文件/符号|Exact files/symbols)\s*[:：]\s*(\S.*)$"),
+    "command": re.compile(r"(?mi)^\s+-\s+(?:验证命令/动作|Validation command/action)\s*[:：]\s*(\S.*)$"),
+    "expected": re.compile(r"(?mi)^\s+-\s+(?:预期结果|Expected result)\s*[:：]\s*(\S.*)$"),
 }
 VERIFICATION_PATTERNS = {
-    "command": re.compile(r"(?mi)^\s*(?:[-*]\s*)?(?:命令|command)\s*:\s*(\S.*)$"),
-    "time": re.compile(r"(?mi)^\s*(?:[-*]\s*)?(?:时间|timestamp|date)\s*:\s*(\S.*)$"),
-    "result": re.compile(r"(?mi)^\s*(?:[-*]\s*)?(?:结果|result)\s*:\s*(\S.*)$"),
+    "command": re.compile(r"(?mi)^\s*(?:[-*]\s*)?(?:命令(?:/动作)?|command(?:/action)?)\s*[:：]\s*(\S.*)$"),
+    "time": re.compile(r"(?mi)^\s*(?:[-*]\s*)?(?:时间|timestamp|date)\s*[:：]\s*(\S.*)$"),
+    "result": re.compile(r"(?mi)^\s*(?:[-*]\s*)?(?:退出码/结果|结果|退出码|result|exit\s*code)\s*[:：]\s*(\S.*)$"),
 }
 PLACEHOLDER = re.compile(r"^(?:<[^>]+>|tbd|todo|n/?a|none|null|待定|待补)$", re.IGNORECASE)
 

@@ -16,6 +16,7 @@
 - 使用 `schema_version: delivery-handoff/v1` 和 `type: delivery-handoff`。
 - 使用 `family_version: delivery-family/1.1`；不支持该 major 版本时停止自动链式转换。
 - 保持本契约的 snake_case 键和内部能力枚举；不要把 UI 的 camelCase 或兼容枚举写回本对象。
+- **前向兼容扩展位：** 顶层如需承载非权威的附加信息，使用 `x_` 前缀键（如 `x_experiment_note`）。校验器忽略 `x_*` 顶层键，不因其失败；但 `x_*` 不得承载权威状态、批准或任务完成事实，那些只能落在既有权威字段和 OpenSpec change 中。`stage_payload` 本就允许阶段专属附加字段，无需 `x_` 前缀。
 - 只写已有事实。未知值使用 `null`、空数组或明确的 `unknown`，不要用占位字符串伪装事实。
 - `presentation` 只能投影同一对象和权威工件中已有的事实，不能创建状态、批准、任务完成或归档结果。
 - 输出前确保 JSON 可完整解析；半截或无效 JSON 不构成交接。

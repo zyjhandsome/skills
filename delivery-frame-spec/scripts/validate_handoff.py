@@ -11,7 +11,11 @@ from pathlib import Path
 from typing import Any
 
 
-FAMILY_VERSION = "delivery-family/1.1"
+# Compatibility is major-based: any delivery-family/<SUPPORTED_FAMILY_MAJOR>.x is accepted
+# so additive minor bumps do not require editing this validator. CURRENT_FAMILY_VERSION is
+# the version the templates currently emit; it is informational only.
+SUPPORTED_FAMILY_MAJOR = 1
+CURRENT_FAMILY_VERSION = "delivery-family/1.1"
 SCHEMA_VERSION = "delivery-handoff/v1"
 STAGES = {
     "delivery-explore",
@@ -80,6 +84,16 @@ STAGE_PAYLOAD_KEYS = {
 }
 
 
+def family_major(value: Any) -> int | None:
+    if not isinstance(value, str) or not value.startswith("delivery-family/"):
+        return None
+    tail = value.split("/", 1)[1]
+    try:
+        return int(tail.split(".", 1)[0])
+    except ValueError:
+        return None
+
+
 def is_rfc3339(value: Any) -> bool:
     if not isinstance(value, str) or not value:
         return False
@@ -114,14 +128,19 @@ def validate(data: Any) -> list[str]:
     errors: list[str] = []
     root = require_object(data, "$", errors)
     require_keys(root, TOP_LEVEL, "$", errors)
-    extras = sorted(set(root) - TOP_LEVEL)
+    # Forward-compatible extension: keys prefixed with "x_" are reserved for additive,
+    # non-authoritative extensions and are ignored by this validator.
+    extras = sorted(k for k in set(root) - TOP_LEVEL if not k.startswith("x_"))
     if extras:
         errors.append(f"$ has unsupported top-level keys: {', '.join(extras)}")
 
     if root.get("schema_version") != SCHEMA_VERSION:
         errors.append(f"schema_version must be {SCHEMA_VERSION}")
-    if root.get("family_version") != FAMILY_VERSION:
-        errors.append(f"family_version must be {FAMILY_VERSION}")
+    if family_major(root.get("family_version")) != SUPPORTED_FAMILY_MAJOR:
+        errors.append(
+            f"family_version major must be {SUPPORTED_FAMILY_MAJOR} "
+            f"(e.g. {CURRENT_FAMILY_VERSION}); got {root.get('family_version')!r}"
+        )
     if root.get("type") != "delivery-handoff":
         errors.append("type must be delivery-handoff")
     if not isinstance(root.get("handoff_id"), str) or not root.get("handoff_id"):
