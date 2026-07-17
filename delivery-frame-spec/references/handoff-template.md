@@ -67,9 +67,9 @@
 公共规则：
 
 - **互斥（强制）**：`next_skill` 与 `next_action` 最多一个非 `null`。Explore/Frame/Plan 成功转换只填 `next_skill`；Execute 只填 `next_action`；结束/阻塞时两者皆 `null`。
-- `artifact_revision`：优先 OpenSpec 原生 revision；否则 `python <frame-spec>/scripts/hash_change_artifacts.py <change-dir>`。
+- `artifact_revision`：优先 OpenSpec 原生 revision；否则 `node <frame-spec>/scripts/hash_change_artifacts.mjs <change-dir>`。
 - 批准必须绑定当前 `artifact_revision`（`binds_to_revision`）；`accepted_warning_ids` 只列可见摘要中用户明确接受的项。
-- 输出前：`python <frame-spec>/scripts/validate_handoff.py <handoff.json>`（或 stdin）。失败不得交接。通过后按 `handoff-contract.md` 第 4 节落盘 `handoff.json`（Explore 除外）。
+- 输出前：`node <frame-spec>/scripts/validate_handoff.mjs <handoff.json>`（或 stdin）。失败不得交接。通过后按 `handoff-contract.md` 第 4 节落盘 `handoff.json`（Explore 除外）。
 - `presentation` 只投影权威对象已有事实；投影方式按 `presentation_capability.mode`（结构化规则见 `structured-presentation-adapter.md`）。
 - 链式加载不可用时，输出交接后停止，并原样提示「请使用 <next_skill>」（Execute：给出已解析的 `archive_change` 实际入口；未解析到时报告缺失，不猜 alias）。
 

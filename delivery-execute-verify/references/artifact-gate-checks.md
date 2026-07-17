@@ -23,7 +23,7 @@
 
 ## 可脚本化断言（试点）
 
-优先运行 `../scripts/validate_delivery_change.py`。它按完整任务块检查字段，而不是要求路径必须写在 checkbox 标题行；自定义 OpenSpec schema 可通过 `--tasks` / `--verification` 传入实际槽位。
+优先运行 `../scripts/validate_delivery_change.mjs`。它按完整任务块检查字段，而不是要求路径必须写在 checkbox 标题行；自定义 OpenSpec schema 可通过 `--tasks` / `--verification` 传入实际槽位。
 
 剩余规则伪代码：
 

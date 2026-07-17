@@ -13,7 +13,7 @@
 |---|---|---|---|---|
 
 ### 主验证证据（机器锚点，标签稳定勿改）
-（供 `scripts/validate_delivery_change.py --claim-verified` 读取；至少填主验证命令一条。标签「命令 / 时间 / 结果」是校验脚本锚点，改词会导致静默漏检。）
+（供 `scripts/validate_delivery_change.mjs --claim-verified` 读取；至少填主验证命令一条。标签「命令 / 时间 / 结果」是校验脚本锚点，改词会导致静默漏检。）
 - 命令：<主验证命令或动作>
 - 时间：<RFC3339，如 2026-07-16T09:00:00Z>
 - 结果：<pass|fail 或退出码，如 exit 0 / 通过>

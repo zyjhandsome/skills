@@ -30,7 +30,7 @@ visible_skills:
 
 **链式接力（宿主无关，按能力判定）：** handoff 校验通过且允许转换时，判定标准只有一条——**当前宿主能否让 Agent 直接读取下一技能的 `SKILL.md`**（多数本地技能目录宿主均可，如 Claude Code）。能读取则在**同一会话**读取并继续执行，不停下等用户复述；仅当宿主确实无法加载下一技能、或转换本身被闸门/阻塞项挡住时，才停止并提示「请使用 <next_skill>」。不为任何具体宿主写定制适配；换宿主时本规则无需修改。跨会话恢复走 `handoff-contract.md` 的持久化槽位（change 目录内 `handoff.json`）。
 
-**版本权威源与兼容口径：** 本文件是 `family_version` 的唯一权威声明；其他文件中的版本字符串只是当前值的复制。兼容性按 **major** 判定：同 major 的 minor 递增是向后兼容的加法式变更（新增可选字段、`x_` 扩展键），不触发停机。`validate_handoff.py` 只校验 major（接受 `delivery-family/1.x`）。
+**版本权威源与兼容口径：** 本文件是 `family_version` 的唯一权威声明；其他文件中的版本字符串只是当前值的复制。兼容性按 **major** 判定：同 major 的 minor 递增是向后兼容的加法式变更（新增可选字段、`x_` 扩展键），不触发停机。`validate_handoff.mjs` 只校验 major（接受 `delivery-family/1.x`）。
 
 ## 2. 硬前提能力（无降级）
 
@@ -48,7 +48,7 @@ visible_skills:
 
 - **不做安装态预检。** 阶段开始时不探测「是否安装/是否初始化」，直接按已就绪使用；第一次真实调用失败才触发上表的停止-报告行为。
 - **失败报告形状（中文，一行起）：**「<能力> 调用失败：<错误摘要>。已停止 <受影响环节>。请修复后回复继续。」不做降级选项列表。
-- `capability_snapshot` 在 handoff 中保留（schema 稳定），但本 profile 下预期恒为标称值：`memory: ok`、`openspec: initialized`、`superpowers: loaded`。出现非标称值时不得携带阶段转换（`next_skill`/`next_action` 保持 `null`，`stop_condition` 写明故障）。此规则由 `validate_handoff.py` 默认强制（`--profile hard`）。
+- `capability_snapshot` 在 handoff 中保留（schema 稳定），但本 profile 下预期恒为标称值：`memory: ok`、`openspec: initialized`、`superpowers: loaded`。出现非标称值时不得携带阶段转换（`next_skill`/`next_action` 保持 `null`，`stop_condition` 写明故障）。此规则由 `validate_handoff.mjs` 默认强制（`--profile hard`）。
 - `evidence_mode` 恒为 `full`。没有 degraded 取证模式。
 
 ## 3. 能力绑定记录
@@ -106,7 +106,7 @@ visible_skills:
 修改任何 `delivery-*` 文件（SKILL、references、scripts、templates）后，发版/交付前运行一键自检：
 
 ```text
-python delivery-frame-spec/tests/run_all.py
+node delivery-frame-spec/tests/run_all.mjs
 ```
 
 覆盖：引用存在性与版本一致性、模板机读锚点与有限同义词锁、handoff 正/负夹具、单链四阶段（含失效级联与 High 切片）。任何一项失败都不得交付；某个 `neg-*` 夹具开始通过意味着护栏被削弱，须先恢复或给出替代控制。
