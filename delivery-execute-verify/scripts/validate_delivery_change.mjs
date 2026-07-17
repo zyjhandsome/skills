@@ -20,7 +20,7 @@ export const TASK_START = /^- \[(?<status>[ xX])\] .+$/m;
 // because the Chinese templates emit the fullwidth colon. Do not reword the labels in the
 // templates without updating these patterns.
 //
-// Limited synonym set (delivery-family/1.2, P3-2): the aliases below are the near-synonym
+// Limited synonym set (delivery-family/1.3, P3-2): the aliases below are the near-synonym
 // labels observed in real field use (R3). They are ACCEPTED on read so a hand-written task
 // does not force a full revision re-bind, but templates and delivery_scaffold.mjs MUST keep
 // emitting only the canonical labels (first alternative in each group). Do not extend this

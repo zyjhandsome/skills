@@ -16,7 +16,7 @@
 ## 1. 权威边界
 
 - 使用 `schema_version: delivery-handoff/v1` 和 `type: delivery-handoff`。
-- `family_version` 以 `family-contract.md` 为权威（当前 `delivery-family/1.2`）；major 不受支持时停止自动链式转换。
+- `family_version` 以 `family-contract.md` 为权威（当前 `delivery-family/1.3`）；major 不受支持时停止自动链式转换。
 - 保持本契约的 snake_case 键和内部能力枚举；不要把 UI 的 camelCase 或兼容枚举写回本对象。
 - **前向兼容扩展位：** 顶层附加信息使用 `x_` 前缀键；校验器忽略 `x_*`。`x_*` 不得承载权威状态、批准或任务完成事实。`stage_payload` 允许阶段专属附加字段，无需前缀。
 - 只写已有事实。未知值使用 `null`、空数组或明确的 `unknown`。
@@ -28,7 +28,7 @@
 ```json
 {
   "schema_version": "delivery-handoff/v1",
-  "family_version": "delivery-family/1.2",
+  "family_version": "delivery-family/1.3",
   "type": "delivery-handoff",
   "handoff_id": "<唯一 id>",
   "previous_handoff_id": null,

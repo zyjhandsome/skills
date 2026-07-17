@@ -1,12 +1,19 @@
 ---
 name: delivery-plan-tasks
-description: >-
+description: |
   Use when an approved software requirement needs a technical design, executable
   task breakdown, implementation-readiness review, or implementation gate —
   e.g. “写技术方案”, “拆分实现任务”, “做实现就绪审查”, or “过实现闸门”, after
   delivery-frame-spec approved Standard/High (or Debug-Medium/High) scope. Writes
   design.md/tasks.md, vertical slices, and a validation matrix. Does not implement.
   Hands off to delivery-execute-verify after explicit user go.
+
+  触发场景：
+  - 需求已批准需要技术设计
+  - 可执行任务拆解
+  - 实现就绪度评审
+
+  触发词：交付计划、delivery、plan、任务拆解、技术设计、plan-tasks
 ---
 
 # Delivery Plan Tasks
@@ -21,6 +28,16 @@ Shared family protocol: `../delivery-frame-spec/references/family-contract.md`. 
 4. Implementation go = **one** user ask (High: same ask + cost/risk/rollback summary; five facets Agent-internal).
 5. Stage end: emit one complete `delivery-handoff/v1` object (including blocked/end states), validate, persist. Only after the gate permits transition, follow the chain relay rule (`family-contract.md` §1): if the host can load skill files directly (e.g. Claude Code), read `delivery-execute-verify/SKILL.md` and continue in the same session; only when the host cannot, tell the user「请使用 delivery-execute-verify」.
 6. Hard prerequisites are assumed available; on a real runtime failure stop and report per `family-contract.md` — no degraded planning mode.
+
+### Runtime failure report (Chinese, fixed 3 lines)
+
+When a hard prerequisite fails at runtime, tell the user exactly:
+
+```text
+缺什么：<memory|openspec|superpowers 的具体异常枚举或错误摘要>
+能否降级：否（硬前提）；必须恢复后继续
+下一步请你：<例如：恢复 OpenSpec 后再写 design/tasks / 修复 Memory 索引后回复继续>
+```
 
 ## Overview
 

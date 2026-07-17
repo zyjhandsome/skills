@@ -1,12 +1,19 @@
 ---
 name: delivery-execute-verify
-description: >-
+description: |
   Use when implementing an approved task set or a user-approved scoped defect/debug
   contract, or when verifying development work — e.g. “开始实施”, “按 tasks.md 执行”,
   “按已批准范围修复缺陷”, “跑新鲜验证”, or “确认是否已完成”. Applies TDD,
   SubAgent waves, fresh tests, and code review. Ends at verified handoff; does not
   sync or archive OpenSpec changes — that belongs to the resolved OpenSpec
   `archive_change` operation.
+
+  触发场景：
+  - 实现已批准任务集
+  - 修复范围缺陷或调试异常
+  - 新鲜验证（运行时测试 + 规格核对）通过后标记 verified
+
+  触发词：交付执行、delivery、verify、实施、验证、TDD、openspec
 ---
 
 # Delivery Execute Verify
@@ -21,6 +28,16 @@ Shared family protocol: `../delivery-frame-spec/references/family-contract.md`. 
 4. Default execute inline; parallel SubAgents only when independence checks pass. Trust diffs and reviews, not SubAgent summaries alone.
 5. Stage end: emit one complete `delivery-handoff/v1` object (in-progress, blocked, verified, and end states), validate, persist. After verified, state the resolved archive operation (`next_action`); ask before any commit/PR. Backflow returns to frame/plan follow the chain relay rule (`family-contract.md` §1): continue in the same session when the host can load the upstream skill directly.
 6. Hard prerequisites are assumed available; on a real runtime failure stop and report per `family-contract.md` — no degraded execution or verification mode.
+
+### Runtime failure report (Chinese, fixed 3 lines)
+
+When a hard prerequisite fails at runtime, tell the user exactly:
+
+```text
+缺什么：<memory|openspec|superpowers 的具体异常枚举或错误摘要>
+能否降级：否（硬前提）；必须恢复后继续
+下一步请你：<例如：恢复 OpenSpec 后再继续实施与 verify / 修复 Memory 索引后回复继续>
+```
 
 ## Overview
 

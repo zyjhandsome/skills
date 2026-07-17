@@ -15,7 +15,7 @@
 ## 1. Family 版本
 
 ```text
-family_version: delivery-family/1.2
+family_version: delivery-family/1.3
 handoff_schema: delivery-handoff/v1
 presentation_schema: delivery-presentation/v1
 structured_ui_schema: delivery-ui/v1
@@ -47,8 +47,19 @@ visible_skills:
 规则：
 
 - **不做安装态预检。** 阶段开始时不探测「是否安装/是否初始化」，直接按已就绪使用；第一次真实调用失败才触发上表的停止-报告行为。
-- **失败报告形状（中文，一行起）：**「<能力> 调用失败：<错误摘要>。已停止 <受影响环节>。请修复后回复继续。」不做降级选项列表。
-- `capability_snapshot` 在 handoff 中保留（schema 稳定），但本 profile 下预期恒为标称值：`memory: ok`、`openspec: initialized`、`superpowers: loaded`。出现非标称值时不得携带阶段转换（`next_skill`/`next_action` 保持 `null`，`stop_condition` 写明故障）。此规则由 `validate_handoff.mjs` 默认强制（`--profile hard`）。
+- **失败报告形状（中文，固定三行）：** 硬前提运行时失败或发现非标称能力状态时，对用户使用下列三行（不做降级选项列表、不提供 degraded 续跑）。四份阶段 `SKILL.md` 各保留完整副本以便阶段内可读。
+
+```text
+缺什么：<memory|openspec|superpowers 的具体异常枚举或错误摘要>
+能否降级：否（硬前提）；必须恢复后继续
+下一步请你：<例如：修复 Memory 索引后回复继续 / 同意执行已解析的 initialize_repo / 恢复 OpenSpec 后继续>
+```
+
+`memory` / `openspec` / `superpowers` 与 `capability_snapshot` 键对齐：`memory` = Codebase Memory MCP（勿写成别的产品名）。SubAgent/worktree 故障不必塞进「缺什么」枚举；用三行前的技术摘要说明即可。
+
+也可在三行前加一句技术摘要：「<能力> 调用失败：<错误摘要>。已停止 <受影响环节>。」
+- **`openspec: cli-only`（异常可恢复，不是降级模式）：** 第一次真实需要 OpenSpec 时若发现 CLI 可用但仓库未 init，将快照标为 `openspec: cli-only`，用上列三行报告，并提议已解析的 `initialize_repo`（常见候选：`openspec init`）。用户同意后执行该操作并恢复标称态；用户拒绝则 mutation / artifact / gate 写入全部停止（只读调查除外）。禁止为此创建应急 Markdown 状态源。
+- `capability_snapshot` 在 handoff 中保留（schema 稳定），但本 profile 下预期恒为标称值：`memory: ok`、`openspec: initialized`、`superpowers: loaded`。出现非标称值（含 `cli-only`）时不得携带阶段转换（`next_skill`/`next_action` 保持 `null`，`stop_condition` 写明故障）。此规则由 `validate_handoff.mjs` 默认强制（`--profile hard`）。
 - `evidence_mode` 恒为 `full`。没有 degraded 取证模式。
 
 ## 3. 能力绑定记录
@@ -62,6 +73,7 @@ visible_skills:
       "version": null,
       "schema": null,
       "operations": {
+        "initialize_repo": null,
         "create_change": null,
         "inspect_change": null,
         "continue_artifacts": null,

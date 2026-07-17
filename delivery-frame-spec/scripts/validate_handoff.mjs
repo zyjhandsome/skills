@@ -18,7 +18,7 @@ import process from "node:process";
 // so additive minor bumps do not require editing this validator. CURRENT_FAMILY_VERSION is
 // the version the templates currently emit; it is informational only.
 export const SUPPORTED_FAMILY_MAJOR = 1;
-export const CURRENT_FAMILY_VERSION = "delivery-family/1.2";
+export const CURRENT_FAMILY_VERSION = "delivery-family/1.3";
 const SCHEMA_VERSION = "delivery-handoff/v1";
 const STAGES = new Set([
   "delivery-explore",
@@ -47,9 +47,9 @@ const TOP_LEVEL = new Set([
   "stage_payload",
   "presentation",
 ]);
-// Optional additive keys (delivery-family/1.2): accepted when present, never required.
+// Optional additive keys (delivery-family/1.3): accepted when present, never required.
 const OPTIONAL_TOP_LEVEL = new Set(["previous_handoff_id"]);
-// Hard-prerequisite profile (delivery-family/1.2 default): OpenSpec, Codebase Memory MCP,
+// Hard-prerequisite profile (delivery-family/1.3 default): OpenSpec, Codebase Memory MCP,
 // Superpowers, and SubAgents are assumed installed and nominal. A non-nominal snapshot may
 // still be reported, but it must not carry a stage transition, and degraded evidence does
 // not exist. Use --profile legacy to validate pre-1.2 handoffs.

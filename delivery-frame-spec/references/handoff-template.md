@@ -7,7 +7,7 @@
 ```delivery-handoff
 {
   "schema_version": "delivery-handoff/v1",
-  "family_version": "delivery-family/1.2",
+  "family_version": "delivery-family/1.3",
   "type": "delivery-handoff",
   "handoff_id": "<change-id>-<stage>-<序号>",
   "previous_handoff_id": null,

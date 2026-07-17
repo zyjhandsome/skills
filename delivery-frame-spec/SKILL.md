@@ -1,12 +1,19 @@
 ---
 name: delivery-frame-spec
-description: >-
+description: |
   Use when starting, resuming, investigating, or reframing a software development
   request before implementation readiness is established — e.g. “请处理这个开发需求”,
   “给需求定框”, “明确需求边界”, “判断 Quick/Standard/High”, add/change a feature,
   clarify scope, route Quick/Standard/High/Debug, or recover an OpenSpec change.
   Default entry when the change intent is clear. Hands off to delivery-plan-tasks
   or delivery-execute-verify (or delivery-explore if direction is still open).
+
+  触发场景：
+  - 开始/恢复/重构开发请求
+  - 明确需求边界
+  - 判断 Quick/Standard/High/Debug 路由
+
+  触发词：定框、delivery、frame、需求边界、就绪度、规范、frame-spec
 ---
 
 # Delivery Frame Spec
@@ -21,6 +28,16 @@ Shared family protocol (versioning, hard prerequisites, language rules, naming):
 4. Specification gate = **one** user ask. High’s five facets stay Agent-internal — never a user multi-quiz.
 5. Stage end: emit one complete `delivery-handoff/v1` object (including read-only, blocked, and end states), validate, persist per the handoff contract. When a transition is allowed, follow the chain relay rule (`family-contract.md` §1): if the host can load skill files directly (e.g. Claude Code), read the next skill's `SKILL.md` and continue in the same session; only when the host cannot, tell the user「请使用 <next_skill>」.
 6. OpenSpec / Codebase Memory MCP / Superpowers / SubAgent are hard prerequisites: use them directly; on a real runtime failure stop and report per `family-contract.md` — no degraded modes, no substitute backends.
+
+### Runtime failure report (Chinese, fixed 3 lines)
+
+When a hard prerequisite fails at runtime, tell the user exactly:
+
+```text
+缺什么：<memory|openspec|superpowers 的具体异常枚举或错误摘要>
+能否降级：否（硬前提）；必须恢复后继续
+下一步请你：<例如：同意已解析的 initialize_repo 操作 / 修复 Memory 索引后回复继续 / 仅继续只读调查>
+```
 
 ## Overview
 
@@ -59,7 +76,12 @@ If the product direction is genuinely open (suggestions, opportunity mapping, �
 
 - **Codebase Memory MCP** — evidence provider only: architecture, symbols, call paths, snippets, blast radius. Discover the current tool schema before calling. It indexes code facts, never requirement artifacts, state, or product decisions. Index freshness rule: `family-contract.md` §5. When OpenWiki/ADR/glossary exist and are in scope, read them as semantic context; if docs and the physical call graph disagree, prefer the call graph and verify with source/tests.
 - **OpenSpec** — the only artifact backend. Resolve semantic operations via `references/openspec-adapter.md`; record bindings in `capability_bindings.openspec`. Recover/create one change through `inspect_change` / `create_change`. This skill owns framing and gates; OpenSpec owns physical change/artifact state.
+- **`openspec: cli-only` (exceptional recovery, not degraded mode):** when the first real OpenSpec call finds the CLI available but the repo not initialized, set `capability_snapshot.openspec: cli-only`, emit the fixed 3-line failure report, and propose the resolved `initialize_repo` operation (common candidate: `openspec init`). If the user accepts, run it and resume at `initialized`; if they decline, stop all mutation / artifact / gate writes (read-only investigation may continue). Never invent a parallel Markdown state source.
 - **Superpowers** — method layer. Prefer `delivery-explore` for open ideation; brainstorming disciplines may inform framing but never own artifacts, state, or question delivery.
+
+### Explore handoff consume
+
+When a `delivery-explore` handoff is present, consume fields per `references/explore-handoff-consume.md` (incoming field → how consumed). Do not invent a locked goal from an incomplete explore map; `direction_alignment` must be `selected` before framing continues.
 
 ### Artifact depth by route
 
@@ -123,7 +145,7 @@ Risk Rating writing must include hit features, missed High features, uncertainti
 
 Then write/update the delta spec and run the Specification Gate.
 
-**Explore-handoff consume self-check (required):** when a `delivery-explore` handoff is present, the active `proposal.md` MUST contain the five-checkbox **Explore Handoff Consume** block (`references/brief-template.md`), all boxes checked and matching the body; with no explore handoff, the section is one line `N/A — 无 explore handoff`. Chat-only summary or empty section = gate failure. `risk_signal` is a hint only; re-derive route/risk from evidence.
+**Explore-handoff consume self-check (required):** follow `references/explore-handoff-consume.md`. When a `delivery-explore` handoff is present, the active `proposal.md` MUST contain the five-checkbox **Explore Handoff Consume** block (`references/brief-template.md`), all boxes checked and matching the body; with no explore handoff, the section is one line `N/A — 无 explore handoff`. Chat-only summary or empty section = gate failure. `risk_signal` is a hint only; re-derive route/risk from evidence.
 
 ## Evidence Discipline
 
@@ -160,7 +182,8 @@ Follow `references/handoff-contract.md` + `references/handoff-template.md` (Fram
 - Writing implementation code during Standard/High framing; handing off without a recorded user go.
 - Choosing Quick for a red-line domain, or because documentation feels expensive.
 - Waiting for an explicit “confirm brief” after the facts readiness gate passed.
-- Skipping the Explore-handoff consume self-check; recording product decisions outside Open Questions.
+- Skipping the Explore-handoff consume self-check (`references/explore-handoff-consume.md`); recording product decisions outside Open Questions.
+- Treating `openspec: cli-only` as a degraded continue path, or creating a Markdown state source when the user declines `initialize_repo`.
 - Violating the batch-clarification protocol (padding, bulk-accept, missing recommendation, dependent questions in the same wave, five-facet user quiz — full list in `batch-clarification.md` Anti-patterns).
 - Treating Codebase Memory output as a product decision; letting an auxiliary skill redefine scope.
 

@@ -1,12 +1,19 @@
 ---
 name: delivery-explore
-description: >-
+description: |
   Use when product direction is open, the user wants feature/idea suggestions,
   opportunity/tradeoff maps, or codebase-grounded exploration before committing
   to a change — e.g. “还想加啥/给建议/机会地图/what's missing”, “探索产品方向”,
   “做机会或权衡地图”, or “基于代码看看还能做什么”. Evidence-first via Codebase
   Memory MCP; does not implement or approve requirements. Hands off only to
   delivery-frame-spec — never to plan or execute.
+
+  触发场景：
+  - 产品方向未定需要功能建议
+  - 需要权衡分析或 tradeoff 地图
+  - 基于代码库证据探索（不实现）
+
+  触发词：交付探索、delivery、explore、方向、建议、权衡、证据
 ---
 
 # Delivery Explore
@@ -20,6 +27,16 @@ Shared family protocol: `../delivery-frame-spec/references/family-contract.md`. 
 3. Next skill only: `delivery-frame-spec` (or end). Never hand off to plan or execute.
 4. Stage end: emit one complete `delivery-handoff/v1` object (including end states), validate it. When a transition is allowed, follow the chain relay rule (`family-contract.md` §1): if the host can load skill files directly (e.g. Claude Code), read `delivery-frame-spec/SKILL.md` and continue in the same session; only when the host cannot, tell the user「请使用 delivery-frame-spec」.
 5. Hard prerequisites (OpenSpec/Memory/Superpowers/SubAgent) are assumed available; on a real runtime failure stop and report per `family-contract.md` — no degraded exploration mode.
+
+### Runtime failure report (Chinese, fixed 3 lines)
+
+When a hard prerequisite fails at runtime, tell the user exactly:
+
+```text
+缺什么：<memory|openspec|superpowers 的具体异常枚举或错误摘要>
+能否降级：否（硬前提）；必须恢复后继续
+下一步请你：<例如：修复 Memory 索引后回复继续 / 恢复 OpenSpec 后继续>
+```
 
 ## Overview
 

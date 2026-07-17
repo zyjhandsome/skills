@@ -106,7 +106,7 @@ presentation:
 ```json
 {
   "type": "delivery-handoff",
-  "familyVersion": "delivery-family/1.2",
+  "familyVersion": "delivery-family/1.3",
   "handoffId": "<canonical handoff_id>",
   "from": "<stage>",
   "to": "<next_skill-or-next_action-or-end>",
@@ -223,7 +223,7 @@ Explore 尚无正式 change 时 `changeId` 为 null；不得为展示创建 chan
 ```json
 {
   "schemaVersion": "delivery-ui/v1",
-  "familyVersion": "delivery-family/1.2",
+  "familyVersion": "delivery-family/1.3",
   "type": "delivery-handoff",
   "handoffId": "<canonical handoff_id>",
   "generatedAt": "<canonical generated_at>",
