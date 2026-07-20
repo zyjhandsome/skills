@@ -157,7 +157,11 @@ The template already encodes earlier review decisions — keep them when editing
 - TOC shows section titles only (no repeated 洞察/解析/实录 links); bio label
   appears as the first TOC entry when present.
 - No per-section jump-pill row (`injectSectionJumps` is intentionally not called).
-- Tight 对谈实录 spacing; no "要点" label on the highlight box.
+- Tight 对谈实录 spacing.
+- Key-info hierarchy: body `strong` uses soft accent chip; thesis `.highlight`
+  is stronger (border/shadow + CSS `全文论点` pill); `.section-insight` tip
+  callouts get a left accent bar + slightly larger type. Speaker bio / timeline /
+  info-callout `strong` stay calm (no chip) so names and quotes do not flood.
 - 延伸术语表 + 文章元数据 collapsed by default.
 - Speaker bio uses `callout-info` (blue), distinct from tip insights (orange)
   and the thesis highlight.

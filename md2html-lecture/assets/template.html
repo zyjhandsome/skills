@@ -359,7 +359,29 @@
     .content a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-border); }
     .content ul, .content ol { padding-left: 24px; margin: 0 0 16px; }
     .content li { margin: 4px 0; }
-    .content strong { color: var(--text); font-weight: 600; }
+    /* Key-info mark: soft accent chip — not link-blue, keeps hierarchy with tip/highlight */
+    .content strong {
+      color: var(--accent-strong);
+      font-weight: 700;
+      background: var(--accent-soft);
+      padding: 0.08em 0.32em;
+      margin: 0 0.04em;
+      border-radius: 4px;
+      border: 1px solid transparent;
+      box-decoration-break: clone;
+      -webkit-box-decoration-break: clone;
+    }
+    /* Keep names / dialogue quotes calm — emphasis belongs to thesis & analysis */
+    .speaker-bio strong,
+    .timeline strong,
+    .callout-info strong {
+      color: var(--text);
+      font-weight: 600;
+      background: transparent;
+      padding: 0;
+      margin: 0;
+      border: none;
+    }
     .content em { color: var(--text-muted); }
     .content hr { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
 
@@ -568,14 +590,40 @@
        KEY-POINT HIGHLIGHT
        ============================================================ */
     .highlight {
-      background: linear-gradient(135deg, var(--accent-soft), var(--surface-2));
-      border-left: 4px solid var(--accent);
-      padding: 18px 22px;
+      position: relative;
+      background: linear-gradient(135deg, var(--accent-soft) 0%, var(--surface) 55%, var(--surface-2) 100%);
+      border: 1px solid var(--accent-border);
+      border-left: 5px solid var(--accent);
+      padding: 20px 24px 20px 22px;
       border-radius: 0 var(--radius) var(--radius) 0;
       margin: 24px 0;
-      font-size: 16px;
+      font-size: 17px;
+      font-weight: 500;
       line-height: 1.65;
       max-width: var(--measure);
+      box-shadow: 0 1px 0 rgba(217, 119, 87, 0.08), var(--shadow);
+      color: var(--text);
+    }
+    .highlight::before {
+      content: "全文论点";
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent-strong);
+      background: var(--surface);
+      border: 1px solid var(--accent-border);
+      border-radius: 999px;
+      padding: 2px 10px;
+      margin: 0 0 10px;
+    }
+    .highlight p { margin: 0; }
+    .highlight strong {
+      color: var(--accent-strong);
+      font-weight: 700;
+      background: color-mix(in srgb, var(--accent-soft) 70%, var(--surface));
+      border: 1px solid var(--accent-border);
     }
     .highlight-label {
       display: inline-block;
@@ -951,8 +999,36 @@
     .layer-dialogue { font-size: 0; }
     .layer-dialogue::before { font-size: 11px; }
     .layer-dialogue .anchor { font-size: 14px; }
-    .section-insight { margin-top: 12px; margin-bottom: 20px; }
+    .section-insight {
+      margin-top: 12px;
+      margin-bottom: 20px;
+      border-left: 4px solid var(--accent);
+      box-shadow: 0 1px 0 rgba(217, 119, 87, 0.06), var(--shadow-sm);
+      padding: 16px 18px 16px 16px;
+      font-size: 15.5px;
+      font-weight: 500;
+    }
     .section-insight .callout-body p { margin: 0; }
+    .section-insight .callout-icon {
+      color: var(--accent);
+      width: 22px;
+      height: 22px;
+    }
+    .section-insight .callout-body {
+      color: var(--text);
+    }
+    .section-insight strong {
+      color: var(--accent-strong);
+      font-weight: 700;
+      background: color-mix(in srgb, var(--surface) 55%, var(--accent-soft));
+      border: 1px solid var(--accent-border);
+    }
+    [data-theme="dark"] .highlight {
+      box-shadow: 0 1px 0 rgba(232, 149, 114, 0.12), var(--shadow);
+    }
+    [data-theme="dark"] .section-insight {
+      box-shadow: 0 1px 0 rgba(232, 149, 114, 0.10), var(--shadow-sm);
+    }
 
     /* Section jump pills (injected by JS) */
     .section-jump {
