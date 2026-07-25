@@ -1,0 +1,8 @@
+{
+  "name": "synthetic-frontend",
+  "private": true,
+  "engines": { "node": ">=18 <21" },
+  "dependencies": {
+    "axios": "1.6.8"
+  }
+}

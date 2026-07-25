@@ -25,6 +25,8 @@ sys.modules[RUNNER_SPEC.name] = RUNNER
 assert RUNNER_SPEC.loader is not None
 RUNNER_SPEC.loader.exec_module(RUNNER)
 
+FIXTURE_ROOT = Path(__file__).resolve().parents[1] / "fixtures" / "synthetic-frontend"
+
 
 class UpgradeReportTests(unittest.TestCase):
     def tearDown(self) -> None:
@@ -502,6 +504,53 @@ packages:
                 item.kind == "toolchain-engine" and item.authority == "authoritative"
                 for item in runtime.project_constraints
             ))
+
+    def test_synthetic_fixture_node_status_not_compatible_with_host_26(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            out = Path(raw) / "report"
+            args = MODULE.parse_args([
+                str(FIXTURE_ROOT),
+                "--upgrade", "axios::1.7.9",
+                "--offline",
+                "--output-dir", str(out),
+            ])
+            with (
+                patch.object(MODULE, "current_host_node_runtime", return_value=("26.5.0", "C:/node/node.exe")),
+                patch.object(MODULE, "detect_node_managers", return_value=([], {})),
+            ):
+                bundle = MODULE.build_bundle(args)
+            self.assertEqual(bundle.importer_resolution, "confirmed")
+            self.assertEqual(bundle.node_runtime.current_host_node, "26.5.0")
+            self.assertNotEqual(bundle.node_runtime.status, "compatible-current")
+            self.assertIn(bundle.node_runtime.status, {
+                "runtime-switch-required", "runtime-missing", "manager-missing",
+            })
+            self.assertNotEqual(bundle.node_runtime.selected_project_node, "26.5.0")
+            pin = (FIXTURE_ROOT / ".nvmrc").read_text(encoding="utf-8")
+            self.assertEqual(pin.strip(), "20.18.0")
+
+    def test_synthetic_fixture_dual_run_is_stable(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+
+            def run_once(tag: str):
+                out = root / f"report-{tag}"
+                args = MODULE.parse_args([
+                    str(FIXTURE_ROOT), "--upgrade", "axios::1.7.9", "--offline",
+                    "--output-dir", str(out),
+                ])
+                with (
+                    patch.object(MODULE, "current_host_node_runtime", return_value=("26.5.0", "C:/node/node.exe")),
+                    patch.object(MODULE, "detect_node_managers", return_value=([], {})),
+                ):
+                    return MODULE.build_bundle(args)
+
+            a, b = run_once("a"), run_once("b")
+            self.assertEqual(a.analysis_status, b.analysis_status)
+            self.assertEqual(a.decision_status, b.decision_status)
+            self.assertEqual(a.node_runtime.status, b.node_runtime.status)
+            self.assertEqual(a.reports[0].risk.total, b.reports[0].risk.total)
+            self.assertEqual(a.reports[0].baseline_status, b.reports[0].baseline_status)
 
     def test_resolve_frontend_workspace_fails_without_package_json(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
