@@ -1,0 +1,4 @@
+interface:
+  display_name: "Frontend Dependency Upgrade Impact Analysis"
+  short_description: "Upgrade impact and Node runtime compatibility analysis"
+  default_prompt: "Use $frontend-dependency-upgrade-impact-analysis to verify the frontend/lock baseline, compare the current host Node with project toolchain requirements, analyze upgrade impact, and produce an evidence-backed report without implementing changes until explicitly approved."
