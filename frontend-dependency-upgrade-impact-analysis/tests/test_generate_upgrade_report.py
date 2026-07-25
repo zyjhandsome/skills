@@ -1176,7 +1176,10 @@ packages:
                 "lockfileVersion": 3,
                 "packages": {"node_modules/legacy": {"version": "1.2.3"}},
             }), encoding="utf-8")
-            args = MODULE.parse_args([str(root), "--assess", "legacy", "--offline"])
+            args = MODULE.parse_args([
+                str(root), "--assess", "legacy", "--offline",
+                "--output-dir", str(root / "out"),
+            ])
             bundle = MODULE.build_bundle(args)
             report = bundle.reports[0]
             self.assertEqual(report.upgrade.from_version, "1.2.3")
@@ -1529,7 +1532,10 @@ packages:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
             (root / "package.json").write_text(json.dumps({"dependencies": {"legacy": "^1.0.0"}}), encoding="utf-8")
-            args = MODULE.parse_args([str(root), "--assess", "legacy", "--offline"])
+            args = MODULE.parse_args([
+                str(root), "--assess", "legacy", "--offline",
+                "--output-dir", str(root / "out"),
+            ])
             bundle = MODULE.build_bundle(args)
             self.assertEqual(bundle.reports[0].option_status, "missing")
             markdown = MODULE.markdown_report(bundle)
@@ -1573,6 +1579,7 @@ packages:
                 str(root), "--offline",
                 "--assess", "declared-only", "--assess", "shared",
                 "--assess", "buried", "--assess", "ghost",
+                "--output-dir", str(root / "out"),
             ])
             bundle = MODULE.build_bundle(args)
             kinds = {report.upgrade.package: report.provenance.kind for report in bundle.reports}
@@ -1809,7 +1816,10 @@ packages:
             (root / "package.json").write_text(json.dumps({"dependencies": {"axios": "^1.0.0"}}), encoding="utf-8")
             (root / "src").mkdir()
             (root / "src" / "api.ts").write_text("import axios from 'axios';\naxios.get('/x');\n", encoding="utf-8")
-            args = MODULE.parse_args([str(root), "--assess", "axios", "--offline"])
+            args = MODULE.parse_args([
+                str(root), "--assess", "axios", "--offline",
+                "--output-dir", str(root / "out"),
+            ])
             bundle = MODULE.build_bundle(args)
             markdown = MODULE.markdown_report(bundle)
             self.assertIn("<!-- section: Human Confirmation Queue -->", markdown)
@@ -1829,7 +1839,11 @@ packages:
                 "package": "axios", "track": "native-refactor", "choice": "native-refactor",
                 "rationale": "无合规替代", "decided_at": "2026-07-25T22:00:00+08:00",
             }]}), encoding="utf-8")
-            args = MODULE.parse_args([str(root), "--assess", "axios", "--offline", "--decision-file", str(decisions)])
+            args = MODULE.parse_args([
+                str(root), "--assess", "axios", "--offline",
+                "--decision-file", str(decisions),
+                "--output-dir", str(root / "out"),
+            ])
             bundle = MODULE.build_bundle(args)
             report = bundle.reports[0]
             self.assertEqual(report.decision.status, "confirmed")
@@ -1970,7 +1984,10 @@ packages:
                 "lockfileVersion": 3,
                 "packages": {"node_modules/axios": {"version": "0.26.0"}},
             }), encoding="utf-8")
-            args = MODULE.parse_args([str(root), "--upgrade", "axios:0.27.2:1.7.9", "--offline"])
+            args = MODULE.parse_args([
+                str(root), "--upgrade", "axios:0.27.2:1.7.9", "--offline",
+                "--output-dir", str(root / "out"),
+            ])
             bundle = MODULE.build_bundle(args)
             self.assertEqual(bundle.status, "blocked")
             self.assertEqual(bundle.reports[0].baseline_status, "mismatch")
@@ -1979,7 +1996,10 @@ packages:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
             (root / "package.json").write_text(json.dumps({"dependencies": {"axios": "^1.0.0"}}), encoding="utf-8")
-            args = MODULE.parse_args([str(root), "--assess", "axios", "--offline"])
+            args = MODULE.parse_args([
+                str(root), "--assess", "axios", "--offline",
+                "--output-dir", str(root / "out"),
+            ])
             bundle = MODULE.build_bundle(args)
             self.assertEqual(bundle.status, "blocked")
             self.assertEqual(bundle.analysis_status, "blocked")
@@ -1988,20 +2008,19 @@ packages:
     def test_resolve_output_dir_uses_change_evidence_folder(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
-            change = root / "changes" / "admin-web-deps"
+            change = root / "openspec" / "changes" / "admin-web-deps"
             change.mkdir(parents=True)
             output, note = MODULE.resolve_report_output_dir(root, None, str(change))
             self.assertEqual(output, (change / "evidence" / "frontend-dependency-upgrade").resolve())
             self.assertIn("change-dir", note)
 
-    def test_resolve_output_dir_does_not_guess_unique_change(self) -> None:
+    def test_resolve_output_dir_requires_change_dir_without_output_dir(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
-            change = root / "changes" / "only-one"
+            change = root / "openspec" / "changes" / "only-one"
             change.mkdir(parents=True)
-            output, note = MODULE.resolve_report_output_dir(root, None, None)
-            self.assertEqual(output, (root / "dependency-upgrade-report").resolve())
-            self.assertIn("回退", note)
+            with self.assertRaisesRegex(ValueError, "--change-dir"):
+                MODULE.resolve_report_output_dir(root, None, None)
 
     def test_behavior_parity_constrains_every_route_without_picking_one(self) -> None:
         report = MODULE.PackageReport(
@@ -2095,7 +2114,10 @@ packages:
                 "lockfileVersion": 3,
                 "packages": {"node_modules/legacy": {"version": "1.2.3"}},
             }), encoding="utf-8")
-            args = MODULE.parse_args([str(root), "--assess", "legacy", "--offline", "--allow-behavior-change"])
+            args = MODULE.parse_args([
+                str(root), "--assess", "legacy", "--offline", "--allow-behavior-change",
+                "--output-dir", str(root / "out"),
+            ])
             bundle = MODULE.build_bundle(args)
             self.assertEqual(bundle.behavior_parity_required, "no")
             self.assertEqual(bundle.reports[0].recommended_action, "review-removal")

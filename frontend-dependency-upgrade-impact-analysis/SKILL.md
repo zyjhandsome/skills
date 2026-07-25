@@ -101,9 +101,11 @@ Read `references/impact-analysis-method.md` for evidence priority, impact-chain 
 
 Resolve the report directory in this order:
 
-1. explicit `--output-dir`;
-2. explicit existing `--change-dir` → `<change-dir>/evidence/frontend-dependency-upgrade/`;
-3. fallback `<project-root>/dependency-upgrade-report/`, with the assumption stated.
+1. existing `--change-dir` (default) → `<change-dir>/evidence/frontend-dependency-upgrade/`  
+   Typical OpenSpec path: `openspec/changes/<id>/evidence/frontend-dependency-upgrade/`;
+2. explicit `--output-dir` override when the caller must write elsewhere.
+
+Do not invent a project-root report folder. Without `--change-dir` or `--output-dir`, stop with an error. This skill may create `evidence/frontend-dependency-upgrade/` inside an **existing** change directory; it must not create the change itself.
 
 Write `frontend-dependency-upgrade-report.md`, plus optional `frontend-dependency-upgrade-report.json` via `--json-output`.
 
@@ -125,24 +127,27 @@ Common forms:
 # Exact upgrade; infer from the authoritative current lock
 python scripts/generate_upgrade_report.py . \
   --upgrade axios::1.7.9 \
-  --output-dir dependency-upgrade-report
+  --change-dir openspec/changes/<id>
 
 # Open-target governance analysis with reviewed evidence
 python scripts/generate_upgrade_report.py . \
   --assess deprecated-client \
   --reason "deprecated-client=不符合维护状态要求" \
   --analysis-evidence-file dependency-analysis-evidence.json \
+  --change-dir openspec/changes/<id> \
   --json-output
 
 # Explicit opt-out from behavior preservation
 python scripts/generate_upgrade_report.py . \
   --assess legacy-client \
-  --allow-behavior-change
+  --allow-behavior-change \
+  --change-dir openspec/changes/<id>
 
 # Offline draft (uses report-adjacent upstream-evidence when present); swap --offline for
 # --no-upstream-evidence or --cleanup-upstream-evidence to disable or clean the pack
 python scripts/generate_upgrade_report.py . \
   --upgrade vite:4.5.0:5.2.0 \
+  --change-dir openspec/changes/<id> \
   --offline
 ```
 

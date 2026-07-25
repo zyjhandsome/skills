@@ -5559,7 +5559,7 @@ def apply_behavior_parity(report: PackageReport) -> None:
 def resolve_report_output_dir(project_root: Path, output_dir: str | None, change_dir: str | None) -> tuple[Path, str]:
     """
     Return (output_path, resolution_note).
-    Prefer explicit output-dir, then an explicit existing change-dir evidence folder, else fallback.
+    Default is an existing --change-dir evidence folder; --output-dir overrides when set.
     """
     if output_dir:
         path = Path(output_dir)
@@ -5567,26 +5567,20 @@ def resolve_report_output_dir(project_root: Path, output_dir: str | None, change
             path = project_root / path
         return path.resolve(), f"使用显式 --output-dir：{path}"
 
-    selected_change: Path | None = None
-    note = ""
-    if change_dir:
-        selected_change = Path(change_dir)
-        if not selected_change.is_absolute():
-            selected_change = project_root / selected_change
-        selected_change = selected_change.resolve()
-        if not selected_change.is_dir():
-            raise ValueError(f"--change-dir 不是目录：{selected_change}")
-        note = f"使用 --change-dir：{selected_change}"
+    if not change_dir:
+        raise ValueError(
+            "必须提供既有 --change-dir（写入 <change-dir>/evidence/frontend-dependency-upgrade/），"
+            "或显式 --output-dir。"
+        )
 
-    if selected_change is not None:
-        path = selected_change / "evidence" / "frontend-dependency-upgrade"
-        return path, note or f"写入 change 证据目录：{path}"
-
-    path = (project_root / "dependency-upgrade-report").resolve()
-    return path, (
-        "未提供 --output-dir 或既有 --change-dir；回退到 "
-        f"{path}。若需归档到某次任务，请显式提供该任务的 --change-dir。"
-    )
+    selected_change = Path(change_dir)
+    if not selected_change.is_absolute():
+        selected_change = project_root / selected_change
+    selected_change = selected_change.resolve()
+    if not selected_change.is_dir():
+        raise ValueError(f"--change-dir 不是目录：{selected_change}")
+    path = selected_change / "evidence" / "frontend-dependency-upgrade"
+    return path, f"使用 --change-dir：{selected_change}"
 
 
 def resolve_decision_file(args: argparse.Namespace, output_dir: Path) -> Path | None:
@@ -5628,12 +5622,16 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--test-coverage", choices=("auto", "adequate", "partial", "missing"), default="auto")
     parser.add_argument(
         "--change-dir",
-        help="Existing caller-owned change/task directory. Reports go to <change-dir>/evidence/frontend-dependency-upgrade/.",
+        help=(
+            "Default report location: existing caller-owned change/task directory "
+            "(e.g. openspec/changes/<id>). Reports go to "
+            "<change-dir>/evidence/frontend-dependency-upgrade/."
+        ),
     )
     parser.add_argument(
         "--output-dir",
         default=None,
-        help="Explicit report directory. Overrides --change-dir resolution when set.",
+        help="Optional report directory override. When set, replaces --change-dir resolution.",
     )
     parser.add_argument(
         "--allow-behavior-change",

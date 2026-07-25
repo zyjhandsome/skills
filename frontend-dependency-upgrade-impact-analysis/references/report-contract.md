@@ -145,10 +145,11 @@ Node 约束冲突、EOL 运行时、需要全局切换或恢复未验证时，�
 
 解析顺序：
 
-1. 调用方显式 `--output-dir`
-2. 调用方显式提供的既有 `--change-dir` → 写入  
-   `<change-dir>/evidence/frontend-dependency-upgrade/`
-3. 未指定时不猜测 active change，回退到 `<project-root>/dependency-upgrade-report/`，并在报告中声明假设；需要归档到某次任务时要求调用方显式提供 `--change-dir`
+1. 默认：调用方提供既有 `--change-dir` → 写入  
+   `<change-dir>/evidence/frontend-dependency-upgrade/`  
+   OpenSpec 典型路径：`openspec/changes/<id>/evidence/frontend-dependency-upgrade/`
+2. 可选覆盖：调用方显式 `--output-dir`（覆盖 `--change-dir` 解析）
+3. 两者皆无时直接报错；不得回退到项目根下的平行报告目录，也不得猜测 active change
 
 本技能可以在**已存在**的 change/任务目录内创建 `evidence/frontend-dependency-upgrade/`，但不得自行创建 change 或生命周期状态。
 
