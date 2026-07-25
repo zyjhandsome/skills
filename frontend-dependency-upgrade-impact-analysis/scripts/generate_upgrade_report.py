@@ -371,6 +371,14 @@ class AnalysisBundle:
     report_paths: dict[str, str] = field(default_factory=dict)
     pending_human_decisions: list[dict[str, str]] = field(default_factory=list)
     node_runtime: NodeRuntimeAssessment = field(default_factory=NodeRuntimeAssessment)
+    importer_resolution: str = "confirmed"
+
+
+@dataclass
+class FrontendWorkspaceResolution:
+    status: str  # confirmed | failed
+    manifest_path: str = ""
+    reason: str = ""
 
 
 def clean_version(value: str) -> str:
@@ -479,6 +487,24 @@ def load_manifest(path: Path | None) -> ManifestSnapshot:
         if field_name in data:
             snapshot.special_entries.extend(f"{field_name}.{row}" for row in flatten_mapping(data[field_name]))
     return snapshot
+
+
+def resolve_frontend_workspace(project_root: Path, args: argparse.Namespace) -> FrontendWorkspaceResolution:
+    candidates: list[Path] = []
+    if getattr(args, "after_package_json", None):
+        candidates.append(Path(args.after_package_json))
+    if getattr(args, "before_package_json", None):
+        candidates.append(Path(args.before_package_json))
+    candidates.append(project_root / "package.json")
+    for path in candidates:
+        resolved = path if path.is_absolute() else (project_root / path)
+        if resolved.is_file():
+            return FrontendWorkspaceResolution("confirmed", str(resolved.resolve()), "")
+    return FrontendWorkspaceResolution(
+        "failed",
+        "",
+        "未找到 frontend workspace 的 package.json；请显式传入前端目录或 --after-package-json，勿对非前端仓库静默分析。",
+    )
 
 
 def compare_package_json(before_path: Path, after_path: Path) -> list[Upgrade]:
@@ -3264,6 +3290,7 @@ def markdown_report(bundle: AnalysisBundle) -> str:
         f"# {bundle.title}", "",
         f"- 生成时间：`{bundle.generated}`",
         f"- 项目根目录：`{bundle.project_root}`",
+        f"- 前端 workspace 解析：`{bundle.importer_resolution}`",
         f"- 报告状态：`{bundle.status}`",
         f"- 分析状态：`{bundle.analysis_status}`",
         f"- 决策状态：`{bundle.decision_status}`",
@@ -3773,6 +3800,7 @@ def build_bundle(
         output_dir, output_note = resolve_report_output_dir(project_root, args.output_dir, args.change_dir)
     elif output_note is None:
         output_note = f"使用调用方提供的输出目录：{output_dir}"
+    workspace = resolve_frontend_workspace(project_root, args)
     cache_dir = args.http_cache_dir or default_http_cache_dir()
     configure_http_cache(cache_dir, args.http_cache_ttl, enabled=not args.no_http_cache)
     upgrades = collect_upgrades(args)
@@ -3780,6 +3808,8 @@ def build_bundle(
         raise ValueError(missing_upgrade_message())
     package_names = [upgrade.package for upgrade in upgrades]
     manifest_path = Path(args.after_package_json).resolve() if args.after_package_json else project_root / "package.json"
+    if workspace.status == "confirmed" and workspace.manifest_path:
+        manifest_path = Path(workspace.manifest_path)
     manifest = load_manifest(manifest_path if manifest_path.exists() else None)
     toolchain_names = sorted(set(manifest.packages) & TOOLCHAIN_PACKAGES)
     initial_analysis_packages = list(dict.fromkeys(package_names + toolchain_names))
@@ -3830,12 +3860,22 @@ def build_bundle(
         if report.baseline_status in {"mismatch", "unknown"}
     ]
     runtime_analysis_blocked = node_runtime.status == "constraint-conflict"
-    status = "blocked" if baseline_blockers or runtime_analysis_blocked else "draft"
-    analysis_status = "blocked" if baseline_blockers or runtime_analysis_blocked else "partial"
+    workspace_failed = workspace.status == "failed"
+    if workspace_failed:
+        for report in reports:
+            if report.change_type == "added":
+                report.change_type = "unknown"
+            report.recommended_action = "resolve-frontend-workspace"
+            if workspace.reason and workspace.reason not in report.constraints:
+                report.constraints.append(workspace.reason)
+            if workspace.reason and workspace.reason not in report.warnings:
+                report.warnings.append(workspace.reason)
+    status = "blocked" if baseline_blockers or runtime_analysis_blocked or workspace_failed else "draft"
+    analysis_status = "blocked" if baseline_blockers or runtime_analysis_blocked or workspace_failed else "partial"
     decision_status = "needs_choice" if any(
         report.decision_status == "needs_choice" or report.selection_status == "needs_explicit_choice"
         for report in reports
-    ) else "not_needed"
+    ) or workspace_failed else "not_needed"
     pending_human_decisions = [
         {
             "package": report.upgrade.package,
@@ -3845,6 +3885,12 @@ def build_bundle(
         for report in reports
         if report.selection_status == "needs_explicit_choice" or report.decision_status == "needs_choice"
     ]
+    if workspace_failed:
+        pending_human_decisions.insert(0, {
+            "package": "__frontend_workspace__",
+            "selection_status": "failed",
+            "decisions": workspace.reason,
+        })
     if node_runtime.execution_readiness == "blocked" or node_runtime.status == "runtime-switch-required":
         pending_human_decisions.append({
             "package": "__node_runtime__",
@@ -3907,6 +3953,7 @@ def build_bundle(
         report_paths,
         pending_human_decisions,
         node_runtime,
+        workspace.status,
     )
 
 
@@ -3943,6 +3990,16 @@ def main(argv: list[str]) -> int:
         return 2
     print(f"已写入 {markdown_path}")
     print(f"输出解析：{output_note}")
+    if bundle.importer_resolution == "failed":
+        workspace_decision = next(
+            (item for item in bundle.pending_human_decisions if item.get("package") == "__frontend_workspace__"),
+            None,
+        )
+        print(
+            (workspace_decision or {}).get("decisions") or "前端 workspace 未解析",
+            file=sys.stderr,
+        )
+        return 5
     baseline_blockers = [
         f"{report.upgrade.package}({report.baseline_status})"
         for report in bundle.reports

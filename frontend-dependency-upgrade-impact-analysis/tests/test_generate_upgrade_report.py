@@ -503,6 +503,42 @@ packages:
                 for item in runtime.project_constraints
             ))
 
+    def test_resolve_frontend_workspace_fails_without_package_json(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            args = MODULE.parse_args([str(root), "--upgrade", "axios::1.7.9", "--offline"])
+            resolution = MODULE.resolve_frontend_workspace(root, args)
+            self.assertEqual(resolution.status, "failed")
+            self.assertTrue(resolution.reason)
+
+    def test_build_bundle_blocks_when_frontend_workspace_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            args = MODULE.parse_args([
+                str(root), "--upgrade", "axios::1.7.9", "--offline",
+                "--output-dir", str(root / "out"),
+            ])
+            bundle = MODULE.build_bundle(args)
+            self.assertEqual(bundle.importer_resolution, "failed")
+            self.assertEqual(bundle.analysis_status, "blocked")
+            self.assertEqual(bundle.status, "blocked")
+            self.assertEqual(bundle.reports[0].change_type, "unknown")
+            self.assertNotEqual(bundle.reports[0].recommended_action, "upgrade")
+            self.assertTrue(any(item.get("package") == "__frontend_workspace__" for item in bundle.pending_human_decisions))
+            self.assertEqual(bundle.node_runtime.selected_project_node, "")
+            markdown = MODULE.markdown_report(bundle)
+            self.assertIn("前端 workspace 解析：`failed`", markdown)
+
+    def test_main_returns_5_when_frontend_workspace_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            code = MODULE.main([
+                str(root), "--upgrade", "axios::1.7.9", "--offline",
+                "--output-dir", str(root / "out"),
+            ])
+            self.assertEqual(code, 5)
+            self.assertTrue((root / "out" / "frontend-dependency-upgrade-report.md").is_file())
+
     def test_node_runtime_unknown_without_constraints_does_not_select_host(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
