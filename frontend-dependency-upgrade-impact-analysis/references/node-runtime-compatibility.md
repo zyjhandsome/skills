@@ -24,14 +24,19 @@
 
 ## 2. 约束来源与判定
 
-按以下顺序收集，但保留每条原始证据，不用单一来源覆盖其他来源：
+按以下顺序收集，但保留每条原始证据，不用单一来源覆盖其他来源。类别名（第一列）即报告与 JSON 中的 `kind`：
 
-| 类别 | 来源 | 用法 |
-|---|---|---|
-| 精确项目 pin | `.nvmrc`、`.node-version`、`.tool-versions`、`volta.node` | 最高优先级；多个不同精确 pin 互相冲突 |
-| 项目范围 | `package.json#engines.node` | 与精确 pin、工具链和目标包范围求交集 |
-| 实际工具链 | CI、Docker、构建工具自身 `engines.node` | 验证仓库真正使用的运行时；矩阵版本分别记录，不把合法矩阵误判为多个精确 pin |
-| 升级目标 | 目标依赖版本的 `engines.node` | 加入项目命令的兼容交集 |
+| `kind` | 来源 | 权威性 | 用法 |
+|---|---|---|---|
+| `runtime-pin` | `.nvmrc`、`.node-version`、`.tool-versions`、`package.json#volta.node`、`package.json#pnpm.executionEnv.nodeVersion`、`.npmrc#use-node-version`、`mise.toml`/`.mise.toml`/`.mise/config.toml` 的 `[tools] node` | authoritative | 最高优先级；多个不同精确 pin 互相冲突 |
+| `project-engine` | `package.json#engines.node` | authoritative | 与精确 pin、工具链和目标包范围求交集 |
+| `toolchain-engine` | 白名单构建/测试工具链包在 lockfile 中记录的 `engines.node`；或 `node_modules` 内已安装版本与 lock 直接解析版本一致时的 `engines.node` | authoritative | 项目未声明运行时时的主要推算来源；lock 来源不依赖 `node_modules`，离线可用 |
+| `dependency-engine` | 分析清单内（升级目标及其 peer）非白名单直接依赖在 lockfile 中记录的 `engines.node` | observed | 仅供人工参考；陈旧上界不得自动构成 `constraint-conflict` |
+| `target-package-engine` | 目标依赖版本的 `engines.node` | authoritative | 加入项目命令的兼容交集 |
+| `ci-node-version` | `.github/workflows/*`、`.circleci/*`、`.gitlab-ci.yml`、`azure-pipelines.*`、`cloudbuild.yaml`、`app.json`、`netlify.toml` 的 `node-version` 与 `NODE_VERSION` | observed | 验证仓库真正使用的运行时；矩阵版本分别记录，不把合法矩阵误判为多个精确 pin |
+| `container-node-image` | `Dockerfile*`（含 `ARG NODE_VERSION`）、`docker-compose.*`、CircleCI `cimg/node:`、`vercel.json` 的 `nodejsXX.x` | observed | 同上；部署镜像与 CI 不一致时并列列出 |
+
+`observed` 证据只进报告的证据表供人工判断，不参与兼容交集、不派生 `selected_project_node`；`node_modules` 与 lockfile 给出同一包同一要求时只记一条。人工确认后可通过 `--analysis-evidence-file` 的 `node_runtime.additional_project_constraints` 显式提权。
 
 判定规则：
 
@@ -41,9 +46,20 @@
 - 有交集但没有兼容 Node：`runtime-missing`。
 - 需要切换但没有受支持版本管理器：`manager-missing`。
 - 无法解析关键范围：`unknown`，不得声称兼容。
-- 无权威项目约束导致 `unknown`：`selected_project_node` 必须为空/`未建立`，禁止把本机当前 Node 回填为项目 Node；`compatible_installed_versions` 在无约束时不用于项目选型。
+- 无权威项目约束导致 `unknown`：`selected_project_node` 必须为空/`未建立`，禁止把本机当前 Node 回填为项目 Node；`compatible_installed_versions` 在无约束时不用于项目选型。已有 `observed` 证据（CI/容器/非白名单依赖）也不改变该结论，只在报告中列出待人工确认。
 
-选择精确版本时，优先一致的项目 pin；否则选择已安装且满足全部项目约束的最高稳定版本。优先 LTS 只是同等候选下的策略，不能覆盖项目 pin。Node 16 及更早版本必须提示 EOL/安全风险；项目确实要求时，经实施批准后可在隔离环境中用于验证，不把警告自动升级为禁止。
+选择精确版本时，优先一致的项目 pin；否则选择已安装且满足全部项目约束的最高稳定版本。优先 LTS 只是同等候选下的策略，不能覆盖项目 pin。
+
+所选 Node 的支持状态按官方发布计划的日期判定，不使用写死的主版本阈值：
+
+| `selected_node_support` | 判定 | 报告要求 |
+|---|---|---|
+| `supported` | 生成日期早于该主版本 EOL 日期超过 90 天 | 正常记录支持截止日期 |
+| `approaching-eol` | 距 EOL 不足 90 天 | 提示在该日期前规划运行时升级 |
+| `eol` | 生成日期已达或超过 EOL 日期 | 提示 EOL/安全风险；项目确实要求时，经实施批准后可在隔离环境中用于验证，不把警告自动升级为禁止 |
+| `unknown` | 主版本不在已核对的计划表内 | 必须写出计划表核对日期并要求人工对照 nodejs/Release |
+
+生成器内的计划表是**已核对快照**（`NODE_EOL_DATES` 与 `NODE_SCHEDULE_REVIEWED`），不是实时数据源；表外主版本保持 `unknown`，不得推测。
 
 ## 3. 只读预检
 
@@ -123,8 +139,8 @@
 不新增第 13 个顶层章节。在现有 12 章中映射：
 
 - **升级摘要**：`node_runtime_status`、`execution_readiness`、本机当前 Node、所选项目 Node。
-- **依赖变化**：完整约束来源、兼容交集、管理器、已安装候选、目标包 engines。
-- **技术风险**：约束冲突、EOL、全局切换、恢复失败风险。
+- **依赖变化**：完整约束来源、兼容交集、管理器、已安装候选、目标包 engines、`selected_node_support` 与计划表核对日期。
+- **技术风险**：约束冲突、EOL/接近 EOL、全局切换、恢复失败风险。
 - **测试范围**：每条项目命令对应的实际 Node，以及恢复验证。
 - **发布与回滚**：运行时恢复触发条件；不得把本机临时 Node 处理提交进仓库。
 - **结论**：未解决的 manager/runtime/constraint blocker 和所需人工批准。

@@ -1,15 +1,15 @@
 ---
 name: frontend-dependency-upgrade-impact-analysis
 description: >
-  Analyze frontend dependency upgrades and package-governance decisions without
-  implementing them. Use for an exact package upgrade, a package-only
-  removal/upgrade/replacement assessment, or a compliance concern. Resolve the
-  frontend workspace and authoritative lock baseline, collect version-specific
-  upstream and code-impact evidence, detect host/project Node runtime
-  conflicts, score seven-factor risk, and produce a Simplified Chinese
-  Markdown decision report plus optional structured JSON. Preserve observable behavior
-  by default and keep removal/replacement and runtime installation as human
-  choices unless the user explicitly allows them.
+  Analyze, never implement, a frontend dependency upgrade, removal, replacement, or
+  compliance concern. Use when asked to assess an exact package upgrade, decide what
+  to do about an unmaintained or vulnerable package, or check whether the project Node
+  runtime can run the upgrade commands at all. Resolves the frontend workspace and
+  authoritative lock baseline, collects version-specific upstream and code-impact
+  evidence, detects host/project Node conflicts, scores seven-factor risk, and writes a
+  Markdown decision report plus optional structured JSON in Simplified Chinese.
+  Behavior preservation is the default; removal, replacement, and runtime installation
+  stay human choices unless the user explicitly allows them.
 ---
 
 # Frontend Dependency Upgrade Impact Analysis
@@ -46,7 +46,7 @@ Read `references/lockfile-and-evidence.md` for lock formats, workspace rules, an
 
 Before recommending implementation:
 
-1. Record the Node currently active on the host, then detect project Node constraints from exact runtime pins, `package.json` engines/Volta, CI/container evidence, installed toolchain metadata, and target-package engines.
+1. Record the Node currently active on the host, then detect project Node constraints from runtime pins (`.nvmrc`, `.node-version`, `.tool-versions`, Volta, `pnpm.executionEnv`, `.npmrc#use-node-version`, mise), `package.json#engines`, and target-package engines. When the project declares none, derive a constraint from `engines.node` that the lockfile or installed metadata records for whitelisted toolchain packages; CI/container/deployment configs and non-toolchain dependency engines stay `observed` evidence only.
 2. Compare the current host Node with the project-compatible range. Do not introduce optional orchestration tools as a default runtime axis.
 3. Stop on contradictory authoritative project constraints. If the host Node is incompatible but a compatible project Node exists, mark `runtime-switch-required`, not `constraint-conflict`.
 4. Prefer an already installed compatible project runtime in an isolated child process. Use a guarded global switch only when isolation is unavailable.
@@ -77,7 +77,7 @@ Read `references/target-discovery-and-removal.md` whenever `to` is absent or rem
 ## Workflow
 
 1. Inventory dependency fields, overrides/resolutions, package manager, engines, runtime pins, workspace, and lock importer.
-2. Parse the applicable npm, pnpm, or Yarn lock. Record direct and observed versions, duplicates, peer context, and baseline status.
+2. Parse the applicable npm, pnpm, Yarn, or Bun lock. Record direct and observed versions, duplicates, peer context, `catalog:` resolution, and baseline status.
 3. Run the read-only Node runtime preflight and compare the current host Node with project-command requirements.
 4. Select the analysis mode and apply the default behavior posture.
 5. Resolve upstream identity per version:
@@ -102,14 +102,11 @@ Resolve the report directory in this order:
 2. explicit existing `--change-dir` → `<change-dir>/evidence/frontend-dependency-upgrade/`;
 3. fallback `<project-root>/dependency-upgrade-report/`, with the assumption stated.
 
-Write:
-
-- `frontend-dependency-upgrade-report.md`;
-- optional `frontend-dependency-upgrade-report.json` via `--json-output`.
+Write `frontend-dependency-upgrade-report.md`, plus optional `frontend-dependency-upgrade-report.json` via `--json-output`.
 
 The report must expose `analysis_status`, `decision_status`, package-level `selection_status`, `behavior_parity_required`, constraints, baseline status, recommendations, pending human decisions, and actual report paths. Read `references/report-contract.md` before generation or review.
 
-Default visible prose to Simplified Chinese. Preserve package names, versions, paths, commands, code identifiers, URLs, API names, and machine enums.
+Language split is deliberate: this skill, its flags, and machine enums stay in English; visible prose in the delivered report defaults to Simplified Chinese. Preserve package names, versions, paths, commands, code identifiers, URLs, and API names verbatim.
 
 ## Generator
 
@@ -139,13 +136,16 @@ python scripts/generate_upgrade_report.py . \
   --assess legacy-client \
   --allow-behavior-change
 
-# Offline draft
+# Offline draft (uses report-adjacent upstream-evidence when present); swap --offline for
+# --no-upstream-evidence or --cleanup-upstream-evidence to disable or clean the pack
 python scripts/generate_upgrade_report.py . \
   --upgrade vite:4.5.0:5.2.0 \
   --offline
 ```
 
 Upstream collection uses bounded concurrency (`--network-workers`, default `6`) and a six-hour public-response cache in the user cache directory. Use `--no-http-cache` for a forced fresh read, `--http-cache-ttl` to change freshness, or `--http-cache-dir` to relocate the cache. Use `--max-versions` only for an explicitly incomplete exploratory draft.
+
+For exact upgrades, the generator also writes a report-adjacent `upstream-evidence/` pack (npm registry slice plus per-version release/changelog artifacts). Network success overwrites local files; network failure or `--offline` reads the same directory when present. Disable with `--no-upstream-evidence`. Default is keep; delete after a successful report write with `--cleanup-upstream-evidence`. Local readback must not mark evidence `complete`.
 
 An unknown or mismatched baseline is fatal by default. Use `--allow-baseline-mismatch` only for a visibly blocked investigative draft.
 
@@ -158,7 +158,7 @@ python scripts/run_with_compatible_node.py <project-root> \
   --command "<build-or-test-command>"
 ```
 
-Only after matching explicit approvals, add `--execute --approve-runtime-switch` and the applicable `--approve-dependency-install` / `--approve-project-scripts` flags. The runner never installs Node, prefers an isolated child PATH, falls back to guarded nvm-windows switching only when required, and verifies restoration plus Node-constraint integrity.
+Only after matching explicit approvals, add `--execute --approve-runtime-switch` and the applicable `--approve-dependency-install` / `--approve-project-scripts` flags. The runner never installs Node, prefers an isolated child PATH, falls back to guarded nvm-windows switching only when required, and verifies restoration plus Node-constraint integrity. Each command has a `--command-timeout` (default `1800`s, `0` waits forever); a timeout reports exit code `124` and still runs restoration.
 
 ## Completion gate
 

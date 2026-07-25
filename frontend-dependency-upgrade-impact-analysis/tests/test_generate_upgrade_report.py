@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import importlib.util
 import json
 import sys
@@ -121,6 +122,75 @@ packages:
             lock = MODULE.parse_lock(path, ["axios"])
             self.assertEqual(lock.direct_versions["axios"], "1.7.9")
 
+    def test_bun_text_lock_direct_and_nested_versions(self) -> None:
+        content = """{
+  // Bun text lockfile
+  "lockfileVersion": 1,
+  "workspaces": {
+    "": { "name": "app", "dependencies": { "axios": "^1.7.9" } },
+  },
+  "packages": {
+    "axios": ["axios@1.7.9", "", { "dependencies": {} }, "sha512-abc"],
+    "legacy-wrapper/axios": ["axios@0.27.2", "", {}, "sha512-def"],
+  },
+}
+"""
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw) / "bun.lock"
+            path.write_text(content, encoding="utf-8")
+            lock = MODULE.parse_lock(path, ["axios"])
+            self.assertEqual(lock.kind, "bun")
+            self.assertEqual(lock.direct_versions["axios"], "1.7.9")
+            self.assertEqual(set(lock.all_versions["axios"]), {"0.27.2", "1.7.9"})
+            self.assertEqual(lock.warnings, [])
+
+    def test_bun_binary_lock_reports_actionable_blocker(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw) / "bun.lockb"
+            path.write_bytes(b"\x00binary")
+            lock = MODULE.parse_lock(path, ["axios"])
+            self.assertEqual(lock.direct_versions, {})
+            self.assertTrue(any("--save-text-lockfile" in warning for warning in lock.warnings))
+
+    def test_bun_lock_is_detected_in_project_root(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "bun.lock").write_text('{"lockfileVersion": 1}', encoding="utf-8")
+            detected = MODULE.detect_lock(root)
+            self.assertIsNotNone(detected)
+            self.assertEqual(detected.name, "bun.lock")
+
+    def test_pnpm_catalog_spec_resolves_effective_range(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "pnpm-workspace.yaml").write_text(
+                "packages:\n  - 'apps/*'\ncatalog:\n  axios: ^1.7.9\ncatalogs:\n  legacy:\n    axios: ^0.27.2\n",
+                encoding="utf-8",
+            )
+            manifest_path = root / "package.json"
+            manifest_path.write_text(
+                json.dumps({"dependencies": {"axios": "catalog:", "vue": "catalog:legacy"}}),
+                encoding="utf-8",
+            )
+            manifest = MODULE.load_manifest(manifest_path, root)
+            self.assertEqual(manifest.packages["axios"].catalog_spec, "^1.7.9")
+            self.assertEqual(manifest.packages["axios"].catalog_source, "pnpm-workspace.yaml#catalog")
+            self.assertEqual(manifest.packages["vue"].catalog_spec, "")
+            self.assertEqual(MODULE.clean_version("catalog:"), "catalog:")
+
+    def test_missing_optional_lock_is_not_reported_as_missing_lockfile(self) -> None:
+        self.assertEqual(MODULE.parse_lock(None, ["axios"], role="before").warnings, [])
+        self.assertEqual(MODULE.parse_lock(None, ["axios"], role="after").warnings, [])
+        current = MODULE.parse_lock(None, ["axios"], role="current")
+        self.assertTrue(any("未在项目根目录找到受支持的 lockfile" in warning for warning in current.warnings))
+
+    def test_unsupported_lock_type_names_the_file(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw) / "deno.lock"
+            path.write_text("{}", encoding="utf-8")
+            lock = MODULE.parse_lock(path, ["axios"], role="current")
+            self.assertTrue(any("deno.lock" in warning for warning in lock.warnings))
+
     def test_ui_scan_does_not_flag_unrelated_custom_component(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
@@ -180,6 +250,70 @@ packages:
             "version_change", "dependency_type", "usage_scope", "business_criticality",
             "lockfile_change", "test_coverage_gap", "peer_compatibility",
         })
+
+    def test_patch_upgrade_of_high_blast_radius_family_is_not_high(self) -> None:
+        report = MODULE.PackageReport(
+            MODULE.Upgrade("axios", "1.6.8", "1.6.9", "request"),
+            "https://www.npmjs.com/package/axios",
+            change_type="patch",
+            baseline_status="matches_from",
+            observed_lock_versions=["1.6.8"],
+            evidence_completeness="complete",
+        )
+        points = [
+            MODULE.CodeModificationPoint(
+                "axios", "package.json", 6, MODULE.DECLARATION_CATEGORY, '"axios": "1.6.8"',
+                "official evidence", "review", "test request", "P2", "high",
+            ),
+            MODULE.CodeModificationPoint(
+                "axios", "src/main.js", 1, "Direct package usage", "import axios from 'axios'",
+                "official evidence", "review", "test request", "P2", "high",
+            ),
+        ]
+        risk = MODULE.risk_score(report, points, [], "auto", "auto")
+        self.assertEqual(risk.factors["version_change"], 1)
+        self.assertEqual(risk.factors["dependency_type"], 1)
+        self.assertEqual(risk.factors["usage_scope"], 1)
+        self.assertEqual(risk.factors["business_criticality"], 2)
+        self.assertEqual(risk.total, sum(risk.factors.values()))
+        self.assertEqual(risk.final_level, "Medium")
+        self.assertTrue(any("业务关键性" in item for item in risk.uncertainties))
+
+    def test_major_upgrade_of_same_family_stays_high(self) -> None:
+        report = MODULE.PackageReport(
+            MODULE.Upgrade("axios", "0.27.2", "1.7.9", "request"),
+            "https://www.npmjs.com/package/axios",
+            change_type="major",
+            baseline_status="matches_from",
+            observed_lock_versions=["0.27.2"],
+            evidence_completeness="complete",
+        )
+        points = [
+            MODULE.CodeModificationPoint(
+                "axios", "src/request/client.ts", 1, "Direct package usage", "axios.create()",
+                "official evidence", "review", "test request", "P0", "high",
+            ),
+        ]
+        risk = MODULE.risk_score(report, points, [], "auto", "auto")
+        self.assertEqual(risk.factors["dependency_type"], 5)
+        self.assertEqual(risk.final_level, "High")
+
+    def test_declaration_only_usage_is_uncertain_not_zero_risk(self) -> None:
+        report = MODULE.PackageReport(
+            MODULE.Upgrade("legacy-client", "1.0.0", "1.0.1", "runtime"),
+            "https://www.npmjs.com/package/legacy-client",
+            change_type="patch",
+            baseline_status="matches_from",
+        )
+        points = [
+            MODULE.CodeModificationPoint(
+                "legacy-client", "package.json", 4, MODULE.DECLARATION_CATEGORY, '"legacy-client": "1.0.0"',
+                "official evidence", "review", "smoke", "P2", "high",
+            ),
+        ]
+        risk = MODULE.risk_score(report, points, [], "auto", "auto")
+        self.assertEqual(risk.factors["usage_scope"], 0)
+        self.assertTrue(any("仅发现依赖声明" in item for item in risk.uncertainties))
 
     def test_version_repository_takes_precedence_over_top_level(self) -> None:
         metadata = {
@@ -431,6 +565,78 @@ packages:
         self.assertTrue(MODULE.semver_satisfies("16.20.2", "<=16"))
         self.assertFalse(MODULE.semver_satisfies("17.0.0", "<=16"))
 
+    def test_semver_range_table_matches_npm_resolution(self) -> None:
+        cases = (
+            # partial caret/tilde, the most common engines.node shape
+            ("22.0.0", "^18 || ^20 || ^22", True),
+            ("21.0.0", "^18 || ^20 || ^22", False),
+            ("16.20.2", "^16", True),
+            ("17.0.0", "^16", False),
+            ("18.1.0", "~18", True),
+            ("19.0.0", "~18", False),
+            ("20.1.0", "~>20.1", True),
+            ("1.2.5", "~1.2.3", True),
+            ("1.3.0", "~1.2.3", False),
+            ("0.2.5", "^0.2.3", True),
+            ("0.3.0", "^0.2.3", False),
+            ("0.0.4", "^0.0.3", False),
+            # hyphen ranges must not swallow the remaining OR alternatives
+            ("20.11.0", "18.0.0 - 18.99.99 || >=20", True),
+            ("18.19.0", "16.x - 18.x || >=20", True),
+            ("19.5.0", "16.x - 18.x || >=20", False),
+            ("2.3.4", "1.2.3 - 2.3.4", True),
+            ("2.3.5", "1.2.3 - 2.3.4", False),
+            ("2.9.9", "1.2.3 - 2", True),
+            ("3.0.0", "1.2.3 - 2", False),
+            # partial comparators and x-ranges
+            ("19.0.0", ">18", True),
+            ("18.0.0", ">18", False),
+            ("18.20.0", "<=18", True),
+            ("19.0.0", "<=18", False),
+            ("20.5.0", ">=18.17 <21", True),
+            ("18.16.0", ">=18.17 <21", False),
+            ("20.1.0", "20.1.x", True),
+            ("20.2.0", "20.1.x", False),
+            ("20.11.1", ">=16.0.0 <=22.x", True),
+            ("23.0.0", ">=16.0.0 <=22.x", False),
+            ("14.21.3", "^14.17.0 || ^16.13.0 || >=18.0.0", True),
+            ("16.10.0", "^14.17.0 || ^16.13.0 || >=18.0.0", False),
+            # wildcards, equality and prerelease rules
+            ("20.0.0", "*", True),
+            ("20.0.0", "", True),
+            ("20.0.0", "=20.0.0", True),
+            ("20.0.1", "=20.0.0", False),
+            ("18.0.0-nightly", ">=18", False),
+            ("18.0.0-nightly", ">=18.0.0-alpha", True),
+            # unparseable ranges stay unknown instead of silently reading as False
+            ("20.0.0", "not-a-range", None),
+            ("17.0.0", ">=18 || not-a-range", None),
+            ("20.0.0", ">=18 || not-a-range", True),
+        )
+        mismatches = [
+            (version, requirement, expected, MODULE.semver_satisfies(version, requirement))
+            for version, requirement, expected in cases
+            if MODULE.semver_satisfies(version, requirement) is not expected
+        ]
+        self.assertEqual(mismatches, [])
+
+    def test_common_engines_range_is_not_treated_as_unknown(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / ".nvmrc").write_text("20.18.0\n", encoding="utf-8")
+            manifest = MODULE.ManifestSnapshot(
+                path=str(root / "package.json"),
+                engines={"node": "^18 || ^20 || ^22"},
+            )
+            with (
+                patch.object(MODULE, "current_host_node_runtime", return_value=("20.18.0", "C:/node/node.exe")),
+                patch.object(MODULE, "detect_node_managers", return_value=([], {})),
+            ):
+                runtime = MODULE.assess_node_runtime(root, manifest, [])
+            self.assertEqual(runtime.status, "compatible-current")
+            self.assertEqual(runtime.selected_project_node, "20.18.0")
+            self.assertEqual(runtime.blockers, [])
+
     def test_node_runtime_switches_when_host_node_conflicts_with_project(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
@@ -447,7 +653,19 @@ packages:
             self.assertEqual(runtime.execution_readiness, "ready-awaiting-approval")
             self.assertEqual(runtime.current_host_node, "20.18.0")
             self.assertEqual(runtime.selected_project_node, "16.20.2")
+            self.assertEqual(runtime.selected_node_support, "eol")
             self.assertTrue(any("EOL" in warning for warning in runtime.warnings))
+
+    def test_node_support_status_is_date_driven(self) -> None:
+        today = dt.date(2026, 7, 25)
+        self.assertEqual(MODULE.node_support_status("18.20.4", today)[0], "eol")
+        self.assertEqual(MODULE.node_support_status("20.18.0", today)[0], "eol")
+        self.assertEqual(MODULE.node_support_status("22.11.0", today)[0], "supported")
+        self.assertEqual(MODULE.node_support_status("24.4.0", today)[0], "supported")
+        # A major outside the reviewed schedule must stay unknown instead of being guessed.
+        self.assertEqual(MODULE.node_support_status("99.0.0", today)[0], "unknown")
+        self.assertEqual(MODULE.node_support_status("22.11.0", dt.date(2027, 3, 1))[0], "approaching-eol")
+        self.assertEqual(MODULE.node_support_status("22.11.0", dt.date(2027, 5, 1))[0], "eol")
 
     def test_node_runtime_detects_toolchain_metadata_without_special_casing_orchestrators(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
@@ -504,6 +722,166 @@ packages:
                 item.kind == "toolchain-engine" and item.authority == "authoritative"
                 for item in runtime.project_constraints
             ))
+
+    def test_lock_declared_toolchain_engine_works_without_node_modules(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "package-lock.json").write_text(json.dumps({
+                "lockfileVersion": 3,
+                "packages": {
+                    "node_modules/vite": {"version": "5.2.0", "engines": {"node": "^18.0.0 || >=20.0.0"}},
+                },
+            }), encoding="utf-8")
+            manifest = MODULE.ManifestSnapshot(
+                packages={"vite": MODULE.ManifestPackage("vite", "devDependencies", "^5.2.0")},
+            )
+            lock = MODULE.parse_lock(root / "package-lock.json", ["vite"], ".", role="current")
+            self.assertEqual(lock.declared_engines, {"vite": "^18.0.0 || >=20.0.0"})
+            with (
+                patch.object(MODULE, "current_host_node_runtime", return_value=("16.20.2", "C:/node/node.exe")),
+                patch.object(MODULE, "detect_node_managers", return_value=(["fnm"], {"fnm": ["20.18.0"]})),
+            ):
+                runtime = MODULE.assess_node_runtime(root, manifest, [], lock=lock)
+            self.assertEqual(runtime.status, "runtime-switch-required")
+            self.assertEqual(runtime.selected_project_node, "20.18.0")
+            self.assertTrue(any(
+                item.source.startswith("vite@5.2.0 lock") and item.authority == "authoritative"
+                for item in runtime.project_constraints
+            ))
+
+    def test_lock_declared_non_toolchain_engine_stays_observed(self) -> None:
+        lock = MODULE.LockSnapshot(
+            kind="npm",
+            path="package-lock.json",
+            direct_versions={"legacy-widget": "1.0.0"},
+            declared_engines={"legacy-widget": ">=8 <13"},
+        )
+        derived = MODULE.lock_declared_runtime_evidence(lock)
+        self.assertEqual([item.authority for item in derived], ["observed"])
+        self.assertEqual([item.kind for item in derived], ["dependency-engine"])
+        with tempfile.TemporaryDirectory() as raw:
+            with (
+                patch.object(MODULE, "current_host_node_runtime", return_value=("20.18.0", "C:/node/node.exe")),
+                patch.object(MODULE, "detect_node_managers", return_value=([], {})),
+            ):
+                runtime = MODULE.assess_node_runtime(Path(raw), MODULE.ManifestSnapshot(), [], lock=lock)
+            self.assertEqual(runtime.status, "unknown")
+            self.assertEqual(runtime.project_constraints, [])
+
+    def test_pnpm_lock_declares_engines_for_direct_version(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw) / "pnpm-lock.yaml"
+            path.write_text(
+                "lockfileVersion: '9.0'\n"
+                "importers:\n"
+                "  .:\n"
+                "    devDependencies:\n"
+                "      vite:\n"
+                "        specifier: ^5.2.0\n"
+                "        version: 5.2.0\n"
+                "packages:\n"
+                "\n"
+                "  vite@5.2.0:\n"
+                "    resolution: {integrity: sha512-deadbeef}\n"
+                "    engines: {node: ^18.0.0 || >=20.0.0}\n"
+                "    hasBin: true\n",
+                encoding="utf-8",
+            )
+            lock = MODULE.parse_lock(path, ["vite"], ".", role="current")
+            self.assertEqual(lock.direct_versions, {"vite": "5.2.0"})
+            self.assertEqual(lock.declared_engines, {"vite": "^18.0.0 || >=20.0.0"})
+
+    def test_pnpm_lock_declares_engines_in_nested_block_form(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw) / "pnpm-lock.yaml"
+            path.write_text(
+                "lockfileVersion: '6.0'\n"
+                "importers:\n"
+                "  .:\n"
+                "    dependencies:\n"
+                "      typescript:\n"
+                "        specifier: ^5.4.0\n"
+                "        version: 5.4.5\n"
+                "packages:\n"
+                "\n"
+                "  /typescript@5.4.5:\n"
+                "    resolution: {integrity: sha512-cafe}\n"
+                "    engines:\n"
+                "      node: '>=14.17'\n"
+                "    hasBin: true\n",
+                encoding="utf-8",
+            )
+            lock = MODULE.parse_lock(path, ["typescript"], ".", role="current")
+            self.assertEqual(lock.declared_engines, {"typescript": ">=14.17"})
+
+    def test_npmrc_and_mise_pins_are_authoritative(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / ".npmrc").write_text("use-node-version=20.18.0\n", encoding="utf-8")
+            with (
+                patch.object(MODULE, "current_host_node_runtime", return_value=("20.18.0", "C:/node/node.exe")),
+                patch.object(MODULE, "detect_node_managers", return_value=([], {})),
+            ):
+                runtime = MODULE.assess_node_runtime(root, MODULE.ManifestSnapshot(), [])
+            self.assertEqual(runtime.status, "compatible-current")
+            self.assertEqual(runtime.selected_project_node, "20.18.0")
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "mise.toml").write_text(
+                "[env]\nnode = \"skip-me\"\n\n[tools]\nnode = \"22.11.0\"\n", encoding="utf-8"
+            )
+            with (
+                patch.object(MODULE, "current_host_node_runtime", return_value=("22.11.0", "C:/node/node.exe")),
+                patch.object(MODULE, "detect_node_managers", return_value=([], {})),
+            ):
+                runtime = MODULE.assess_node_runtime(root, MODULE.ManifestSnapshot(), [])
+            self.assertEqual(
+                [(item.source, item.requirement) for item in runtime.project_constraints],
+                [("mise.toml#tools.node", "22.11.0")],
+            )
+
+    def test_pnpm_execution_env_node_version_is_a_project_pin(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            manifest = MODULE.ManifestSnapshot(
+                path=str(root / "package.json"),
+                pnpm={"executionEnv": {"nodeVersion": "18.20.4"}},
+            )
+            with (
+                patch.object(MODULE, "current_host_node_runtime", return_value=("20.18.0", "C:/node/node.exe")),
+                patch.object(MODULE, "detect_node_managers", return_value=(["fnm"], {"fnm": ["18.20.4"]})),
+            ):
+                runtime = MODULE.assess_node_runtime(root, manifest, [])
+            self.assertEqual(runtime.status, "runtime-switch-required")
+            self.assertEqual(runtime.selected_project_node, "18.20.4")
+
+    def test_deployment_and_ci_configs_are_observed_not_authoritative(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "netlify.toml").write_text(
+                "[build.environment]\n  NODE_VERSION = \"20.18.0\"\n", encoding="utf-8"
+            )
+            (root / "vercel.json").write_text(
+                json.dumps({"functions": {"api/*.ts": {"runtime": "nodejs20.x"}}}), encoding="utf-8"
+            )
+            circleci = root / ".circleci"
+            circleci.mkdir()
+            (circleci / "config.yml").write_text(
+                "jobs:\n  build:\n    docker:\n      - image: cimg/node:22.11.0\n", encoding="utf-8"
+            )
+            (root / "Dockerfile").write_text("ARG NODE_VERSION=20.18.0\nFROM node:${NODE_VERSION}\n", encoding="utf-8")
+            evidence = MODULE.observed_node_runtime_evidence(root)
+            sources = {Path(item.source).name for item in evidence}
+            self.assertEqual(sources, {"netlify.toml", "vercel.json", "config.yml", "Dockerfile"})
+            self.assertEqual({item.authority for item in evidence}, {"observed"})
+            with (
+                patch.object(MODULE, "current_host_node_runtime", return_value=("26.5.0", "C:/node/node.exe")),
+                patch.object(MODULE, "detect_node_managers", return_value=([], {})),
+            ):
+                runtime = MODULE.assess_node_runtime(root, MODULE.ManifestSnapshot(), [])
+            self.assertEqual(runtime.status, "unknown")
+            self.assertEqual(runtime.selected_project_node, "")
+            self.assertTrue(runtime.observed_runtime_evidence)
 
     def test_synthetic_fixture_node_status_not_compatible_with_host_26(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
@@ -654,6 +1032,23 @@ packages:
         ])
         with self.assertRaises(ValueError):
             RUNNER.verify_approvals(node_install)
+
+    def test_node_runner_times_out_hung_project_command(self) -> None:
+        args = RUNNER.parse_args([
+            ".", "--node-version", "20.18.0", "--command", "npm run build", "--command-timeout", "5",
+        ])
+        self.assertEqual(args.command_timeout, 5)
+        with (
+            patch.object(RUNNER, "current_node", return_value=("20.18.0", "C:/node/node.exe")),
+            patch.object(
+                RUNNER.subprocess, "run",
+                side_effect=RUNNER.subprocess.TimeoutExpired(cmd="npm run build", timeout=5),
+            ),
+        ):
+            row = RUNNER.run_shell_command("npm run build", Path("."), {}, 5)
+        self.assertEqual(row["exit_code"], 124)
+        self.assertEqual(row["state"], "timeout")
+        self.assertEqual(row["timeout_seconds"], 5)
 
     def test_node_runner_dry_run_does_not_switch_runtime(self) -> None:
         if MODULE.os.name != "nt":
@@ -1024,6 +1419,264 @@ packages:
             bundle = MODULE.build_bundle(args)
             self.assertEqual(bundle.behavior_parity_required, "no")
             self.assertEqual(bundle.reports[0].recommended_action, "review-removal")
+
+    def _seed_frontend(self, root: Path, package: str = "pkg", version: str = "1.0.0") -> None:
+        (root / "package.json").write_text(json.dumps({"dependencies": {package: version}}), encoding="utf-8")
+        (root / "package-lock.json").write_text(json.dumps({
+            "lockfileVersion": 3,
+            "packages": {f"node_modules/{package}": {"version": version}},
+        }), encoding="utf-8")
+
+    def _sample_metadata(self) -> dict:
+        return {
+            "homepage": "https://example.test/pkg",
+            "repository": {"url": "git+https://github.com/owner/pkg.git"},
+            "versions": {
+                "1.0.0": {"repository": {"url": "git+https://github.com/owner/pkg.git"}, "gitHead": "c100"},
+                "1.1.0": {"repository": {"url": "git+https://github.com/owner/pkg.git"}, "gitHead": "c110"},
+            },
+            "time": {"1.0.0": "2024-01-01T00:00:00.000Z", "1.1.0": "2024-02-01T00:00:00.000Z"},
+        }
+
+    def test_upstream_evidence_persisted_for_exact_upgrade(self) -> None:
+        metadata = self._sample_metadata()
+        releases = {
+            "1.1.0": {
+                "body": "release details for 1.1.0 " * 5,
+                "url": "https://github.com/owner/pkg/releases/tag/v1.1.0",
+                "published": "2024-02-01",
+                "name": "1.1.0",
+                "tag": "v1.1.0",
+                "source_kind": "github-release",
+                "status": "substantive",
+                "pointer_urls": [],
+            }
+        }
+        changelog = "## 1.1.0\nChangelog body for 1.1.0\n"
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            self._seed_frontend(root)
+            output = root / "reports"
+            args = MODULE.parse_args([
+                str(root), "--upgrade", "pkg:1.0.0:1.1.0",
+                "--output-dir", str(output), "--network-workers", "1",
+            ])
+            with (
+                patch.object(MODULE, "request_json", return_value=metadata),
+                patch.object(MODULE, "validate_version_repository", return_value=("confirmed", "ok", "")),
+                patch.object(MODULE, "github_default_branch", return_value="main"),
+                patch.object(MODULE, "fetch_github_releases", return_value=releases),
+                patch.object(MODULE, "fetch_changelog", return_value=(changelog, "https://example.test/changelog")),
+                patch.object(MODULE, "fetch_github_release_by_tag", return_value={}),
+                patch.object(MODULE, "fetch_github_tag", return_value={}),
+            ):
+                bundle = MODULE.build_bundle(args, output)
+                MODULE.write_bundle(bundle, args, output)
+            evidence = output / "upstream-evidence"
+            self.assertTrue(evidence.is_dir())
+            self.assertTrue((evidence / "manifest.json").is_file())
+            self.assertTrue((evidence / "pkg" / "registry.json").is_file())
+            self.assertTrue((evidence / "pkg" / "1.1.0" / "release.md").is_file())
+            self.assertTrue((evidence / "pkg" / "1.1.0" / "changelog.md").is_file())
+            self.assertTrue((evidence / "pkg" / "1.1.0" / "sources.json").is_file())
+            self.assertEqual(bundle.report_paths.get("upstream_evidence"), str(evidence.resolve()))
+            self.assertIn("1.1.0", (evidence / "pkg" / "1.1.0" / "release.md").read_text(encoding="utf-8"))
+
+    def test_upstream_evidence_local_fallback_when_network_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            self._seed_frontend(root)
+            output = root / "reports"
+            evidence = output / "upstream-evidence"
+            MODULE.write_upstream_registry(evidence, "pkg", self._sample_metadata())
+            note = MODULE.VersionNote(
+                version="1.1.0",
+                published="2024-02-01",
+                change_type="minor",
+                release_notes="cached release body for 1.1.0",
+                changelog="cached changelog for 1.1.0",
+                sources=["https://example.test/release"],
+                evidence_status="partial",
+                release_status="substantive",
+                changelog_status="confirmed",
+                repository_url="https://github.com/owner/pkg",
+                repository_source="npm-version-metadata",
+                repository_validation="confirmed",
+            )
+            MODULE.write_upstream_version_evidence(evidence, "pkg", note, evidence_origin="network")
+            MODULE.update_upstream_manifest(
+                evidence,
+                package="pkg",
+                from_version="1.0.0",
+                to_version="1.1.0",
+                versions=[{"version": "1.1.0", "status": "partial", "origin": "network"}],
+            )
+            args = MODULE.parse_args([
+                str(root), "--upgrade", "pkg:1.0.0:1.1.0",
+                "--output-dir", str(output), "--network-workers", "1",
+            ])
+            args.upstream_evidence_root = evidence
+            with (
+                patch.object(MODULE, "request_json", return_value=None),
+                patch.object(MODULE, "request_text", return_value=None),
+                patch.object(MODULE, "validate_version_repository", return_value=("candidate", "offline", "")),
+                patch.object(MODULE, "github_default_branch", return_value="main"),
+                patch.object(MODULE, "fetch_github_releases", return_value={}),
+                patch.object(MODULE, "fetch_changelog", return_value=("", "")),
+                patch.object(MODULE, "fetch_github_release_by_tag", return_value={}),
+                patch.object(MODULE, "fetch_github_tag", return_value={}),
+            ):
+                report = MODULE.collect_package_report(MODULE.Upgrade("pkg", "1.0.0", "1.1.0"), args)
+            self.assertTrue(report.used_local_upstream_evidence)
+            self.assertEqual(report.notes[0].version, "1.1.0")
+            self.assertIn("cached release body", report.notes[0].release_notes)
+            self.assertIn("cached changelog", report.notes[0].changelog)
+
+    def test_offline_uses_local_upstream_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            self._seed_frontend(root)
+            output = root / "reports"
+            evidence = output / "upstream-evidence"
+            MODULE.write_upstream_registry(evidence, "pkg", self._sample_metadata())
+            note = MODULE.VersionNote(
+                version="1.1.0",
+                release_notes="offline local release",
+                changelog="offline local changelog",
+                sources=["https://example.test/r"],
+                release_status="substantive",
+                changelog_status="confirmed",
+                evidence_status="partial",
+            )
+            MODULE.write_upstream_version_evidence(evidence, "pkg", note)
+            args = MODULE.parse_args([
+                str(root), "--upgrade", "pkg:1.0.0:1.1.0", "--offline",
+                "--output-dir", str(output),
+            ])
+            args.upstream_evidence_root = evidence
+            network_calls = {"json": 0, "text": 0}
+
+            def track_json(*_a, **_k):
+                network_calls["json"] += 1
+                return None
+
+            def track_text(*_a, **_k):
+                network_calls["text"] += 1
+                return None
+
+            with (
+                patch.object(MODULE, "request_json", side_effect=track_json),
+                patch.object(MODULE, "request_text", side_effect=track_text),
+            ):
+                report = MODULE.collect_package_report(MODULE.Upgrade("pkg", "1.0.0", "1.1.0"), args)
+            self.assertEqual(network_calls["json"], 0)
+            self.assertEqual(network_calls["text"], 0)
+            self.assertTrue(report.used_local_upstream_evidence)
+            self.assertEqual(report.evidence_completeness, "partial")
+            self.assertIn("offline local release", report.notes[0].release_notes)
+            self.assertNotEqual(report.notes[0].evidence_status, "offline")
+
+    def test_offline_without_local_evidence_stays_placeholder(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            self._seed_frontend(root, "axios", "0.27.2")
+            output = root / "reports"
+            args = MODULE.parse_args([
+                str(root), "--upgrade", "axios:0.27.2:1.7.9", "--offline",
+                "--output-dir", str(output),
+            ])
+            report = MODULE.collect_package_report(MODULE.Upgrade("axios", "0.27.2", "1.7.9"), args)
+            self.assertEqual(report.evidence_completeness, "offline")
+            self.assertEqual(report.notes[0].evidence_status, "offline")
+            self.assertIn("离线模式", report.notes[0].release_notes)
+            self.assertFalse((output / "upstream-evidence").exists())
+
+    def test_no_upstream_evidence_disables_persist(self) -> None:
+        metadata = self._sample_metadata()
+        releases = {
+            "1.1.0": {
+                "body": "release details " * 10,
+                "url": "https://example.test/1.1.0",
+                "published": "",
+                "name": "1.1.0",
+                "tag": "v1.1.0",
+                "source_kind": "github-release",
+                "status": "substantive",
+                "pointer_urls": [],
+            }
+        }
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            self._seed_frontend(root)
+            output = root / "reports"
+            args = MODULE.parse_args([
+                str(root), "--upgrade", "pkg:1.0.0:1.1.0",
+                "--output-dir", str(output), "--no-upstream-evidence", "--network-workers", "1",
+            ])
+            with (
+                patch.object(MODULE, "request_json", return_value=metadata),
+                patch.object(MODULE, "validate_version_repository", return_value=("confirmed", "ok", "")),
+                patch.object(MODULE, "github_default_branch", return_value="main"),
+                patch.object(MODULE, "fetch_github_releases", return_value=releases),
+                patch.object(MODULE, "fetch_changelog", return_value=("## 1.1.0\nfix\n", "https://example.test/c")),
+                patch.object(MODULE, "fetch_github_release_by_tag", return_value={}),
+                patch.object(MODULE, "fetch_github_tag", return_value={}),
+            ):
+                bundle = MODULE.build_bundle(args, output)
+                MODULE.write_bundle(bundle, args, output)
+            self.assertFalse((output / "upstream-evidence").exists())
+            self.assertNotIn("upstream_evidence", bundle.report_paths)
+
+    def test_cleanup_upstream_evidence_removes_directory(self) -> None:
+        metadata = self._sample_metadata()
+        releases = {
+            "1.1.0": {
+                "body": "release details " * 10,
+                "url": "https://example.test/1.1.0",
+                "published": "",
+                "name": "1.1.0",
+                "tag": "v1.1.0",
+                "source_kind": "github-release",
+                "status": "substantive",
+                "pointer_urls": [],
+            }
+        }
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            self._seed_frontend(root)
+            output = root / "reports"
+            args = MODULE.parse_args([
+                str(root), "--upgrade", "pkg:1.0.0:1.1.0",
+                "--output-dir", str(output), "--cleanup-upstream-evidence", "--network-workers", "1",
+            ])
+            with (
+                patch.object(MODULE, "request_json", return_value=metadata),
+                patch.object(MODULE, "validate_version_repository", return_value=("confirmed", "ok", "")),
+                patch.object(MODULE, "github_default_branch", return_value="main"),
+                patch.object(MODULE, "fetch_github_releases", return_value=releases),
+                patch.object(MODULE, "fetch_changelog", return_value=("## 1.1.0\nfix\n", "https://example.test/c")),
+                patch.object(MODULE, "fetch_github_release_by_tag", return_value={}),
+                patch.object(MODULE, "fetch_github_tag", return_value={}),
+            ):
+                bundle = MODULE.build_bundle(args, output)
+                markdown_path = MODULE.write_bundle(bundle, args, output)
+            self.assertTrue(markdown_path.is_file())
+            self.assertFalse((output / "upstream-evidence").exists())
+            self.assertNotIn("upstream_evidence", bundle.report_paths)
+
+    def test_assess_without_to_does_not_create_upstream_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            self._seed_frontend(root, "legacy", "1.2.3")
+            output = root / "reports"
+            args = MODULE.parse_args([
+                str(root), "--assess", "legacy", "--offline",
+                "--output-dir", str(output),
+            ])
+            bundle = MODULE.build_bundle(args, output)
+            MODULE.write_bundle(bundle, args, output)
+            self.assertFalse((output / "upstream-evidence").exists())
+            self.assertNotIn("upstream_evidence", bundle.report_paths)
 
 
 if __name__ == "__main__":

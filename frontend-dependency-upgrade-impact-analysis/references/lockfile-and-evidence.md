@@ -6,10 +6,13 @@
 2. npm lock
 3. pnpm lock
 4. Yarn lock
-5. Manifest 特殊字段
-6. 官方证据完整性
+5. Bun lock
+6. Manifest 特殊字段
+7. 官方证据完整性
 
 ## 1. 工作区和基线
+
+受支持的 lockfile 按检测优先级为：`package-lock.json`、`npm-shrinkwrap.json`、`pnpm-lock.yaml`、`yarn.lock`、`bun.lock`、`bun.lockb`。其余类型（例如 Deno 的 `deno.lock`）必须报为不受支持并写出实际文件名，不得按 npm 语义猜测。
 
 先确定真正拥有依赖声明的 `package.json`，再解析该 workspace/importer。根目录 lock 不等于根 workspace 的直接依赖。缺少 frontend `package.json`（`importer_resolution=failed`）是与 unknown baseline 同级的实施闸门阻塞：生成器退出码 `5`，不得当作可批准升级结论。
 
@@ -40,6 +43,9 @@
 - v2/v3：优先读取 `packages["node_modules/<package>"].version`；嵌套 `node_modules` 路径用于识别重复版本。
 - v1：读取 `dependencies[package].version` 并递归观察嵌套 dependencies。
 - 记录 `lockfileVersion`；解析不到直接版本时标 unknown，不回退猜测。
+- v2/v3 的直接依赖条目还带 `engines`：读取其中的 `node` 作为该解析版本声明的运行时要求，用途见 `references/node-runtime-compatibility.md` §2 的 `toolchain-engine` / `dependency-engine`。
+
+只有**当前** lock 缺失才是发现项。分析升级前状态时没有 before/after lock 属正常，报告不得输出无主语的"未找到 lockfile"。lock 路径存在但类型不受支持时，必须写出实际文件名和受支持类型清单。
 
 ## 3. pnpm lock
 
@@ -47,6 +53,8 @@
 - 目标 workspace 对应 importer 下的 dependencies/devDependencies/optionalDependencies 可能是标量，也可能包含 `specifier`/`version`。
 - `packages`/`snapshots` 键用于观察所有版本和 peer variant。
 - 版本后缀如 `(react@18.2.0)` 是 peer context，不应混入基础版本。
+- `packages` 块内的 `engines`（行内 `{node: ...}` 或缩进子键两种写法）按解析版本读取，作为 Node 约束证据。
+- `catalog:` / `catalog:<name>` 协议不是 semver。必须从 `pnpm-workspace.yaml` 的 `catalog:` / `catalogs.<name>` 解析有效范围，在 manifest 声明中同时呈现协议与解析结果，并提示改动范围时需要同步 catalog。解析不到条目时保持人工确认，不得当作普通版本声明。
 
 ## 4. Yarn lock
 
@@ -55,7 +63,15 @@
 - 多 selector 合并到同一块时仍需记录所有声明与实际版本。
 - 没有 workspace importer 信息时必须注明限制。
 
-## 5. Manifest 特殊字段
+## 5. Bun lock
+
+- `bun.lock` 是 JSONC：解析前需要剥离注释和尾随逗号，且不得破坏字符串内容。
+- `workspaces` 的根 importer 键是空字符串 `""`；`.` 应映射到该键。
+- `packages` 的键即依赖路径：`axios` 是直接依赖，`wrapper/axios` 是嵌套重复；值数组第一项形如 `axios@1.7.9`，用于提取实际版本。
+- Bun 文本锁与 Yarn v1 都不记录 `engines`，Node 约束只能来自 manifest、运行时 pin 或已安装元数据。
+- `bun.lockb` 是二进制锁，不能读出直接解析版本。此时必须给出可执行出路（提交 `bun.lock` 或运行 `bun install --save-text-lockfile`），并保持基线 unknown，不猜测。
+
+## 6. Manifest 特殊字段
 
 除四类依赖外必须检查：
 
@@ -68,7 +84,7 @@
 
 嵌套 overrides 应用完整键路径表达，不要把它误报成普通直接依赖升级。
 
-## 6. 官方证据完整性
+## 7. 官方证据完整性
 
 每个**版本**先解析并记录：
 
@@ -95,6 +111,23 @@
 | partial | 有官方来源但部分版本、标签或文档缺失 |
 | ambiguous | monorepo tag/release 无法可靠归属到目标 package |
 | offline | 未联网，仅生成待补来源 |
+
+### 报告级 upstream-evidence
+
+精确升级（明确 `from → to`）默认在报告输出目录旁写入 `upstream-evidence/`，只保存目标版本区间材料：
+
+- `manifest.json`：包名、区间、抓取时间、每版本状态与来源；
+- `<package-safe>/registry.json`：npm 包元数据（供离线回放区间）；
+- `<package-safe>/<version>/release.md`、`changelog.md`、`sources.json`。
+
+行为：
+
+- 默认开启写与回读；`--no-upstream-evidence` 关闭；
+- 联网成功时覆盖同包同版本本地文件；联网失败或 `--offline` 时回读已有证据包，并在报告中标明本地来源；
+- 本地回读最多把完整性标为 `partial`，不得标 `complete`；
+- 默认保留目录；`--cleanup-upstream-evidence` 在报告写成功后删除；
+- 非精确升级（无 to 的 assess/removal 等）不写、不读该目录；
+- 与六小时 HTTP cache 并存：后者是传输缓存，前者是报告级可读证据包。
 
 GitHub API 必须分页或明确页数限制。若人为设置 `max-versions` 截断，报告必须写出总数、保留区间和“不可视为完整证据”。
 

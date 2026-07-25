@@ -25,6 +25,27 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Iterable
 
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from upgrade_lockfiles import (  # noqa: E402  (sibling module; scripts/ is added above)
+    LOCK_NAMES,
+    LockSnapshot,
+    detect_lock,
+    parse_lock,
+    unquote_yaml,
+)
+from upgrade_semver import (  # noqa: E402
+    VERSION_RE,
+    classify_change,
+    clean_version,
+    compare_versions,
+    preferred_version as preferred_node_version,
+    range_satisfies as semver_satisfies,
+    range_witnesses as node_constraint_candidates,
+    semver_key,
+)
+
 
 DEPENDENCY_FIELDS = (
     "dependencies",
@@ -33,8 +54,6 @@ DEPENDENCY_FIELDS = (
     "optionalDependencies",
 )
 SPECIAL_FIELDS = ("overrides", "resolutions", "peerDependenciesMeta")
-LOCK_NAMES = ("package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock")
-VERSION_RE = re.compile(r"(?P<version>\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)")
 CRITICAL_RE = re.compile(r"(?:auth|login|permission|role|payment|checkout|order|upload|token)", re.I)
 SHARED_RE = re.compile(r"(?:common|shared|components?|utils?|services?|request|client|router|store)", re.I)
 TEST_RE = re.compile(r"(?:^|/)(?:__tests__/|test/|tests/)|\.(?:test|spec)\.[^.]+$", re.I)
@@ -53,9 +72,12 @@ CONFIG_FILE_HINTS = (
     "tsconfig", "vite.config", "vitest.config", "webpack.config",
 )
 TOOLCHAIN_PACKAGES = {
-    "@angular/cli", "@playwright/test", "@vue/cli-service", "cypress", "eslint",
-    "esbuild", "gulp", "jest", "next", "nuxt", "parcel", "playwright",
-    "react-scripts", "rollup", "typescript", "vite", "vitest", "webpack",
+    "@angular-devkit/build-angular", "@angular/cli", "@babel/core", "@nestjs/cli",
+    "@playwright/test", "@remix-run/dev", "@sveltejs/kit", "@swc/core",
+    "@vue/cli-service", "astro", "cypress", "eslint", "esbuild", "gatsby", "gulp",
+    "jest", "mocha", "next", "nuxt", "nx", "parcel", "playwright", "prettier",
+    "react-scripts", "rollup", "storybook", "stylelint", "tailwindcss", "ts-node",
+    "tsup", "tsx", "turbo", "typescript", "vite", "vitest", "vue-tsc", "webpack",
     "webpack-cli",
 }
 REPORT_SECTION_TITLES = {
@@ -73,8 +95,55 @@ REPORT_SECTION_TITLES = {
     "Conclusion": "结论",
 }
 REQUIRED_HEADINGS = tuple(REPORT_SECTION_TITLES)
+# End-of-life dates from the official Node.js release schedule (nodejs/Release). This is a
+# reviewed snapshot, not a live feed: majors outside the table stay `unknown` instead of being
+# guessed, and NODE_SCHEDULE_REVIEWED is reported so a stale table is visible to the reader.
+NODE_EOL_DATES = {
+    12: "2022-04-30", 13: "2020-06-01", 14: "2023-04-30", 15: "2021-06-01",
+    16: "2023-09-11", 17: "2022-06-01", 18: "2025-04-30", 19: "2023-06-01",
+    20: "2026-04-30", 21: "2024-06-01", 22: "2027-04-30", 23: "2025-06-01",
+    24: "2028-04-30", 25: "2026-06-01",
+}
+NODE_SCHEDULE_REVIEWED = "2026-07-25"
+NODE_EOL_WARNING_WINDOW_DAYS = 90
+CHANGE_SCORES = {"same": 0, "patch": 1, "minor": 3, "added": 3, "unknown": 3, "major": 5, "removed": 5}
+# Blast radius of the package family, before it is weighted by how large the version change is.
+DEPENDENCY_TYPE_BASE = {
+    "runtime": 1, "dev-tooling": 1,
+    "typescript": 2, "style": 2, "test": 2,
+    "state": 4, "dom-runtime": 4,
+    "framework": 5, "router": 5, "ui": 5, "request": 5, "build": 5,
+}
+# base blast radius -> (trivial change, moderate change, breaking change)
+DEPENDENCY_TYPE_BY_CHANGE = {
+    5: (1, 3, 5),
+    4: (1, 3, 4),
+    2: (1, 2, 2),
+    1: (1, 1, 1),
+}
+TRIVIAL_CHANGES = frozenset({"same", "patch"})
+BREAKING_CHANGES = frozenset({"major", "removed", "replacement"})
+RISK_FACTORS = (
+    "version_change",
+    "dependency_type",
+    "usage_scope",
+    "business_criticality",
+    "lockfile_change",
+    "test_coverage_gap",
+    "peer_compatibility",
+)
+RISK_LOW_MAX = 6
+RISK_MEDIUM_MAX = 14
+NODE_SUPPORT_STATUSES = ("supported", "approaching-eol", "eol", "unknown")
+NODE_CONSTRAINT_KINDS = (
+    "runtime-pin", "project-engine", "toolchain-engine", "dependency-engine",
+    "target-package-engine", "ci-node-version", "container-node-image",
+)
+DECLARATION_CATEGORY = "Dependency declaration/config"
+UNMAPPED_FLOW = "需要补充路由/调用方映射"
+UNRATED = "待评估"
 CODE_CATEGORY_TITLES = {
-    "Dependency declaration/config": "依赖声明/配置",
+    DECLARATION_CATEGORY: "依赖声明/配置",
     "Direct package usage": "直接包用法",
     "Vue app entry": "Vue 应用入口",
     "Vue reactivity": "Vue 响应式",
@@ -171,21 +240,13 @@ class OfficialSource:
 
 
 @dataclass
-class LockSnapshot:
-    kind: str = "none"
-    path: str = ""
-    lockfile_version: str = ""
-    importer: str = "."
-    direct_versions: dict[str, str] = field(default_factory=dict)
-    all_versions: dict[str, list[str]] = field(default_factory=dict)
-    warnings: list[str] = field(default_factory=list)
-
-
-@dataclass
 class ManifestPackage:
     package: str
     field: str = ""
     spec: str = ""
+    # Range a `catalog:` / `catalog:<name>` protocol spec resolves to in pnpm-workspace.yaml.
+    catalog_spec: str = ""
+    catalog_source: str = ""
 
 
 @dataclass
@@ -194,6 +255,7 @@ class ManifestSnapshot:
     package_manager: str = ""
     engines: dict[str, Any] = field(default_factory=dict)
     volta: dict[str, Any] = field(default_factory=dict)
+    pnpm: dict[str, Any] = field(default_factory=dict)
     packages: dict[str, ManifestPackage] = field(default_factory=dict)
     special_entries: list[str] = field(default_factory=list)
 
@@ -219,6 +281,7 @@ class RiskAssessment:
     automatic_level: str = "Medium"
     final_level: str = "Medium"
     rationale: list[str] = field(default_factory=list)
+    uncertainties: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -295,6 +358,7 @@ class NodeRuntimeAssessment:
     compatible_installed_versions: list[str] = field(default_factory=list)
     selected_project_node: str = ""
     selected_manager: str = ""
+    selected_node_support: str = "unknown"
     recommended_strategy: str = "read-only-analysis"
     restoration_plan: list[str] = field(default_factory=list)
     blockers: list[str] = field(default_factory=list)
@@ -347,6 +411,7 @@ class PackageReport:
     decision_required: list[str] = field(default_factory=list)
     constraints: list[str] = field(default_factory=list)
     selection_status: str = "not_applicable"
+    used_local_upstream_evidence: bool = False
 
 
 @dataclass
@@ -379,57 +444,6 @@ class FrontendWorkspaceResolution:
     status: str  # confirmed | failed
     manifest_path: str = ""
     reason: str = ""
-
-
-def clean_version(value: str) -> str:
-    value = str(value or "").strip()
-    if not value:
-        return ""
-    if value.startswith(("workspace:", "file:", "link:", "github:", "git+", "http:" , "https:")):
-        return value
-    if value.startswith("npm:"):
-        match = VERSION_RE.search(value)
-        return match.group("version") if match else value
-    value = value.split("||", 1)[0].strip()
-    match = VERSION_RE.search(value.lstrip("v^~<>= "))
-    return match.group("version") if match else value
-
-
-def semver_key(value: str) -> tuple[int, int, int, int, str] | None:
-    version = clean_version(value)
-    match = VERSION_RE.fullmatch(version)
-    if not match:
-        return None
-    base = version.split("+", 1)[0]
-    main, _, prerelease = base.partition("-")
-    major, minor, patch = (int(part) for part in main.split("."))
-    return major, minor, patch, 1 if not prerelease else 0, prerelease
-
-
-def compare_versions(left: str, right: str) -> int | None:
-    left_key = semver_key(left)
-    right_key = semver_key(right)
-    if left_key is None or right_key is None:
-        return None
-    return (left_key > right_key) - (left_key < right_key)
-
-
-def classify_change(from_version: str, to_version: str) -> str:
-    if not from_version and to_version:
-        return "added"
-    if from_version and not to_version:
-        return "removed"
-    before = semver_key(from_version)
-    after = semver_key(to_version)
-    if before is None or after is None:
-        return "unknown"
-    if before[0] != after[0]:
-        return "major"
-    if before[1] != after[1]:
-        return "minor"
-    if before != after:
-        return "patch"
-    return "same"
 
 
 def infer_dependency_type(package: str, declared_type: str = "") -> str:
@@ -470,7 +484,55 @@ def flatten_mapping(value: Any, prefix: str = "") -> list[str]:
     return rows
 
 
-def load_manifest(path: Path | None) -> ManifestSnapshot:
+def read_pnpm_catalogs(project_root: Path) -> dict[str, dict[str, str]]:
+    """Read `catalog:` / `catalogs:` ranges from pnpm-workspace.yaml without a YAML dependency."""
+    path = project_root / "pnpm-workspace.yaml"
+    if not path.is_file():
+        return {}
+    catalogs: dict[str, dict[str, str]] = {}
+    section = ""
+    named = ""
+    try:
+        lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+    except OSError:
+        return {}
+    for raw in lines:
+        line = raw.split("#", 1)[0].rstrip()
+        if not line.strip():
+            continue
+        indent = len(line) - len(line.lstrip())
+        stripped = line.strip()
+        if indent == 0:
+            section = stripped.rstrip(":") if stripped.endswith(":") else ""
+            named = ""
+            continue
+        if section not in {"catalog", "catalogs"}:
+            continue
+        if section == "catalogs" and stripped.endswith(":") and ":" not in stripped[:-1]:
+            named = stripped[:-1].strip("'\"")
+            continue
+        key, separator, value = stripped.partition(":")
+        if not separator:
+            continue
+        name = key.strip().strip("'\"")
+        spec = unquote_yaml(value.strip())
+        if not name or not spec:
+            continue
+        catalog_name = "default" if section == "catalog" else (named or "default")
+        catalogs.setdefault(catalog_name, {})[name] = spec
+    return catalogs
+
+
+def resolve_catalog_spec(spec: str, package: str, catalogs: dict[str, dict[str, str]]) -> tuple[str, str]:
+    if not spec.startswith("catalog:"):
+        return "", ""
+    name = spec.split(":", 1)[1].strip() or "default"
+    entry = (catalogs.get(name) or {}).get(package, "")
+    source = f"pnpm-workspace.yaml#catalog{'' if name == 'default' else 's.' + name}"
+    return entry, source if entry else ""
+
+
+def load_manifest(path: Path | None, project_root: Path | None = None) -> ManifestSnapshot:
     if path is None or not path.exists():
         return ManifestSnapshot(path=str(path or ""))
     data = read_json(path)
@@ -479,10 +541,14 @@ def load_manifest(path: Path | None) -> ManifestSnapshot:
         package_manager=str(data.get("packageManager") or ""),
         engines=data.get("engines") or {},
         volta=data.get("volta") or {},
+        pnpm=data.get("pnpm") or {},
     )
+    catalogs = read_pnpm_catalogs(project_root or path.parent)
     for field_name in DEPENDENCY_FIELDS:
         for package, spec in (data.get(field_name) or {}).items():
-            snapshot.packages[package] = ManifestPackage(package, field_name, str(spec))
+            entry = ManifestPackage(package, field_name, str(spec))
+            entry.catalog_spec, entry.catalog_source = resolve_catalog_spec(entry.spec, package, catalogs)
+            snapshot.packages[package] = entry
     for field_name in SPECIAL_FIELDS:
         if field_name in data:
             snapshot.special_entries.extend(f"{field_name}.{row}" for row in flatten_mapping(data[field_name]))
@@ -618,166 +684,6 @@ def collect_upgrades(args: argparse.Namespace) -> list[Upgrade]:
     return list(deduped.values())
 
 
-def detect_lock(project_root: Path) -> Path | None:
-    for name in LOCK_NAMES:
-        path = project_root / name
-        if path.exists():
-            return path
-    return None
-
-
-def add_version(mapping: dict[str, list[str]], package: str, version: str) -> None:
-    version = clean_version(version)
-    if semver_key(version) is None:
-        return
-    mapping.setdefault(package, [])
-    if version not in mapping[package]:
-        mapping[package].append(version)
-
-
-def parse_npm_lock(path: Path, packages: list[str], importer: str) -> LockSnapshot:
-    data = read_json(path)
-    snapshot = LockSnapshot("npm", str(path.resolve()), str(data.get("lockfileVersion") or ""), importer)
-    package_set = set(packages)
-    entries = data.get("packages") or {}
-    if isinstance(entries, dict) and entries:
-        for key, info in entries.items():
-            if not isinstance(info, dict):
-                continue
-            for package in package_set:
-                marker = f"node_modules/{package}"
-                if key.replace("\\", "/").endswith(marker) and info.get("version"):
-                    add_version(snapshot.all_versions, package, str(info["version"]))
-                direct_key = f"node_modules/{package}" if importer in {"", "."} else f"{importer.strip('/')}/node_modules/{package}"
-                if key.replace("\\", "/") == direct_key and info.get("version"):
-                    snapshot.direct_versions[package] = clean_version(info["version"])
-    dependencies = data.get("dependencies") or {}
-
-    def walk(node: dict[str, Any], depth: int = 0) -> None:
-        for name, info in node.items():
-            if not isinstance(info, dict):
-                continue
-            if name in package_set and info.get("version"):
-                add_version(snapshot.all_versions, name, str(info["version"]))
-                if depth == 0:
-                    snapshot.direct_versions[name] = clean_version(info["version"])
-            walk(info.get("dependencies") or {}, depth + 1)
-
-    if isinstance(dependencies, dict):
-        walk(dependencies)
-    return snapshot
-
-
-def unquote_yaml(value: str) -> str:
-    return value.strip().strip("'\"")
-
-
-def parse_pnpm_direct(lines: list[str], packages: set[str], importer: str) -> dict[str, str]:
-    direct: dict[str, str] = {}
-    in_importers = False
-    current_importer = ""
-    current_field = ""
-    current_package = ""
-    for raw in lines:
-        stripped = raw.strip()
-        indent = len(raw) - len(raw.lstrip(" "))
-        if stripped == "importers:":
-            in_importers = True
-            continue
-        if not in_importers or not stripped or stripped.startswith("#"):
-            continue
-        if indent == 0 and stripped.endswith(":"):
-            break
-        if indent == 2 and stripped.endswith(":"):
-            current_importer = unquote_yaml(stripped[:-1])
-            current_field = ""
-            current_package = ""
-            continue
-        if current_importer != importer:
-            continue
-        if indent == 4 and stripped.rstrip(":") in {"dependencies", "devDependencies", "optionalDependencies"}:
-            current_field = stripped.rstrip(":")
-            current_package = ""
-            continue
-        if not current_field:
-            continue
-        version_line = re.match(r"^\s{8}version:\s+(.+)$", raw)
-        if indent == 8 and version_line and current_package in packages:
-            direct[current_package] = clean_version(unquote_yaml(version_line.group(1)).split("(", 1)[0])
-            continue
-        scalar = re.match(r"^\s{6}([^:]+):\s+(.+)$", raw)
-        if indent == 6 and scalar:
-            package = unquote_yaml(scalar.group(1))
-            if package in packages:
-                direct[package] = clean_version(unquote_yaml(scalar.group(2)).split("(", 1)[0])
-            current_package = ""
-            continue
-        nested = re.match(r"^\s{6}([^:]+):\s*$", raw)
-        if indent == 6 and nested:
-            current_package = unquote_yaml(nested.group(1))
-            continue
-    return direct
-
-
-def parse_pnpm_lock(path: Path, packages: list[str], importer: str) -> LockSnapshot:
-    text = path.read_text(encoding="utf-8-sig", errors="replace")
-    lines = text.splitlines()
-    version_match = re.search(r"^lockfileVersion:\s*['\"]?([^'\"\s]+)", text, re.M)
-    snapshot = LockSnapshot("pnpm", str(path.resolve()), version_match.group(1) if version_match else "", importer)
-    snapshot.direct_versions = parse_pnpm_direct(lines, set(packages), importer)
-    for package in packages:
-        escaped = re.escape(package)
-        patterns = [
-            rf"^[ \t]*['\"]?/?{escaped}@(?P<version>\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)",
-            rf"^[ \t]*/?{escaped}/(?P<version>\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?):",
-        ]
-        for pattern in patterns:
-            for match in re.finditer(pattern, text, re.M):
-                add_version(snapshot.all_versions, package, match.group("version"))
-        if package in snapshot.direct_versions:
-            add_version(snapshot.all_versions, package, snapshot.direct_versions[package])
-    if not snapshot.direct_versions:
-        snapshot.warnings.append(f"未能解析 pnpm importer {importer!r} 的直接版本；请核验 workspace importer。")
-    return snapshot
-
-
-def parse_yarn_lock(path: Path, packages: list[str], importer: str) -> LockSnapshot:
-    text = path.read_text(encoding="utf-8-sig", errors="replace")
-    snapshot = LockSnapshot("yarn", str(path.resolve()), "", importer)
-    current_selectors = ""
-    observed: dict[str, list[str]] = {package: [] for package in packages}
-    for raw in text.splitlines():
-        if raw and not raw[0].isspace() and raw.rstrip().endswith(":"):
-            current_selectors = raw.rstrip()[:-1].strip("'\"")
-            continue
-        version_match = re.match(r"^\s+version\s+['\"]?([^'\"\s]+)", raw)
-        if not version_match:
-            continue
-        version = clean_version(version_match.group(1))
-        for package in packages:
-            if re.search(rf"(?:^|[,\s'\"]){re.escape(package)}@", current_selectors):
-                add_version(observed, package, version)
-    snapshot.all_versions = {key: value for key, value in observed.items() if value}
-    for package, versions in snapshot.all_versions.items():
-        if len(versions) == 1:
-            snapshot.direct_versions[package] = versions[0]
-        else:
-            snapshot.warnings.append(f"Yarn lock 包含多个 {package} 版本；缺少包管理器输出时无法唯一确定 workspace 直接解析版本。")
-    return snapshot
-
-
-def parse_lock(path: Path | None, packages: list[str], importer: str = ".") -> LockSnapshot:
-    if path is None or not path.exists():
-        return LockSnapshot(path=str(path or ""), importer=importer, warnings=["未找到 lockfile。"])
-    if path.name in {"package-lock.json", "npm-shrinkwrap.json"}:
-        return parse_npm_lock(path, packages, importer)
-    if path.name == "pnpm-lock.yaml":
-        return parse_pnpm_lock(path, packages, importer)
-    if path.name == "yarn.lock":
-        return parse_yarn_lock(path, packages, importer)
-    return LockSnapshot(path=str(path.resolve()), importer=importer, warnings=["不支持该 lockfile 类型。"])
-
-
 def package_url(package: str, version: str = "") -> str:
     quoted = urllib.parse.quote(package, safe="@/")
     suffix = f"/v/{urllib.parse.quote(version, safe='')}" if version else ""
@@ -898,6 +804,322 @@ def request_json(url: str, timeout: int) -> Any | None:
         return json.loads(text)
     except json.JSONDecodeError:
         return None
+
+
+_UPSTREAM_EVIDENCE_LOCK = threading.Lock()
+RELEASE_NOTE_PLACEHOLDERS = frozenset({
+    "离线模式：需要人工收集官方发布证据。",
+    "无法获取 npm 元数据。",
+    "该版本只有官方 Git tag，未找到 GitHub Release 正文。",
+    "未找到可确认属于目标包的 GitHub Release 正文。",
+})
+CHANGELOG_NOTE_PLACEHOLDERS = frozenset({
+    "离线模式：需要人工收集官方变更日志。",
+    "需要人工复核上游资料。",
+    "已找到 changelog 文档，但未能提取该版本章节。",
+    "未找到官方 changelog 文档。",
+})
+
+
+def upstream_evidence_enabled(args: argparse.Namespace) -> bool:
+    return not bool(getattr(args, "no_upstream_evidence", False))
+
+
+def upstream_evidence_dir(output_dir: Path | str) -> Path:
+    return Path(output_dir).resolve() / "upstream-evidence"
+
+
+def package_dir_name(package: str) -> str:
+    return package.replace("/", "__")
+
+
+def is_exact_upgrade_target(upgrade: Upgrade) -> bool:
+    return upgrade.intent == "exact-upgrade" and bool(clean_version(upgrade.to_version))
+
+
+def is_placeholder_release_notes(text: str) -> bool:
+    return not text or text.strip() in RELEASE_NOTE_PLACEHOLDERS
+
+
+def is_placeholder_changelog(text: str) -> bool:
+    return not text or text.strip() in CHANGELOG_NOTE_PLACEHOLDERS
+
+
+def upstream_package_dir(root: Path, package: str) -> Path:
+    return root / package_dir_name(package)
+
+
+def upstream_version_dir(root: Path, package: str, version: str) -> Path:
+    return upstream_package_dir(root, package) / clean_version(version)
+
+
+def write_upstream_registry(root: Path, package: str, metadata: dict[str, Any]) -> Path:
+    package_dir = upstream_package_dir(root, package)
+    package_dir.mkdir(parents=True, exist_ok=True)
+    path = package_dir / "registry.json"
+    path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+    return path
+
+
+def read_upstream_registry(root: Path | None, package: str) -> dict[str, Any] | None:
+    if root is None:
+        return None
+    path = upstream_package_dir(root, package) / "registry.json"
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def write_upstream_version_evidence(
+    root: Path,
+    package: str,
+    note: VersionNote,
+    *,
+    evidence_origin: str = "network",
+    changelog_document: str = "",
+) -> None:
+    version_dir = upstream_version_dir(root, package, note.version)
+    version_dir.mkdir(parents=True, exist_ok=True)
+    if note.release_notes and not is_placeholder_release_notes(note.release_notes):
+        (version_dir / "release.md").write_text(note.release_notes, encoding="utf-8")
+    if note.changelog and not is_placeholder_changelog(note.changelog):
+        (version_dir / "changelog.md").write_text(note.changelog, encoding="utf-8")
+    if changelog_document:
+        (version_dir / "changelog-document.md").write_text(changelog_document, encoding="utf-8")
+    payload = {
+        "version": note.version,
+        "published": note.published,
+        "change_type": note.change_type,
+        "release_status": note.release_status,
+        "changelog_status": note.changelog_status,
+        "evidence_status": note.evidence_status,
+        "evidence_origin": evidence_origin,
+        "repository_url": note.repository_url,
+        "repository_source": note.repository_source,
+        "repository_validation": note.repository_validation,
+        "sources": list(note.sources),
+        "has_release_body": bool(note.release_notes and not is_placeholder_release_notes(note.release_notes)),
+        "has_changelog_section": bool(note.changelog and not is_placeholder_changelog(note.changelog)),
+        "has_changelog_document": bool(changelog_document),
+    }
+    (version_dir / "sources.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def read_upstream_version_evidence(root: Path | None, package: str, version: str) -> dict[str, Any] | None:
+    if root is None:
+        return None
+    version_dir = upstream_version_dir(root, package, version)
+    sources_path = version_dir / "sources.json"
+    if not version_dir.is_dir() and not sources_path.is_file():
+        release_path = version_dir / "release.md"
+        changelog_path = version_dir / "changelog.md"
+        if not release_path.is_file() and not changelog_path.is_file():
+            return None
+    payload: dict[str, Any] = {}
+    if sources_path.is_file():
+        try:
+            loaded = json.loads(sources_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                payload.update(loaded)
+        except (OSError, json.JSONDecodeError):
+            pass
+    release_path = version_dir / "release.md"
+    changelog_path = version_dir / "changelog.md"
+    if release_path.is_file():
+        payload["release_notes"] = release_path.read_text(encoding="utf-8")
+    if changelog_path.is_file():
+        payload["changelog"] = changelog_path.read_text(encoding="utf-8")
+    if not payload.get("release_notes") and not payload.get("changelog") and not payload:
+        return None
+    payload.setdefault("version", clean_version(version))
+    return payload
+
+
+def merge_note_fields_from_local(
+    release_text: str,
+    changelog_text: str,
+    release_status: str,
+    changelog_status: str,
+    local: dict[str, Any] | None,
+) -> tuple[str, str, str, str, bool]:
+    if not local:
+        return release_text, changelog_text, release_status, changelog_status, False
+    used = False
+    local_release = str(local.get("release_notes") or "").strip()
+    local_changelog = str(local.get("changelog") or "").strip()
+    if is_placeholder_release_notes(release_text) and local_release:
+        release_text = local_release
+        release_status = str(local.get("release_status") or release_status or "substantive")
+        used = True
+    if is_placeholder_changelog(changelog_text) and local_changelog:
+        changelog_text = local_changelog
+        changelog_status = str(local.get("changelog_status") or "confirmed")
+        used = True
+    return release_text, changelog_text, release_status, changelog_status, used
+
+
+def update_upstream_manifest(
+    root: Path,
+    *,
+    package: str,
+    from_version: str,
+    to_version: str,
+    versions: list[dict[str, Any]],
+) -> None:
+    manifest_path = root / "manifest.json"
+    with _UPSTREAM_EVIDENCE_LOCK:
+        root.mkdir(parents=True, exist_ok=True)
+        manifest: dict[str, Any] = {"packages": {}, "root": str(root.resolve())}
+        if manifest_path.is_file():
+            try:
+                loaded = json.loads(manifest_path.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    manifest.update(loaded)
+            except (OSError, json.JSONDecodeError):
+                pass
+        packages = manifest.setdefault("packages", {})
+        if not isinstance(packages, dict):
+            packages = {}
+            manifest["packages"] = packages
+        packages[package] = {
+            "package": package,
+            "package_dir": package_dir_name(package),
+            "from_version": from_version,
+            "to_version": to_version,
+            "updated_at": dt.datetime.now(dt.timezone.utc).astimezone().isoformat(timespec="seconds"),
+            "versions": versions,
+        }
+        manifest["root"] = str(root.resolve())
+        manifest["updated_at"] = dt.datetime.now(dt.timezone.utc).astimezone().isoformat(timespec="seconds")
+        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def cleanup_upstream_evidence(root: Path | None) -> bool:
+    if root is None or not root.exists():
+        return False
+    shutil.rmtree(root)
+    return True
+
+
+def apply_local_upstream_note(report: PackageReport, local: dict[str, Any], fallback_change_type: str) -> VersionNote:
+    release_notes = str(local.get("release_notes") or "").strip()
+    changelog = str(local.get("changelog") or "").strip()
+    release_status = str(local.get("release_status") or ("substantive" if release_notes else "missing"))
+    changelog_status = str(local.get("changelog_status") or ("confirmed" if changelog else "missing"))
+    if release_status == "ambiguous":
+        evidence_status = "ambiguous"
+    elif release_status in {"substantive", "substantive-linked"} and changelog_status == "confirmed":
+        evidence_status = "confirmed"
+    elif release_status in {"substantive", "substantive-linked", "pointer", "thin", "tag-only"} or changelog_status == "confirmed":
+        evidence_status = "partial"
+    else:
+        evidence_status = str(local.get("evidence_status") or "partial")
+    return VersionNote(
+        version=str(local.get("version") or ""),
+        published=str(local.get("published") or ""),
+        change_type=str(local.get("change_type") or fallback_change_type),
+        release_notes=release_notes or "未找到可确认属于目标包的 GitHub Release 正文。",
+        changelog=changelog or "未找到官方 changelog 文档。",
+        sources=list(local.get("sources") or []),
+        evidence_status=evidence_status,
+        release_status=release_status,
+        changelog_status=changelog_status,
+        repository_url=str(local.get("repository_url") or ""),
+        repository_source=str(local.get("repository_source") or ""),
+        repository_validation=str(local.get("repository_validation") or "unknown"),
+    )
+
+
+def collect_exact_upgrade_from_local_evidence(
+    upgrade: Upgrade,
+    args: argparse.Namespace,
+    report: PackageReport,
+) -> PackageReport | None:
+    root = getattr(args, "upstream_evidence_root", None)
+    if root is None or not is_exact_upgrade_target(upgrade):
+        return None
+    metadata = read_upstream_registry(root, upgrade.package)
+    if not isinstance(metadata, dict):
+        return None
+    normalized = report.upgrade
+    selected, warnings, _interval_complete = versions_in_range(metadata, normalized, args.max_versions)
+    if not selected:
+        return None
+    report.warnings.extend(warnings)
+    report.evidence_dimensions["registry"] = "candidate"
+    report.repository_url, report.repository_directory, report.repository_source_version = repository_details_for_version(
+        metadata, normalized.to_version or selected[-1]
+    )
+    report.homepage = str(metadata.get("homepage") or "")
+    target_metadata = (metadata.get("versions") or {}).get(normalized.to_version, {}) or {}
+    report.target_peer_dependencies = target_metadata.get("peerDependencies") or {}
+    report.target_peer_dependencies_meta = target_metadata.get("peerDependenciesMeta") or {}
+    report.target_engines = target_metadata.get("engines") or {}
+    times = metadata.get("time") or {}
+    add_official_source(report.official_sources, "registry", report.package_url, status="candidate", title="local upstream-evidence registry")
+    release_confirmed = True
+    changelog_confirmed = True
+    local_hits = 0
+    version_rows: list[dict[str, Any]] = []
+    for version in selected:
+        local = read_upstream_version_evidence(root, upgrade.package, version)
+        if not local:
+            report.notes.append(VersionNote(
+                version=version,
+                published=str(times.get(version) or "")[:10],
+                change_type=classify_change(normalized.from_version, version),
+                release_notes="未找到可确认属于目标包的 GitHub Release 正文。",
+                changelog="未找到官方 changelog 文档。",
+                sources=[package_url(upgrade.package, version)],
+                evidence_status="missing",
+            ))
+            release_confirmed = False
+            changelog_confirmed = False
+            version_rows.append({"version": version, "status": "missing", "origin": "local"})
+            continue
+        local.setdefault("published", str(times.get(version) or "")[:10])
+        if not local.get("sources"):
+            local["sources"] = [package_url(upgrade.package, version)]
+        note = apply_local_upstream_note(report, local, classify_change(normalized.from_version, version))
+        report.notes.append(note)
+        local_hits += 1
+        release_confirmed = release_confirmed and note.release_status in {"substantive", "substantive-linked"}
+        changelog_confirmed = changelog_confirmed and note.changelog_status == "confirmed"
+        if note.repository_url:
+            report.repository_lineage[version] = note.repository_url
+        version_rows.append({
+            "version": version,
+            "status": note.evidence_status,
+            "origin": "local",
+            "release_status": note.release_status,
+            "changelog_status": note.changelog_status,
+        })
+    if local_hits == 0:
+        report.notes.clear()
+        return None
+    report.used_local_upstream_evidence = True
+    report.evidence_dimensions["release"] = "confirmed" if release_confirmed else "candidate"
+    report.evidence_dimensions["changelog"] = "confirmed" if changelog_confirmed else "candidate"
+    report.evidence_dimensions["repository"] = "candidate" if report.repository_url else "missing"
+    for dimension in ("migration", "security", "support", "license"):
+        if report.evidence_dimensions.get(dimension) == "missing" and dimension == "migration":
+            report.evidence_dimensions[dimension] = (
+                "not-applicable" if report.change_type in {"patch", "same", "added", "removed"} else "missing"
+            )
+    report.evidence_completeness = "partial"
+    report.warnings.append("离线/本地模式：已从报告旁 upstream-evidence 回读官方证据；不得标记为 complete。")
+    update_upstream_manifest(
+        Path(root),
+        package=upgrade.package,
+        from_version=normalized.from_version,
+        to_version=normalized.to_version,
+        versions=version_rows,
+    )
+    return report
 
 
 def parallel_map_ordered(function: Any, items: list[Any], workers: int) -> list[Any]:
@@ -1644,104 +1866,28 @@ def discover_target_candidates(metadata: dict[str, Any], upgrade: Upgrade) -> li
     return candidates
 
 
-def semver_satisfies(version: str, requirement: str) -> bool | None:
+def node_support_status(version: str, today: dt.date | None = None) -> tuple[str, str]:
+    """Classify a Node version against the reviewed release schedule as of `today`."""
     key = semver_key(version)
     if key is None:
-        return None
-    requirement = str(requirement or "").strip()
-    if not requirement or requirement == "*":
-        return True
-    outcomes: list[bool] = []
-    for alternative in requirement.split("||"):
-        hyphen = re.fullmatch(
-            r"\s*(\d+(?:\.\d+){0,2})\s+-\s+(\d+(?:\.\d+){0,2})\s*",
-            alternative,
+        return "unknown", f"无法解析 Node 版本 {version!r}；请核对官方发布计划"
+    major = key[0]
+    raw_date = NODE_EOL_DATES.get(major)
+    if raw_date is None:
+        return "unknown", (
+            f"Node {major} 不在已核对的发布计划表内（表最后核对于 {NODE_SCHEDULE_REVIEWED}）；"
+            "请对照 https://github.com/nodejs/Release 确认支持状态"
         )
-        if hyphen:
-            lower_parts = [int(part) for part in hyphen.group(1).split(".")]
-            upper_parts = [int(part) for part in hyphen.group(2).split(".")]
-            lower = ".".join(str(part) for part in (lower_parts + [0, 0])[:3])
-            upper_fill = upper_parts + [999999, 999999]
-            upper = ".".join(str(part) for part in upper_fill[:3])
-            return (compare_versions(version, lower) or 0) >= 0 and (compare_versions(version, upper) or 0) <= 0
-        tokens = [token for token in re.split(r"[\s,]+", alternative.strip()) if token and token != "-"]
-        if not tokens:
-            outcomes.append(True)
-            continue
-        valid = True
-        understood = False
-        for token in tokens:
-            if token in {"*", "x", "X"}:
-                understood = True
-                continue
-            wildcard = re.fullmatch(r"v?(\d+)(?:\.(\d+|x|X|\*))?(?:\.(\d+|x|X|\*))?", token)
-            if wildcard and any(part in {None, "x", "X", "*"} for part in wildcard.groups()[1:]):
-                understood = True
-                major = int(wildcard.group(1))
-                minor = wildcard.group(2)
-                if key[0] != major or (minor not in {None, "x", "X", "*"} and key[1] != int(minor)):
-                    valid = False
-                continue
-            match = re.fullmatch(r"(>=|<=|>|<|\^|~)?v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)", token)
-            partial_comparator = re.fullmatch(r"(>=|<=|>|<)v?(\d+)(?:\.(\d+))?(?:\.(\d+))?", token)
-            if not match and partial_comparator:
-                operator = partial_comparator.group(1)
-                raw_parts = list(partial_comparator.groups()[1:])
-                provided = sum(part is not None for part in raw_parts)
-                lower_parts = [int(part or 0) for part in raw_parts]
-                lower = ".".join(str(part) for part in lower_parts)
-                upper_parts = list(lower_parts)
-                if provided == 1:
-                    upper_parts = [lower_parts[0] + 1, 0, 0]
-                elif provided == 2:
-                    upper_parts = [lower_parts[0], lower_parts[1] + 1, 0]
-                else:
-                    upper_parts[2] += 1
-                upper = ".".join(str(part) for part in upper_parts)
-                understood = True
-                lower_comparison = compare_versions(version, lower)
-                upper_comparison = compare_versions(version, upper)
-                if lower_comparison is None or upper_comparison is None:
-                    return None
-                valid = valid and {
-                    ">=": lower_comparison >= 0,
-                    "<=": upper_comparison < 0 if provided < 3 else lower_comparison <= 0,
-                    ">": upper_comparison >= 0 if provided < 3 else lower_comparison > 0,
-                    "<": lower_comparison < 0,
-                }[operator]
-                continue
-            if not match:
-                continue
-            understood = True
-            operator, wanted = match.groups()
-            comparison = compare_versions(version, wanted)
-            if comparison is None:
-                return None
-            wanted_key = semver_key(wanted)
-            if operator == "^" and wanted_key:
-                upper = (
-                    f"{wanted_key[0] + 1}.0.0" if wanted_key[0] > 0
-                    else (f"0.{wanted_key[1] + 1}.0" if wanted_key[1] > 0 else f"0.0.{wanted_key[2] + 1}")
-                )
-                valid = valid and comparison >= 0 and (compare_versions(version, upper) or 0) < 0
-            elif operator == "~" and wanted_key:
-                upper = f"{wanted_key[0]}.{wanted_key[1] + 1}.0"
-                valid = valid and comparison >= 0 and (compare_versions(version, upper) or 0) < 0
-            elif operator == ">=":
-                valid = valid and comparison >= 0
-            elif operator == "<=":
-                valid = valid and comparison <= 0
-            elif operator == ">":
-                valid = valid and comparison > 0
-            elif operator == "<":
-                valid = valid and comparison < 0
-            else:
-                valid = valid and comparison == 0
-        if understood and valid:
-            return True
-        if understood:
-            outcomes.append(False)
-    return False if outcomes else None
+    eol = dt.date.fromisoformat(raw_date)
+    current = today or dt.date.today()
+    if current >= eol:
+        return "eol", (
+            f"Node {major} 已于 {raw_date} 结束支持（EOL）；仅在隔离环境中用于项目验证，"
+            "并规划升级到受支持主版本"
+        )
+    if (eol - current).days <= NODE_EOL_WARNING_WINDOW_DAYS:
+        return "approaching-eol", f"Node {major} 将于 {raw_date} 进入 EOL；请在该日期前规划运行时升级"
+    return "supported", f"Node {major} 官方支持至 {raw_date}"
 
 
 def normalize_node_version(value: Any) -> str:
@@ -1866,18 +2012,31 @@ def current_host_node_runtime() -> tuple[str, str]:
 
 def observed_node_runtime_evidence(project_root: Path) -> list[NodeConstraint]:
     candidates: list[Path] = []
-    github = project_root / ".github" / "workflows"
-    if github.is_dir():
-        candidates.extend(sorted(github.glob("*.yml")))
-        candidates.extend(sorted(github.glob("*.yaml")))
-    for name in (".gitlab-ci.yml", "azure-pipelines.yml", "azure-pipelines.yaml"):
+    for relative in (".github/workflows", ".circleci"):
+        directory = project_root / relative
+        if directory.is_dir():
+            candidates.extend(sorted(directory.glob("*.yml")))
+            candidates.extend(sorted(directory.glob("*.yaml")))
+    for name in (
+        ".gitlab-ci.yml", "azure-pipelines.yml", "azure-pipelines.yaml",
+        "netlify.toml", "vercel.json", "docker-compose.yml", "docker-compose.yaml",
+        "app.json", "cloudbuild.yaml",
+    ):
         path = project_root / name
         if path.is_file():
             candidates.append(path)
     candidates.extend(sorted(project_root.glob("Dockerfile*")))
     patterns = (
         ("ci-node-version", re.compile(r"node-version\s*:\s*['\"]?([^'\"#\s,\]]+)", re.I)),
-        ("container-node-image", re.compile(r"(?:FROM|image\s*:)\s*node:([0-9][^@\s]*)", re.I)),
+        # netlify.toml `NODE_VERSION = "20"`, Dockerfile `ARG NODE_VERSION=20`,
+        # workflow `env: NODE_VERSION: 20`, compose `NODE_VERSION: 20`.
+        ("ci-node-version", re.compile(r"NODE_VERSION\s*[:=]\s*['\"]?([0-9][^'\"#\s,\]]*)")),
+        (
+            "container-node-image",
+            re.compile(r"(?:FROM|image\s*:|container\s*:)\s*(?:cimg/|circleci/)?node:([0-9][^@\s]*)", re.I),
+        ),
+        # vercel.json / serverless `"runtime": "nodejs20.x"`.
+        ("container-node-image", re.compile(r"nodejs([0-9]+(?:\.[0-9]+)?)\.x", re.I)),
     )
     evidence: list[NodeConstraint] = []
     for path in candidates[:64]:
@@ -1894,6 +2053,73 @@ def observed_node_runtime_evidence(project_root: Path) -> list[NodeConstraint]:
                         evidence,
                         NodeConstraint(relative, raw, kind, "observed", relative),
                     )
+    return evidence
+
+
+def declared_runtime_pins(project_root: Path) -> list[NodeConstraint]:
+    """Committed runtime pins outside `.nvmrc`/`.tool-versions` that tooling actually honours."""
+    pins: list[NodeConstraint] = []
+    npmrc = project_root / ".npmrc"
+    if npmrc.is_file():
+        match = re.search(
+            r"^\s*use-node-version\s*=\s*['\"]?([0-9][^'\"#\s]*)",
+            npmrc.read_text(encoding="utf-8", errors="ignore"),
+            re.M,
+        )
+        if match:
+            add_node_constraint(
+                pins,
+                NodeConstraint(".npmrc#use-node-version", match.group(1), "runtime-pin", "authoritative", ".npmrc"),
+            )
+    for name in ("mise.toml", ".mise.toml", ".mise/config.toml"):
+        path = project_root / name
+        if not path.is_file():
+            continue
+        in_tools = False
+        for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+            stripped = line.strip()
+            if stripped.startswith("["):
+                in_tools = stripped.rstrip("]").strip("[").strip() in {"tools", "tools.node"}
+                continue
+            if not in_tools:
+                continue
+            match = re.match(r"^node(?:js)?\s*=\s*['\"]([^'\"]+)['\"]", stripped, re.I)
+            if match:
+                add_node_constraint(
+                    pins,
+                    NodeConstraint(f"{name}#tools.node", match.group(1), "runtime-pin", "authoritative", name),
+                )
+                break
+    return pins
+
+
+def lock_declared_runtime_evidence(lock: LockSnapshot | None) -> list[NodeConstraint]:
+    """`engines.node` recorded by the lockfile for resolved direct versions.
+
+    Works without `node_modules`, so it is the offline-safe way to recover a project
+    Node constraint when the manifest declares none. Only whitelisted toolchain
+    packages gate the runtime used for project commands; other dependencies are
+    recorded as observed so a stale upper bound cannot fabricate a conflict.
+    """
+    if lock is None or not lock.declared_engines:
+        return []
+    lock_name = Path(lock.path).name if lock.path else lock.kind
+    evidence: list[NodeConstraint] = []
+    for package, requirement in sorted(lock.declared_engines.items()):
+        if requirement.strip() in {"*", ">=0", ">=0.0.0"}:
+            continue
+        version = lock.direct_versions.get(package) or "unknown"
+        toolchain = package in TOOLCHAIN_PACKAGES
+        add_node_constraint(
+            evidence,
+            NodeConstraint(
+                f"{package}@{version} lock engines.node",
+                requirement,
+                "toolchain-engine" if toolchain else "dependency-engine",
+                "authoritative" if toolchain else "observed",
+                lock_name,
+            ),
+        )
     return evidence
 
 
@@ -1938,20 +2164,6 @@ def installed_toolchain_runtime_evidence(
     return evidence
 
 
-def node_constraint_candidates(requirements: list[str]) -> list[str]:
-    candidates: set[str] = set()
-    for requirement in requirements:
-        for match in re.finditer(r"\d+(?:\.\d+){0,2}", requirement):
-            parts = [int(part) for part in match.group(0).split(".")]
-            normalized = (parts + [0, 0])[:3]
-            candidates.add(".".join(str(part) for part in normalized))
-            candidates.add(f"{normalized[0]}.{normalized[1]}.99")
-            candidates.add(f"{normalized[0]}.99.99")
-    for major in range(0, 41):
-        candidates.update({f"{major}.0.0", f"{major}.20.0", f"{major}.99.99"})
-    return sorted(candidates, key=lambda value: semver_key(value) or (0, 0, 0, 0, ""))
-
-
 def version_satisfies_all(version: str, constraints: list[NodeConstraint]) -> bool | None:
     outcomes = [semver_satisfies(version, item.requirement) for item in constraints]
     if any(outcome is False for outcome in outcomes):
@@ -1959,19 +2171,6 @@ def version_satisfies_all(version: str, constraints: list[NodeConstraint]) -> bo
     if any(outcome is None for outcome in outcomes):
         return None
     return True
-
-
-def preferred_node_version(versions: Iterable[str]) -> str:
-    exact = [value for value in versions if semver_key(value) is not None]
-    if not exact:
-        return ""
-    lts_candidates = [
-        value for value in exact
-        if (semver_key(value) or (1, 0, 0, 0, ""))[0] % 2 == 0
-        and not (semver_key(value) or (0, 0, 0, 0, ""))[4]
-    ]
-    pool = lts_candidates or exact
-    return max(pool, key=lambda value: semver_key(value) or (0, 0, 0, 0, ""))
 
 
 def load_node_runtime_evidence(path: Path | None) -> dict[str, Any]:
@@ -2026,6 +2225,8 @@ def assess_node_runtime(
                 assessment.project_constraints,
                 NodeConstraint(relative, value, kind, "authoritative", relative),
             )
+    for pin in declared_runtime_pins(project_root):
+        add_node_constraint(assessment.project_constraints, pin)
     tool_versions = project_root / ".tool-versions"
     if tool_versions.is_file():
         for line in tool_versions.read_text(encoding="utf-8", errors="ignore").splitlines():
@@ -2047,6 +2248,18 @@ def assess_node_runtime(
         add_node_constraint(
             assessment.project_constraints,
             NodeConstraint("package.json#volta.node", volta_node, "runtime-pin", "authoritative", manifest.path),
+        )
+    execution_env_node = str((manifest.pnpm.get("executionEnv") or {}).get("nodeVersion") or "")
+    if execution_env_node:
+        add_node_constraint(
+            assessment.project_constraints,
+            NodeConstraint(
+                "package.json#pnpm.executionEnv.nodeVersion",
+                execution_env_node,
+                "runtime-pin",
+                "authoritative",
+                manifest.path,
+            ),
         )
     for report in reports:
         target_engine = str(report.target_engines.get("node") or "")
@@ -2074,7 +2287,18 @@ def assess_node_runtime(
             constraint,
         )
     assessment.observed_runtime_evidence.extend(observed_node_runtime_evidence(project_root))
+    derived = lock_declared_runtime_evidence(lock)
+    for constraint in derived:
+        add_node_constraint(
+            assessment.project_constraints
+            if constraint.authority == "authoritative"
+            else assessment.observed_runtime_evidence,
+            constraint,
+        )
+    lock_facts = {(item.source.rsplit("@", 1)[0], item.requirement) for item in derived}
     for constraint in installed_toolchain_runtime_evidence(project_root, manifest, lock):
+        if (constraint.source.rsplit("@", 1)[0], constraint.requirement) in lock_facts:
+            continue
         add_node_constraint(
             assessment.project_constraints
             if constraint.authority == "authoritative"
@@ -2151,11 +2375,9 @@ def assess_node_runtime(
 
     if assessment.selected_project_node:
         assessment.selected_manager = installed_to_manager.get(assessment.selected_project_node, "")
-        major = (semver_key(assessment.selected_project_node) or (999, 0, 0, 0, ""))[0]
-        if major <= 16:
-            assessment.warnings.append(
-                f"Node {assessment.selected_project_node} 已处于 EOL 范围；仅在隔离环境中用于项目验证"
-            )
+        assessment.selected_node_support, support_note = node_support_status(assessment.selected_project_node)
+        if assessment.selected_node_support != "supported":
+            assessment.warnings.append(support_note)
         for observed in assessment.observed_runtime_evidence:
             if observed.kind == "toolchain-engine":
                 compatible = semver_satisfies(
@@ -2556,18 +2778,38 @@ def collect_package_report(upgrade: Upgrade, args: argparse.Namespace) -> Packag
     if not upgrade.reason and upgrade.intent in {"auto-assess", "compliance-assessment", "target-discovery"}:
         report.decision_required.append("尚未建立治理或不合规依据；先核对仓库政策、安全、license、兼容性和维护状态。")
     endpoint = normalized.to_version or normalized.from_version or "unknown"
+    evidence_root: Path | None = getattr(args, "upstream_evidence_root", None)
+    persist_evidence = (
+        upstream_evidence_enabled(args)
+        and evidence_root is not None
+        and is_exact_upgrade_target(normalized)
+    )
     if args.offline:
+        if persist_evidence:
+            local_report = collect_exact_upgrade_from_local_evidence(normalized, args, report)
+            if local_report is not None:
+                return local_report
         report.notes.append(VersionNote(endpoint, change_type=report.change_type, release_notes="离线模式：需要人工收集官方发布证据。", changelog="离线模式：需要人工收集官方变更日志。", sources=[package_url(upgrade.package, endpoint)], evidence_status="offline"))
         report.evidence_completeness = "offline"
         report.evidence_dimensions = {dimension: "offline" for dimension in EVIDENCE_DIMENSIONS}
         report.warnings.append("使用了离线模式；报告不能标记为 complete。")
         return report
     metadata = request_json(registry_url(upgrade.package), args.timeout)
+    metadata_origin = "network"
+    if not isinstance(metadata, dict) and persist_evidence:
+        local_metadata = read_upstream_registry(evidence_root, upgrade.package)
+        if isinstance(local_metadata, dict):
+            metadata = local_metadata
+            metadata_origin = "local"
+            report.used_local_upstream_evidence = True
+            report.warnings.append("获取 npm registry 元数据失败；已回读本地 upstream-evidence/registry.json。")
     if not isinstance(metadata, dict):
         report.notes.append(VersionNote(endpoint, change_type=report.change_type, release_notes="无法获取 npm 元数据。", changelog="需要人工复核上游资料。", sources=[package_url(upgrade.package, endpoint)]))
         report.warnings.append("获取 npm registry 元数据失败。")
         return report
-    report.evidence_dimensions["registry"] = "confirmed"
+    if persist_evidence and metadata_origin == "network":
+        write_upstream_registry(evidence_root, upgrade.package, metadata)
+    report.evidence_dimensions["registry"] = "confirmed" if metadata_origin == "network" else "candidate"
     report.repository_url, report.repository_directory, report.repository_source_version = repository_details_for_version(metadata, endpoint)
     report.homepage = str(metadata.get("homepage") or "")
     if normalized.to_version:
@@ -2607,6 +2849,7 @@ def collect_package_report(upgrade: Upgrade, args: argparse.Namespace) -> Packag
     changelog_confirmed = bool(selected)
     source_ambiguous = False
     repository_statuses: list[str] = []
+    persisted_version_rows: list[dict[str, Any]] = []
     if normalized.from_version:
         from_repository, _, _ = repository_details_for_version(metadata, normalized.from_version)
         report.repository_lineage[normalized.from_version] = from_repository or "missing"
@@ -2845,30 +3088,52 @@ def collect_package_report(upgrade: Upgrade, args: argparse.Namespace) -> Packag
                         )
         release_status = str(release.get("status") or "missing")
         changelog_status = "confirmed" if changelog_text else ("document-only" if changelog else "missing")
+        note_release = release_text or (
+            "该版本只有官方 Git tag，未找到 GitHub Release 正文。"
+            if release_status == "tag-only"
+            else "未找到可确认属于目标包的 GitHub Release 正文。"
+        )
+        note_changelog = changelog_text or (
+            "已找到 changelog 文档，但未能提取该版本章节。"
+            if changelog else "未找到官方 changelog 文档。"
+        )
+        evidence_origin = "network"
+        if persist_evidence:
+            local_version = read_upstream_version_evidence(evidence_root, upgrade.package, version)
+            note_release, note_changelog, release_status, changelog_status, used_local = merge_note_fields_from_local(
+                note_release, note_changelog, release_status, changelog_status, local_version,
+            )
+            if used_local:
+                evidence_origin = "local"
+                report.used_local_upstream_evidence = True
+                append_unique(report.warnings, f"{version} 部分官方证据来自本地 upstream-evidence。")
+                if local_version:
+                    for url in local_version.get("sources") or []:
+                        if url:
+                            sources.append(str(url))
+                    if not repository_url and local_version.get("repository_url"):
+                        repository_url = str(local_version.get("repository_url") or "")
+                        repository_source = str(local_version.get("repository_source") or repository_source)
+                        repository_validation = str(
+                            local_version.get("repository_validation") or repository_validation
+                        )
         if release_status == "ambiguous":
             status = "ambiguous"
             source_ambiguous = True
         elif release_status in {"substantive", "substantive-linked"} and changelog_status == "confirmed":
             status = "confirmed"
-        elif release_status in {"substantive", "pointer", "thin", "tag-only"} or changelog_status == "confirmed":
+        elif release_status in {"substantive", "substantive-linked", "pointer", "thin", "tag-only"} or changelog_status == "confirmed":
             status = "partial"
         else:
             status = "missing"
         release_confirmed = release_confirmed and release_status in {"substantive", "substantive-linked"}
         changelog_confirmed = changelog_confirmed and changelog_status == "confirmed"
-        report.notes.append(VersionNote(
+        note = VersionNote(
             version=version,
             published=str(times.get(version) or "")[:10] or str(release.get("published") or ""),
             change_type=classify_change(normalized.from_version, version),
-            release_notes=release_text or (
-                "该版本只有官方 Git tag，未找到 GitHub Release 正文。"
-                if release_status == "tag-only"
-                else "未找到可确认属于目标包的 GitHub Release 正文。"
-            ),
-            changelog=changelog_text or (
-                "已找到 changelog 文档，但未能提取该版本章节。"
-                if changelog else "未找到官方 changelog 文档。"
-            ),
+            release_notes=note_release,
+            changelog=note_changelog,
             sources=list(dict.fromkeys(sources)),
             evidence_status=status,
             release_status=release_status,
@@ -2876,7 +3141,44 @@ def collect_package_report(upgrade: Upgrade, args: argparse.Namespace) -> Packag
             repository_url=repository_url,
             repository_source=repository_source,
             repository_validation=repository_validation,
-        ))
+        )
+        report.notes.append(note)
+        if persist_evidence and evidence_origin == "network" and (
+            not is_placeholder_release_notes(note.release_notes)
+            or not is_placeholder_changelog(note.changelog)
+            or note.release_status not in {"missing"}
+            or note.changelog_status not in {"missing"}
+        ):
+            write_upstream_version_evidence(
+                evidence_root,
+                upgrade.package,
+                note,
+                evidence_origin="network",
+                changelog_document=changelog if changelog and not changelog_text else "",
+            )
+            persisted_version_rows.append({
+                "version": version,
+                "status": status,
+                "origin": "network",
+                "release_status": release_status,
+                "changelog_status": changelog_status,
+            })
+        elif persist_evidence:
+            persisted_version_rows.append({
+                "version": version,
+                "status": status,
+                "origin": evidence_origin,
+                "release_status": release_status,
+                "changelog_status": changelog_status,
+            })
+    if persist_evidence and persisted_version_rows:
+        update_upstream_manifest(
+            evidence_root,
+            package=upgrade.package,
+            from_version=normalized.from_version,
+            to_version=normalized.to_version,
+            versions=persisted_version_rows,
+        )
     if "ambiguous" in repository_statuses:
         report.repository_validation_status = "ambiguous"
         report.evidence_dimensions["repository"] = "ambiguous"
@@ -3014,6 +3316,25 @@ def upstream_reason_for(report: PackageReport, reason: str) -> str:
     return f"{reason} 证据候选：{source}"
 
 
+def declaration_reason(report: PackageReport) -> str:
+    if report.upgrade.to_version:
+        return (
+            f"依赖声明本身需要改到目标版本 {report.upgrade.to_version}；"
+            "这是升级动作的落点，不是 API 适配候选。"
+        )
+    return "依赖声明是本次治理对象的入口；目标未选定前不改动该行。"
+
+
+def declaration_recommendation(report: PackageReport) -> str:
+    if not report.upgrade.to_version:
+        return "保持不变，直到人工在删除、同库精确版本或替代库之间做出选择。"
+    spec = report.manifest_spec or "当前声明"
+    return (
+        f"获得实施批准后，把 {spec} 更新到 {report.upgrade.to_version} 对应的声明范围，"
+        "并通过包管理器同步 lock；不要手工编辑 lockfile。"
+    )
+
+
 def analyze_code_modification_points(project_root: Path, reports: list[PackageReport], max_points: int, max_scan_files: int, max_file_bytes: int) -> tuple[list[CodeModificationPoint], list[str], list[str]]:
     files, warnings = iter_code_files(project_root, max_scan_files, max_file_bytes)
     test_files = [str(path.relative_to(project_root)).replace("\\", "/") for path in files if TEST_RE.search(str(path).replace("\\", "/"))]
@@ -3039,15 +3360,29 @@ def analyze_code_modification_points(project_root: Path, reports: list[PackageRe
                 if not line:
                     continue
                 if package_regex.search(line):
-                    category = "Dependency declaration/config" if is_config else "Direct package usage"
+                    is_declaration = is_config and path.name == "package.json"
+                    category = DECLARATION_CATEGORY if is_config else "Direct package usage"
                     key = (report.upgrade.package, relative, line_number, category)
                     if key not in seen:
                         seen.add(key)
+                        if is_declaration:
+                            # The declaration is the edit itself, not an API adaptation candidate.
+                            reason = declaration_reason(report)
+                            recommendation = declaration_recommendation(report)
+                            validation = "确认 lock 直接解析版本与目标一致，且 overrides/resolutions 未意外锁定旧版本。"
+                            priority = "P0" if report.upgrade.to_version else "P1"
+                        else:
+                            reason = upstream_reason_for(
+                                report,
+                                f"此处直接用法必须核对 {report.upgrade.package} "
+                                f"{report.upgrade.from_version}->{report.upgrade.to_version} 的完整变更区间。",
+                            )
+                            recommendation = "对照官方迁移证据确认 import、选项、props、类型和 peer 相关配置。"
+                            validation = validation_for_type(report.upgrade.dependency_type)
+                            priority = point_priority(relative, report.change_type, category)
                         points.append(CodeModificationPoint(
                             report.upgrade.package, relative, line_number, category, truncate(line, 240),
-                            upstream_reason_for(report, f"此处直接用法必须核对 {report.upgrade.package} {report.upgrade.from_version}->{report.upgrade.to_version} 的完整变更区间。"),
-                            "对照官方迁移证据确认 import、选项、props、类型和 peer 相关配置。",
-                            validation_for_type(report.upgrade.dependency_type), point_priority(relative, report.change_type, category), "high",
+                            reason, recommendation, validation, priority, "high",
                         ))
                 for pattern, category, reason in patterns:
                     if not pattern.search(line):
@@ -3074,7 +3409,7 @@ def assess_removal(report: PackageReport, points: list[CodeModificationPoint]) -
     package_points = [point for point in points if point.package == report.upgrade.package]
     usage_points = [
         point for point in package_points
-        if not (Path(point.file).name == "package.json" and point.category == "Dependency declaration/config")
+        if not (Path(point.file).name == "package.json" and point.category == DECLARATION_CATEGORY)
     ]
     declared_direct = bool(report.manifest_field)
     observed = bool(report.observed_lock_versions)
@@ -3135,6 +3470,19 @@ def baseline_for(report: PackageReport, manifest: ManifestSnapshot, before_lock:
     if manifest_package:
         report.manifest_field = manifest_package.field
         report.manifest_spec = manifest_package.spec
+        if manifest_package.catalog_spec:
+            report.manifest_spec = f"{manifest_package.spec} → {manifest_package.catalog_spec}"
+            append_unique(
+                report.warnings,
+                f"{package} 通过 pnpm catalog 声明；有效范围 {manifest_package.catalog_spec}"
+                f"（来源 {manifest_package.catalog_source}），改动范围时需同步 catalog。",
+            )
+        elif manifest_package.spec.startswith("catalog:"):
+            append_unique(
+                report.warnings,
+                f"{package} 声明为 {manifest_package.spec}，但未能在 pnpm-workspace.yaml 中解析到对应 catalog 条目；"
+                "请人工确认有效范围。",
+            )
     report.lock_kind = current_lock.kind if current_lock.kind != "none" else (after_lock.kind if after_lock.kind != "none" else before_lock.kind)
     report.lock_path = current_lock.path or after_lock.path or before_lock.path
     report.before_lock_version = before_lock.direct_versions.get(package, "")
@@ -3163,13 +3511,28 @@ def baseline_for(report: PackageReport, manifest: ManifestSnapshot, before_lock:
         report.baseline_status = "unknown"
 
 
+def dependency_type_score(dependency_type: str, change_type: str) -> int:
+    """Weight the package family's blast radius by how large the version change actually is."""
+    base = DEPENDENCY_TYPE_BASE.get(dependency_type, 2)
+    trivial, moderate, breaking = DEPENDENCY_TYPE_BY_CHANGE.get(base, (1, 2, 2))
+    if change_type in TRIVIAL_CHANGES:
+        return trivial
+    if change_type in BREAKING_CHANGES:
+        return breaking
+    return moderate
+
+
 def risk_score(report: PackageReport, points: list[CodeModificationPoint], test_files: list[str], business_override: str, coverage_override: str) -> RiskAssessment:
-    change_scores = {"same": 0, "patch": 1, "minor": 3, "added": 3, "unknown": 3, "major": 5, "removed": 5}
-    type_scores = {"runtime": 1, "dev-tooling": 1, "typescript": 2, "style": 2, "test": 2, "state": 4, "dom-runtime": 4, "framework": 5, "router": 5, "ui": 5, "request": 5, "build": 5}
+    uncertainties: list[str] = []
     package_points = [point for point in points if point.package == report.upgrade.package]
-    files = {point.file for point in package_points}
+    # A dependency declaration proves the package is installed, not that code depends on it,
+    # so declaration-only hits must not inflate the usage-scope factor.
+    files = {point.file for point in package_points if point.category != DECLARATION_CATEGORY}
+    declaration_only = bool(package_points) and not files
     if not files:
         usage = 0
+        if declaration_only:
+            uncertainties.append("仅发现依赖声明，未发现源码使用点；使用范围需通过知识图谱或动态加载核查后复算")
     elif len(files) == 1 and not any(SHARED_RE.search(path) for path in files):
         usage = 1
     elif len(files) <= 5 and not any(SHARED_RE.search(path) for path in files):
@@ -3185,7 +3548,11 @@ def risk_score(report: PackageReport, points: list[CodeModificationPoint], test_
     elif any(CRITICAL_RE.search(path) for path in files):
         business = 5
     elif files:
-        business = 3
+        # No critical-path evidence yet: score the uncertainty instead of assuming a main flow.
+        business = 2
+        uncertainties.append(
+            "业务关键性按未确认计 2 分；补齐路由/调用方映射后用 --business-criticality 复算"
+        )
     else:
         business = 1
     if report.baseline_status == "mismatch":
@@ -3206,19 +3573,24 @@ def risk_score(report: PackageReport, points: list[CodeModificationPoint], test_
         stems = {Path(path).stem.lower() for path in files}
         related = any(any(stem and stem in Path(test).stem.lower() for stem in stems) for test in test_files)
         coverage = 0 if related and files else (2 if test_files else 3)
-    factors = {
-        "version_change": change_scores.get(report.change_type, 3),
-        "dependency_type": type_scores.get(report.upgrade.dependency_type, 2),
-        "usage_scope": usage,
-        "business_criticality": business,
-        "lockfile_change": lock,
-        "test_coverage_gap": coverage,
-        "peer_compatibility": 5 if report.peer_compatibility_status == "incompatible" else (
-            2 if report.peer_compatibility_status == "unknown" else 0
-        ),
-    }
+    peer = 5 if report.peer_compatibility_status == "incompatible" else (
+        2 if report.peer_compatibility_status == "unknown" else 0
+    )
+    if peer == 2:
+        uncertainties.append("目标 peerDependencies 或 workspace 精确版本未确认；按未知计 2 分")
+    if report.change_type == "unknown":
+        uncertainties.append("版本变化类型无法解析；按 minor 同级计 3 分")
+    factors = dict(zip(RISK_FACTORS, (
+        CHANGE_SCORES.get(report.change_type, 3),
+        dependency_type_score(report.upgrade.dependency_type, report.change_type),
+        usage,
+        business,
+        lock,
+        coverage,
+        peer,
+    )))
     total = sum(factors.values())
-    automatic = "Low" if total <= 5 else ("Medium" if total <= 12 else "High")
+    automatic = "Low" if total <= RISK_LOW_MAX else ("Medium" if total <= RISK_MEDIUM_MAX else "High")
     final = automatic
     rationale: list[str] = []
     red_line = business == 5 and report.upgrade.dependency_type in {"framework", "router", "state", "dom-runtime", "ui", "request", "build"}
@@ -3234,7 +3606,7 @@ def risk_score(report: PackageReport, points: list[CodeModificationPoint], test_
             rationale.append("大版本升级的上游证据不完整或存在歧义。")
         if peer_conflict:
             rationale.append("目标 peerDependencies 与 workspace 精确版本冲突。")
-    return RiskAssessment(factors, total, automatic, final, rationale)
+    return RiskAssessment(factors, total, automatic, final, rationale, uncertainties)
 
 
 def breaking_candidates(report: PackageReport) -> list[str]:
@@ -3257,7 +3629,7 @@ def business_module(path: str) -> tuple[str, str]:
     match = re.search(r"(?:pages?|views?|routes?)/([^/]+)", normalized, re.I)
     module = match.group(1) if match else (Path(normalized).parent.name or "共享/基础设施")
     flows = [name for name in ("login", "permission", "order", "upload", "form", "table", "route", "build") if name in normalized.lower()]
-    return module, ", ".join(flows) or "需要补充路由/调用方映射"
+    return module, ", ".join(flows) or UNMAPPED_FLOW
 
 
 def overall_level(reports: list[PackageReport]) -> str:
@@ -3272,6 +3644,32 @@ def md_cell(value: Any, max_chars: int = 420) -> str:
 
 def visible_code_category(value: str) -> str:
     return CODE_CATEGORY_TITLES.get(value, value)
+
+
+def format_mapping(mapping: dict[str, Any] | None, empty: str = "未建立") -> str:
+    """Render a machine mapping as readable `key=value` pairs instead of raw JSON."""
+    if not mapping:
+        return f"`{empty}`"
+    return "；".join(
+        f"`{key}`={value if isinstance(value, str) else ', '.join(map(str, value)) if isinstance(value, list) else value}"
+        for key, value in sorted(mapping.items())
+    )
+
+
+def format_mapping_cell(mapping: dict[str, Any] | None, empty: str = "未建立") -> str:
+    """Same pairs as `format_mapping`, without backticks, for use inside table cells."""
+    if not mapping:
+        return empty
+    return "; ".join(f"{key}={value}" for key, value in sorted(mapping.items()))
+
+
+def format_path_list(paths: dict[str, str] | None) -> list[str]:
+    if not paths:
+        return ["- 报告路径：`未建立`"]
+    labels = {"markdown": "Markdown 报告", "json": "结构化 JSON", "upstream_evidence": "上游证据包"}
+    return ["- 报告路径："] + [
+        f"  - {labels.get(key, key)}：`{value}`" for key, value in sorted(paths.items())
+    ]
 
 
 def report_section(anchor: str) -> list[str]:
@@ -3301,7 +3699,7 @@ def markdown_report(bundle: AnalysisBundle) -> str:
         f"- 项目 Node：`{bundle.node_runtime.selected_project_node or '未建立'}`；管理器：`{bundle.node_runtime.selected_manager or '未建立'}`",
         f"- 关联 change/任务目录：`{bundle.change_dir or '未绑定'}`",
         f"- 报告目录：`{bundle.report_output_dir}`",
-        f"- 报告路径：`{json.dumps(bundle.report_paths, ensure_ascii=False, sort_keys=True)}`",
+        *format_path_list(bundle.report_paths),
         f"- 批次：精确升级 `{exact_count}` / 待人工决策 `{pending_count}` / blocked 项 `{blocked_count}`",
         "",
         *report_section("Upgrade Summary"), "",
@@ -3318,16 +3716,25 @@ def markdown_report(bundle: AnalysisBundle) -> str:
         )) + " |")
 
     lines.extend(["", *report_section("Release Notes And Changelog Evidence"), ""])
+    upstream_evidence_path = bundle.report_paths.get("upstream_evidence", "")
+    if upstream_evidence_path:
+        lines.append(f"- 本地上游证据包：`{upstream_evidence_path}`")
+    elif any(report.used_local_upstream_evidence for report in bundle.reports):
+        lines.append("- 本地上游证据包：已回读（路径见各包警告）")
     for report in bundle.reports:
         lines.extend([f"### {report.upgrade.package} `{report.upgrade.from_version} -> {report.upgrade.to_version}`", "", f"- 完整性：`{report.evidence_completeness}`", f"- 包页面：{report.package_url}"])
         if report.repository_url:
             lines.append(f"- 代码仓库：{report.repository_url}")
         if report.homepage:
             lines.append(f"- 官方主页：{report.homepage}")
-        lines.append(f"- 仓库校验：`{report.repository_validation_status}`；版本来源：`{report.repository_source_version}`")
-        lines.append(f"- 证据维度：`{json.dumps(report.evidence_dimensions, ensure_ascii=False, sort_keys=True)}`")
+        lines.append(
+            f"- 仓库校验：`{report.repository_validation_status}`；"
+            f"版本来源：`{report.repository_source_version or '未建立'}`"
+        )
+        lines.append(f"- 证据维度：{format_mapping(report.evidence_dimensions)}")
+        lines.append(f"- 本地证据回读：`{'yes' if report.used_local_upstream_evidence else 'no'}`")
         if report.repository_lineage:
-            lines.append(f"- 版本仓库谱系：`{json.dumps(report.repository_lineage, ensure_ascii=False, sort_keys=True)}`")
+            lines.append(f"- 版本仓库谱系：{format_mapping(report.repository_lineage)}")
         for warning in report.warnings:
             lines.append(f"- 警告：{warning}")
         if report.official_sources:
@@ -3372,9 +3779,9 @@ def markdown_report(bundle: AnalysisBundle) -> str:
             f"- 升级后观察版本：`{', '.join(report.after_lock_versions) or '未提供'}`",
             f"- 汇总观察版本：`{', '.join(report.observed_lock_versions) or '未建立'}`",
             f"- 基线状态：`{report.baseline_status}`",
-            f"- 目标 peerDependencies：`{json.dumps(report.target_peer_dependencies, ensure_ascii=False, sort_keys=True) if report.target_peer_dependencies else '未建立'}`",
+            f"- 目标 peerDependencies：{format_mapping(report.target_peer_dependencies)}",
             f"- Peer 兼容性：`{report.peer_compatibility_status}`；冲突：`{'; '.join(report.peer_compatibility_conflicts) or '无'}`",
-            f"- 目标 engines：`{json.dumps(report.target_engines, ensure_ascii=False, sort_keys=True) if report.target_engines else '未建立'}`",
+            f"- 目标 engines：{format_mapping(report.target_engines)}",
             "",
         ])
         if open_target:
@@ -3406,8 +3813,8 @@ def markdown_report(bundle: AnalysisBundle) -> str:
                 lines.append("| " + " | ".join(md_cell(value) for value in (
                     candidate.version, candidate.candidate_type, candidate.compliance_status,
                     "; ".join(candidate.criteria_checked), "; ".join(candidate.disqualifiers), candidate.published,
-                    json.dumps(candidate.peer_dependencies, ensure_ascii=False, sort_keys=True),
-                    json.dumps(candidate.engines, ensure_ascii=False, sort_keys=True),
+                    format_mapping_cell(candidate.peer_dependencies, "-"),
+                    format_mapping_cell(candidate.engines, "-"),
                     candidate.compatibility, candidate.compliance_and_maintenance,
                     candidate.migration_cost, candidate.validation_scope, candidate.rollback_difficulty,
                     candidate.rationale, candidate.confidence,
@@ -3448,8 +3855,9 @@ def markdown_report(bundle: AnalysisBundle) -> str:
         f"- 状态：`{runtime.status}`；执行就绪度：`{runtime.execution_readiness}`",
         f"- 本机当前 Node：`{runtime.current_host_node or '未检测到'}`；路径：`{runtime.current_host_node_path or '未检测到'}`",
         f"- 所选项目 Node：`{runtime.selected_project_node or '未建立'}`；管理器：`{runtime.selected_manager or '未建立'}`",
+        f"- 所选 Node 支持状态：`{runtime.selected_node_support}`（发布计划表核对于 {NODE_SCHEDULE_REVIEWED}）",
         f"- 可用管理器：`{', '.join(runtime.available_managers) or '未检测到'}`",
-        f"- 已安装版本：`{json.dumps(runtime.installed_versions, ensure_ascii=False, sort_keys=True) if runtime.installed_versions else '未检测到'}`",
+        f"- 已安装版本：{format_mapping(runtime.installed_versions, '未检测到')}",
         f"- 兼容的已安装版本：`{', '.join(runtime.compatible_installed_versions) or '未检测到'}`",
         f"- 推荐策略：`{runtime.recommended_strategy}`",
         "",
@@ -3487,7 +3895,7 @@ def markdown_report(bundle: AnalysisBundle) -> str:
 
     lines.extend(["", *report_section("Code References"), ""])
     for report in bundle.reports:
-        direct_files = sorted({point.file for point in bundle.code_points if point.package == report.upgrade.package and point.category in {"Direct package usage", "Dependency declaration/config"}})
+        direct_files = sorted({point.file for point in bundle.code_points if point.package == report.upgrade.package and point.category in {"Direct package usage", DECLARATION_CATEGORY}})
         shared_files = sorted(path for path in direct_files if SHARED_RE.search(path))
         lines.extend([
             f"### {report.upgrade.package}", "",
@@ -3512,22 +3920,34 @@ def markdown_report(bundle: AnalysisBundle) -> str:
     lines.extend([*report_section("Business Impact"), "", "| 包 | 模块 | 页面/流程 | 风险 | 依据 |", "|---|---|---|---|---|"])
     emitted: set[tuple[str, str]] = set()
     for point in bundle.code_points:
+        # A manifest declaration is not a business surface; only real usage maps to flows.
+        if point.category == DECLARATION_CATEGORY:
+            continue
         module, flows = business_module(point.file)
         key = (point.package, module)
         if key in emitted:
             continue
         emitted.add(key)
         report = next(report for report in bundle.reports if report.upgrade.package == point.package)
-        lines.append("| " + " | ".join(md_cell(value) for value in (point.package, module, flows, report.risk.final_level, f"根据 {point.file} 映射；仍需调用方追踪")) + " |")
+        # An unmapped flow is not an assessed impact, so it must not inherit the package risk level.
+        mapped = flows != UNMAPPED_FLOW
+        severity = report.risk.final_level if mapped else UNRATED
+        basis = (
+            f"根据 {point.file} 映射；仍需调用方追踪" if mapped
+            else f"仅建立 {point.file} 引用证据；页面/流程映射完成后才可定级"
+        )
+        lines.append("| " + " | ".join(md_cell(value) for value in (point.package, module, flows, severity, basis)) + " |")
     if not emitted:
-        lines.append("| - | 未建立 | 需要补充路由/调用方映射 | Medium | 尚未建立直接代码引用证据 |")
+        lines.append(f"| - | 未建立 | {UNMAPPED_FLOW} | {UNRATED} | 尚未建立直接代码引用证据 |")
 
     lines.extend(["", *report_section("Technical Risks"), "", "| 包 | 风险 | 严重度 | 证据 | 缓解措施 |", "|---|---|---|---|---|"])
     for report in bundle.reports:
         factor_text = ", ".join(f"{name}={score}" for name, score in report.risk.factors.items())
+        override_text = "; ".join(report.risk.rationale) or f"未覆盖自动等级（{report.risk.automatic_level}）"
+        uncertainty_text = "; ".join(report.risk.uncertainties) or "无"
         lines.append("| " + " | ".join(md_cell(value) for value in (
             report.upgrade.package, "七因素升级风险", report.risk.final_level,
-            f"总分 {report.risk.total}：{factor_text}；{'; '.join(report.risk.rationale) or '未覆盖自动等级'}",
+            f"总分 {report.risk.total}：{factor_text}；{override_text}；不确定项：{uncertainty_text}",
             validation_for_type(report.upgrade.dependency_type),
         )) + " |")
         if report.evidence_completeness != "complete":
@@ -3755,6 +4175,16 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--json-output", nargs="?", const="__auto__", default=None, help="Optional structured JSON path; bare flag writes beside the Markdown report.")
     parser.add_argument("--title", default="前端依赖升级与治理影响分析报告")
     parser.add_argument("--offline", action="store_true")
+    parser.add_argument(
+        "--no-upstream-evidence",
+        action="store_true",
+        help="Disable writing/reading report-adjacent upstream-evidence/ for exact upgrades.",
+    )
+    parser.add_argument(
+        "--cleanup-upstream-evidence",
+        action="store_true",
+        help="Delete output_dir/upstream-evidence after the report is written successfully.",
+    )
     parser.add_argument("--timeout", type=int, default=12)
     parser.add_argument("--network-workers", type=int, default=6, help="Maximum concurrent upstream evidence requests.")
     parser.add_argument("--http-cache-dir", help="Persistent public HTTP cache directory; defaults to the user cache directory.")
@@ -3800,6 +4230,10 @@ def build_bundle(
         output_dir, output_note = resolve_report_output_dir(project_root, args.output_dir, args.change_dir)
     elif output_note is None:
         output_note = f"使用调用方提供的输出目录：{output_dir}"
+    if upstream_evidence_enabled(args):
+        args.upstream_evidence_root = upstream_evidence_dir(output_dir)
+    else:
+        args.upstream_evidence_root = None
     workspace = resolve_frontend_workspace(project_root, args)
     cache_dir = args.http_cache_dir or default_http_cache_dir()
     configure_http_cache(cache_dir, args.http_cache_ttl, enabled=not args.no_http_cache)
@@ -3810,13 +4244,19 @@ def build_bundle(
     manifest_path = Path(args.after_package_json).resolve() if args.after_package_json else project_root / "package.json"
     if workspace.status == "confirmed" and workspace.manifest_path:
         manifest_path = Path(workspace.manifest_path)
-    manifest = load_manifest(manifest_path if manifest_path.exists() else None)
+    manifest = load_manifest(manifest_path if manifest_path.exists() else None, project_root)
     toolchain_names = sorted(set(manifest.packages) & TOOLCHAIN_PACKAGES)
     initial_analysis_packages = list(dict.fromkeys(package_names + toolchain_names))
-    before_lock = parse_lock(Path(args.before_lock).resolve() if args.before_lock else None, initial_analysis_packages, args.workspace_importer)
-    after_lock = parse_lock(Path(args.after_lock).resolve() if args.after_lock else None, initial_analysis_packages, args.workspace_importer)
+    before_lock = parse_lock(
+        Path(args.before_lock).resolve() if args.before_lock else None,
+        initial_analysis_packages, args.workspace_importer, role="before",
+    )
+    after_lock = parse_lock(
+        Path(args.after_lock).resolve() if args.after_lock else None,
+        initial_analysis_packages, args.workspace_importer, role="after",
+    )
     current_path = None if args.before_lock or args.after_lock else detect_lock(project_root)
-    current_lock = parse_lock(current_path, initial_analysis_packages, args.workspace_importer)
+    current_lock = parse_lock(current_path, initial_analysis_packages, args.workspace_importer, role="current")
     infer_current_versions(upgrades, before_lock, current_lock)
     reports = collect_package_reports(upgrades, args)
     peer_names = sorted({
@@ -3827,9 +4267,15 @@ def build_bundle(
     })
     if peer_names:
         analysis_packages = list(dict.fromkeys(initial_analysis_packages + peer_names))
-        before_lock = parse_lock(Path(args.before_lock).resolve() if args.before_lock else None, analysis_packages, args.workspace_importer)
-        after_lock = parse_lock(Path(args.after_lock).resolve() if args.after_lock else None, analysis_packages, args.workspace_importer)
-        current_lock = parse_lock(current_path, analysis_packages, args.workspace_importer)
+        before_lock = parse_lock(
+            Path(args.before_lock).resolve() if args.before_lock else None,
+            analysis_packages, args.workspace_importer, role="before",
+        )
+        after_lock = parse_lock(
+            Path(args.after_lock).resolve() if args.after_lock else None,
+            analysis_packages, args.workspace_importer, role="after",
+        )
+        current_lock = parse_lock(current_path, analysis_packages, args.workspace_importer, role="current")
     for report in reports:
         baseline_for(report, manifest, before_lock, current_lock, after_lock)
         assess_peer_compatibility(report, manifest, before_lock, current_lock, after_lock)
@@ -3909,7 +4355,9 @@ def build_bundle(
         (
             f"上游取证：network_workers={max(1, int(args.network_workers))}；"
             f"HTTP cache={'disabled' if args.no_http_cache else 'enabled'}；"
-            f"ttl={max(0, int(args.http_cache_ttl))}s。"
+            f"ttl={max(0, int(args.http_cache_ttl))}s；"
+            f"upstream-evidence={'disabled' if args.no_upstream_evidence else 'enabled'}；"
+            f"cleanup_upstream_evidence={'yes' if args.cleanup_upstream_evidence else 'no'}。"
         ),
         f"报告输出：{output_note}",
         (
@@ -3942,6 +4390,9 @@ def build_bundle(
             else Path(args.json_output).resolve()
         )
         report_paths["json"] = str(json_path)
+    evidence_root = getattr(args, "upstream_evidence_root", None)
+    if evidence_root is not None and Path(evidence_root).is_dir():
+        report_paths["upstream_evidence"] = str(Path(evidence_root).resolve())
     return AnalysisBundle(
         args.title,
         dt.datetime.now(dt.timezone.utc).astimezone().isoformat(timespec="seconds"),
@@ -3966,11 +4417,18 @@ def write_bundle(bundle: AnalysisBundle, args: argparse.Namespace, output_dir: P
     if args.json_output is not None:
         json_path = target / "frontend-dependency-upgrade-report.json" if args.json_output == "__auto__" else Path(args.json_output).resolve()
         bundle.report_paths["json"] = str(json_path)
+    evidence_root = getattr(args, "upstream_evidence_root", None)
+    if evidence_root is not None and Path(evidence_root).is_dir():
+        bundle.report_paths["upstream_evidence"] = str(Path(evidence_root).resolve())
     markdown = markdown_report(bundle)
     errors = validate_report_contract(markdown)
     if errors:
         raise RuntimeError("Report contract validation failed:\n- " + "\n- ".join(errors))
     markdown_path.write_text(markdown, encoding="utf-8")
+    if bool(getattr(args, "cleanup_upstream_evidence", False)):
+        cleaned = cleanup_upstream_evidence(Path(evidence_root) if evidence_root else upstream_evidence_dir(target))
+        if cleaned:
+            bundle.report_paths.pop("upstream_evidence", None)
     if args.json_output is not None:
         json_path = Path(bundle.report_paths["json"])
         json_path.parent.mkdir(parents=True, exist_ok=True)
@@ -3978,7 +4436,23 @@ def write_bundle(bundle: AnalysisBundle, args: argparse.Namespace, output_dir: P
     return markdown_path
 
 
+def configure_console() -> None:
+    """Keep the console's own encoding but stop unencodable characters from aborting the run.
+
+    Report files are always written as UTF-8; only the progress lines are affected here.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(errors="replace")
+        except (OSError, ValueError):
+            pass
+
+
 def main(argv: list[str]) -> int:
+    configure_console()
     try:
         args = parse_args(argv)
         project_root = Path(args.project_root).resolve()

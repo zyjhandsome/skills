@@ -174,18 +174,31 @@ def verify_approvals(args: argparse.Namespace) -> None:
             raise ValueError(f"命令需要 --approve-project-scripts：{command}")
 
 
-def run_shell_command(command: str, project_root: Path, env: dict[str, str]) -> dict[str, Any]:
+def run_shell_command(command: str, project_root: Path, env: dict[str, str], timeout: int) -> dict[str, Any]:
     started = dt.datetime.now(dt.timezone.utc).astimezone().isoformat(timespec="seconds")
     node_version, node_path = current_node(env)
-    result = subprocess.run(command, cwd=project_root, env=env, shell=True, check=False)
-    return {
+    row: dict[str, Any] = {
         "command": command,
         "scope": classify_command(command),
         "started": started,
         "node_version": node_version,
         "node_path": node_path,
-        "exit_code": result.returncode,
+        "timeout_seconds": timeout,
+        "state": "completed",
     }
+    try:
+        result = subprocess.run(
+            command, cwd=project_root, env=env, shell=True, check=False,
+            timeout=timeout if timeout > 0 else None,
+        )
+        row["exit_code"] = result.returncode
+    except subprocess.TimeoutExpired:
+        # Match GNU timeout's 124 so callers can tell a hang from a normal failure. The shell is
+        # killed, but grandchildren spawned by package scripts may need manual cleanup.
+        row["exit_code"] = 124
+        row["state"] = "timeout"
+        row["note"] = f"命令超过 {timeout}s 未结束，已终止；请确认是否有遗留子进程"
+    return row
 
 
 def execute(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
@@ -207,6 +220,7 @@ def execute(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
         "manager": manager or "not-found",
         "mode": "isolated-child-process" if runtime_dir else "guarded-global-switch",
         "execute": bool(args.execute),
+        "command_timeout_seconds": int(args.command_timeout),
         "commands": [
             {"command": command, "scope": classify_command(command)}
             for command in args.command
@@ -252,7 +266,7 @@ def execute(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
                 f"目标运行时验证失败：期望 {target}，实际 {actual_version or '未检测到'}（{actual_path or '无路径'}）"
             )
         for command in args.command:
-            result = run_shell_command(command, project_root, command_env)
+            result = run_shell_command(command, project_root, command_env, int(args.command_timeout))
             plan["results"].append(result)
             if result["exit_code"] != 0:
                 failure_code = int(result["exit_code"]) or 1
@@ -313,20 +327,34 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--approve-runtime-switch", action="store_true")
     parser.add_argument("--approve-dependency-install", action="store_true")
     parser.add_argument("--approve-project-scripts", action="store_true")
-    parser.add_argument("--log-json", help="Optional execution log path. Written only in --execute mode.")
+    parser.add_argument(
+        "--command-timeout", type=int, default=1800,
+        help="Per-command timeout in seconds (default 1800). Use 0 to wait indefinitely.",
+    )
+    parser.add_argument("--log-json", help="Optional plan/execution log path; written in both dry-run and execute mode.")
     args = parser.parse_args(argv)
     if not args.command:
         parser.error("至少提供一个 --command")
+    if args.command_timeout < 0:
+        parser.error("--command-timeout 不能为负数")
     return args
 
 
 def main(argv: list[str]) -> int:
+    # Plan output is JSON with Chinese notes; never let a legacy console encoding abort the run.
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            try:
+                reconfigure(errors="replace")
+            except (OSError, ValueError):
+                pass
     try:
         args = parse_args(argv)
         code, plan = execute(args)
         rendered = json.dumps(plan, ensure_ascii=False, indent=2)
         print(rendered)
-        if args.execute and args.log_json:
+        if args.log_json:
             log_path = Path(args.log_json).resolve()
             log_path.parent.mkdir(parents=True, exist_ok=True)
             log_path.write_text(rendered + "\n", encoding="utf-8")

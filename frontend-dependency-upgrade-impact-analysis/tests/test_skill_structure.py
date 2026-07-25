@@ -1,11 +1,20 @@
 from __future__ import annotations
 
+import importlib.util
 import re
+import sys
 import unittest
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+SPEC = importlib.util.spec_from_file_location(
+    "frontend_upgrade_report_contract", ROOT / "scripts" / "generate_upgrade_report.py"
+)
+GENERATOR = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = GENERATOR
+assert SPEC.loader is not None
+SPEC.loader.exec_module(GENERATOR)
 
 
 class SkillStructureTests(unittest.TestCase):
@@ -35,6 +44,42 @@ class SkillStructureTests(unittest.TestCase):
 
     def test_skill_contains_no_auxiliary_readme(self) -> None:
         self.assertFalse((ROOT / "README.md").exists())
+
+    def test_machine_enums_documented_where_they_are_enforced(self) -> None:
+        """The generator constants are the single definition source; docs must not drift from them."""
+        docs = {
+            name: (ROOT / "references" / name).read_text(encoding="utf-8")
+            for name in (
+                "report-contract.md",
+                "risk-model.md",
+                "node-runtime-compatibility.md",
+                "lockfile-and-evidence.md",
+                "analysis-evidence-schema.md",
+            )
+        }
+        missing: list[str] = []
+
+        def require(doc: str, values: object, label: str) -> None:
+            for value in values:  # type: ignore[union-attr]
+                if value not in docs[doc]:
+                    missing.append(f"{doc} 缺少 {label}：{value}")
+
+        require("report-contract.md", GENERATOR.REPORT_SECTION_TITLES, "报告章节 anchor")
+        require("report-contract.md", GENERATOR.EVIDENCE_DIMENSIONS, "证据维度")
+        require("analysis-evidence-schema.md", GENERATOR.REMOVAL_COVERAGE_AREAS, "删除覆盖维度")
+        require("analysis-evidence-schema.md", GENERATOR.REMOVAL_STATUSES, "删除结论枚举")
+        require("report-contract.md", GENERATOR.SELECTION_STATUSES, "选择状态枚举")
+        require("risk-model.md", GENERATOR.RISK_FACTORS, "风险因子")
+        require("lockfile-and-evidence.md", GENERATOR.LOCK_NAMES, "受支持 lockfile")
+        require("node-runtime-compatibility.md", GENERATOR.NODE_SUPPORT_STATUSES, "Node 支持状态枚举")
+        require("node-runtime-compatibility.md", GENERATOR.NODE_CONSTRAINT_KINDS, "Node 约束来源类别")
+        for threshold in (GENERATOR.RISK_LOW_MAX, GENERATOR.RISK_MEDIUM_MAX):
+            if str(threshold) not in docs["risk-model.md"]:
+                missing.append(f"risk-model.md 缺少等级阈值：{threshold}")
+        if GENERATOR.NODE_SCHEDULE_REVIEWED not in docs["node-runtime-compatibility.md"]:
+            # The reviewed date lives in code; the doc only needs to say the table is a snapshot.
+            self.assertIn("NODE_SCHEDULE_REVIEWED", docs["node-runtime-compatibility.md"])
+        self.assertEqual(missing, [])
 
 
 if __name__ == "__main__":

@@ -103,7 +103,7 @@
 ## 校验规则
 
 - `node_runtime` 是可选的整单证据对象，不属于单个包，也不是实施授权。
-- `additional_project_constraints` 每项必须包含 `source`、`requirement`、`kind` 和 `authority`；`authority` 只能为 `authoritative` 或 `observed`。
+- `additional_project_constraints` 每项必须包含 `source`、`requirement`、`kind` 和 `authority`；`authority` 只能为 `authoritative` 或 `observed`。`kind` 推荐复用 `references/node-runtime-compatibility.md` §2 的类别名，便于与生成器自动收集的证据并排阅读；这也是把自动探测到的 `observed` 证据（CI 镜像、非白名单依赖 engines）在人工确认后提权为项目约束的唯一通道。
 - `selected_project_node` 必须是精确 semver，并满足所有可解析的权威项目约束；生成器探测结果不一致时保持 blocked。
 - 证据文件不能包含或授予 `runtime-switch`、`node-install`、依赖安装或项目脚本权限；审批只从当前任务的调用方生命周期取得。
 - 候选必须提供精确 semver。

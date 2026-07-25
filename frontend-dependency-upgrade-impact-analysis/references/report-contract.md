@@ -36,18 +36,20 @@ Markdown 必须按以下顺序包含中文可见标题，并保留对应的英�
 
 package、analysis mode、governance/upgrade reason、from、to、recommended action、selection status、decision status、constraints、change type、dependency type、manifest spec、lock direct version、baseline status、risk score、risk level、evidence completeness。
 
+包级 `selection_status` 取值：`selected`（已确定精确目标）、`needs_explicit_choice`（等待人工在删除/同库/替代之间选择）、`not_applicable`（该包不需要选择动作）。
+
 整单摘要另需：
 
 - `behavior_parity_required`：默认为 `yes`；仅当用户显式允许行为变化/删除/替换时为 `no`
 - `importer_resolution`：`confirmed` 或 `failed`（失败时报告状态与 `analysis_status` 均为 `blocked`，并在待人工决策中包含 `__frontend_workspace__`）
-- `node_runtime_status`、`execution_readiness`、`current_host_node`、`selected_project_node`
+- `node_runtime_status`、`execution_readiness`、`current_host_node`、`selected_project_node`、`selected_node_support`
 - `selected_project_node`：仅在存在权威项目约束或经证据明确指定且通过校验时填写；`node_runtime_status=unknown` 且无约束时必须为空
 - 批次计数：精确升级数 / 待人工决策数 / blocked 数
-- `report_paths`：实际写入路径；键为 `markdown`，可选 `json`
+- `report_paths`：实际写入路径；键为 `markdown`，可选 `json`，可选 `upstream_evidence`（报告旁 `upstream-evidence/` 目录；仅在目录实际存在时出现；`--cleanup-upstream-evidence` 删除后不再保留该键）
 
 ### Dependency Changes
 
-必须呈现 manifest、lock、peer、engines、overrides/resolutions。另需在本章包含“Node 运行时兼容性”小节，呈现本机当前 Node、项目约束来源、版本管理器、已安装兼容候选、所选精确项目 Node、EOL 警告、切换策略、实施阻塞项和恢复计划。目标未知时必须先呈现删除状态、证据、阻塞点、未知项、覆盖范围和可信度；再按需呈现同库与替代库候选。候选矩阵至少包含 `compliance_status`、核查标准、排除原因、证据 URL、兼容性、合规/维护、迁移成本、验证范围和回滚难度。`eligible` 必须有核查标准与证据 URL。
+必须呈现 manifest、lock、peer、engines、overrides/resolutions。`catalog:` 声明需同时呈现协议与解析出的有效范围。另需在本章包含“Node 运行时兼容性”小节，呈现本机当前 Node、项目约束来源、版本管理器、已安装兼容候选、所选精确项目 Node、`selected_node_support` 与发布计划核对日期、切换策略、实施阻塞项和恢复计划。目标未知时必须先呈现删除状态、证据、阻塞点、未知项、覆盖范围和可信度；再按需呈现同库与替代库候选。候选矩阵至少包含 `compliance_status`、核查标准、排除原因、证据 URL、兼容性、合规/维护、迁移成本、验证范围和回滚难度。`eligible` 必须有核查标准与证据 URL。
 
 ### Detailed Code Modification Points
 
@@ -55,19 +57,28 @@ package、file、line、category、current usage、upstream reason、recommended
 
 ### Risk
 
-七个因子（含 peer 兼容性）、各自分值、总分、自动等级、覆盖等级（如有）、不确定项。
+七个因子（含 peer 兼容性）、各自分值、总分、自动等级、覆盖等级（如有）、不确定项。不确定项必须逐条可见（无则写 `无`），并写出复算方式。
 Node 约束冲突、EOL 运行时、需要全局切换或恢复未验证时，作为独立技术风险和 High 覆盖依据呈现，不擅自增加第八个评分因子。
+
+### Business Impact
+
+只有已建立页面/流程映射的行才可写入风险等级；仅有文件引用、流程未映射的行必须写 `待评估`，不得继承包级风险等级。
 
 ### Evidence
 
 版本、发布日期、版本级 repository/source/validation、release 与 changelog 各自状态和摘要、来源 URL、九个证据维度及完整性/歧义警告。不得把 npm 包详情页本身当作迁移说明，也不得把 tag 或 URL-only Release 当成 release 正文。
+
+九个证据维度固定为：`registry`、`repository`、`release`、`changelog`、`migration`、`compatibility`、`security`、`support`、`license`。
+
+若存在报告旁 `upstream-evidence/`，证据节须给出本地证据包路径；各包须声明是否发生本地回读（`本地证据回读：yes|no`）。本地回读不得单独把证据标为 `complete`。
 
 ## 3. Markdown 校验
 
 - 必需章节和关键字段必须来自同一个结构化分析对象；
 - 每张表的所有数据行必须与表头列数一致；
 - 外部 URL 保持完整并单独列出，避免把多个来源拼成一个不可识别字段；
-- 空节写 `未建立` 或 `需要 Agent 复核`，不得省略。
+- 空节写 `未建立` 或 `需要 Agent 复核`，不得省略，也不得输出空反引号；
+- 键值型机器字段（证据维度、peer、engines、已安装 Node、仓库谱系）以 `key=value` 或子列表呈现，不得直接倾倒 JSON 字面量；`report_paths` 以带标签的子列表呈现。
 - Node 运行时信息必须来自整单结构化 `node_runtime` 对象，并复用于升级摘要、依赖变化、技术风险、测试范围和结论。
 
 ## 4. 语言规则
@@ -109,3 +120,5 @@ Node 约束冲突、EOL 运行时、需要全局切换或恢复未验证时，�
 3. 未指定时不猜测 active change，回退到 `<project-root>/dependency-upgrade-report/`，并在报告中声明假设；需要归档到某次任务时要求调用方显式提供 `--change-dir`
 
 本技能可以在**已存在**的 change/任务目录内创建 `evidence/frontend-dependency-upgrade/`，但不得自行创建 change 或生命周期状态。
+
+精确升级默认在报告目录下创建 `upstream-evidence/`（见 `lockfile-and-evidence.md`）。`report_paths.upstream_evidence` 指向该目录的绝对路径。

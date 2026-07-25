@@ -12,6 +12,7 @@ Cursor Agent Skills 集合。
 | [ai-agent-update-brief](./ai-agent-update-brief/SKILL.md) | AI 编码 Agent / IDE / CLI 工具更新简报生成 |
 | [github-repo-usage-article](./github-repo-usage-article/SKILL.md) | GitHub 仓库「使用示例」深度文章（房屋风格） |
 | [md2html-lecture](./md2html-lecture/SKILL.md) | 将 content-structuring 的整理稿转换成单文件 HTML 阅读页 |
+| [frontend-dependency-upgrade-impact-analysis](./frontend-dependency-upgrade-impact-analysis/SKILL.md) | 前端依赖升级影响分析：证据驱动的升级/移除/替换决策报告（只分析不实现） |
 
 ## Delivery 流水线
 
@@ -82,6 +83,15 @@ md2html-lecture/
 │   └── template.html     # 单文件 HTML 模板（CSS/JS + 占位符）
 └── scripts/
     └── build_html.py     # 确定性的 MD → HTML 转换脚本（仅依赖标准库）
+
+frontend-dependency-upgrade-impact-analysis/
+├── SKILL.md              # 技能加载器（边界、工作流、报告闸门）
+├── agents/
+│   └── openai.yaml
+├── fixtures/             # 合成前端 fixture（测试用）
+├── references/           # 证据 schema、风险模型、报告契约等
+├── scripts/              # 报告生成与 Node 兼容探测
+└── tests/
 ```
 
 安装：将需要的技能目录复制到项目的 `.cursor/skills/` 或 `~/.cursor/skills/` 即可。
