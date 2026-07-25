@@ -11,7 +11,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 from upgrade_semver import clean_version, semver_key
 
@@ -32,6 +32,76 @@ class LockSnapshot:
     # Only npm and pnpm locks carry it; Yarn v1 and Bun locks leave it empty.
     declared_engines: dict[str, str] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class LockEdge:
+    """One `parent@version depends on child (range)` edge read from the lock."""
+
+    parent: str
+    parent_version: str
+    child: str
+    requirement: str
+
+
+@dataclass
+class DependencyGraph:
+    """Reverse dependency edges for the whole lock, used to explain transitive packages."""
+
+    kind: str = "none"
+    supported: bool = False
+    # child package -> edges that pull it in. Root/workspace edges use parent `__root__`.
+    dependents: dict[str, list[LockEdge]] = field(default_factory=dict)
+    roots: set[str] = field(default_factory=set)
+    warnings: list[str] = field(default_factory=list)
+
+    def add(self, edge: LockEdge) -> None:
+        bucket = self.dependents.setdefault(edge.child, [])
+        if edge not in bucket:
+            bucket.append(edge)
+        if edge.parent == ROOT_NODE:
+            self.roots.add(edge.child)
+
+    def parents_of(self, package: str) -> list[LockEdge]:
+        return [edge for edge in self.dependents.get(package, []) if edge.parent != ROOT_NODE]
+
+    def paths_to(self, package: str, limit: int = 5, max_depth: int = 12) -> tuple[list[list[str]], int]:
+        """Root-to-package paths, capped. Returns the kept paths and the total found.
+
+        Breadth-first from the package upwards so the shortest, most actionable chains
+        come first; a package pulled in by dozens of parents would otherwise bury them.
+        """
+        found: list[list[str]] = []
+        seen: set[tuple[str, ...]] = set()
+        total = 0
+        budget = 20_000
+        queue: list[tuple[str, list[str]]] = [(package, [package])]
+        while queue and budget > 0:
+            budget -= 1
+            current, trail = queue.pop(0)
+            if len(trail) > max_depth:
+                continue
+            edges = self.dependents.get(current, [])
+            if not edges:
+                continue
+            for edge in edges:
+                if edge.parent == ROOT_NODE:
+                    chain = tuple(reversed(trail))
+                    if chain in seen:
+                        continue
+                    seen.add(chain)
+                    total += 1
+                    if len(found) < limit:
+                        found.append(list(chain))
+                    continue
+                if edge.parent in trail:
+                    continue
+                queue.append((edge.parent, trail + [edge.parent]))
+        return found, total
+
+
+ROOT_NODE = "__root__"
+DEPENDENCY_EDGE_FIELDS = ("dependencies", "optionalDependencies", "peerDependencies")
 
 
 def read_lock_json(path: Path) -> Any:
@@ -293,6 +363,167 @@ def parse_bun_lock(path: Path, packages: list[str], importer: str) -> LockSnapsh
                 snapshot.direct_versions.setdefault(package, version)
     snapshot.all_versions = {key: value for key, value in observed.items() if value}
     return snapshot
+
+
+def npm_entry_name(key: str) -> str:
+    """Package name for an npm `packages` key such as `node_modules/a/node_modules/@b/c`."""
+    normalized = key.replace("\\", "/")
+    marker = "node_modules/"
+    index = normalized.rfind(marker)
+    return normalized[index + len(marker):] if index >= 0 else ""
+
+
+def npm_graph(data: Any, graph: DependencyGraph) -> None:
+    entries = data.get("packages") if isinstance(data, dict) else None
+    if isinstance(entries, dict) and entries:
+        for key, info in entries.items():
+            if not isinstance(info, dict):
+                continue
+            name = npm_entry_name(str(key)) or str(info.get("name") or "")
+            version = clean_version(str(info.get("version") or ""))
+            parent = name or ROOT_NODE
+            if str(key) in {"", "."}:
+                parent, version = ROOT_NODE, ""
+            for group in DEPENDENCY_EDGE_FIELDS + ("devDependencies",):
+                if parent != ROOT_NODE and group == "devDependencies":
+                    continue  # a dependency's own devDependencies are not installed
+                for child, requirement in (info.get(group) or {}).items():
+                    graph.add(LockEdge(parent, version, str(child), str(requirement)))
+        graph.supported = True
+        return
+    legacy = data.get("dependencies") if isinstance(data, dict) else None
+    if isinstance(legacy, dict):
+        def walk(node: dict[str, Any], parent: str, parent_version: str) -> None:
+            for name, info in node.items():
+                if not isinstance(info, dict):
+                    continue
+                graph.add(LockEdge(parent, parent_version, str(name), str(info.get("version") or "")))
+                for child, requirement in (info.get("requires") or {}).items():
+                    graph.add(LockEdge(str(name), clean_version(str(info.get("version") or "")), str(child), str(requirement)))
+                walk(info.get("dependencies") or {}, str(name), clean_version(str(info.get("version") or "")))
+
+        walk(legacy, ROOT_NODE, "")
+        graph.supported = True
+
+
+def pnpm_graph(lines: list[str], graph: DependencyGraph) -> None:
+    """Read `snapshots:`/`packages:` dependency blocks from a pnpm lock."""
+    header = re.compile(r"^  ['\"]?/?(?P<name>@?[^@'\"]+(?:/[^@'\"]+)?)@(?P<version>[^'\"(:]+)")
+    entry = re.compile(r"^\s{6}['\"]?(?P<name>@?[^:'\"]+)['\"]?:\s*(?P<requirement>.+)$")
+    current_name = ""
+    current_version = ""
+    in_dependencies = False
+    for raw in lines:
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = len(raw) - len(raw.lstrip(" "))
+        if indent == 0:
+            current_name, current_version, in_dependencies = "", "", False
+            continue
+        if indent == 2:
+            match = header.match(raw)
+            current_name = match.group("name") if match else ""
+            current_version = clean_version(match.group("version").split("(", 1)[0]) if match else ""
+            in_dependencies = False
+            continue
+        if indent == 4:
+            in_dependencies = stripped.rstrip(":") in {"dependencies", "optionalDependencies", "peerDependencies"}
+            continue
+        if indent == 6 and in_dependencies and current_name:
+            match = entry.match(raw)
+            if match:
+                graph.add(LockEdge(
+                    current_name, current_version, unquote_yaml(match.group("name")),
+                    unquote_yaml(match.group("requirement")),
+                ))
+    graph.supported = bool(graph.dependents)
+
+
+def yarn_graph(text: str, graph: DependencyGraph) -> None:
+    current_names: list[str] = []
+    current_version = ""
+    in_dependencies = False
+    entry = re.compile(r"^\s{4}['\"]?(?P<name>@?[^\s'\"]+?)['\"]?\s+['\"]?(?P<requirement>[^'\"]+)['\"]?\s*$")
+    for raw in text.splitlines():
+        if raw and not raw[0].isspace() and raw.rstrip().endswith(":"):
+            selectors = raw.rstrip()[:-1]
+            current_names = []
+            for selector in selectors.split(","):
+                cleaned = selector.strip().strip("'\"")
+                name = cleaned[: cleaned.rindex("@")] if "@" in cleaned[1:] else cleaned
+                if name and name not in current_names:
+                    current_names.append(name)
+            current_version = ""
+            in_dependencies = False
+            continue
+        stripped = raw.strip()
+        version_match = re.match(r"^\s+version\s+['\"]?([^'\"\s]+)", raw)
+        if version_match:
+            current_version = clean_version(version_match.group(1))
+            continue
+        if stripped in {"dependencies:", "optionalDependencies:"}:
+            in_dependencies = True
+            continue
+        if raw and not raw.startswith("    "):
+            in_dependencies = False
+            continue
+        if in_dependencies and current_names:
+            match = entry.match(raw)
+            if match:
+                for name in current_names:
+                    graph.add(LockEdge(name, current_version, match.group("name"), match.group("requirement")))
+    graph.supported = bool(graph.dependents)
+
+
+def bun_graph(data: Any, graph: DependencyGraph) -> None:
+    entries = data.get("packages") if isinstance(data, dict) else None
+    if not isinstance(entries, dict):
+        return
+    for key, value in entries.items():
+        if not isinstance(value, list):
+            continue
+        identifier = str(value[0]) if value else ""
+        version = clean_version(identifier.rsplit("@", 1)[-1]) if "@" in identifier else ""
+        name = str(key).rsplit("/", 1)[-1]
+        info = next((item for item in value if isinstance(item, dict)), {})
+        for group in DEPENDENCY_EDGE_FIELDS:
+            for child, requirement in (info.get(group) or {}).items():
+                graph.add(LockEdge(name, version, str(child), str(requirement)))
+    graph.supported = bool(graph.dependents)
+
+
+def build_dependency_graph(path: Path | None, root_packages: Iterable[str]) -> DependencyGraph:
+    """Reverse dependency edges plus the workspace's own declarations as root edges.
+
+    Root edges come from the manifest rather than the lock: Yarn v1 and Bun locks do not
+    mark which entries the workspace declares, and the manifest is authoritative anyway.
+    """
+    graph = DependencyGraph()
+    for package in root_packages:
+        graph.add(LockEdge(ROOT_NODE, "", package, "manifest"))
+    if path is None or not path.exists():
+        graph.warnings.append("缺少 lockfile：无法判定传递依赖的父包链，来源判定降级为 unknown。")
+        return graph
+    graph.kind = path.name
+    try:
+        if path.name in {"package-lock.json", "npm-shrinkwrap.json"}:
+            npm_graph(read_lock_json(path), graph)
+        elif path.name == "pnpm-lock.yaml":
+            pnpm_graph(path.read_text(encoding="utf-8-sig", errors="replace").splitlines(), graph)
+        elif path.name == "yarn.lock":
+            yarn_graph(path.read_text(encoding="utf-8-sig", errors="replace"), graph)
+        elif path.name == "bun.lock":
+            bun_graph(json.loads(strip_jsonc(path.read_text(encoding="utf-8", errors="ignore"))), graph)
+        elif path.name == "bun.lockb":
+            graph.warnings.append("bun.lockb 是二进制 lockfile，无法构建父包链；请提交 bun.lock 文本锁。")
+        else:
+            graph.warnings.append(f"lock 类型 {path.name} 不支持父包链解析。")
+    except (OSError, json.JSONDecodeError, ValueError) as error:
+        graph.warnings.append(f"解析父包链失败：{path.name}（{error}）")
+    if not graph.supported and not graph.warnings:
+        graph.warnings.append(f"未能从 {path.name} 解析出依赖边；父包链不可用。")
+    return graph
 
 
 def parse_lock(path: Path | None, packages: list[str], importer: str = ".", role: str = "current") -> LockSnapshot:

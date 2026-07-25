@@ -26,6 +26,7 @@ Markdown 必须按以下顺序包含中文可见标题，并保留对应的英�
 | `Technical Risks` | 技术风险 |
 | `Test Scope` | 测试范围 |
 | `Rollout And Rollback` | 发布与回滚 |
+| `Human Confirmation Queue` | 人工确认队列 |
 | `Conclusion` | 结论 |
 
 锚点形态为 `<!-- section: <机器锚点> -->`，锚点不作为人类可见标题。
@@ -36,7 +37,7 @@ Markdown 必须按以下顺序包含中文可见标题，并保留对应的英�
 
 package、analysis mode、governance/upgrade reason、from、to、recommended action、selection status、decision status、constraints、change type、dependency type、manifest spec、lock direct version、baseline status、risk score、risk level、evidence completeness。
 
-包级 `selection_status` 取值：`selected`（已确定精确目标）、`needs_explicit_choice`（等待人工在删除/同库/替代之间选择）、`not_applicable`（该包不需要选择动作）。
+包级 `selection_status` 取值：`selected`（已确定精确目标）、`needs_explicit_choice`（等待人工在删除/替换/原生改造/父包处置之间选择）、`not_applicable`（该包不需要选择动作）。
 
 整单摘要另需：
 
@@ -49,7 +50,35 @@ package、analysis mode、governance/upgrade reason、from、to、recommended ac
 
 ### Dependency Changes
 
-必须呈现 manifest、lock、peer、engines、overrides/resolutions。`catalog:` 声明需同时呈现协议与解析出的有效范围。另需在本章包含“Node 运行时兼容性”小节，呈现本机当前 Node、项目约束来源、版本管理器、已安装兼容候选、所选精确项目 Node、`selected_node_support` 与发布计划核对日期、切换策略、实施阻塞项和恢复计划。目标未知时必须先呈现删除状态、证据、阻塞点、未知项、覆盖范围和可信度；再按需呈现同库与替代库候选。候选矩阵至少包含 `compliance_status`、核查标准、排除原因、证据 URL、兼容性、合规/维护、迁移成本、验证范围和回滚难度。`eligible` 必须有核查标准与证据 URL。
+必须呈现 manifest、lock、peer、engines、overrides/resolutions。`catalog:` 声明需同时呈现协议与解析出的有效范围。另需在本章包含“Node 运行时兼容性”小节，呈现本机当前 Node、项目约束来源、版本管理器、已安装兼容候选、所选精确项目 Node、`selected_node_support` 与发布计划核对日期、切换策略、实施阻塞项和恢复计划。目标未知时必须先呈现「依赖来源与父包链」，再呈现删除状态、证据、阻塞点、未知项、覆盖范围和可信度；随后**始终**呈现替代库候选与处置方案选项，不因某一路径已有候选而省略其他路径。**不得出现同库目标版本候选表**：未指定目标版本的包不以同库升级收场。候选矩阵至少包含 `compliance_status`、核查标准、排除原因、证据 URL、兼容性、合规/维护、迁移成本、验证范围和回滚难度。`eligible` 必须有核查标准与证据 URL。
+
+替代库候选另需 `origin`（`analysis-evidence` 或 `curated-map`）、推荐版本（未解析时写 `待解析`）、`兼容回退版本`、`排序`、`排序依据`、`约束匹配`、peer/engines，并在候选 `engines.node` 与所选项目 Node 冲突时写入排除原因。`curated-map` 候选恒为 `compliance_status=unknown`，不得据此改变推荐动作。
+
+排序只用机器可核信号，优先级固定为 `ALTERNATIVE_RANK_SIGNALS`：`human-reviewed`、`project-constraint-fit`、`not-deprecated`、`recent-release`、`declared-license`；逐项取值写入“排序依据”列。`约束匹配` 取 `fits` / `unknown` / `conflicts`。排序只是呈现顺序，不改变 `recommended_action`，也不构成选型。
+
+`research_status` 不为 `reviewed` 时，必须呈现「替代方案调研任务」小节：用法画像、`RESEARCH_CRITERIA` 筛选标准、回填方式。
+
+目标未知时必须呈现「原生重构方向」小节：方案状态（`established` / `needs-research`）、可直接改用的原生能力、需自建的能力、按调用点分组的改造范围、`REFACTOR_STAGES` 分阶段路径、改造规模、验证范围、回滚、未决项、影响面、行为等价核对清单，以及逐调用点改造表（文件、行号、类别、当前用法、等价实现思路、行为差异风险、验证点、可信度）。方向必须来自本轮扫描证据，仅有声明引用时状态保持 `needs-research`。
+
+改造规模只取 `S`/`M`/`L`，由调用点数、文件数与是否跨公共包装器按固定阈值算出，必须写出计数依据；不得给出工时估算。
+
+处置方案选项表固定覆盖 `remove-dependency`、`replace-with-alternative`、`handle-parent-package`、`native-platform-capability`、`in-house-reimplementation`、`isolate-behind-wrapper`、`internal-fork`、`remove-feature`，每项标注 `evidence-available`、`needs-research` 或 `not-applicable`、适用条件、本轮证据与决策所需依据。菜单不含以“不变更”收场的选项，也不含同库升级。
+
+「依赖来源与父包链」小节必须写明 `provenance.kind`（`direct` / `both` / `phantom` / `transitive` / `unknown`）、manifest 声明字段、代码是否有直接用法、判定证据与未决项。存在父包时另需父包表：父包、已解析版本、对该包的 range、父包最新稳定版、是否已摆脱该依赖（`dropped`/`still-depends`/`unknown`）、说明；父包链最多展示 5 条，超出只计数。解析出 overrides 最低可行版本时写明该版本及会被破坏的父包约束。
+
+目标未知时还要在依赖变化中写明主轨判定：`primary_track` 取 `remove`、`replace`、`native-refactor`、`handle-parent`、`fix-phantom` 或 `pending-removal-evidence`，附判定依据与备选轨道。判定顺序固定为「先看依赖来源 → 是否真的被使用 → 是否有可换的包 → 都没有则原生改造」。主轨只表示本轮证据指向哪条路径，人可改轨。
+
+### Human Confirmation Queue
+
+一包一问，按队列顺序逐个确认。必须包含：决策记录文件路径、队列总表（包、主轨、`ready`/`blocked`/`decided`、问题、前置条件），以及每个 `ready` 包的选项表（选项 ID、选项、说明）。
+
+选项 ID 形态固定：`replace:<包>@<版本>`、`remove`、`remove-usage`、`switch-to-declared`、`native-refactor`、`handle-parent`、`pin-override:<包>@<版本>`、`parent-upgrade:<包>@<版本>`、`parent-replace:<包>`、`parent-remove:<包>`、`isolate-behind-wrapper`、`internal-fork`、`remove-feature`、`switch:<轨道>`、`other`。末位固定为 `other`。**不得出现 `same-package:` 选项**。`switch:<轨道>` 只是改轨答案，不是最终选择，不得写入决策文件。
+
+`handle-parent` 轨为两段式：主问题选处置方式，选中「处置父包」后再按父包逐个追问，追问的 `package` 字段形如 `<目标包><-<父包>`，且必须标注「仅在选择 `handle-parent` 后提问」。
+
+`blocked` 的包不呈现选项，只写阻塞原因与前置条件清单，Agent 不得提前提问。
+
+已有决策时追加「人工决策记录」表：包、轨道、选择、选定包、选定版本、状态（`confirmed`/`invalidated`/`unknown-package`）、来源、时间、理由或失效原因。记录选型不等于实施授权。
 
 ### Detailed Code Modification Points
 
@@ -104,9 +133,11 @@ Node 约束冲突、EOL 运行时、需要全局切换或恢复未验证时，�
 - `analysis_status`：`partial`、`blocked` 或经人工复核后的 `complete`；
 - `decision_status`：`not_needed` 或 `needs_choice`。
 
-候选版本、替代库和删除可行性属于决策证据，不是已批准结论。`analysis_status=complete` 可以与 `decision_status=needs_choice` 同时存在。
+候选版本、替代库、处置方案选项和删除可行性都属于决策证据，不是已批准结论。`analysis_status=complete` 可以与 `decision_status=needs_choice` 同时存在。呈现完整选择面不等于推荐其中任何一条。
 
-当 `behavior_parity_required=yes`（默认）时：删除与替代库结论只能作为待选证据；默认推荐同库精确升级（若存在合规候选）；必要 API/配置适配可列为改造候选并标注为适配。
+选项完整性闸门：未指定目标版本的包必须至少产出一个可执行选项（替代包、已成立的原生重构方案、已解析出父包的父包处置，或 `safe_removal_candidate`/`requires_migration` 的删除路径）。任一包 `option_status=missing` 时，结论必须点名该包，且报告不得提升为 `complete`。该闸门只约束完成状态，不改写 `recommended_action`。
+
+当 `behavior_parity_required=yes`（默认）时：删除、替换、原生改造与父包处置都必须保持对外可观察行为不变，且都只能作为待选证据；报告不得偏好其中任何一条，也不得把同库升级作为选项；必要 API/配置适配可列为改造候选并标注为适配。
 
 ## 6. 输出路径
 

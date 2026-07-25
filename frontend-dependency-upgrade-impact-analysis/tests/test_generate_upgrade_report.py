@@ -1183,14 +1183,14 @@ packages:
             self.assertEqual(report.baseline_status, "matches_from")
             self.assertEqual(report.analysis_mode, "auto-assess")
             self.assertEqual(report.removal.status, "uncertain")
-            self.assertEqual(report.recommended_action, "prefer-same-package-or-retain")
+            self.assertEqual(report.recommended_action, "review-removal")
             self.assertEqual(report.decision_status, "needs_choice")
             self.assertEqual(bundle.decision_status, "needs_choice")
             self.assertEqual(bundle.behavior_parity_required, "yes")
             self.assertEqual(bundle.status, "draft")
             markdown = MODULE.markdown_report(bundle)
-            self.assertLess(markdown.index("#### 删除可行性"), markdown.index("#### 同库目标版本候选"))
-            self.assertLess(markdown.index("#### 同库目标版本候选"), markdown.index("#### 替代库候选"))
+            self.assertNotIn("同库目标版本候选", markdown)
+            self.assertLess(markdown.index("#### 依赖来源与父包链"), markdown.index("#### 删除可行性"))
             self.assertFalse(MODULE.validate_report_contract(markdown))
 
     def test_removal_with_direct_usage_requires_migration(self) -> None:
@@ -1210,14 +1210,11 @@ packages:
         self.assertEqual(report.recommended_action, "plan-migration-before-removal")
         self.assertTrue(report.removal.blockers)
 
-    def test_open_target_with_direct_usage_moves_to_same_package_candidates(self) -> None:
+    def test_open_target_with_direct_usage_moves_to_replacement_research(self) -> None:
         report = MODULE.PackageReport(
             MODULE.Upgrade("legacy", "1.2.3", "", intent="auto-assess"),
             "https://www.npmjs.com/package/legacy",
             analysis_mode="auto-assess",
-            target_candidates=[
-                MODULE.TargetCandidate("legacy", "1.3.0", "same-major-latest"),
-            ],
         )
         point = MODULE.CodeModificationPoint(
             "legacy", "src/runtime.ts", 1, "Direct package usage", "import legacy from 'legacy'",
@@ -1225,8 +1222,695 @@ packages:
         )
         MODULE.assess_removal(report, [point])
         self.assertEqual(report.removal.status, "requires_migration")
-        self.assertEqual(report.recommended_action, "review-same-package-candidates")
-        self.assertTrue(any("同库精确版本" in decision for decision in report.decision_required))
+        self.assertEqual(report.recommended_action, "research-replacement")
+        self.assertTrue(any("替代库" in decision for decision in report.decision_required))
+
+    def alternative_args(self, offline: bool = False) -> argparse.Namespace:
+        return MODULE.parse_args(
+            [".", "--assess", "axios", "--no-upstream-evidence"] + (["--offline"] if offline else [])
+        )
+
+    def test_curated_alternatives_resolve_exact_versions_from_registry(self) -> None:
+        registry = {
+            "ky": {
+                "versions": {"1.9.0": {"license": "MIT"}, "2.0.2": {"license": "MIT", "engines": {"node": ">=22"}}},
+                "time": {"2.0.2": "2026-04-21T00:00:00.000Z"},
+            },
+            "ofetch": {"versions": {"1.5.1": {"license": "MIT"}}, "time": {"1.5.1": "2025-11-01T00:00:00.000Z"}},
+        }
+        with patch.object(MODULE, "request_json", side_effect=lambda url, *_: registry.get(url.rsplit("/", 1)[-1])):
+            candidates = MODULE.build_alternative_candidates("axios", self.alternative_args(), [])
+        self.assertEqual([(item.package, item.version) for item in candidates], [("ky", "2.0.2"), ("ofetch", "1.5.1")])
+        self.assertEqual({item.origin for item in candidates}, {"curated-map"})
+        self.assertEqual({item.compliance_status for item in candidates}, {"unknown"})
+        self.assertIn("2026-04-21", candidates[0].compliance_and_maintenance)
+        self.assertIn("license=MIT", candidates[0].compliance_and_maintenance)
+        self.assertEqual(candidates[0].engines, {"node": ">=22"})
+
+    def test_deprecated_alternative_version_is_disqualified(self) -> None:
+        registry = {"sass": {"versions": {"1.80.0": {"deprecated": "use dart-sass"}}, "time": {}}}
+        with patch.object(MODULE, "request_json", side_effect=lambda url, *_: registry.get(url.rsplit("/", 1)[-1])):
+            candidates = MODULE.build_alternative_candidates("node-sass", self.alternative_args(), [])
+        self.assertEqual(len(candidates), 1)
+        self.assertTrue(any("已弃用" in item for item in candidates[0].disqualifiers))
+
+    def test_offline_alternatives_are_listed_without_versions(self) -> None:
+        candidates = MODULE.build_alternative_candidates("moment", self.alternative_args(offline=True), [])
+        self.assertEqual([item.package for item in candidates], ["dayjs", "date-fns", "luxon"])
+        self.assertEqual({item.version for item in candidates}, {""})
+        self.assertTrue(all("离线模式未解析精确版本" in item.disqualifiers for item in candidates))
+
+    def test_unmapped_package_gets_no_curated_alternatives(self) -> None:
+        self.assertEqual(MODULE.build_alternative_candidates("internal-widget", self.alternative_args(), []), [])
+
+    def test_curated_alternative_does_not_change_recommended_action(self) -> None:
+        report = MODULE.PackageReport(
+            MODULE.Upgrade("axios", "1.2.3", "", intent="auto-assess"),
+            "https://www.npmjs.com/package/axios",
+            analysis_mode="auto-assess",
+            alternative_candidates=[MODULE.AlternativeCandidate("ky", "2.0.2", origin="curated-map")],
+        )
+        report.removal.status = "requires_migration"
+        MODULE.reconcile_open_target_report(report)
+        self.assertEqual(report.recommended_action, "plan-migration-before-removal")
+        self.assertTrue(any("由人决定" in item for item in report.decision_required))
+
+    def test_reviewed_alternative_can_drive_replacement_and_replaces_curated_row(self) -> None:
+        report = MODULE.PackageReport(
+            MODULE.Upgrade("axios", "1.2.3", "", intent="auto-assess"),
+            "https://www.npmjs.com/package/axios",
+            analysis_mode="auto-assess",
+            alternative_candidates=[
+                MODULE.AlternativeCandidate("ky", "2.0.2", origin="curated-map"),
+                MODULE.AlternativeCandidate("ofetch", "1.5.1", origin="curated-map"),
+            ],
+        )
+        report.removal.status = "requires_migration"
+        MODULE.apply_analysis_evidence([report], {"axios": {"alternative_candidates": [{
+            "package": "ky",
+            "version": "2.0.2",
+            "compliance_status": "eligible",
+            "criteria_checked": ["security", "license"],
+            "evidence_urls": ["https://example.invalid/ky"],
+        }]}})
+        MODULE.reconcile_open_target_report(report)
+        self.assertEqual(
+            [(item.package, item.origin) for item in report.alternative_candidates],
+            [("ky", "analysis-evidence"), ("ofetch", "curated-map")],
+        )
+        self.assertEqual(report.recommended_action, "research-replacement")
+
+    def test_disposition_options_cover_every_route_for_open_target(self) -> None:
+        report = MODULE.PackageReport(
+            MODULE.Upgrade("axios", "1.2.3", "", intent="auto-assess"),
+            "https://www.npmjs.com/package/axios",
+            analysis_mode="auto-assess",
+            alternative_candidates=[MODULE.AlternativeCandidate("ky", "2.0.2", origin="curated-map")],
+        )
+        report.removal.status = "requires_migration"
+        MODULE.reconcile_open_target_report(report)
+        options = {option.option: option for option in report.disposition_options}
+        self.assertEqual(set(options), {row[0] for row in MODULE.DISPOSITION_OPTIONS})
+        self.assertEqual(options["replace-with-alternative"].availability, "evidence-available")
+        self.assertEqual(options["native-platform-capability"].availability, "evidence-available")
+        self.assertIn("fetch", options["native-platform-capability"].detail)
+        self.assertEqual(options["internal-fork"].availability, "needs-research")
+
+    def test_exact_upgrade_gets_no_alternatives_or_disposition_menu(self) -> None:
+        report = MODULE.PackageReport(
+            MODULE.Upgrade("axios", "1.6.8", "1.7.9", intent="exact-upgrade"),
+            "https://www.npmjs.com/package/axios",
+            analysis_mode="exact-upgrade",
+        )
+        MODULE.reconcile_open_target_report(report)
+        self.assertEqual(report.alternative_candidates, [])
+        self.assertEqual(report.disposition_options, [])
+
+    def test_alternative_incompatible_with_project_node_is_flagged(self) -> None:
+        report = MODULE.PackageReport(
+            MODULE.Upgrade("axios", "1.2.3", "", intent="auto-assess"),
+            "https://www.npmjs.com/package/axios",
+            analysis_mode="auto-assess",
+            alternative_candidates=[
+                MODULE.AlternativeCandidate("ky", "2.0.2", origin="curated-map", engines={"node": ">=22"}),
+                MODULE.AlternativeCandidate("ofetch", "1.5.1", origin="curated-map"),
+            ],
+        )
+        runtime = MODULE.NodeRuntimeAssessment()
+        runtime.selected_project_node = "20.18.0"
+        MODULE.flag_alternative_runtime_conflicts([report], runtime)
+        self.assertTrue(any("不兼容" in item for item in report.alternative_candidates[0].disqualifiers))
+        self.assertEqual(report.alternative_candidates[0].constraint_fit, "conflicts")
+        self.assertEqual(report.alternative_candidates[1].disqualifiers, [])
+        self.assertEqual(report.alternative_candidates[1].constraint_fit, "unknown")
+
+    def test_engines_satisfied_by_project_node_counts_as_fitting(self) -> None:
+        report = MODULE.PackageReport(
+            MODULE.Upgrade("axios", "1.2.3", "", intent="auto-assess"),
+            "https://www.npmjs.com/package/axios",
+            analysis_mode="auto-assess",
+            alternative_candidates=[
+                MODULE.AlternativeCandidate("ofetch", "1.5.1", origin="curated-map", engines={"node": ">=18"}),
+            ],
+        )
+        runtime = MODULE.NodeRuntimeAssessment()
+        runtime.selected_project_node = "20.18.0"
+        MODULE.flag_alternative_runtime_conflicts([report], runtime)
+        self.assertEqual(report.alternative_candidates[0].constraint_fit, "fits")
+
+    def test_alternative_runtime_check_is_skipped_without_selected_node(self) -> None:
+        report = MODULE.PackageReport(
+            MODULE.Upgrade("axios", "1.2.3", "", intent="auto-assess"),
+            "https://www.npmjs.com/package/axios",
+            analysis_mode="auto-assess",
+            alternative_candidates=[
+                MODULE.AlternativeCandidate("ky", "2.0.2", origin="curated-map", engines={"node": ">=22"}),
+            ],
+        )
+        MODULE.flag_alternative_runtime_conflicts([report], MODULE.NodeRuntimeAssessment())
+        self.assertEqual(report.alternative_candidates[0].disqualifiers, [])
+
+    def test_runtime_conflict_resolves_a_compatible_fallback_version(self) -> None:
+        report = MODULE.PackageReport(
+            MODULE.Upgrade("axios", "1.2.3", "", intent="auto-assess"),
+            "https://www.npmjs.com/package/axios",
+            analysis_mode="auto-assess",
+            alternative_candidates=[
+                MODULE.AlternativeCandidate("ky", "2.0.2", origin="curated-map", engines={"node": ">=22"}),
+            ],
+        )
+        runtime = MODULE.NodeRuntimeAssessment()
+        runtime.selected_project_node = "20.18.0"
+        metadata = {"versions": {
+            "1.7.5": {"engines": {"node": ">=18"}},
+            "1.8.0": {"engines": {"node": ">=18"}, "deprecated": "moved"},
+            "2.0.2": {"engines": {"node": ">=22"}},
+        }}
+        args = MODULE.parse_args(["."])
+        with patch.object(MODULE, "request_json", return_value=metadata):
+            MODULE.flag_alternative_runtime_conflicts([report], runtime, args)
+        candidate = report.alternative_candidates[0]
+        self.assertEqual(candidate.constraint_fit, "conflicts")
+        self.assertEqual(candidate.fallback_version, "1.7.5")
+        self.assertTrue(any("1.7.5" in item for item in candidate.disqualifiers))
+
+    def test_offline_runtime_conflict_reports_no_fallback_without_network(self) -> None:
+        report = MODULE.PackageReport(
+            MODULE.Upgrade("axios", "1.2.3", "", intent="auto-assess"),
+            "https://www.npmjs.com/package/axios",
+            analysis_mode="auto-assess",
+            alternative_candidates=[
+                MODULE.AlternativeCandidate("ky", "2.0.2", origin="curated-map", engines={"node": ">=22"}),
+            ],
+        )
+        runtime = MODULE.NodeRuntimeAssessment()
+        runtime.selected_project_node = "20.18.0"
+        args = MODULE.parse_args([".", "--offline"])
+        with patch.object(MODULE, "request_json", side_effect=AssertionError("offline 不得联网")):
+            MODULE.flag_alternative_runtime_conflicts([report], runtime, args)
+        self.assertEqual(report.alternative_candidates[0].fallback_version, "")
+
+    def test_peer_conflict_with_project_marks_candidate_as_conflicting(self) -> None:
+        report = MODULE.PackageReport(
+            MODULE.Upgrade("legacy", "1.2.3", "", intent="auto-assess"),
+            "https://www.npmjs.com/package/legacy",
+            analysis_mode="auto-assess",
+            alternative_candidates=[
+                MODULE.AlternativeCandidate("fits-pkg", "2.0.0", peer_dependencies={"react": ">=18"}),
+                MODULE.AlternativeCandidate("breaks-pkg", "3.0.0", peer_dependencies={"react": "^16"}),
+                MODULE.AlternativeCandidate("unknown-pkg", "1.0.0", peer_dependencies={"vue": "^3"}),
+            ],
+        )
+        manifest = MODULE.ManifestSnapshot(packages={"react": MODULE.ManifestPackage("react", "dependencies", "^18.2.0")})
+        lock = MODULE.LockSnapshot(kind="npm", direct_versions={"react": "18.3.1"})
+        MODULE.assess_alternative_constraint_fit([report], manifest, lock)
+        self.assertEqual(
+            [(item.package, item.constraint_fit) for item in report.alternative_candidates],
+            [("fits-pkg", "fits"), ("breaks-pkg", "conflicts"), ("unknown-pkg", "unknown")],
+        )
+
+    def test_candidate_ranking_follows_declared_signal_priority(self) -> None:
+        report = MODULE.PackageReport(
+            MODULE.Upgrade("legacy", "1.2.3", "", intent="auto-assess"),
+            "https://www.npmjs.com/package/legacy",
+            analysis_mode="auto-assess",
+            alternative_candidates=[
+                MODULE.AlternativeCandidate("old-fit", "1.0.0", origin="curated-map", constraint_fit="fits", published="2020-01-01", license="MIT"),
+                MODULE.AlternativeCandidate("conflicting", "9.0.0", origin="curated-map", constraint_fit="conflicts", published="2026-07-01", license="MIT"),
+                MODULE.AlternativeCandidate("fresh-fit", "2.0.0", origin="curated-map", constraint_fit="fits", published="2026-06-01", license="MIT"),
+                MODULE.AlternativeCandidate("deprecated-fit", "3.0.0", origin="curated-map", constraint_fit="fits", published="2026-07-20", license="MIT", deprecated=True),
+                MODULE.AlternativeCandidate("reviewed", "4.0.0", origin="analysis-evidence", constraint_fit="unknown", published="2019-01-01"),
+            ],
+        )
+        MODULE.rank_alternative_candidates([report])
+        self.assertEqual(
+            [item.package for item in report.alternative_candidates],
+            ["reviewed", "fresh-fit", "old-fit", "deprecated-fit", "conflicting"],
+        )
+        self.assertEqual([item.rank for item in report.alternative_candidates], [1, 2, 3, 4, 5])
+        self.assertEqual(
+            report.alternative_candidates[1].rank_signals,
+            [
+                "human-reviewed=no", "project-constraint-fit=fits", "not-deprecated=yes",
+                "recent-release=2026-06-01", "declared-license=MIT",
+            ],
+        )
+
+    def test_ranking_does_not_change_recommended_action(self) -> None:
+        report = MODULE.PackageReport(
+            MODULE.Upgrade("axios", "1.2.3", "", intent="auto-assess"),
+            "https://www.npmjs.com/package/axios",
+            analysis_mode="auto-assess",
+            alternative_candidates=[MODULE.AlternativeCandidate("ky", "2.0.2", origin="curated-map", constraint_fit="fits")],
+        )
+        report.removal.status = "requires_migration"
+        MODULE.reconcile_open_target_report(report)
+        MODULE.rank_alternative_candidates([report])
+        self.assertEqual(report.alternative_candidates[0].rank, 1)
+        self.assertEqual(report.recommended_action, "plan-migration-before-removal")
+
+    def test_refactor_plan_is_built_from_real_call_sites(self) -> None:
+        report = MODULE.PackageReport(
+            MODULE.Upgrade("axios", "1.2.3", "", dependency_type="request", intent="auto-assess"),
+            "https://www.npmjs.com/package/axios",
+            analysis_mode="auto-assess",
+        )
+        points = [
+            MODULE.CodeModificationPoint("axios", "src/request.ts", 1, "Direct package usage", "import axios", "", "", "", "P1", "high"),
+            MODULE.CodeModificationPoint("axios", "package.json", 1, MODULE.DECLARATION_CATEGORY, "", "", "", "", "P1", "high"),
+        ]
+        plan = MODULE.build_refactor_plan(report, points)
+        self.assertEqual(plan.status, "established")
+        self.assertEqual(plan.stages, list(MODULE.REFACTOR_STAGES))
+        self.assertTrue(any("src/request.ts" in group for group in plan.call_site_groups))
+        self.assertTrue(any("fetch" in item for item in plan.native_routes))
+        self.assertTrue(plan.validation_scope)
+
+    def test_declaration_only_usage_leaves_refactor_plan_unestablished(self) -> None:
+        report = MODULE.PackageReport(
+            MODULE.Upgrade("legacy", "1.2.3", "", intent="auto-assess"),
+            "https://www.npmjs.com/package/legacy",
+            analysis_mode="auto-assess",
+        )
+        points = [MODULE.CodeModificationPoint("legacy", "package.json", 1, MODULE.DECLARATION_CATEGORY, "", "", "", "", "P1", "high")]
+        plan = MODULE.build_refactor_plan(report, points)
+        self.assertEqual(plan.status, "needs-research")
+        self.assertEqual(plan.stages, [])
+        self.assertTrue(any("运行时或动态用法" in item for item in plan.unknowns))
+
+    def test_unremovable_package_with_call_sites_recommends_native_refactor(self) -> None:
+        report = MODULE.PackageReport(
+            MODULE.Upgrade("legacy", "1.2.3", "", intent="auto-assess"),
+            "https://www.npmjs.com/package/legacy",
+            analysis_mode="auto-assess",
+        )
+        report.removal.status = "not_viable"
+        report.refactor_plan = MODULE.build_refactor_plan(report, [
+            MODULE.CodeModificationPoint("legacy", "src/app.ts", 1, "Direct package usage", "", "", "", "", "P1", "high"),
+        ])
+        MODULE.reconcile_open_target_report(report)
+        self.assertEqual(report.recommended_action, "plan-native-refactor")
+        self.assertEqual(report.option_status, "available")
+
+    def test_unremovable_package_without_any_route_is_blocked(self) -> None:
+        report = MODULE.PackageReport(
+            MODULE.Upgrade("legacy", "1.2.3", "", intent="auto-assess"),
+            "https://www.npmjs.com/package/legacy",
+            analysis_mode="auto-assess",
+        )
+        report.removal.status = "not_viable"
+        MODULE.reconcile_open_target_report(report)
+        self.assertEqual(report.recommended_action, "blocked-pending-options")
+        self.assertEqual(report.option_status, "missing")
+        self.assertEqual(report.research_status, "pending")
+        self.assertTrue(any("不得标记为 complete" in item for item in report.decision_required))
+
+    def test_option_gate_is_reported_without_overriding_next_step(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "package.json").write_text(json.dumps({"dependencies": {"legacy": "^1.0.0"}}), encoding="utf-8")
+            args = MODULE.parse_args([str(root), "--assess", "legacy", "--offline"])
+            bundle = MODULE.build_bundle(args)
+            self.assertEqual(bundle.reports[0].option_status, "missing")
+            markdown = MODULE.markdown_report(bundle)
+            self.assertIn("选项完整性闸门", markdown)
+            self.assertIn("未满足：`legacy`", markdown)
+            self.assertIn("替代方案调研缺口", markdown)
+            self.assertEqual(MODULE.validate_report_contract(markdown), [])
+
+    def open_target_report(self, package: str = "legacy") -> "MODULE.PackageReport":
+        return MODULE.PackageReport(
+            MODULE.Upgrade(package, "1.2.3", "", intent="auto-assess"),
+            f"https://www.npmjs.com/package/{package}",
+            analysis_mode="auto-assess",
+        )
+
+    def provenance_project(self, root: Path, manifest: dict[str, object], lock: dict[str, object]) -> None:
+        (root / "package.json").write_text(json.dumps(manifest), encoding="utf-8")
+        (root / "package-lock.json").write_text(json.dumps(lock), encoding="utf-8")
+
+    def test_provenance_separates_direct_both_transitive_and_phantom(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            self.provenance_project(
+                root,
+                {"dependencies": {"declared-only": "^1.0.0", "shared": "^2.0.0", "parent-a": "^3.0.0"}},
+                {
+                    "lockfileVersion": 3,
+                    "packages": {
+                        "": {"dependencies": {"declared-only": "^1.0.0", "shared": "^2.0.0", "parent-a": "^3.0.0"}},
+                        "node_modules/declared-only": {"version": "1.0.0"},
+                        "node_modules/shared": {"version": "2.1.0"},
+                        "node_modules/parent-a": {"version": "3.4.0", "dependencies": {"shared": "^2.0.0", "buried": "~4.1.0"}},
+                        "node_modules/buried": {"version": "4.1.2"},
+                        "node_modules/ghost": {"version": "5.0.0"},
+                    },
+                },
+            )
+            (root / "src").mkdir()
+            (root / "src" / "app.js").write_text("import ghost from 'ghost';\nghost();\n", encoding="utf-8")
+            args = MODULE.parse_args([
+                str(root), "--offline",
+                "--assess", "declared-only", "--assess", "shared",
+                "--assess", "buried", "--assess", "ghost",
+            ])
+            bundle = MODULE.build_bundle(args)
+            kinds = {report.upgrade.package: report.provenance.kind for report in bundle.reports}
+            self.assertEqual(kinds, {
+                "declared-only": "direct", "shared": "both",
+                "buried": "transitive", "ghost": "phantom",
+            })
+            tracks = {report.upgrade.package: report.primary_track for report in bundle.reports}
+            self.assertEqual(tracks["buried"], "handle-parent")
+            self.assertEqual(tracks["ghost"], "fix-phantom")
+            buried = next(report for report in bundle.reports if report.upgrade.package == "buried")
+            self.assertEqual([edge.package for edge in buried.provenance.parents], ["parent-a"])
+            self.assertEqual(buried.provenance.chains, ["parent-a → buried"])
+            ghost = next(report for report in bundle.reports if report.upgrade.package == "ghost")
+            self.assertTrue(any("tsconfig paths" in item for item in ghost.provenance.unknowns))
+
+    def test_pnpm_and_yarn_locks_also_yield_parent_edges(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            pnpm = root / "pnpm-lock.yaml"
+            pnpm.write_text(
+                "lockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    dependencies:\n"
+                "      parent-a:\n        specifier: ^3.0.0\n        version: 3.4.0\n\n"
+                "snapshots:\n\n  parent-a@3.4.0:\n    dependencies:\n      buried: 4.1.2\n\n"
+                "  buried@4.1.2: {}\n",
+                encoding="utf-8",
+            )
+            yarn = root / "yarn.lock"
+            yarn.write_text(
+                '# yarn lockfile v1\n\n\nparent-a@^3.0.0:\n  version "3.4.0"\n'
+                '  dependencies:\n    buried "~4.1.0"\n\n'
+                'buried@~4.1.0:\n  version "4.1.2"\n',
+                encoding="utf-8",
+            )
+            for lock, requirement in ((pnpm, "4.1.2"), (yarn, "~4.1.0")):
+                graph = MODULE.build_dependency_graph(lock, ["parent-a"])
+                edges = graph.parents_of("buried")
+                self.assertTrue(graph.supported, lock.name)
+                self.assertEqual([(edge.parent, edge.parent_version, edge.requirement) for edge in edges],
+                                 [("parent-a", "3.4.0", requirement)], lock.name)
+                self.assertEqual(graph.paths_to("buried"), ([["parent-a", "buried"]], 1), lock.name)
+
+    def test_missing_lock_leaves_parent_chains_unavailable(self) -> None:
+        graph = MODULE.build_dependency_graph(None, ["declared"])
+        self.assertFalse(graph.supported)
+        report = self.open_target_report("buried")
+        provenance = MODULE.assess_provenance(report, MODULE.ManifestSnapshot(), graph, [], set())
+        self.assertEqual(provenance.kind, "unknown")
+        self.assertTrue(any("未能解析依赖边" in item for item in provenance.unknowns))
+
+    def test_phantom_detection_degrades_for_node_builtin_names(self) -> None:
+        report = self.open_target_report("path")
+        graph = MODULE.DependencyGraph(supported=True)
+        point = MODULE.CodeModificationPoint(
+            "path", "src/app.ts", 1, "Direct package usage", "import path from 'path'", "", "", "", "P1", "high",
+        )
+        provenance = MODULE.assess_provenance(report, MODULE.ManifestSnapshot(), graph, [point], set())
+        self.assertEqual(provenance.kind, "unknown")
+        self.assertTrue(any("Node 内置模块" in item for item in provenance.unknowns))
+
+    def test_transitive_question_offers_parents_override_and_feature_removal(self) -> None:
+        report = self.open_target_report("buried")
+        report.provenance = MODULE.ProvenanceAssessment(
+            kind="transitive",
+            parents=[
+                MODULE.ParentEdge("parent-a", "3.4.0", "~4.1.0", latest_stable="4.0.0", fix_available="dropped"),
+                MODULE.ParentEdge("parent-b", "1.0.0", "^4.0.0"),
+            ],
+            chains=["parent-a → buried"],
+            override_version="4.3.0",
+        )
+        MODULE.assign_primary_track(report)
+        question = MODULE.build_confirmation_question(report)
+        followups = MODULE.build_parent_followups(report)
+        self.assertEqual(report.primary_track, "handle-parent")
+        self.assertEqual(
+            [option.option_id for option in question.options],
+            ["handle-parent", "pin-override:buried@4.3.0", "remove-feature"],
+        )
+        self.assertIn("parent-a", question.options[0].detail)
+        self.assertEqual([item.package for item in followups], ["buried<-parent-a", "buried<-parent-b"])
+        self.assertEqual(followups[0].options[0].option_id, "parent-upgrade:parent-a@4.0.0")
+
+    def test_transitive_without_parents_is_blocked_rather_than_asked(self) -> None:
+        report = self.open_target_report("buried")
+        report.provenance = MODULE.ProvenanceAssessment(kind="transitive")
+        MODULE.assign_primary_track(report)
+        question = MODULE.build_confirmation_question(report)
+        self.assertEqual(question.status, "blocked")
+        self.assertIn("未解析出父包", question.blocked_reason)
+        self.assertTrue(question.prerequisites)
+
+    def test_both_removal_says_the_package_stays_as_a_transitive_dependency(self) -> None:
+        report = self.open_target_report("shared")
+        report.removal.status = "safe_removal_candidate"
+        report.provenance = MODULE.ProvenanceAssessment(
+            kind="both",
+            parents=[MODULE.ParentEdge("parent-a", "3.4.0", "^2.0.0")],
+            chains=["parent-a → shared"],
+        )
+        MODULE.assign_primary_track(report)
+        question = MODULE.build_confirmation_question(report)
+        self.assertEqual(report.primary_track, "remove")
+        self.assertIn("handle-parent", report.alternate_tracks)
+        self.assertIn("仍将作为传递依赖存在", question.options[0].label)
+        self.assertIn("switch:handle-parent", [option.option_id for option in question.options])
+
+    def test_override_version_is_the_lowest_that_satisfies_every_parent(self) -> None:
+        report = self.open_target_report("buried")
+        report.provenance = MODULE.ProvenanceAssessment(
+            kind="transitive",
+            parents=[
+                MODULE.ParentEdge("parent-a", "3.4.0", ">=4.1.0"),
+                MODULE.ParentEdge("parent-b", "1.0.0", "^4.0.0"),
+            ],
+        )
+        registry = {"versions": {
+            "4.0.9": {}, "4.1.0": {"engines": {"node": ">=22"}}, "4.2.0": {}, "5.0.0": {},
+        }}
+        args = MODULE.parse_args([".", "--assess", "buried", "--no-upstream-evidence"])
+        with unittest.mock.patch.object(MODULE, "request_json", return_value=registry):
+            MODULE.resolve_override_version(report, "20.11.1", args)
+        self.assertEqual(report.provenance.override_version, "4.2.0")
+        self.assertEqual(report.provenance.override_breaks, [])
+
+    def test_override_names_the_parent_ranges_it_breaks(self) -> None:
+        report = self.open_target_report("buried")
+        report.provenance = MODULE.ProvenanceAssessment(
+            kind="transitive",
+            parents=[
+                MODULE.ParentEdge("parent-a", "3.4.0", "^4.0.0"),
+                MODULE.ParentEdge("parent-b", "1.0.0", "^5.0.0"),
+            ],
+        )
+        registry = {"versions": {"4.2.0": {}, "5.0.0": {}}}
+        args = MODULE.parse_args([".", "--assess", "buried", "--no-upstream-evidence"])
+        with unittest.mock.patch.object(MODULE, "request_json", return_value=registry):
+            MODULE.resolve_override_version(report, "", args)
+        self.assertEqual(report.provenance.override_version, "4.2.0")
+        self.assertEqual(report.provenance.override_breaks, ["parent-b@1.0.0 要求 ^5.0.0"])
+
+    def test_parent_fix_flags_parents_that_no_longer_depend_on_the_package(self) -> None:
+        report = self.open_target_report("buried")
+        report.provenance = MODULE.ProvenanceAssessment(
+            kind="transitive",
+            parents=[MODULE.ParentEdge("parent-a", "3.4.0", "~4.1.0")],
+        )
+        args = MODULE.parse_args([".", "--assess", "buried", "--no-upstream-evidence"])
+        with unittest.mock.patch.object(
+            MODULE, "request_json",
+            return_value={"versions": {"4.0.0": {"dependencies": {}}}, "dist-tags": {"latest": "4.0.0"}},
+        ):
+            MODULE.flag_parent_fix_availability(report, args)
+        edge = report.provenance.parents[0]
+        self.assertEqual(edge.fix_available, "dropped")
+        self.assertEqual(edge.latest_stable, "4.0.0")
+
+    def test_zero_hit_scan_waits_for_removal_evidence_instead_of_asking(self) -> None:
+        report = self.open_target_report()
+        report.removal.status = "uncertain"
+        report.removal.coverage_checked = ["runtime"]
+        MODULE.assign_primary_track(report)
+        question = MODULE.build_confirmation_question(report)
+        self.assertEqual(report.primary_track, "pending-removal-evidence")
+        self.assertEqual(question.status, "blocked")
+        self.assertEqual(question.options, [])
+        self.assertTrue(any("动态" in item for item in question.prerequisites))
+
+    def test_track_routes_to_replace_when_a_package_version_exists(self) -> None:
+        report = self.open_target_report()
+        report.removal.status = "requires_migration"
+        report.alternative_candidates = [MODULE.AlternativeCandidate("ky", "1.9.0", compliance_status="eligible")]
+        report.refactor_plan = MODULE.build_refactor_plan(report, [
+            MODULE.CodeModificationPoint("legacy", "src/app.ts", 1, "Direct package usage", "", "", "", "", "P1", "high"),
+        ])
+        MODULE.assign_primary_track(report)
+        question = MODULE.build_confirmation_question(report)
+        self.assertEqual(report.primary_track, "replace")
+        self.assertEqual(sorted(report.alternate_tracks), ["native-refactor", "remove"])
+        ids = [option.option_id for option in question.options]
+        self.assertEqual(ids[0], "replace:ky@1.9.0")
+        self.assertEqual(ids[-1], "other")
+        self.assertIn("switch:native-refactor", ids)
+        self.assertFalse(any(option_id.startswith("same-package:") for option_id in ids))
+
+    def test_track_falls_back_to_native_refactor_without_package_options(self) -> None:
+        report = self.open_target_report()
+        report.removal.status = "not_viable"
+        report.refactor_plan = MODULE.build_refactor_plan(report, [
+            MODULE.CodeModificationPoint("legacy", "src/app.ts", 4, "Direct package usage", "legacy()", "", "", "", "P1", "high"),
+        ])
+        MODULE.assign_primary_track(report)
+        question = MODULE.build_confirmation_question(report)
+        self.assertEqual(report.primary_track, "native-refactor")
+        self.assertEqual(question.status, "ready")
+        self.assertEqual(
+            [option.option_id for option in question.options],
+            ["native-refactor", "isolate-behind-wrapper", "internal-fork", "remove-feature", "other"],
+        )
+
+    def test_refactor_plan_grades_scale_and_lists_every_call_site(self) -> None:
+        report = self.open_target_report()
+        report.upgrade.dependency_type = "request"
+        points = [
+            MODULE.CodeModificationPoint("legacy", f"src/services/api{index}.ts", index, "Axios client API", "legacy.get()", "", "", "", "P1", "high")
+            for index in range(1, 8)
+        ]
+        plan = MODULE.build_refactor_plan(report, points)
+        self.assertEqual(len(plan.actions), 7)
+        self.assertIn("超时", " ".join(plan.parity_checks))
+        self.assertEqual(plan.scale, "M")
+        self.assertIn("调用点 7 个、文件 7 个、跨公共包装器", plan.scale_basis)
+        self.assertTrue(any("公共包装器" in item for item in plan.impact_surface))
+
+    def test_unestablished_plan_reports_no_scale_and_no_call_site_table(self) -> None:
+        report = self.open_target_report()
+        plan = MODULE.build_refactor_plan(report, [
+            MODULE.CodeModificationPoint("legacy", "package.json", 1, MODULE.DECLARATION_CATEGORY, "", "", "", "", "P2", "high"),
+        ])
+        self.assertEqual(plan.status, "needs-research")
+        self.assertEqual(plan.scale, "")
+        self.assertEqual(plan.actions, [])
+        self.assertEqual(plan.parity_checks, [])
+
+    def test_refactor_scale_uses_fixed_thresholds(self) -> None:
+        self.assertEqual(MODULE.refactor_scale(1, 3, False)[0], "S")
+        self.assertEqual(MODULE.refactor_scale(1, 3, True)[0], "M")
+        self.assertEqual(MODULE.refactor_scale(11, 3, False)[0], "L")
+        self.assertEqual(MODULE.refactor_scale(2, 31, False)[0], "L")
+
+    def test_confirmation_queue_is_rendered_with_ids_and_decision_path(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "package.json").write_text(json.dumps({"dependencies": {"axios": "^1.0.0"}}), encoding="utf-8")
+            (root / "src").mkdir()
+            (root / "src" / "api.ts").write_text("import axios from 'axios';\naxios.get('/x');\n", encoding="utf-8")
+            args = MODULE.parse_args([str(root), "--assess", "axios", "--offline"])
+            bundle = MODULE.build_bundle(args)
+            markdown = MODULE.markdown_report(bundle)
+            self.assertIn("<!-- section: Human Confirmation Queue -->", markdown)
+            self.assertIn("人工确认队列", markdown)
+            self.assertIn("| other |", markdown)
+            self.assertIn("human-decisions.json", markdown)
+            self.assertEqual(MODULE.validate_report_contract(markdown), [])
+
+    def test_recorded_decision_stops_the_question_and_is_not_an_approval(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "package.json").write_text(json.dumps({"dependencies": {"axios": "^1.0.0"}}), encoding="utf-8")
+            (root / "src").mkdir()
+            (root / "src" / "api.ts").write_text("import axios from 'axios';\naxios.get('/x');\n", encoding="utf-8")
+            decisions = root / "chosen.json"
+            decisions.write_text(json.dumps({"decisions": [{
+                "package": "axios", "track": "native-refactor", "choice": "native-refactor",
+                "rationale": "无合规替代", "decided_at": "2026-07-25T22:00:00+08:00",
+            }]}), encoding="utf-8")
+            args = MODULE.parse_args([str(root), "--assess", "axios", "--offline", "--decision-file", str(decisions)])
+            bundle = MODULE.build_bundle(args)
+            report = bundle.reports[0]
+            self.assertEqual(report.decision.status, "confirmed")
+            self.assertEqual(report.confirmation.status, "decided")
+            self.assertEqual(report.selection_status, "selected")
+            self.assertEqual(report.recommended_action, "awaiting-implementation-approval")
+            markdown = MODULE.markdown_report(bundle)
+            self.assertIn("人工决策记录", markdown)
+            self.assertIn("记录选型不等于实施授权", markdown)
+
+    def test_invalidated_decision_is_asked_again_with_the_reason(self) -> None:
+        report = self.open_target_report()
+        report.removal.status = "requires_migration"
+        report.alternative_candidates = [MODULE.AlternativeCandidate(
+            package="ky", version="1.14.3", rationale="", deprecated="已弃用",
+        )]
+        MODULE.assign_primary_track(report)
+        report.confirmation = MODULE.build_confirmation_question(report)
+        decision = MODULE.HumanDecision(
+            package="legacy", track="replace", choice="replace:ky@1.14.3",
+            selected_package="ky", selected_version="1.14.3",
+        )
+        MODULE.apply_decisions([report], [decision])
+        self.assertEqual(decision.status, "invalidated")
+        self.assertIn("弃用", decision.invalidation_reason)
+        self.assertNotEqual(report.confirmation.status, "decided")
+        self.assertTrue(report.confirmation.prompt.startswith("（原选择已失效"))
+
+    def test_alternative_offers_up_to_three_exact_versions(self) -> None:
+        metadata = {
+            "versions": {
+                "0.9.0": {}, "1.14.3": {}, "2.0.0-beta.1": {}, "2.0.2": {},
+            },
+        }
+        self.assertEqual(MODULE.previous_major_stable(metadata, "2.0.2"), "1.14.3")
+        self.assertEqual(MODULE.previous_major_stable(metadata, "0.9.0"), "")
+        candidate = MODULE.AlternativeCandidate(
+            package="ky", version="2.0.2", rationale="",
+            fallback_version="1.14.3", conservative_version="1.14.3",
+        )
+        self.assertEqual(MODULE.alternative_version_options(candidate), "1.14.3（兼容项目 Node）")
+        candidate.fallback_version = ""
+        self.assertEqual(MODULE.alternative_version_options(candidate), "1.14.3（上一个大版本，保守）")
+
+    def test_switch_answers_are_rejected_as_final_decisions(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw) / "chosen.json"
+            path.write_text(json.dumps({"decisions": [
+                {"package": "axios", "choice": "switch:remove"},
+            ]}), encoding="utf-8")
+            decisions, warnings = MODULE.load_decision_record(path)
+            self.assertEqual(decisions, [])
+            self.assertTrue(any("不是最终选择" in item for item in warnings))
+
+    def test_truncated_cell_stays_on_one_markdown_row(self) -> None:
+        row = "| " + " | ".join(MODULE.md_cell(value) for value in ("a" * 900, "b", "c")) + " |"
+        self.assertNotIn("\n", row)
+        self.assertEqual(len(MODULE.split_markdown_row(row)), 3)
+
+    def test_offline_assess_renders_alternatives_and_disposition_menu(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "src").mkdir()
+            (root / "src" / "request.ts").write_text("import axios from 'axios';", encoding="utf-8")
+            (root / "package.json").write_text(json.dumps({"dependencies": {"axios": "1.6.8"}}), encoding="utf-8")
+            args = MODULE.parse_args([
+                str(root), "--assess", "axios", "--offline", "--output-dir", str(root / "out"),
+            ])
+            with (
+                patch.object(MODULE, "current_host_node_runtime", return_value=("20.18.0", "C:/node/node.exe")),
+                patch.object(MODULE, "detect_node_managers", return_value=([], {})),
+            ):
+                markdown = MODULE.markdown_report(MODULE.build_bundle(args))
+            self.assertEqual(MODULE.validate_report_contract(markdown), [])
+            self.assertIn("#### 替代库候选", markdown)
+            self.assertIn("#### 处置方案选项", markdown)
+            self.assertIn("| 1 | ky | 待解析 | - | curated-map |", markdown)
+            self.assertIn("#### 原生重构方向", markdown)
+            self.assertIn("#### 替代方案调研任务", markdown)
+            for option, _title, _applicability, _evidence in MODULE.DISPOSITION_OPTIONS:
+                self.assertIn(f"| {option} |", markdown)
 
     def test_current_lock_equal_to_target_is_not_inferred_as_from(self) -> None:
         upgrade = MODULE.Upgrade("axios", "", "1.7.9")
@@ -1319,24 +2003,19 @@ packages:
             self.assertEqual(output, (root / "dependency-upgrade-report").resolve())
             self.assertIn("回退", note)
 
-    def test_behavior_parity_prefers_same_package_over_removal(self) -> None:
+    def test_behavior_parity_constrains_every_route_without_picking_one(self) -> None:
         report = MODULE.PackageReport(
             MODULE.Upgrade("legacy", "1.2.3", "", intent="auto-assess"),
             "https://www.npmjs.com/package/legacy",
             analysis_mode="auto-assess",
             recommended_action="review-removal",
-            target_candidates=[MODULE.TargetCandidate(
-                "legacy", "1.3.0", "same-major-latest",
-                compliance_status="eligible",
-                criteria_checked=["security", "license"],
-                evidence_urls=["https://example.invalid/release"],
-            )],
         )
         MODULE.apply_behavior_parity(report)
-        self.assertEqual(report.recommended_action, "prefer-same-package-upgrade")
+        self.assertEqual(report.recommended_action, "review-removal")
         self.assertEqual(report.decision_status, "needs_choice")
         self.assertEqual(report.selection_status, "needs_explicit_choice")
         self.assertTrue(any("行为守恒" in item for item in report.decision_required))
+        self.assertTrue(any("同库升级不作为本轮选项" in item for item in report.constraints))
 
     def test_exact_target_behavior_constraint_does_not_create_false_decision(self) -> None:
         report = MODULE.PackageReport(
@@ -1392,7 +2071,8 @@ packages:
             evidence = MODULE.load_analysis_evidence(evidence_path)
             MODULE.apply_analysis_evidence([report], evidence)
             MODULE.reconcile_open_target_report(report)
-            self.assertEqual(report.target_candidates[0].compliance_status, "eligible")
+            self.assertEqual(report.target_candidates, [])
+            self.assertTrue(any("已忽略 legacy.target_candidates" in item for item in report.warnings))
             self.assertEqual(report.alternative_candidates[0].package, "replacement")
             self.assertEqual(report.removal.status, "requires_migration")
             self.assertEqual(report.selection_status, "needs_explicit_choice")

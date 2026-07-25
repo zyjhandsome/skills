@@ -60,15 +60,16 @@ Read `references/node-runtime-compatibility.md` before determining runtime readi
 
 Preserve observable behavior unless the user explicitly allows behavior change, deletion, or replacement:
 
-- prefer a same-package exact upgrade;
+- every route an open target can take must keep observable behavior identical; parity is a constraint on all of them, not a preference for one;
 - allow only necessary API/config adaptations for the chosen target;
-- keep deletion/replacement as `needs_explicit_choice`;
+- keep deletion/replacement/rewrite/parent handling as `needs_explicit_choice`;
 - exclude drive-by business/UI refactors and backend contract changes.
 
 Modes:
 
 - **Exact upgrade:** analyze the confirmed `from → to` interval.
-- **Open target:** assess evidence in order `remove → same-package candidates → alternatives → retain/exempt/isolate/fork/remove feature`.
+- **Open target:** a listed package has to go, so the only routes are remove, replace, native rewrite, or handling the parent that pulls it in. **A same-package upgrade is never offered** — the version number moving forward does not resolve whatever put the package on the list; pass an exact target version if an upgrade is what you want. "Keep it" and "time-boxed exemption" are not offered either. Triage into one `primary_track` by asking, in order, *where does it come from → is it actually used → is there a package to switch to → otherwise rewrite it in first-party code*: `handle-parent` / `fix-phantom` / `pending-removal-evidence` / `remove` / `replace` / `native-refactor`. Alternate tracks stay visible and the human can switch tracks.
+- **Provenance:** classify every package as `direct` / `both` / `phantom` / `transitive` / `unknown` from the manifest, the lock's dependency edges, and real call sites. Provenance decides which routes exist at all: an undeclared package has no declaration to drop, and one nobody calls cannot be rewritten. Transitive packages get parent chains, per-parent ranges, whether each parent's newest stable already dropped the dependency, and the lowest override version that satisfies every parent.
 - **Removal:** inspect direct, indirect, dynamic, tooling, peer, and transitive use. Zero static hits do not prove safe removal.
 - **Compliance/replacement:** verify the stated concern, then compare bounded exact candidates.
 
@@ -87,10 +88,12 @@ Read `references/target-discovery-and-removal.md` whenever `to` is absent or rem
 6. Collect official release, changelog, migration, peer/engine, security, support, and license evidence with direct URLs.
 7. Map imports/configuration first. Prefer a code knowledge graph; otherwise use bounded static search. Trace wrappers and callers to pages, routes, workflows, and tests.
 8. Produce modification candidates with file, line, current usage, upstream reason, recommendation, validation, priority, and confidence.
-9. For open targets, assess removal before comparing 1–3 same-package versions; research 2–3 alternatives only when same-package options are not viable or replacement is explicitly requested.
-10. Record reviewed candidate/removal/runtime facts using `references/analysis-evidence-schema.md` and import them with `--analysis-evidence-file`.
+9. For open targets, classify provenance, assess removal, list replacement packages with exact registry-resolved versions ranked by machine-checkable signals only, give a scan-driven native refactor direction as the fallback when no package fits, resolve parent chains and the lowest viable override for transitive packages, and render the full disposition menu. Curated replacement leads are `curated-map`/`unknown` evidence and never change the recommendation; only reviewed `analysis-evidence` candidates can. Every open target must end with at least one actionable option — removal, a replacement package, an established refactor plan, or parent handling; `option_status=missing` blocks `complete`.
+10. When the curated map has no entry, the emitted research checklist is mandatory work, not a suggestion: research candidates against the listed criteria (never download counts) and write the verdict back through `--analysis-evidence-file` per `references/analysis-evidence-schema.md`, alongside reviewed removal/runtime facts.
 11. Score the seven factors in `references/risk-model.md`, then derive regression scope, rollout controls, monitoring, and rollback triggers.
 12. Generate and validate the Markdown report. Review every incomplete or heuristic section before delivery.
+13. Work the confirmation queue: ask the generated question for one package at a time, verbatim, with its options and the trailing `other`. Never ask `blocked` packages — clear their prerequisites and regenerate first. A `switch:<track>` answer means asking that track's question next, not a decision. On the `handle-parent` track, ask the follow-up parent questions only after the human picks `handle-parent`.
+14. Record each final answer in the decision file per `references/decision-record-schema.md`, then regenerate. Confirmed packages are not asked again unless the evidence invalidated them. Recording a selection is not implementation approval.
 
 Read `references/impact-analysis-method.md` for evidence priority, impact-chain mapping, and stopping conditions. Read only the relevant family in `references/package-categories.md`.
 
@@ -182,6 +185,7 @@ Before marking the analysis complete, verify:
 - `references/impact-analysis-method.md` — evidence sequence, impact mapping, completeness.
 - `references/target-discovery-and-removal.md` — open targets, behavior posture, removal, alternatives.
 - `references/analysis-evidence-schema.md` — reviewed JSON evidence contract.
+- `references/decision-record-schema.md` — human selection record, revalidation on re-runs.
 - `references/lockfile-and-evidence.md` — baselines, lockfiles, monorepo/version identity.
 - `references/node-runtime-compatibility.md` — Node constraint precedence, isolated execution, manager adapters, installation and restoration gates.
 - `references/risk-model.md` — seven-factor scoring and validation depth.
