@@ -46,7 +46,7 @@ No new runtime dependencies. Do not split `generate_upgrade_report.py` in this p
 
 Root cause: `version_satisfies_all(version, [])` returns `True`, so the host Node enters `compatible_installed_versions` and becomes `selected_project_node` even after status is set to `unknown`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `UpgradeReportTests` in `tests/test_generate_upgrade_report.py`:
 
@@ -68,7 +68,7 @@ def test_node_runtime_unknown_without_constraints_does_not_select_host(self) -> 
         self.assertTrue(any("未发现权威项目 Node 约束" in warning for warning in runtime.warnings))
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run:
 
@@ -85,7 +85,7 @@ python -m unittest tests.test_generate_upgrade_report.UpgradeReportTests.test_no
 
 Expected: FAIL — `selected_project_node` is currently `"26.5.0"` (or similar host) and/or `compatible_installed_versions` is non-empty.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 In `assess_node_runtime`, after the branch that sets `status = "unknown"` when `not assessment.project_constraints`, skip host-driven selection. Concrete change pattern:
 
@@ -122,7 +122,7 @@ if assessment.status == "unknown" and not assessment.project_constraints:
         assessment.recommended_strategy = "read-only-analysis"
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 ```bash
 cd frontend-dependency-upgrade-impact-analysis
@@ -139,7 +139,7 @@ python -m unittest tests.test_generate_upgrade_report.UpgradeReportTests.test_no
 
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend-dependency-upgrade-impact-analysis/scripts/generate_upgrade_report.py frontend-dependency-upgrade-impact-analysis/tests/test_generate_upgrade_report.py
@@ -162,7 +162,7 @@ git commit -m "fix(frontend-dep-upgrade): do not select host Node when project c
   - `AnalysisBundle.importer_resolution: str` (`"confirmed"` | `"failed"`)
   - On `failed`: `analysis_status="blocked"`, `status="blocked"`, pending decision for `__frontend_workspace__`, package `change_type` not `"added"`, `recommended_action` steers to resolve workspace; `main` returns exit code `5`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 def test_resolve_frontend_workspace_fails_without_package_json(self) -> None:
@@ -207,7 +207,7 @@ def test_main_returns_5_when_frontend_workspace_missing(self) -> None:
         self.assertTrue((root / "out" / "frontend-dependency-upgrade-report.md").is_file())
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 ```bash
 cd frontend-dependency-upgrade-impact-analysis
@@ -219,7 +219,7 @@ python -m unittest \
 
 Expected: FAIL — `resolve_frontend_workspace` missing / `importer_resolution` missing.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Add near manifest helpers:
 
@@ -280,7 +280,7 @@ if bundle.importer_resolution == "failed":
 
 Place this check before or after baseline exit 3; workspace failure should win (return 5 even if baseline also unknown).
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 ```bash
 cd frontend-dependency-upgrade-impact-analysis
@@ -293,7 +293,7 @@ python tests/run_all.py
 
 Expected: new tests PASS; full suite green (fix any older tests that assumed missing package.json still yields `draft` / exit 3 only — update those assertions to `blocked` / exit 5).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend-dependency-upgrade-impact-analysis/scripts/generate_upgrade_report.py frontend-dependency-upgrade-impact-analysis/tests/test_generate_upgrade_report.py
@@ -315,7 +315,7 @@ git commit -m "feat(frontend-dep-upgrade): block analysis when frontend workspac
 - Consumes: fixture root as `project_root`
 - Produces: offline exact-upgrade bundle with `importer_resolution="confirmed"`, Node status in `{runtime-switch-required, runtime-missing, manager-missing}` (not `compatible-current` when host is patched to 26.5.0), dual-run equal key fields
 
-- [ ] **Step 1: Create fixture files**
+- [x] **Step 1: Create fixture files**
 
 `package.json`:
 
@@ -367,7 +367,7 @@ import axios from "axios";
 export const client = axios.create({ timeout: 5000 });
 ```
 
-- [ ] **Step 2: Write failing integration tests**
+- [x] **Step 2: Write failing integration tests**
 
 ```python
 FIXTURE_ROOT = Path(__file__).resolve().parents[1] / "fixtures" / "synthetic-frontend"
@@ -417,7 +417,7 @@ def test_synthetic_fixture_dual_run_is_stable(self) -> None:
     self.assertEqual(a.reports[0].baseline_status, b.reports[0].baseline_status)
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 ```bash
 cd frontend-dependency-upgrade-impact-analysis
@@ -428,7 +428,7 @@ python -m unittest \
 
 Expected: PASS if Tasks 1–2 done and fixture valid; if baseline/inference fails, fix fixture lock/`from` inference (`axios::1.7.9` should infer from lock `1.6.8`).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend-dependency-upgrade-impact-analysis/fixtures/synthetic-frontend frontend-dependency-upgrade-impact-analysis/tests/test_generate_upgrade_report.py
@@ -452,7 +452,7 @@ Add `fixtures/synthetic-frontend/.tmp-report-*` to `frontend-dependency-upgrade-
 - Consumes: behaviors from Tasks 1–2
 - Produces: docs that match CLI enums and exit code 5; SKILL still < 200 lines
 
-- [ ] **Step 1: Patch SKILL.md workflow**
+- [x] **Step 1: Patch SKILL.md workflow**
 
 In **Resolve scope and baseline**, after frontend workspace bullets, add an explicit CLI precondition:
 
@@ -468,7 +468,7 @@ In **Node runtime compatibility gate**, add:
 
 Renumber carefully; keep total lines < 200 (trim elsewhere if needed — prefer shortening examples over deleting gates).
 
-- [ ] **Step 2: Patch references**
+- [x] **Step 2: Patch references**
 
 `node-runtime-compatibility.md` §2 after the `unknown` bullet:
 
@@ -485,7 +485,7 @@ Renumber carefully; keep total lines < 200 (trim elsewhere if needed — prefer 
 
 `lockfile-and-evidence.md`: note that missing frontend `package.json` is a workspace/importer blocker equivalent in severity to unknown baseline for implementation gating.
 
-- [ ] **Step 3: Run structure tests**
+- [x] **Step 3: Run structure tests**
 
 ```bash
 cd frontend-dependency-upgrade-impact-analysis
@@ -495,7 +495,7 @@ python tests/run_all.py
 
 Expected: PASS; SKILL line count still < 200.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend-dependency-upgrade-impact-analysis/SKILL.md frontend-dependency-upgrade-impact-analysis/references/node-runtime-compatibility.md frontend-dependency-upgrade-impact-analysis/references/report-contract.md frontend-dependency-upgrade-impact-analysis/references/lockfile-and-evidence.md
@@ -514,7 +514,7 @@ git commit -m "docs(frontend-dep-upgrade): align skill and refs with workspace a
 - Consumes: hardened generator + fixture
 - Produces: findings matrix with D1–D10 scores; VoiceInk command transcript summary
 
-- [ ] **Step 1: Run full unit suite (L0)**
+- [x] **Step 1: Run full unit suite (L0)**
 
 ```bash
 cd frontend-dependency-upgrade-impact-analysis
@@ -523,7 +523,7 @@ python tests/run_all.py
 
 Expected: OK (all tests).
 
-- [ ] **Step 2: L1 offline report smoke (optional manual)**
+- [x] **Step 2: L1 offline report smoke (optional manual)**
 
 ```bash
 cd frontend-dependency-upgrade-impact-analysis
@@ -535,7 +535,7 @@ python scripts/generate_upgrade_report.py fixtures/synthetic-frontend \
 
 Expected: `importer_resolution=confirmed` in report; Node status not `compatible-current` on host 26.5 if pin is 20.x; `.nvmrc` unchanged.
 
-- [ ] **Step 3: L2 VoiceInk negative control**
+- [x] **Step 3: L2 VoiceInk negative control**
 
 ```bash
 python scripts/generate_upgrade_report.py "D:\Hzhao\AI_Test\VoiceInk-main" \
@@ -553,7 +553,7 @@ Expected:
 - No recommendation to `npm install` VoiceInk
 - Do not modify any file under `D:\Hzhao\AI_Test\VoiceInk-main`
 
-- [ ] **Step 4: Write findings doc**
+- [x] **Step 4: Write findings doc**
 
 Create `docs/superpowers/specs/2026-07-25-frontend-dep-upgrade-eval-findings.md` with a short table:
 
@@ -567,7 +567,7 @@ Create `docs/superpowers/specs/2026-07-25-frontend-dep-upgrade-eval-findings.md`
 
 List P0 items closed vs P1 backlog (multi-workspace auto-discovery, richer seven-factor explainability).
 
-- [ ] **Step 5: Commit findings**
+- [x] **Step 5: Commit findings**
 
 ```bash
 git add docs/superpowers/specs/2026-07-25-frontend-dep-upgrade-eval-findings.md
