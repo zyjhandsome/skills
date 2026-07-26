@@ -44,6 +44,73 @@ class UpgradeReportTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             MODULE.parse_upgrade_spec("axios:0.27.2:")
 
+    def test_exact_direct_upgrade_emits_commands_and_requires_full_lock_convergence(self) -> None:
+        report = MODULE.PackageReport(
+            MODULE.Upgrade("axios", "1.6.8", "1.7.9", intent="exact-upgrade"),
+            "https://www.npmjs.com/package/axios",
+            analysis_mode="exact-upgrade",
+            manifest_field="dependencies",
+            lock_kind="npm",
+            peer_compatibility_status="not-applicable",
+            after_lock_versions=["1.7.9"],
+            provenance=MODULE.ProvenanceAssessment(kind="direct"),
+        )
+        runtime = MODULE.NodeRuntimeAssessment(status="compatible-current")
+        MODULE.finalize_exact_upgrade_report(report, runtime)
+        self.assertEqual(report.exact_upgrade_status, "ready")
+        self.assertEqual(report.target_convergence_status, "confirmed")
+        self.assertEqual(report.recommended_action, "upgrade-to-exact-target")
+        self.assertIn("npm install axios@1.7.9", report.implementation_commands)
+        self.assertIn("npm ls axios --all", report.implementation_commands)
+
+    def test_exact_upgrade_is_blocked_when_any_lock_instance_remains_old(self) -> None:
+        report = MODULE.PackageReport(
+            MODULE.Upgrade("axios", "1.6.8", "1.7.9", intent="exact-upgrade"),
+            "https://www.npmjs.com/package/axios",
+            analysis_mode="exact-upgrade",
+            manifest_field="dependencies",
+            lock_kind="npm",
+            peer_compatibility_status="not-applicable",
+            after_lock_versions=["1.7.9", "0.27.2"],
+            provenance=MODULE.ProvenanceAssessment(kind="both"),
+        )
+        MODULE.finalize_exact_upgrade_report(
+            report, MODULE.NodeRuntimeAssessment(status="compatible-current"),
+        )
+        self.assertEqual(report.exact_upgrade_status, "blocked")
+        self.assertEqual(report.residual_lock_versions, ["0.27.2"])
+        self.assertTrue(any("残留" in item for item in report.implementation_blockers))
+
+    def test_exact_transitive_upgrade_uses_override_only_when_parent_ranges_accept_target(self) -> None:
+        compatible = MODULE.PackageReport(
+            MODULE.Upgrade("buried", "4.1.0", "4.3.0", intent="exact-upgrade"),
+            "https://www.npmjs.com/package/buried",
+            analysis_mode="exact-upgrade",
+            lock_kind="pnpm",
+            peer_compatibility_status="not-applicable",
+            provenance=MODULE.ProvenanceAssessment(
+                kind="transitive",
+                parents=[MODULE.ParentEdge("parent-a", "2.0.0", "^4.0.0")],
+            ),
+        )
+        runtime = MODULE.NodeRuntimeAssessment(status="compatible-current")
+        MODULE.finalize_exact_upgrade_report(compatible, runtime)
+        self.assertEqual(compatible.exact_upgrade_status, "ready")
+        self.assertTrue(any("pnpm.overrides.buried=4.3.0" in item for item in compatible.implementation_commands))
+
+        incompatible = MODULE.PackageReport(
+            MODULE.Upgrade("buried", "4.1.0", "5.0.0", intent="exact-upgrade"),
+            "https://www.npmjs.com/package/buried",
+            analysis_mode="exact-upgrade",
+            lock_kind="pnpm",
+            peer_compatibility_status="not-applicable",
+            provenance=compatible.provenance,
+        )
+        MODULE.finalize_exact_upgrade_report(incompatible, runtime)
+        self.assertEqual(incompatible.exact_upgrade_status, "blocked")
+        self.assertEqual(incompatible.implementation_commands, [])
+        self.assertTrue(any("父依赖" in item for item in incompatible.implementation_blockers))
+
     def test_package_json_diff_allows_add_and_remove(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
@@ -1275,7 +1342,7 @@ packages:
         )
         report.removal.status = "requires_migration"
         MODULE.reconcile_open_target_report(report)
-        self.assertEqual(report.recommended_action, "plan-migration-before-removal")
+        self.assertEqual(report.recommended_action, "research-replacement")
         self.assertTrue(any("由人决定" in item for item in report.decision_required))
 
     def test_reviewed_alternative_can_drive_replacement_and_replaces_curated_row(self) -> None:
@@ -1293,9 +1360,10 @@ packages:
             "package": "ky",
             "version": "2.0.2",
             "compliance_status": "eligible",
-            "criteria_checked": ["security", "license"],
+            "criteria_checked": ["node", "framework", "peer", "security", "license", "maintenance"],
             "evidence_urls": ["https://example.invalid/ky"],
         }]}})
+        report.alternative_candidates[0].constraint_fit = "fits"
         MODULE.reconcile_open_target_report(report)
         self.assertEqual(
             [(item.package, item.origin) for item in report.alternative_candidates],
@@ -1314,7 +1382,7 @@ packages:
         MODULE.reconcile_open_target_report(report)
         options = {option.option: option for option in report.disposition_options}
         self.assertEqual(set(options), {row[0] for row in MODULE.DISPOSITION_OPTIONS})
-        self.assertEqual(options["replace-with-alternative"].availability, "evidence-available")
+        self.assertEqual(options["replace-with-alternative"].availability, "needs-research")
         self.assertEqual(options["native-platform-capability"].availability, "evidence-available")
         self.assertIn("fetch", options["native-platform-capability"].detail)
         self.assertEqual(options["internal-fork"].availability, "needs-research")
@@ -1345,7 +1413,7 @@ packages:
         self.assertTrue(any("不兼容" in item for item in report.alternative_candidates[0].disqualifiers))
         self.assertEqual(report.alternative_candidates[0].constraint_fit, "conflicts")
         self.assertEqual(report.alternative_candidates[1].disqualifiers, [])
-        self.assertEqual(report.alternative_candidates[1].constraint_fit, "unknown")
+        self.assertEqual(report.alternative_candidates[1].constraint_fit, "fits")
 
     def test_engines_satisfied_by_project_node_counts_as_fitting(self) -> None:
         report = MODULE.PackageReport(
@@ -1470,7 +1538,7 @@ packages:
         MODULE.reconcile_open_target_report(report)
         MODULE.rank_alternative_candidates([report])
         self.assertEqual(report.alternative_candidates[0].rank, 1)
-        self.assertEqual(report.recommended_action, "plan-migration-before-removal")
+        self.assertEqual(report.recommended_action, "research-replacement")
 
     def test_refactor_plan_is_built_from_real_call_sites(self) -> None:
         report = MODULE.PackageReport(
@@ -1751,7 +1819,11 @@ packages:
     def test_track_routes_to_replace_when_a_package_version_exists(self) -> None:
         report = self.open_target_report()
         report.removal.status = "requires_migration"
-        report.alternative_candidates = [MODULE.AlternativeCandidate("ky", "1.9.0", compliance_status="eligible")]
+        report.alternative_candidates = [MODULE.AlternativeCandidate(
+            "ky", "1.9.0", compliance_status="eligible", constraint_fit="fits",
+            criteria_checked=["node", "framework", "peer", "security", "license", "maintenance"],
+            evidence_urls=["https://example.invalid/ky"],
+        )]
         report.refactor_plan = MODULE.build_refactor_plan(report, [
             MODULE.CodeModificationPoint("legacy", "src/app.ts", 1, "Direct package usage", "", "", "", "", "P1", "high"),
         ])
@@ -1777,8 +1849,23 @@ packages:
         self.assertEqual(question.status, "ready")
         self.assertEqual(
             [option.option_id for option in question.options],
-            ["native-refactor", "isolate-behind-wrapper", "internal-fork", "remove-feature", "other"],
+            ["native-refactor", "reject-native-refactor"],
         )
+
+    def test_rejecting_native_refactor_marks_remediation_blocked(self) -> None:
+        report = self.open_target_report()
+        report.primary_track = "native-refactor"
+        report.refactor_plan.status = "established"
+        report.confirmation = MODULE.build_confirmation_question(report)
+        decision = MODULE.HumanDecision(
+            package="legacy",
+            track="native-refactor",
+            choice="reject-native-refactor",
+        )
+        MODULE.apply_decisions([report], [decision])
+        self.assertEqual(report.recommended_action, "remediation-blocked")
+        self.assertEqual(report.selection_status, "not_applicable")
+        self.assertTrue(report.implementation_blockers)
 
     def test_refactor_plan_grades_scale_and_lists_every_call_site(self) -> None:
         report = self.open_target_report()
@@ -1824,7 +1911,7 @@ packages:
             markdown = MODULE.markdown_report(bundle)
             self.assertIn("<!-- section: Human Confirmation Queue -->", markdown)
             self.assertIn("人工确认队列", markdown)
-            self.assertIn("| other |", markdown)
+            self.assertIn("| reject-native-refactor |", markdown)
             self.assertIn("human-decisions.json", markdown)
             self.assertEqual(MODULE.validate_report_contract(markdown), [])
 
@@ -2061,14 +2148,14 @@ packages:
                         "target_candidates": [{
                             "version": "1.3.0",
                             "compliance_status": "eligible",
-                            "criteria_checked": ["security", "license", "maintenance"],
+                            "criteria_checked": ["node", "framework", "peer", "security", "license", "maintenance"],
                             "evidence_urls": ["https://example.invalid/legacy-release"],
                         }],
                         "alternative_candidates": [{
                             "package": "replacement",
                             "version": "2.0.0",
                             "compliance_status": "eligible",
-                            "criteria_checked": ["security", "license", "maintenance"],
+                            "criteria_checked": ["node", "framework", "peer", "security", "license", "maintenance"],
                             "evidence_urls": ["https://example.invalid/replacement-docs"],
                         }],
                         "removal": {
@@ -2097,6 +2184,16 @@ packages:
             self.assertEqual(report.selection_status, "needs_explicit_choice")
             self.assertEqual(report.upgrade.reason, "停止维护")
             self.assertFalse(any(item.startswith("尚未建立治理") for item in report.decision_required))
+
+    def test_eligible_replacement_requires_all_compatibility_and_governance_checks(self) -> None:
+        with self.assertRaisesRegex(ValueError, "node"):
+            MODULE.alternative_candidate_from_evidence("legacy", {
+                "package": "replacement",
+                "version": "2.0.0",
+                "compliance_status": "eligible",
+                "criteria_checked": ["security", "license", "maintenance"],
+                "evidence_urls": ["https://example.invalid/replacement"],
+            })
 
     def test_safe_removal_candidate_requires_complete_coverage(self) -> None:
         with self.assertRaises(ValueError):

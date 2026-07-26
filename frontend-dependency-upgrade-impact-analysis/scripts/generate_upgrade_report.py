@@ -210,6 +210,14 @@ ANALYSIS_MODES = {
     "replacement-discovery",
 }
 COMPLIANCE_STATUSES = {"eligible", "ineligible", "unknown"}
+REQUIRED_ALTERNATIVE_CRITERIA = {
+    "node",
+    "framework",
+    "peer",
+    "security",
+    "license",
+    "maintenance",
+}
 SELECTION_STATUSES = {"selected", "needs_explicit_choice", "not_applicable"}
 REMOVAL_STATUSES = {
     "safe_removal_candidate",
@@ -407,6 +415,8 @@ class ParentEdge:
     # still-depends | dropped | unknown — does the parent's newest stable still pull it in?
     fix_available: str = "unknown"
     fix_note: str = ""
+    target_compatible_version: str = ""
+    target_compatible_requirement: str = ""
 
 
 @dataclass
@@ -593,6 +603,13 @@ class PackageReport:
     constraints: list[str] = field(default_factory=list)
     selection_status: str = "not_applicable"
     used_local_upstream_evidence: bool = False
+    # Exact-target planning remains analysis-only: commands are emitted but never run.
+    exact_upgrade_status: str = "not_applicable"
+    exact_upgrade_strategy: str = ""
+    target_convergence_status: str = "not_applicable"
+    residual_lock_versions: list[str] = field(default_factory=list)
+    implementation_commands: list[str] = field(default_factory=list)
+    implementation_blockers: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -1964,6 +1981,18 @@ def infer_current_versions(upgrades: list[Upgrade], before_lock: LockSnapshot, c
         if upgrade.from_version:
             continue
         inferred = before_lock.direct_versions.get(upgrade.package) or current_lock.direct_versions.get(upgrade.package)
+        if not inferred:
+            observed = (
+                before_lock.all_versions.get(upgrade.package)
+                or current_lock.all_versions.get(upgrade.package)
+                or []
+            )
+            candidates = [version for version in observed if version != upgrade.to_version]
+            if candidates:
+                inferred = min(
+                    candidates,
+                    key=lambda value: semver_key(value) or (0, 0, 0, 0, value),
+                )
         # When the current lock already equals an explicitly supplied target, it is
         # post-upgrade evidence, not proof of the historical "from" baseline.
         if inferred and inferred != upgrade.to_version:
@@ -2183,6 +2212,7 @@ def flag_alternative_runtime_conflicts(
         for candidate in report.alternative_candidates:
             requirement = str((candidate.engines or {}).get("node") or "")
             if not requirement:
+                candidate.constraint_fit = "fits"
                 continue
             satisfied = semver_satisfies(selected, requirement)
             if satisfied is not False:
@@ -2229,6 +2259,75 @@ def highest_version_satisfying_node(
     return ""
 
 
+def highest_stable_candidate_compatible_with_project(
+    metadata: dict[str, Any],
+    selected_node: str,
+    manifest: ManifestSnapshot,
+    lock: LockSnapshot,
+) -> str:
+    """Resolve the newest non-deprecated stable version whose Node and peers fit."""
+    versions_data = metadata.get("versions") or {}
+    versions = sorted(
+        (version for version in versions_data if is_stable_version(version)),
+        key=lambda value: semver_key(value) or (0, 0, 0, 0, ""),
+        reverse=True,
+    )
+    for version in versions:
+        row = versions_data.get(version) or {}
+        if row.get("deprecated"):
+            continue
+        node_requirement = str((row.get("engines") or {}).get("node") or "")
+        if not selected_node or (
+            node_requirement and semver_satisfies(selected_node, node_requirement) is not True
+        ):
+            continue
+        peer_ok = True
+        for peer, requirement in sorted((row.get("peerDependencies") or {}).items()):
+            installed = project_declared_version(peer, manifest, lock)
+            if not installed or semver_satisfies(installed, str(requirement)) is not True:
+                peer_ok = False
+                break
+        if peer_ok:
+            return version
+    return ""
+
+
+def verify_replacement_recommendations(
+    reports: list[PackageReport],
+    runtime: NodeRuntimeAssessment,
+    manifest: ManifestSnapshot,
+    lock: LockSnapshot,
+    args: argparse.Namespace,
+) -> None:
+    """Keep user-facing choices to reviewed latest stable compatible versions."""
+    for report in reports:
+        for candidate in report.alternative_candidates:
+            if candidate.origin != "analysis-evidence" or candidate.compliance_status != "eligible":
+                continue
+            if args.offline:
+                candidate.constraint_fit = "unknown"
+                append_unique(candidate.disqualifiers, "离线模式无法确认其为满足全部约束的最新稳定版")
+                continue
+            metadata = request_json(registry_url(candidate.package), args.timeout)
+            if not isinstance(metadata, dict):
+                candidate.constraint_fit = "unknown"
+                append_unique(candidate.disqualifiers, "无法获取 registry 元数据以确认最新稳定兼容版本")
+                continue
+            recommended = highest_stable_candidate_compatible_with_project(
+                metadata, runtime.selected_project_node, manifest, lock,
+            )
+            if not recommended:
+                candidate.constraint_fit = "conflicts"
+                append_unique(candidate.disqualifiers, "未找到同时满足当前 Node、框架与 peer 约束的稳定版本")
+                continue
+            if candidate.version != recommended:
+                append_unique(
+                    candidate.disqualifiers,
+                    f"满足全部项目约束的最新稳定版是 {recommended}；"
+                    f"当前复核版本 {candidate.version} 不再作为默认推荐，需按 {recommended} 重新复核安全与 license",
+                )
+
+
 def assess_alternative_constraint_fit(
     reports: list[PackageReport],
     manifest: ManifestSnapshot,
@@ -2245,10 +2344,12 @@ def assess_alternative_constraint_fit(
             peers = candidate.peer_dependencies or {}
             if not peers:
                 continue
-            verified = False
+            verified = True
             for peer, requirement in sorted(peers.items()):
                 installed = project_declared_version(peer, manifest, lock)
                 if not installed or not isinstance(requirement, str):
+                    candidate.constraint_fit = "unknown"
+                    verified = False
                     continue
                 satisfied = semver_satisfies(installed, requirement)
                 if satisfied is False:
@@ -2258,8 +2359,9 @@ def assess_alternative_constraint_fit(
                         f"peerDependencies.{peer}={requirement} 与项目现有 {peer}@{installed} 不兼容",
                     )
                     break
-                if satisfied is True:
-                    verified = True
+                if satisfied is not True:
+                    candidate.constraint_fit = "unknown"
+                    verified = False
             else:
                 if verified:
                     candidate.constraint_fit = "fits"
@@ -2344,14 +2446,18 @@ def build_disposition_options(report: PackageReport) -> list[DispositionOption]:
                 availability = "not-applicable"
                 detail = f"来源为 {report.provenance.kind}：manifest 未声明，没有可摘除的声明"
         elif option == "replace-with-alternative":
-            if report.alternative_candidates:
+            eligible = eligible_alternative_candidates(report)
+            if eligible:
                 availability = "evidence-available"
                 detail = "候选：" + "、".join(
                     f"{candidate.package}@{candidate.version or '待解析'}"
-                    for candidate in report.alternative_candidates
+                    for candidate in eligible
                 )
             else:
-                detail = f"知识表（核对于 {REPLACEMENT_MAP_REVIEWED}）无该包条目；需要 Agent 基于官方资料研究。"
+                detail = (
+                    "尚无同时通过 Node、框架、peer、安全、license、维护状态与最新稳定版核验的候选；"
+                    "需要 Agent 基于官方资料研究并回填。"
+                )
         elif option == "native-platform-capability":
             if natives:
                 availability = "evidence-available"
@@ -2619,7 +2725,7 @@ def package_route_options(report: PackageReport) -> list[ConfirmationOption]:
     recommended version of each replacement is offered; the rest stay in the report.
     """
     options: list[ConfirmationOption] = []
-    for candidate in report.alternative_candidates:
+    for index, candidate in enumerate(eligible_alternative_candidates(report), start=1):
         version = candidate.version or "待解析"
         detail = candidate.rationale or "替代库候选"
         if not candidate.version:
@@ -2628,7 +2734,10 @@ def package_route_options(report: PackageReport) -> list[ConfirmationOption]:
             detail += f"；约束冲突：{'; '.join(candidate.disqualifiers) or '见候选表'}"
         options.append(ConfirmationOption(
             f"replace:{candidate.package}@{version}",
-            f"{candidate.package}@{version}（替换，排序 {candidate.rank or '-'}）",
+            (
+                f"{candidate.package}@{version}（首选方案）"
+                if index == 1 else f"{candidate.package}@{version}（备选方案 {index - 1}）"
+            ),
             detail,
         ))
     return options
@@ -2643,7 +2752,7 @@ def assign_primary_track(report: PackageReport) -> None:
     """
     removal = report.removal.status
     routes = package_route_options(report)
-    removable = removal in {"safe_removal_candidate", "requires_migration"}
+    removable = removal == "safe_removal_candidate"
     refactorable = report.refactor_plan.status == "established"
     provenance = report.provenance.kind
     if provenance == "transitive":
@@ -2754,11 +2863,10 @@ def build_confirmation_question(report: PackageReport) -> ConfirmationQuestion:
                 "switch:handle-parent", "先处置父包（该包同时被其他包引入）",
                 f"父包链：{'; '.join(report.provenance.chains[:3]) or '未建立'}",
             ))
-        if report.removal.status in {"safe_removal_candidate", "requires_migration"}:
+        if report.removal.status == "safe_removal_candidate":
             question.options.append(ConfirmationOption(
                 "switch:remove", "改走删除",
-                f"删除结论：{report.removal.status}"
-                + ("；需先迁移已确认的使用点" if report.removal.status == "requires_migration" else ""),
+                f"删除结论：{report.removal.status}",
             ))
         if plan.status == "established":
             question.options.append(ConfirmationOption(
@@ -2777,20 +2885,15 @@ def build_confirmation_question(report: PackageReport) -> ConfirmationQuestion:
             return question
         question.options = [
             ConfirmationOption(
-                "native-refactor", "确认原生改造（改用原生能力或自建最小实现）",
+                "native-refactor", "是：进行原生改造（改用原生能力或自建最小实现）",
                 f"规模 {plan.scale}（{plan.scale_basis}）；需自建：{'；'.join(plan.capabilities_to_rebuild)}",
             ),
             ConfirmationOption(
-                "isolate-behind-wrapper", "先隔离到内部包装层，择期再替换",
-                "先收敛调用面，需约定后续替换的触发条件与期限。",
+                "reject-native-refactor", "否：不进行原生改造",
+                "该包将标记为整改阻塞；不再自动提供包装层隔离、内部 fork 或移除功能等路线。",
             ),
-            ConfirmationOption("internal-fork", "内部 fork 维护", "需明确维护责任人与安全补丁流程。"),
-            ConfirmationOption("remove-feature", "移除该依赖支撑的功能", "需业务方确认影响面与清理范围。"),
         ]
-        if report.removal.status == "requires_migration":
-            question.options.append(ConfirmationOption(
-                "switch:remove", "改走删除", "需先迁移或消除已确认的使用点。",
-            ))
+        return question
     question.options.append(ConfirmationOption(
         "other", "其他：自行指定依赖包与版本，或改走其他处置方式",
         "自填内容会以 `source=other` 记录，并按同样的约束重新核对。",
@@ -2845,7 +2948,9 @@ def revalidate_decision(report: PackageReport, decision: HumanDecision) -> str:
         if report.removal.status == "not_viable":
             return "删除结论已变为 not_viable，原“确认删除”不再成立"
         return ""
-    if choice in {"native-refactor", "isolate-behind-wrapper", "internal-fork", "remove-feature"}:
+    if choice == "reject-native-refactor":
+        return ""
+    if choice == "native-refactor":
         if choice == "native-refactor" and report.refactor_plan.status != "established":
             return "改造方向已不成立（缺少调用点证据），需重新确认"
         return ""
@@ -2895,9 +3000,14 @@ def apply_decisions(reports: list[PackageReport], decisions: list[HumanDecision]
             warnings.append(f"{decision.package} 的人工选择已失效：{reason}")
             continue
         decision.status = "confirmed"
-        report.selection_status = "selected"
+        if decision.choice == "reject-native-refactor":
+            report.selection_status = "not_applicable"
+            report.recommended_action = "remediation-blocked"
+            append_unique(report.implementation_blockers, "用户拒绝原生改造，且删除与替换均不可行")
+        else:
+            report.selection_status = "selected"
+            report.recommended_action = "awaiting-implementation-approval"
         report.decision_status = "not_needed"
-        report.recommended_action = "awaiting-implementation-approval"
         if report.confirmation is not None:
             report.confirmation.status = "decided"
         report.decision_required = [
@@ -3737,6 +3847,32 @@ def validate_compliance_fields(
         raise ValueError(
             f"{package}@{version} 标记 eligible 时必须提供 criteria_checked 和 evidence_urls"
         )
+    if status == "eligible":
+        normalized = {str(item).strip().lower() for item in criteria_checked}
+        missing = sorted(REQUIRED_ALTERNATIVE_CRITERIA - normalized)
+        if missing:
+            raise ValueError(
+                f"{package}@{version} 标记 eligible 时缺少必核标准：{', '.join(missing)}"
+            )
+
+
+def eligible_alternative_candidates(report: PackageReport) -> list[AlternativeCandidate]:
+    """Return only fully reviewed, compatible, non-deprecated replacement choices."""
+    eligible: list[AlternativeCandidate] = []
+    for candidate in report.alternative_candidates:
+        criteria = {str(item).strip().lower() for item in candidate.criteria_checked}
+        if (
+            candidate.origin == "analysis-evidence"
+            and candidate.compliance_status == "eligible"
+            and semver_key(candidate.version) is not None
+            and REQUIRED_ALTERNATIVE_CRITERIA <= criteria
+            and bool(candidate.evidence_urls)
+            and not candidate.deprecated
+            and candidate.constraint_fit == "fits"
+            and not candidate.disqualifiers
+        ):
+            eligible.append(candidate)
+    return eligible[:3]
 
 
 def target_candidate_from_evidence(
@@ -3927,14 +4063,16 @@ def reconcile_open_target_report(report: PackageReport) -> None:
     report.selection_status = "needs_explicit_choice"
     # Curated suggestions are leads, not researched conclusions, so they never move the
     # recommendation ahead of the removal-first order.
-    researched_alternatives = [
+    reviewed_alternatives = [
         candidate for candidate in report.alternative_candidates
-        if candidate.origin != "curated-map" or candidate.compliance_status == "eligible"
+        if candidate.origin == "analysis-evidence"
     ]
-    eligible_alternatives = [
-        candidate for candidate in researched_alternatives
-        if candidate.compliance_status == "eligible"
-    ]
+    eligible_alternatives = eligible_alternative_candidates(report)
+    report.research_status = (
+        "reviewed" if reviewed_alternatives
+        else "curated-only" if report.alternative_candidates
+        else "pending"
+    )
     if report.alternative_candidates:
         append_unique(
             report.decision_required,
@@ -3960,11 +4098,19 @@ def reconcile_open_target_report(report: PackageReport) -> None:
             report.decision_required,
             "删除证据满足安全候选门槛；删除仍需人显式选择，未获选择时继续比较替代方案。",
         )
-    elif eligible_alternatives or researched_alternatives:
+    elif eligible_alternatives:
         report.recommended_action = "research-replacement"
         append_unique(report.decision_required, "替代库候选仍需人显式选择。")
     elif report.removal.status == "requires_migration":
-        report.recommended_action = "plan-migration-before-removal"
+        report.recommended_action = (
+            "plan-native-refactor"
+            if report.refactor_plan.status == "established" and report.research_status == "reviewed"
+            else "research-replacement"
+        )
+        append_unique(
+            report.decision_required,
+            "已确认存在真实使用点，不能直接删除；必须先评估合格替代库，确认无可行替代后才能进入原生改造。",
+        )
     elif report.refactor_plan.status == "established":
         report.recommended_action = "plan-native-refactor"
         append_unique(
@@ -3976,15 +4122,10 @@ def reconcile_open_target_report(report: PackageReport) -> None:
             "blocked-pending-options" if report.removal.status == "not_viable" else "review-removal"
         )
     report.disposition_options = build_disposition_options(report)
-    report.research_status = (
-        "reviewed" if any(candidate.origin == "analysis-evidence" for candidate in report.alternative_candidates)
-        else "curated-only" if report.alternative_candidates
-        else "pending"
-    )
     has_option = bool(
-        report.alternative_candidates
+        eligible_alternatives
         or report.refactor_plan.status == "established"
-        or report.removal.status in {"safe_removal_candidate", "requires_migration"}
+        or report.removal.status == "safe_removal_candidate"
         or (report.provenance.kind in {"transitive", "both"} and report.provenance.parents)
         or report.provenance.kind == "phantom"
     )
@@ -4756,8 +4897,138 @@ def baseline_for(report: PackageReport, manifest: ManifestSnapshot, before_lock:
             report.baseline_status = "mismatch"
     elif after:
         report.baseline_status = "matches_to" if after == report.upgrade.to_version else "mismatch"
+    elif report.upgrade.from_version and (
+        report.upgrade.from_version in report.before_lock_versions
+        or report.upgrade.from_version in report.current_lock_versions
+    ):
+        report.baseline_status = "matches_from"
+    elif report.after_lock_versions:
+        report.baseline_status = (
+            "matches_to"
+            if set(report.after_lock_versions) == {report.upgrade.to_version}
+            else "mismatch"
+        )
     else:
         report.baseline_status = "unknown"
+
+
+def direct_upgrade_command(report: PackageReport) -> str:
+    package_at_version = f"{report.upgrade.package}@{report.upgrade.to_version}"
+    dev = report.manifest_field == "devDependencies"
+    optional = report.manifest_field == "optionalDependencies"
+    peer = report.manifest_field == "peerDependencies"
+    if report.lock_kind == "pnpm":
+        flag = " -D" if dev else (" -O" if optional else (" --save-peer" if peer else ""))
+        return f"pnpm add {package_at_version}{flag}"
+    if report.lock_kind == "yarn":
+        flag = " -D" if dev else (" -O" if optional else (" -P" if peer else ""))
+        return f"yarn add {package_at_version}{flag}"
+    if report.lock_kind == "bun":
+        flag = " -d" if dev else (" --optional" if optional else (" --peer" if peer else ""))
+        return f"bun add {package_at_version}{flag}"
+    flag = " --save-dev" if dev else (" --save-optional" if optional else (" --save-peer" if peer else ""))
+    return f"npm install {package_at_version}{flag}"
+
+
+def lock_convergence_commands(report: PackageReport, needs_override: bool) -> list[str]:
+    package = report.upgrade.package
+    target = report.upgrade.to_version
+    if report.lock_kind == "pnpm":
+        commands = (
+            [f'pnpm pkg set "pnpm.overrides.{package}={target}"', "pnpm install"]
+            if needs_override else [direct_upgrade_command(report), "pnpm dedupe"]
+        )
+        return commands + [f"pnpm why {package}"]
+    if report.lock_kind == "yarn":
+        commands = (
+            [f'在 package.json 的 resolutions 中设置 "{package}": "{target}"', "yarn install"]
+            if needs_override else [direct_upgrade_command(report), "yarn dedupe"]
+        )
+        return commands + [f"yarn why {package}"]
+    if report.lock_kind == "bun":
+        commands = (
+            [f'在 package.json 的 overrides/resolutions 中设置 "{package}": "{target}"', "bun install"]
+            if needs_override else [direct_upgrade_command(report), "bun install"]
+        )
+        return commands + ["bun pm ls --all"]
+    commands = (
+        [f'npm pkg set "overrides.{package}={target}"', "npm install"]
+        if needs_override else [direct_upgrade_command(report), "npm dedupe"]
+    )
+    return commands + [f"npm ls {package} --all"]
+
+
+def finalize_exact_upgrade_report(
+    report: PackageReport,
+    runtime: NodeRuntimeAssessment,
+) -> None:
+    """Produce a deterministic exact-target plan without executing any command."""
+    if report.analysis_mode != "exact-upgrade" or not report.upgrade.to_version:
+        return
+    report.exact_upgrade_status = "ready"
+    target = report.upgrade.to_version
+    parents = report.provenance.parents
+    needs_override = report.provenance.kind == "transitive"
+    if report.provenance.kind == "transitive":
+        report.exact_upgrade_strategy = "parent-first-with-override-fallback"
+    elif report.provenance.kind == "both":
+        report.exact_upgrade_strategy = "direct-upgrade-plus-parent-convergence"
+    else:
+        report.exact_upgrade_strategy = "direct-upgrade"
+
+    if report.provenance.kind in {"unknown", "phantom"}:
+        append_unique(
+            report.implementation_blockers,
+            f"依赖来源为 {report.provenance.kind}，无法形成安全的精确升级命令",
+        )
+    incompatible_parents = [
+        f"{edge.package}@{edge.version} 要求 {edge.requirement or '未建立'}"
+        for edge in parents
+        if not edge.requirement or semver_satisfies(target, edge.requirement) is not True
+    ]
+    if incompatible_parents:
+        append_unique(
+            report.implementation_blockers,
+            "目标版本不满足当前父依赖范围；必须先解析并升级/替换父依赖的精确兼容版本："
+            + "；".join(incompatible_parents),
+        )
+    if report.peer_compatibility_status != "compatible" and report.peer_compatibility_status != "not-applicable":
+        append_unique(
+            report.implementation_blockers,
+            "目标 peerDependencies 未确认兼容：" + (
+                "；".join(report.peer_compatibility_conflicts) or report.peer_compatibility_status
+            ),
+        )
+    if runtime.status != "compatible-current":
+        append_unique(
+            report.implementation_blockers,
+            "当前运行环境不能直接执行该升级；先调整 Node/工具链或目标版本："
+            + "；".join(runtime.blockers or [runtime.status]),
+        )
+
+    if report.after_lock_versions:
+        report.residual_lock_versions = [
+            version for version in report.after_lock_versions if version != target
+        ]
+        report.target_convergence_status = (
+            "confirmed" if not report.residual_lock_versions and target in report.after_lock_versions
+            else "blocked-residual-versions"
+        )
+        if report.residual_lock_versions:
+            append_unique(
+                report.implementation_blockers,
+                "升级后 lock 仍残留非目标版本：" + ", ".join(report.residual_lock_versions),
+            )
+    else:
+        report.target_convergence_status = "verification-required"
+
+    if not incompatible_parents:
+        report.implementation_commands = lock_convergence_commands(report, needs_override)
+    if report.implementation_blockers:
+        report.exact_upgrade_status = "blocked"
+        report.recommended_action = "adjust-environment-or-target"
+    else:
+        report.recommended_action = "upgrade-to-exact-target"
 
 
 def dependency_type_score(dependency_type: str, change_type: str) -> int:
@@ -5038,6 +5309,23 @@ def markdown_report(bundle: AnalysisBundle) -> str:
             f"- 目标 engines：{format_mapping(report.target_engines)}",
             "",
         ])
+        if not open_target:
+            lines.extend([
+                "#### 精确目标升级结论", "",
+                f"- 升级状态：`{report.exact_upgrade_status}`",
+                f"- 实施策略：`{report.exact_upgrade_strategy or '未建立'}`",
+                f"- 全量 lock 收敛：`{report.target_convergence_status}`；"
+                f"残留版本：`{', '.join(report.residual_lock_versions) or '无'}`",
+                f"- 阻塞项：{'; '.join(report.implementation_blockers) or '无'}",
+                "- 实施命令（仅输出，不执行；所有阻塞项清零后方可运行）：",
+                *(
+                    [f"  - `{command}`" for command in report.implementation_commands]
+                    if report.implementation_commands else ["  - `未建立`"]
+                ),
+                f"- 完成判定：升级后 lock 中 `{report.upgrade.package}` 的所有实例必须等于 "
+                f"`{report.upgrade.to_version}`；任何旧版本残留都视为整改未完成。",
+                "",
+            ])
         lines.extend(render_provenance(report))
         if open_target:
             alternates = "、".join(
@@ -5319,6 +5607,13 @@ def markdown_report(bundle: AnalysisBundle) -> str:
             f"- 替代方案调研缺口：`{'`, `'.join(research_gaps)}` 尚无任何候选线索，"
             "需按「替代方案调研任务」联网调研后回填 `--analysis-evidence-file`。"
         )
+    remediation_blockers = [
+        f"`{report.upgrade.package}`：{blocker}"
+        for report in bundle.reports
+        for blocker in report.implementation_blockers
+    ]
+    if remediation_blockers:
+        lines.extend(["", "### 整改阻塞", *[f"- {item}" for item in remediation_blockers]])
     decisions = [
         f"`{report.upgrade.package}`：{decision}"
         for report in bundle.reports
@@ -5392,7 +5687,7 @@ def render_confirmation_queue(bundle: AnalysisBundle) -> list[str]:
     lines.extend([
         f"- 决策记录文件：`{bundle.decision_file}`（生成器只读；由 Agent 在人确认后写入）",
         "- 提问规则：一包一问，按下表顺序逐个确认；`blocked` 的包先补前置证据，不得提前问选型。",
-        "- 选项末位固定为 `other`：可自行指定包与版本，或改走其他处置方式。",
+        "- 除原生改造严格是/否外，选项末位固定为 `other`：可自行指定包与版本，或改走其他处置方式。",
         "- 记录选型不等于实施授权；实施仍需在本技能之外单独批准。",
         "",
     ])
@@ -5524,6 +5819,10 @@ def validate_report_contract(markdown: str) -> list[str]:
         errors.append("详细代码修改候选字段不完整。")
     if "选择状态" not in markdown or "约束" not in markdown or "报告路径" not in markdown:
         errors.append("升级摘要缺少选择状态、约束或报告路径。")
+    if "精确目标升级结论" in markdown and (
+        "实施命令（仅输出，不执行" not in markdown or "全量 lock 收敛" not in markdown
+    ):
+        errors.append("精确升级缺少只读实施命令或全量 lock 收敛结论。")
     has_candidate_table = "| 精确版本 | 候选类型 |" in markdown or "| 包 | 精确版本 | 合规状态 |" in markdown
     if has_candidate_table and (
         "合规状态" not in markdown or "核查标准" not in markdown or "排除原因" not in markdown
@@ -5775,12 +6074,21 @@ def build_bundle(
     )
     flag_alternative_runtime_conflicts(reports, node_runtime, args)
     assess_alternative_constraint_fit(reports, manifest, current_lock if current_lock.kind != "none" else after_lock)
+    verify_replacement_recommendations(
+        reports,
+        node_runtime,
+        manifest,
+        current_lock if current_lock.kind != "none" else after_lock,
+        args,
+    )
     rank_alternative_candidates(reports)
     decision_path = resolve_decision_file(args, output_dir)
     decisions, decision_warnings = load_decision_record(decision_path)
     for report in reports:
         if report.upgrade.to_version or report.analysis_mode == "exact-upgrade":
+            finalize_exact_upgrade_report(report, node_runtime)
             continue
+        reconcile_open_target_report(report)
         if report.provenance.parents:
             flag_parent_fix_availability(report, args)
             resolve_override_version(report, node_runtime.selected_project_node, args)
@@ -5795,6 +6103,11 @@ def build_bundle(
     ]
     runtime_analysis_blocked = node_runtime.status == "constraint-conflict"
     workspace_failed = workspace.status == "failed"
+    remediation_blocked = any(
+        report.exact_upgrade_status == "blocked"
+        or report.recommended_action == "remediation-blocked"
+        for report in reports
+    )
     if workspace_failed:
         for report in reports:
             if report.change_type == "added":
@@ -5804,8 +6117,8 @@ def build_bundle(
                 report.constraints.append(workspace.reason)
             if workspace.reason and workspace.reason not in report.warnings:
                 report.warnings.append(workspace.reason)
-    status = "blocked" if baseline_blockers or runtime_analysis_blocked or workspace_failed else "draft"
-    analysis_status = "blocked" if baseline_blockers or runtime_analysis_blocked or workspace_failed else "partial"
+    status = "blocked" if baseline_blockers or runtime_analysis_blocked or workspace_failed or remediation_blocked else "draft"
+    analysis_status = "blocked" if baseline_blockers or runtime_analysis_blocked or workspace_failed or remediation_blocked else "partial"
     decision_status = "needs_choice" if any(
         report.decision_status == "needs_choice" or report.selection_status == "needs_explicit_choice"
         for report in reports
@@ -5980,6 +6293,18 @@ def main(argv: list[str]) -> int:
             file=sys.stderr,
         )
         return 4
+    exact_blockers = [
+        f"{report.upgrade.package}：{'; '.join(report.implementation_blockers)}"
+        for report in bundle.reports
+        if report.exact_upgrade_status == "blocked"
+    ]
+    if exact_blockers:
+        print(
+            "精确升级被兼容性、父依赖或 lock 收敛条件阻止："
+            + "；".join(exact_blockers),
+            file=sys.stderr,
+        )
+        return 6
     return 0
 
 
