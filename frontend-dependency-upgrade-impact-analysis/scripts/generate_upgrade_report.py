@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import contextvars
 import csv
 import datetime as dt
 import hashlib
@@ -980,6 +981,53 @@ def write_http_cache(url: str, text: str | None, authenticated: bool) -> None:
         return
 
 
+_FETCH_PACKAGE = contextvars.ContextVar("upstream_fetch_package", default="")
+_FETCH_DIAGNOSTICS: dict[str, list[str]] = {}
+_FETCH_DIAGNOSTICS_LOCK = threading.Lock()
+
+
+def reset_fetch_diagnostics(package: str = "") -> None:
+    key = package or "_default"
+    _FETCH_PACKAGE.set(key)
+    with _FETCH_DIAGNOSTICS_LOCK:
+        _FETCH_DIAGNOSTICS[key] = []
+
+
+def record_fetch_diagnostic(message: str) -> None:
+    text = str(message or "").strip()
+    if not text:
+        return
+    key = _FETCH_PACKAGE.get() or "_default"
+    with _FETCH_DIAGNOSTICS_LOCK:
+        bucket = _FETCH_DIAGNOSTICS.setdefault(key, [])
+        if text not in bucket:
+            bucket.append(text)
+
+
+def drain_fetch_diagnostics(package: str = "", limit: int = 40) -> list[str]:
+    key = package or _FETCH_PACKAGE.get() or "_default"
+    with _FETCH_DIAGNOSTICS_LOCK:
+        items = list(_FETCH_DIAGNOSTICS.pop(key, []))
+    return items[: max(1, limit)]
+
+
+def _http_error_diagnostic(url: str, exc: urllib.error.HTTPError) -> str:
+    detail = f"HTTP {exc.code}"
+    if exc.code in {403, 429} and "api.github.com" in url:
+        remaining = exc.headers.get("X-RateLimit-Remaining") if exc.headers else None
+        reset_at = exc.headers.get("X-RateLimit-Reset") if exc.headers else None
+        if remaining is not None:
+            detail += f"；X-RateLimit-Remaining={remaining}"
+        if reset_at:
+            detail += f"；X-RateLimit-Reset={reset_at}"
+        if not os.environ.get("GITHUB_TOKEN"):
+            detail += "；未设置 GITHUB_TOKEN，匿名 GitHub API 极易被限流"
+        detail += "（疑似限流/防滥用拦截）"
+    elif exc.code in {401, 403}:
+        detail += "（访问被拒绝）"
+    return f"{url} → {detail}"
+
+
 def request_text(url: str, timeout: int, attempts: int = 2) -> str | None:
     cache_hit, cached = read_http_cache(url)
     if cache_hit:
@@ -991,6 +1039,7 @@ def request_text(url: str, timeout: int, attempts: int = 2) -> str | None:
     token = os.environ.get("GITHUB_TOKEN")
     if token and "api.github.com" in url:
         headers["Authorization"] = f"Bearer {token}"
+    last_error = ""
     for attempt in range(max(1, attempts)):
         try:
             with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=timeout) as response:
@@ -999,14 +1048,23 @@ def request_text(url: str, timeout: int, attempts: int = 2) -> str | None:
                 write_http_cache(url, text, authenticated=bool(headers.get("Authorization")))
                 return text
         except urllib.error.HTTPError as exc:
+            last_error = _http_error_diagnostic(url, exc)
             if exc.code in {404, 410}:
                 write_http_cache(url, None, authenticated=bool(headers.get("Authorization")))
+                # 404 is often an expected miss (no release); keep diagnostic only for non-miss probes.
+                if "api.github.com" in url and "/releases" not in url and "/git/trees/" not in url:
+                    record_fetch_diagnostic(last_error)
                 return None
             if exc.code not in {403, 429, 500, 502, 503, 504} or attempt + 1 >= attempts:
+                record_fetch_diagnostic(last_error)
                 return None
-        except (urllib.error.URLError, TimeoutError):
+        except (urllib.error.URLError, TimeoutError) as exc:
+            last_error = f"{url} → 网络错误/超时：{exc}"
             if attempt + 1 >= attempts:
+                record_fetch_diagnostic(last_error)
                 return None
+    if last_error:
+        record_fetch_diagnostic(last_error)
     return None
 
 
@@ -1017,6 +1075,7 @@ def request_json(url: str, timeout: int) -> Any | None:
     try:
         return json.loads(text)
     except json.JSONDecodeError:
+        record_fetch_diagnostic(f"{url} → JSON 解析失败")
         return None
 
 
@@ -1095,7 +1154,9 @@ def write_upstream_version_evidence(
     *,
     evidence_origin: str = "network",
     changelog_document: str = "",
+    fetch_diagnostics: list[str] | None = None,
 ) -> None:
+    """Always persist sources.json for exact-upgrade versions (download-first contract)."""
     version_dir = upstream_version_dir(root, package, note.version)
     version_dir.mkdir(parents=True, exist_ok=True)
     if note.release_notes and not is_placeholder_release_notes(note.release_notes):
@@ -1119,8 +1180,47 @@ def write_upstream_version_evidence(
         "has_release_body": bool(note.release_notes and not is_placeholder_release_notes(note.release_notes)),
         "has_changelog_section": bool(note.changelog and not is_placeholder_changelog(note.changelog)),
         "has_changelog_document": bool(changelog_document),
+        "fetch_diagnostics": list(fetch_diagnostics or []),
     }
     (version_dir / "sources.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def write_upstream_fetch_failure(
+    root: Path,
+    package: str,
+    *,
+    stage: str,
+    diagnostics: list[str],
+    from_version: str = "",
+    to_version: str = "",
+) -> None:
+    root.mkdir(parents=True, exist_ok=True)
+    package_dir = upstream_package_dir(root, package)
+    package_dir.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "package": package,
+        "from_version": from_version,
+        "to_version": to_version,
+        "stage": stage,
+        "failed_at": dt.datetime.now(dt.timezone.utc).astimezone().isoformat(timespec="seconds"),
+        "diagnostics": list(diagnostics),
+    }
+    (package_dir / "fetch-failure.json").write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    update_upstream_manifest(
+        root,
+        package=package,
+        from_version=from_version,
+        to_version=to_version,
+        versions=[{
+            "version": to_version or from_version or "unknown",
+            "status": "missing",
+            "origin": "network-failed",
+            "stage": stage,
+            "diagnostics": list(diagnostics)[:20],
+        }],
+    )
 
 
 def read_upstream_version_evidence(root: Path | None, package: str, version: str) -> dict[str, Any] | None:
@@ -1339,8 +1439,16 @@ def collect_exact_upgrade_from_local_evidence(
 def parallel_map_ordered(function: Any, items: list[Any], workers: int) -> list[Any]:
     if len(items) < 2 or workers <= 1:
         return [function(item) for item in items]
+    # Preserve ContextVar (e.g. per-package fetch diagnostics) across worker threads.
+    # Each worker needs its own Context copy: a single Context cannot be .run() concurrently
+    # or re-entered from nested parallel_map_ordered calls.
+    parent_context = contextvars.copy_context()
+
+    def run(item: Any) -> Any:
+        return parent_context.copy().run(function, item)
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=min(max(1, workers), len(items))) as executor:
-        return list(executor.map(function, items))
+        return list(executor.map(run, items))
 
 
 def repository_details_from_npm(metadata: dict[str, Any]) -> tuple[str, str]:
@@ -4488,6 +4596,7 @@ def collect_package_report(upgrade: Upgrade, args: argparse.Namespace) -> Packag
         if not normalized.to_version:
             report.alternative_candidates = build_alternative_candidates(upgrade.package, args, report.warnings)
         return report
+    reset_fetch_diagnostics(upgrade.package)
     metadata = request_json(registry_url(upgrade.package), args.timeout)
     metadata_origin = "network"
     if not isinstance(metadata, dict) and persist_evidence:
@@ -4498,8 +4607,27 @@ def collect_package_report(upgrade: Upgrade, args: argparse.Namespace) -> Packag
             report.used_local_upstream_evidence = True
             report.warnings.append("获取 npm registry 元数据失败；已回读本地 upstream-evidence/registry.json。")
     if not isinstance(metadata, dict):
-        report.notes.append(VersionNote(endpoint, change_type=report.change_type, release_notes="无法获取 npm 元数据。", changelog="需要人工复核上游资料。", sources=[package_url(upgrade.package, endpoint)]))
+        diagnostics = drain_fetch_diagnostics(upgrade.package)
+        report.notes.append(VersionNote(endpoint, change_type=report.change_type, release_notes="无法获取 npm 元数据。", changelog="需要人工复核上游资料。", sources=[package_url(upgrade.package, endpoint)], evidence_status="missing", release_status="missing", changelog_status="missing"))
         report.warnings.append("获取 npm registry 元数据失败。")
+        for item in diagnostics:
+            append_unique(report.warnings, f"上游抓取失败：{item}")
+        report.evidence_dimensions["registry"] = "missing"
+        report.evidence_dimensions["release"] = "missing"
+        report.evidence_dimensions["changelog"] = "missing"
+        report.evidence_completeness = "partial"
+        if persist_evidence and evidence_root is not None:
+            write_upstream_fetch_failure(
+                Path(evidence_root),
+                upgrade.package,
+                stage="registry",
+                diagnostics=diagnostics or ["npm registry 元数据不可用"],
+                from_version=normalized.from_version,
+                to_version=normalized.to_version,
+            )
+            report.warnings.append(
+                f"已写入 upstream-evidence 抓取失败记录：{upstream_package_dir(Path(evidence_root), upgrade.package) / 'fetch-failure.json'}"
+            )
         return report
     if persist_evidence and metadata_origin == "network":
         write_upstream_registry(evidence_root, upgrade.package, metadata)
@@ -4831,41 +4959,39 @@ def collect_package_report(upgrade: Upgrade, args: argparse.Namespace) -> Packag
             repository_validation=repository_validation,
         )
         report.notes.append(note)
-        if persist_evidence and evidence_origin == "network" and (
-            not is_placeholder_release_notes(note.release_notes)
-            or not is_placeholder_changelog(note.changelog)
-            or note.release_status not in {"missing"}
-            or note.changelog_status not in {"missing"}
-        ):
+        if persist_evidence and evidence_root is not None:
+            # Download-first: always persist per-version sources.json so the pack exists
+            # even when release/changelog bodies are missing (rate-limit / 404 / parse miss).
+            # Keep package-level diagnostics; attach a snapshot into sources.json.
+            with _FETCH_DIAGNOSTICS_LOCK:
+                version_diagnostics = list(_FETCH_DIAGNOSTICS.get(upgrade.package, []))[-12:]
             write_upstream_version_evidence(
                 evidence_root,
                 upgrade.package,
                 note,
-                evidence_origin="network",
+                evidence_origin=evidence_origin if evidence_origin == "local" else "network",
                 changelog_document=changelog if changelog and not changelog_text else "",
+                fetch_diagnostics=version_diagnostics,
             )
             persisted_version_rows.append({
                 "version": version,
                 "status": status,
-                "origin": "network",
+                "origin": evidence_origin if evidence_origin == "local" else "network",
                 "release_status": release_status,
                 "changelog_status": changelog_status,
+                "fetch_diagnostics": version_diagnostics[:10],
             })
-        elif persist_evidence:
-            persisted_version_rows.append({
-                "version": version,
-                "status": status,
-                "origin": evidence_origin,
-                "release_status": release_status,
-                "changelog_status": changelog_status,
-            })
-    if persist_evidence and persisted_version_rows:
+    if persist_evidence and persisted_version_rows and evidence_root is not None:
         update_upstream_manifest(
             evidence_root,
             package=upgrade.package,
             from_version=normalized.from_version,
             to_version=normalized.to_version,
             versions=persisted_version_rows,
+        )
+        append_unique(
+            report.warnings,
+            "精确升级默认下载并落盘 upstream-evidence/；报告以该本地证据包为 release/changelog 依据之一。",
         )
     if "ambiguous" in repository_statuses:
         report.repository_validation_status = "ambiguous"
@@ -4879,8 +5005,20 @@ def collect_package_report(upgrade: Upgrade, args: argparse.Namespace) -> Packag
     else:
         report.repository_validation_status = "candidate"
         report.evidence_dimensions["repository"] = "candidate"
-    report.evidence_dimensions["release"] = "confirmed" if release_confirmed else ("ambiguous" if source_ambiguous else "candidate")
-    report.evidence_dimensions["changelog"] = "confirmed" if changelog_confirmed else "candidate"
+    if release_confirmed:
+        report.evidence_dimensions["release"] = "confirmed"
+    elif source_ambiguous:
+        report.evidence_dimensions["release"] = "ambiguous"
+    elif any(note.release_status not in {"missing"} for note in report.notes):
+        report.evidence_dimensions["release"] = "candidate"
+    else:
+        report.evidence_dimensions["release"] = "missing"
+    if changelog_confirmed:
+        report.evidence_dimensions["changelog"] = "confirmed"
+    elif any(note.changelog_status not in {"missing"} for note in report.notes):
+        report.evidence_dimensions["changelog"] = "candidate"
+    else:
+        report.evidence_dimensions["changelog"] = "missing"
     migration_sources = [source for source in report.official_sources if source.kind == "migration"]
     report.evidence_dimensions["migration"] = "candidate" if migration_sources else (
         "not-applicable" if report.change_type in {"patch", "same", "added", "removed"} else "missing"
@@ -4897,6 +5035,9 @@ def collect_package_report(upgrade: Upgrade, args: argparse.Namespace) -> Packag
             report.evidence_dimensions["license"] = "candidate"
     if report.homepage:
         add_official_source(report.official_sources, "homepage", report.homepage, status="candidate")
+    leftover_diagnostics = drain_fetch_diagnostics(upgrade.package)
+    for item in leftover_diagnostics:
+        append_unique(report.warnings, f"上游抓取：{item}")
     report.evidence_completeness = evidence_completeness(report.evidence_dimensions, interval_complete)
     if len(set(report.repository_lineage.values())) > 1:
         report.warnings.append("版本区间跨越不同 repository；已按版本拆分 release/changelog 取证。")
@@ -6453,10 +6594,62 @@ def collect_package_reports(upgrades: list[Upgrade], args: argparse.Namespace) -
     return parallel_map_ordered(collect, upgrades, package_workers)
 
 
+def partition_upgrade_batches(upgrades: list[Upgrade]) -> list[tuple[str, list[Upgrade], str]]:
+    """Split mixed exact/open-target batches into separate report directories.
+
+    Returns (subdir, upgrades, label). Empty subdir means write at the batch root
+    (single-mode runs keep the historical layout).
+    """
+    exact = [upgrade for upgrade in upgrades if is_exact_upgrade_target(upgrade)]
+    open_targets = [upgrade for upgrade in upgrades if not is_exact_upgrade_target(upgrade)]
+    if exact and open_targets:
+        return [
+            ("exact", exact, "精确升级批次（含 upstream-evidence）"),
+            ("open-target", open_targets, "开放目标批次（无 upstream-evidence）"),
+        ]
+    if exact:
+        return [("", exact, "精确升级")]
+    return [("", open_targets or upgrades, "开放目标")]
+
+
+EXIT_CODE_PRIORITY = (2, 5, 3, 4, 6, 7, 0)
+
+
+def merge_exit_codes(codes: list[int]) -> int:
+    if not codes:
+        return 0
+    rank = {code: index for index, code in enumerate(EXIT_CODE_PRIORITY)}
+    return sorted(codes, key=lambda code: rank.get(int(code), 99))[0]
+
+
+def write_batch_index(parent_dir: Path, batches: list[tuple[str, Path, str]]) -> Path:
+    parent_dir.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "# 前端依赖升级影响分析 — 批次索引",
+        "",
+        "本轮同时包含精确升级与开放目标，已自动拆成两份报告：",
+        "",
+    ]
+    for subdir, report_path, label in batches:
+        relative = report_path.name if not subdir else f"{subdir}/{report_path.name}"
+        lines.append(f"- **{label}**：`{relative}`")
+        if subdir == "exact":
+            lines.append(f"  - upstream-evidence：`{subdir}/upstream-evidence/`")
+    lines.extend([
+        "",
+        "release/changelog 下载与落盘仅适用于精确升级批次。",
+        "",
+    ])
+    path = parent_dir / "BATCH-INDEX.md"
+    path.write_text("\n".join(lines), encoding="utf-8")
+    return path
+
+
 def build_bundle(
     args: argparse.Namespace,
     output_dir: Path | None = None,
     output_note: str | None = None,
+    upgrades: list[Upgrade] | None = None,
 ) -> AnalysisBundle:
     project_root = Path(args.project_root).resolve()
     if not project_root.is_dir():
@@ -6472,7 +6665,8 @@ def build_bundle(
     workspace = resolve_frontend_workspace(project_root, args)
     cache_dir = args.http_cache_dir or default_http_cache_dir()
     configure_http_cache(cache_dir, args.http_cache_ttl, enabled=not args.no_http_cache)
-    upgrades = collect_upgrades(args)
+    if upgrades is None:
+        upgrades = collect_upgrades(args)
     if not upgrades:
         raise ValueError(missing_upgrade_message())
     package_names = [upgrade.package for upgrade in upgrades]
@@ -6737,19 +6931,7 @@ def configure_console() -> None:
             pass
 
 
-def main(argv: list[str]) -> int:
-    configure_console()
-    try:
-        args = parse_args(argv)
-        project_root = Path(args.project_root).resolve()
-        output_dir, output_note = resolve_report_output_dir(project_root, args.output_dir, args.change_dir)
-        bundle = build_bundle(args, output_dir, output_note)
-        markdown_path = write_bundle(bundle, args, output_dir)
-    except (ValueError, OSError, json.JSONDecodeError, RuntimeError) as exc:
-        print(str(exc), file=sys.stderr)
-        return 2
-    print(f"已写入 {markdown_path}")
-    print(f"输出解析：{output_note}")
+def exit_code_for_bundle(bundle: AnalysisBundle, args: argparse.Namespace) -> int:
     if bundle.importer_resolution == "failed":
         workspace_decision = next(
             (item for item in bundle.pending_human_decisions if item.get("package") == "__frontend_workspace__"),
@@ -6816,6 +6998,42 @@ def main(argv: list[str]) -> int:
             file=sys.stderr,
         )
     return 0
+
+
+def main(argv: list[str]) -> int:
+    configure_console()
+    try:
+        args = parse_args(argv)
+        project_root = Path(args.project_root).resolve()
+        output_dir, output_note = resolve_report_output_dir(project_root, args.output_dir, args.change_dir)
+        upgrades = collect_upgrades(args)
+        if not upgrades:
+            raise ValueError(missing_upgrade_message())
+        batches = partition_upgrade_batches(upgrades)
+        written: list[tuple[str, Path, str]] = []
+        codes: list[int] = []
+        for subdir, batch_upgrades, label in batches:
+            batch_args = argparse.Namespace(**vars(args))
+            batch_dir = output_dir / subdir if subdir else output_dir
+            batch_note = output_note if not subdir else f"{output_note}；自动拆分 → {subdir}/（{label}）"
+            if subdir == "open-target":
+                batch_args.no_upstream_evidence = True
+            # Split batches always use a per-directory decision file to avoid cross-talk.
+            if subdir:
+                batch_args.decision_file = str((batch_dir / DECISION_FILE_NAME).resolve())
+            bundle = build_bundle(batch_args, batch_dir, batch_note, upgrades=batch_upgrades)
+            markdown_path = write_bundle(bundle, batch_args, batch_dir)
+            written.append((subdir, markdown_path, label))
+            print(f"已写入 [{label}] {markdown_path}")
+            print(f"输出解析：{batch_note}")
+            codes.append(exit_code_for_bundle(bundle, batch_args))
+        if len(written) > 1:
+            index_path = write_batch_index(output_dir, written)
+            print(f"已写入批次索引 {index_path}")
+        return merge_exit_codes(codes)
+    except (ValueError, OSError, json.JSONDecodeError, RuntimeError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

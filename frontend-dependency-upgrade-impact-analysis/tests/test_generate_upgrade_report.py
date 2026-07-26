@@ -2705,6 +2705,122 @@ packages:
             self.assertEqual(bundle.decision_status, "not_needed")
             self.assertEqual(bundle.batch_implementation_gate, "ready")
 
+    def test_partition_upgrade_batches_splits_mixed_exact_and_open(self) -> None:
+        upgrades = [
+            MODULE.Upgrade("axios", "1.6.8", "1.7.9", intent="exact-upgrade"),
+            MODULE.Upgrade("legacy", "1.0.0", "", intent="auto-assess"),
+        ]
+        batches = MODULE.partition_upgrade_batches(upgrades)
+        self.assertEqual([item[0] for item in batches], ["exact", "open-target"])
+        self.assertEqual([item.package for item in batches[0][1]], ["axios"])
+        self.assertEqual([item.package for item in batches[1][1]], ["legacy"])
+
+    def test_mixed_batch_main_writes_split_reports_and_index(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "package.json").write_text(json.dumps({
+                "engines": {"node": ">=18"},
+                "dependencies": {"axios": "1.6.8", "legacy": "1.0.0"},
+            }), encoding="utf-8")
+            (root / "package-lock.json").write_text(json.dumps({
+                "lockfileVersion": 3,
+                "packages": {
+                    "node_modules/axios": {"version": "1.6.8"},
+                    "node_modules/legacy": {"version": "1.0.0"},
+                },
+            }), encoding="utf-8")
+            (root / ".nvmrc").write_text("20.18.0\n", encoding="utf-8")
+            (root / "src").mkdir()
+            (root / "src" / "a.ts").write_text(
+                "import axios from 'axios';\nimport legacy from 'legacy';\n",
+                encoding="utf-8",
+            )
+            out = root / "evidence" / "frontend-dependency-upgrade"
+            with (
+                patch.object(MODULE, "current_host_node_runtime", return_value=("20.18.0", "C:/node/node.exe")),
+                patch.object(MODULE, "detect_node_managers", return_value=(["nvm-windows"], {"nvm-windows": ["20.18.0"]})),
+                patch.object(MODULE, "request_json", return_value={
+                    "versions": {"1.6.8": {}, "1.7.9": {}},
+                    "time": {"1.6.8": "2024-01-01", "1.7.9": "2024-06-01"},
+                }),
+                patch.object(MODULE, "fetch_github_releases", return_value={}),
+                patch.object(MODULE, "fetch_changelog", return_value=("", "")),
+                patch.object(MODULE, "validate_version_repository", return_value=("missing", "test", "")),
+                patch.object(MODULE, "github_default_branch", return_value="main"),
+            ):
+                code = MODULE.main([
+                    str(root),
+                    "--upgrade", "axios::1.7.9",
+                    "--assess", "legacy",
+                    "--offline",
+                    "--output-dir", str(out),
+                ])
+            self.assertIn(code, {0, 6, 7})
+            self.assertTrue((out / "BATCH-INDEX.md").is_file())
+            self.assertTrue((out / "exact" / "frontend-dependency-upgrade-report.md").is_file())
+            self.assertTrue((out / "open-target" / "frontend-dependency-upgrade-report.md").is_file())
+
+    def test_exact_upgrade_persists_upstream_evidence_even_when_release_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "package.json").write_text(json.dumps({
+                "engines": {"node": ">=18"},
+                "dependencies": {"axios": "1.6.8"},
+            }), encoding="utf-8")
+            (root / "package-lock.json").write_text(json.dumps({
+                "lockfileVersion": 3,
+                "packages": {"node_modules/axios": {"version": "1.6.8"}},
+            }), encoding="utf-8")
+            (root / ".nvmrc").write_text("20.18.0\n", encoding="utf-8")
+            out = root / "out"
+            metadata = {
+                "versions": {
+                    "1.6.8": {"repository": {"url": "https://github.com/axios/axios.git"}},
+                    "1.7.9": {"repository": {"url": "https://github.com/axios/axios.git"}},
+                },
+                "time": {"1.6.8": "2024-01-01T00:00:00.000Z", "1.7.9": "2024-06-01T00:00:00.000Z"},
+                "repository": {"url": "https://github.com/axios/axios.git"},
+            }
+            with (
+                patch.object(MODULE, "current_host_node_runtime", return_value=("20.18.0", "C:/node/node.exe")),
+                patch.object(MODULE, "detect_node_managers", return_value=(["nvm-windows"], {"nvm-windows": ["20.18.0"]})),
+                patch.object(MODULE, "request_json", return_value=metadata),
+                patch.object(MODULE, "request_text", return_value=None),
+                patch.object(MODULE, "fetch_github_releases", return_value={}),
+                patch.object(MODULE, "fetch_changelog", return_value=("", "")),
+                patch.object(MODULE, "validate_version_repository", return_value=("confirmed", "ok", "")),
+                patch.object(MODULE, "github_default_branch", return_value="main"),
+            ):
+                args = MODULE.parse_args([
+                    str(root), "--upgrade", "axios:1.6.8:1.7.9",
+                    "--output-dir", str(out),
+                ])
+                bundle = MODULE.build_bundle(args)
+                MODULE.write_bundle(bundle, args, out)
+            evidence = out / "upstream-evidence"
+            self.assertTrue(evidence.is_dir())
+            self.assertTrue((evidence / "axios" / "registry.json").is_file())
+            sources = evidence / "axios" / "1.7.9" / "sources.json"
+            self.assertTrue(sources.is_file())
+            payload = json.loads(sources.read_text(encoding="utf-8"))
+            self.assertEqual(payload.get("release_status"), "missing")
+            self.assertEqual(payload.get("changelog_status"), "missing")
+            self.assertTrue(any("upstream-evidence" in item for item in bundle.reports[0].warnings))
+
+    def test_http_403_records_rate_limit_diagnostic(self) -> None:
+        MODULE.reset_fetch_diagnostics("demo")
+        headers = {"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "1710000000"}
+
+        class FakeHTTPError(MODULE.urllib.error.HTTPError):
+            def __init__(self) -> None:
+                super().__init__("https://api.github.com/repos/x/y/releases", 403, "forbidden", headers, None)
+
+        with patch.object(MODULE.urllib.request, "urlopen", side_effect=FakeHTTPError()):
+            text = MODULE.request_text("https://api.github.com/repos/x/y/releases", timeout=1, attempts=1)
+        self.assertIsNone(text)
+        diagnostics = MODULE.drain_fetch_diagnostics("demo")
+        self.assertTrue(any("403" in item and "限流" in item for item in diagnostics))
+
     def test_batch_gate_stays_frozen_when_any_package_still_needs_choice(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)

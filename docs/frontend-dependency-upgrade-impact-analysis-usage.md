@@ -342,6 +342,7 @@ Workspace 失败：`resolve-frontend-workspace`
 1. `--change-dir`（默认意图）→ `<change-dir>/evidence/frontend-dependency-upgrade/`  
 2. `--output-dir` 显式覆盖  
 3. 两者皆无 → **报错停止**（不得在项目根自建平行报告目录）
+4. 同一轮混有精确升级 + 开放目标 → 在上述目录下自动拆成 `exact/` + `open-target/`，并写 `BATCH-INDEX.md`
 
 可创建：已有 change 目录内的 `evidence/frontend-dependency-upgrade/`  
 不可创建：change / lifecycle 本身  
@@ -350,7 +351,8 @@ Workspace 失败：`resolve-frontend-workspace`
 |---|---|
 | `frontend-dependency-upgrade-report.md` | 始终 |
 | `frontend-dependency-upgrade-report.json` | `--json-output` |
-| `upstream-evidence/` | 精确升级默认；`--no-upstream-evidence` 关；`--cleanup-upstream-evidence` 写成功后删 |
+| `upstream-evidence/` | 精确升级默认 download-first；即使正文 missing 也落盘 `sources.json` + 抓取诊断；`--no-upstream-evidence` 关；`--cleanup-upstream-evidence` 写成功后删 |
+| 混批拆分 | 同时有精确升级 + 开放目标 → `exact/` + `open-target/` + `BATCH-INDEX.md` |
 | `human-decisions.json` | Agent 写入；生成器只读（默认路径或 `--decision-file`） |
 
 报告 12 章（机器锚点 → 中文标题）：

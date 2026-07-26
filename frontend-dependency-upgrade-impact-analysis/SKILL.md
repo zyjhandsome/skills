@@ -97,6 +97,7 @@ Resolve the report directory in this order:
 1. existing `--change-dir` (default) → `<change-dir>/evidence/frontend-dependency-upgrade/`  
    Typical OpenSpec path: `openspec/changes/<id>/evidence/frontend-dependency-upgrade/`;
 2. explicit `--output-dir` override when the caller must write elsewhere.
+3. Mixed exact + open-target batches auto-split into `exact/` and `open-target/` under that directory (plus `BATCH-INDEX.md`). Exact upgrades download-first into `upstream-evidence/`.
 
 Do not invent a project-root report folder. Without `--change-dir` or `--output-dir`, stop with an error. This skill may create `evidence/frontend-dependency-upgrade/` inside an **existing** change directory; it must not create the change itself.
 

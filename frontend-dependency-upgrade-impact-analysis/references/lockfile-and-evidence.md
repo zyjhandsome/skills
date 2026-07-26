@@ -114,20 +114,32 @@
 
 ### 报告级 upstream-evidence
 
-精确升级（明确 `from → to`）默认在报告输出目录旁写入 `upstream-evidence/`，只保存目标版本区间材料：
+精确升级（明确 `from → to`）默认采用 **download-first**：先把官方 registry / release / changelog 下载落到报告输出目录旁的 `upstream-evidence/`，再以该本地包作为 release/changelog 依据之一。开放目标（无 `to`）不写、不读该目录。
+
+目录内容：
 
 - `manifest.json`：包名、区间、抓取时间、每版本状态与来源；
 - `<package-safe>/registry.json`：npm 包元数据（供离线回放区间）；
-- `<package-safe>/<version>/release.md`、`changelog.md`、`sources.json`。
+- `<package-safe>/fetch-failure.json`：registry 级失败时的诊断（HTTP 状态、限流线索等）；
+- `<package-safe>/<version>/release.md`、`changelog.md`、`sources.json`（`sources.json` **始终**写入，即使正文 missing）。
 
 行为：
 
 - 默认开启写与回读；`--no-upstream-evidence` 关闭；
-- 联网成功时覆盖同包同版本本地文件；联网失败或 `--offline` 时回读已有证据包，并在报告中标明本地来源；
-- 本地回读最多把完整性标为 `partial`，不得标 `complete`；
+- 联网抓取时即使 release/changelog 正文缺失，也必须创建证据目录与 `sources.json`，并写入 `fetch_diagnostics`（如 GitHub `403/429`、未设置 `GITHUB_TOKEN`、超时）；
+- 联网失败或 `--offline` 时回读已有证据包；本地回读最多把完整性标为 `partial`，不得标 `complete`；
 - 默认保留目录；`--cleanup-upstream-evidence` 在报告写成功后删除；
-- 非精确升级（无 to 的 assess/removal 等）不写、不读该目录；
 - 与六小时 HTTP cache 并存：后者是传输缓存，前者是报告级可读证据包。
+
+### 混批自动拆分
+
+同一轮同时包含精确升级与开放目标时，生成器在 `evidence/frontend-dependency-upgrade/` 下自动拆成：
+
+- `exact/`：精确升级报告 + `upstream-evidence/`
+- `open-target/`：开放目标报告（无 upstream-evidence）
+- `BATCH-INDEX.md`：批次索引
+
+单模式（只有精确或只有开放目标）仍写在 `frontend-dependency-upgrade/` 根下，保持旧布局。
 
 GitHub API 必须分页或明确页数限制。若人为设置 `max-versions` 截断，报告必须写出总数、保留区间和“不可视为完整证据”。
 
