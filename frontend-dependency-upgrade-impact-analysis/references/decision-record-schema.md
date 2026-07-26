@@ -13,7 +13,7 @@
 
 生成器**只读**决策文件，不会创建也不会修改它。默认路径为 `<报告目录>/human-decisions.json`，存在即读取；也可用 `--decision-file` 显式指定。
 
-**记录选型不等于实施授权。** 决策文件不能授予安装依赖、执行项目脚本、切换 Node 或提交改动的权限；实施审批只从调用方的任务生命周期取得。
+**记录选型/推进不等于实施授权。** 决策文件不能授予安装依赖、执行项目脚本、切换 Node 或提交改动的权限；也不能单独把 `batch_implementation_gate` 解冻到可实施——技术阻塞仍会使闸门保持 `frozen`。实施审批只从调用方的任务生命周期取得（Stage B/C）。
 
 ## 2. 文件格式
 
@@ -38,6 +38,16 @@
       "rationale": "无合规替代包，按逐调用点改造表推进",
       "decided_at": "2026-07-25T22:12:00+08:00",
       "source": "confirmation-queue"
+    },
+    {
+      "package": "axios",
+      "track": "proceed-exact",
+      "choice": "proceed:axios@1.7.9",
+      "selected_package": "axios",
+      "selected_version": "1.7.9",
+      "rationale": "按报告精确目标推进",
+      "decided_at": "2026-07-26T19:00:00+08:00",
+      "source": "confirmation-queue"
     }
   ]
 }
@@ -48,8 +58,8 @@
 | 字段 | 必填 | 说明 |
 |---|---|---|
 | `package` | 是 | 必须属于本次分析清单，否则记为 `unknown-package` 并忽略 |
-| `track` | 否 | `remove` / `replace` / `native-refactor`；缺省时按报告主轨呈现 |
-| `choice` | 是 | 确认队列给出的选项 ID |
+| `track` | 否 | `remove` / `replace` / `native-refactor` / `proceed-exact` 等；缺省时按报告主轨呈现 |
+| `choice` | 是 | 确认队列给出的选项 ID（精确升级：`proceed:<包>@<版本>` / `defer` / `other`） |
 | `selected_package` | 选包时必填 | 选定的依赖包名 |
 | `selected_version` | 选包时必填 | 精确 semver，不接受范围 |
 | `rationale` | 建议 | 决策理由，会原样呈现在决策记录表 |
@@ -72,9 +82,12 @@
 
 `source=other` 的自填选择只做能核对的检查（精确 semver、若该包也在候选中则同样核对弃用与约束冲突），其余按未经生成器核对呈现。
 
-确认后的包：`selection_status=selected`、`decision_status=not_needed`、`recommended_action=disposition-selected`，队列状态为 `decided`。
+确认后的包：`selection_status=selected`、`decision_status=not_needed`，队列状态为 `decided`。  
+`recommended_action` 为 `disposition-selected`（开放目标）、`proceed-selected`（精确升级确认推进）或 `deferred`（精确升级本轮不推进）。
 
-`disposition-selected` 只表示**本技能内的分析选型已落盘**；本技能到此结束，不会也不应开始改依赖或跑项目脚本。实施授权须由调用方另行给出。
+上述状态只表示 **Stage A 分析选型/推进确认已落盘**；本技能到此结束，不会也不应开始改依赖或跑项目脚本。仅当整批 `batch_implementation_gate=ready` 时，调用方才可进入 Stage B（计划）并另给 Stage C（实施）授权。
+
+机读动作名：`disposition-selected`、`proceed-selected`、`deferred`。
 
 不得作为最终选择写入本文件：`switch:*`、`handle-parent`（须继续写 `包<-父包` 追问）、无版本的 `pin-override`、已废除的 `reject-native-refactor`。父包追问的 `package` 形如 `目标包<-父包`；全部父包追问确认后，主包也会变为 `disposition-selected`。
 

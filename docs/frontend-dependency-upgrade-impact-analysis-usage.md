@@ -8,19 +8,20 @@
 
 ## 1. 一句话心智模型
 
-这个 skill **只做证据驱动的决策包**，不做实施。
+这个 skill **只做证据驱动的决策包（Stage A）**，不做实施计划与实施（Stage B/C）。
 
-Agent 解析前端 workspace 与 lock 基线 → 用生成器收集/渲染报告 → 按确认队列让人选型 → 选型写入决策文件后重跑 → **实施授权仍由调用方任务生命周期单独给出**。生成器是确定性的采集器 + Markdown 渲染器；启发式结论必须经 Agent 复核后才能宣称权威。
+Agent 解析前端 workspace 与 lock 基线 → 用生成器收集/渲染报告 → 按确认队列让人完成策略确认（开放目标选型 / 精确升级 proceed·defer）→ 写入决策文件后重跑 → **仅当 `batch_implementation_gate=ready` 才可交接 Stage B**；实施授权仍由调用方另给。生成器是确定性的采集器 + Markdown 渲染器；启发式结论必须经 Agent 复核后才能宣称权威。
 
-三条永不混淆的状态轴：
+四条永不混淆的状态轴：
 
 | 轴 | 回答的问题 | 典型取值 |
 |---|---|---|
 | `analysis_status` | 证据是否够完整？ | `partial` / `blocked` / `complete`（**禁止**与 `needs_choice` 同时为 `complete`） |
-| `decision_status` / `selection_status` | 人是否已选路径与目标？ | `needs_choice` / `not_needed`；`selected` / `needs_explicit_choice` / `not_applicable` |
-| 实施授权 | 是否允许改运行时 / 装依赖 / 跑脚本？ | 默认全部否；报告与决策文件**不能**授予；**本技能终点是分析报告** |
+| `decision_status` / `selection_status` | 人是否已确认路径/推进？ | `needs_choice` / `not_needed`；`selected` / `needs_explicit_choice` / `not_applicable` |
+| `batch_implementation_gate` | 整批是否允许开计划/实施？ | `frozen` / `ready`（任一未确认或非延期包仍 blocked → `frozen`） |
+| 实施授权 | 是否允许改运行时 / 装依赖 / 跑脚本？ | 默认全部否；报告与决策文件**不能**授予 |
 
-**心智纠偏：** 生成器会一次写出证据 + 主轨建议 + 全菜单 + 确认队列；真正「停下来问人」是 Agent 协议。开放目标在未写 decision-file 前 exit **`7`**，不得宣称分析完成。细则地图见 skill 内 `references/human-confirmation-gates.md`，摘要见下文 §11.1。
+**心智纠偏：** 生成器会一次写出证据 + 主轨建议 + 全菜单 + 确认队列；真正「停下来问人」是 Agent 协议。未写 decision-file 前 exit **`7`**（含精确升级推进确认），不得宣称 Stage A 完成。`frozen` 时整批不得开 Stage B/C。细则见 `references/human-confirmation-gates.md`，摘要见 §11.1。
 
 ---
 
@@ -124,16 +125,19 @@ flowchart TD
   M --> N[写 Markdown ± JSON<br/>默认 draft]
   N --> O{确认队列}
   O -->|blocked 包| P[补前置条件后重跑]
-  O -->|ready 包| R[Agent 逐包照问]
+  O -->|ready 开放目标| R[Agent 一包一问]
+  O -->|ready 精确升级| R2[可批量 proceed/defer]
   R --> S[写入 decision-file]
+  R2 --> S
   S --> N
   P --> N
   N --> T{完成门禁}
-  T -->|缺口| U[保持 draft/partial]
-  T -->|通过| V[Agent 可标 complete]
-  V --> W{调用方实施授权?}
-  W -->|否| X[停止于决策包]
-  W -->|是| Y[run_with_compatible_node<br/>dry-run → approve flags → execute]
+  T -->|needs_choice| U[draft + exit 7 + frozen]
+  T -->|决策完成| V{batch_implementation_gate}
+  V -->|frozen| X[停止；不得开计划/实施]
+  V -->|ready| W{调用方 Stage B/C 授权?}
+  W -->|否| X2[停止于决策包]
+  W -->|是| Y[Stage B 计划 → Stage C<br/>run_with_compatible_node]
 ```
 
 ### 5.1 步骤对照（SKILL Workflow）
@@ -150,8 +154,8 @@ flowchart TD
 10. **调研回填**：知识表无条目时，调研清单为必做；经 `--analysis-evidence-file` 回填  
 11. **风险**：七因素 → 回归范围 / 发布控制 / 监控 / 回滚触发  
 12. **生成并校验报告**；Agent 复核启发式段落  
-13. **确认队列**：一包一问、原文照问、含 `other`；`blocked` 不问；`switch:<track>` 只改轨  
-14. **决策落盘** → 重跑；记录选型 ≠ 实施批准  
+13. **确认队列**：开放目标一包一问；精确升级可批量 proceed/defer；`blocked` 不问；`switch:<track>` 只改轨  
+14. **决策落盘** → 重跑；仅 `batch_implementation_gate=ready` 可交接 Stage B；选型 ≠ 实施批准  
 
 ---
 
@@ -197,6 +201,7 @@ CLI 入口对应关系：
 | `remove` | `safe_removal_candidate` |
 | `replace` | 有使用点且有可换包@版本 |
 | `native-refactor` | 有使用点且无可换包 |
+| `proceed-exact` | 已指定精确 `to`（精确升级；确认推进/延期） |
 
 `alternate_tracks` 保持可见；人可 `switch:<track>`。
 
@@ -491,15 +496,15 @@ flowchart LR
 
 ## 11. 人工确认循环（Agent 协议）
 
-1. 生成报告，读「人工确认队列」与确认阶段 `evidence`/`choice`/`mixed`；`needs_choice` 时 exit `7`，横幅区分待补证据 vs 待选型  
-2. `blocked`：先补删除证据 / 调用点 / 调研回填，再重跑（勿问选型）  
-3. `ready`：**原文**问主轨问题；替换仅含已复核 `replace:<包>@<版本>`，末位 `other`；curated-map 不可点选  
+1. 生成报告，读「人工确认队列」、确认阶段与 `batch_implementation_gate`；`needs_choice` 时 exit `7`  
+2. `blocked`：先补证据 / 解精确升级阻塞，再重跑（勿问选型/推进）  
+3. `ready`：开放目标**一包一问**；精确升级可按「精确升级批量确认」表一次确认 `proceed:包@版本` / `defer` / `other`  
 4. 若答 `switch:<track>` → 改问同节「改轨问题」整表，**不**写 decision-file  
-5. `handle-parent` 勿落盘；继续写 `包<-父包` 追问，或选 pin-override / remove-feature / other  
-6. 最终答案写入 `human-decisions.json` → 重跑；完成后 `disposition-selected`，exit `0`（无其他阻塞）  
+5. `handle-parent` 勿落盘；继续写 `包<-父包` 追问  
+6. 最终答案写入 `human-decisions.json` → 重跑 → `disposition-selected` / `proceed-selected` / `deferred`  
+7. 仅当 `batch_implementation_gate=ready` 时交接 Stage B；Stage C 另需实施授权 + runner approve flags  
 
-确认后包级：`selection_status=selected`，`decision_status=not_needed`，`recommended_action=disposition-selected`，队列 `decided`。  
-**只表示分析选型已落盘、本技能结束**；不是实施批准。
+**只表示 Stage A 完成**；不是计划批准，更不是实施批准。同批任一包未确认或非延期包仍 blocked → 整批 `frozen`。
 
 ### 11.1 人确认点地图（摘要）
 
@@ -507,11 +512,13 @@ flowchart LR
 |---|---|---|
 | 多 frontend workspace | 问 | 问 |
 | 基线 `from` 冲突 | 问 / blocked | 问 / blocked |
-| 删除/替换/原生选型 | **不问**（目标已明确） | **必须问**（G4）；exit `7` |
-| 证据不足（队列 blocked） | 少见 | 先补证据再问 |
-| 实施装依赖/改代码 | 技能外 | 技能外 |
+| 处置选型（删/换/原生/父包） | **不问** | **必须问**（G4）；一包一问；exit `7` |
+| 推进确认 proceed/defer | **必须问**（G7）；可批量；exit `7` | 不适用 |
+| 证据/技术阻塞（队列 blocked） | 先解阻塞 | 先补证据 |
+| `batch_implementation_gate` | 未完成或 blocked → `frozen` | 同左 |
+| 实施装依赖/改代码 | 技能外（Stage C） | 技能外 |
 
-完整表与「为何感觉一次跑完」根因：`frontend-dependency-upgrade-impact-analysis/references/human-confirmation-gates.md`。
+完整表：`frontend-dependency-upgrade-impact-analysis/references/human-confirmation-gates.md`。
 
 ---
 
@@ -519,7 +526,8 @@ flowchart LR
 
 文档要求在标 complete 前确认：
 
-- [ ] **`decision_status` 不是 `needs_choice`**（开放目标已写入 decision-file 并重跑）  
+- [ ] **`decision_status` 不是 `needs_choice`**（开放目标选型 + 精确升级 proceed/defer 已落盘并重跑）  
+- [ ] **`batch_implementation_gate=ready`** 才交接 Stage B；`frozen` 不得开计划/实施  
 - [ ] **未**将 `analysis_status=complete` 与 `needs_choice` 并存  
 - [ ] baseline / lock 类型 / workspace / importer 已确认（`importer_resolution=confirmed`）  
 - [ ] 本机 Node、项目约束、管理器、所选项目 Node、execution readiness、恢复计划明确  
@@ -544,8 +552,8 @@ python frontend-dependency-upgrade-impact-analysis/scripts/generate_upgrade_repo
   --change-dir openspec/changes/<id>
 ```
 
-Agent：复核上游与代码映射 → 需要时补 analysis-evidence → 精确升级无处置选型，复核后即可交付分析报告。  
-**实施不在本技能内**；仅当调用方另开实施授权后，才使用 `run_with_compatible_node.py`（dry-run → 再加 approve flags）。
+Agent：复核上游与代码映射 → 需要时补 analysis-evidence → **仍须确认 proceed/defer**（可与其他精确升级批量问）→ 写入 decision-file → 重跑 → 确认 `batch_implementation_gate=ready`。  
+**实施不在本技能内**；仅当调用方完成 Stage B 并另开 Stage C 授权后，才使用 `run_with_compatible_node.py`（dry-run → 再加 approve flags）。
 
 ### 开放目标治理
 

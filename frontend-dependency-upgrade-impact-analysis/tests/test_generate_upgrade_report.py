@@ -1912,8 +1912,9 @@ packages:
             self.assertIn("| other |", markdown)
             self.assertIn("改轨问题", markdown)
             self.assertIn("human-decisions.json", markdown)
-            self.assertIn("待人工选型", markdown)
+            self.assertTrue("待人工确认" in markdown or "待人工选型" in markdown)
             self.assertIn("exit `7`", markdown)
+            self.assertIn("batch_implementation_gate", markdown)
             self.assertEqual(MODULE.validate_report_contract(markdown), [])
 
     def test_main_returns_7_when_open_target_needs_choice(self) -> None:
@@ -1934,7 +1935,9 @@ packages:
             report_path = root / "out" / "frontend-dependency-upgrade-report.md"
             self.assertTrue(report_path.is_file())
             text = report_path.read_text(encoding="utf-8")
-            self.assertTrue("待人工选型" in text or "待补证据" in text)
+            self.assertTrue(
+                "待人工确认" in text or "待人工选型" in text or "待补证据" in text
+            )
             self.assertIn("本轮确认阶段", text)
 
     def test_main_returns_0_after_open_target_decision_recorded(self) -> None:
@@ -2178,15 +2181,26 @@ packages:
             markdown_path = MODULE.write_bundle(bundle, args)
             markdown = markdown_path.read_text(encoding="utf-8")
             self.assertEqual(bundle.reports[0].baseline_status, "matches_from")
-            self.assertEqual(bundle.reports[0].selection_status, "selected")
-            self.assertEqual(bundle.decision_status, "not_needed")
+            self.assertEqual(bundle.reports[0].selection_status, "needs_explicit_choice")
+            self.assertEqual(bundle.decision_status, "needs_choice")
+            self.assertEqual(bundle.batch_implementation_gate, "frozen")
+            self.assertEqual(bundle.reports[0].primary_track, MODULE.PROCEED_EXACT_TRACK)
+            self.assertIsNotNone(bundle.reports[0].confirmation)
+            self.assertEqual(bundle.reports[0].confirmation.track, MODULE.PROCEED_EXACT_TRACK)
+            # Offline fixture has no project Node pin → exact upgrade blocked → queue evidence phase
+            self.assertEqual(bundle.reports[0].confirmation.status, "blocked")
+            self.assertIn("proceed-exact", markdown)
+            self.assertIn("batch_implementation_gate", markdown)
             self.assertTrue(bundle.reports[0].constraints)
             self.assertEqual(set(bundle.report_paths), {"markdown", "json"})
             self.assertEqual(bundle.report_paths["markdown"], str(markdown_path))
             self.assertTrue(markdown_path.is_file())
             self.assertTrue(Path(bundle.report_paths["json"]).is_file())
             structured = json.loads(Path(bundle.report_paths["json"]).read_text(encoding="utf-8"))
-            self.assertEqual(structured["pending_human_decisions"][0]["package"], "__node_runtime__")
+            pending_packages = {item["package"] for item in structured["pending_human_decisions"]}
+            self.assertIn("axios", pending_packages)
+            self.assertIn("__node_runtime__", pending_packages)
+            self.assertEqual(structured["batch_implementation_gate"], "frozen")
             self.assertEqual(structured["node_runtime"]["status"], "unknown")
             self.assertIn("current_host_node", structured["node_runtime"])
             self.assertNotIn("control_plane_requirement", structured["node_runtime"])
@@ -2263,7 +2277,7 @@ packages:
         self.assertTrue(any("行为守恒" in item for item in report.decision_required))
         self.assertTrue(any("同库升级不作为本轮选项" in item for item in report.constraints))
 
-    def test_exact_target_behavior_constraint_does_not_create_false_decision(self) -> None:
+    def test_exact_target_behavior_constraint_still_requires_proceed_gate(self) -> None:
         report = MODULE.PackageReport(
             MODULE.Upgrade("antd", "4.24.16", "5.22.0", intent="exact-upgrade"),
             "https://www.npmjs.com/package/antd",
@@ -2272,9 +2286,9 @@ packages:
             selection_status="selected",
         )
         MODULE.apply_behavior_parity(report)
-        self.assertEqual(report.decision_status, "not_needed")
-        self.assertEqual(report.selection_status, "selected")
-        self.assertFalse(report.decision_required)
+        self.assertEqual(report.decision_status, "needs_choice")
+        self.assertEqual(report.selection_status, "needs_explicit_choice")
+        self.assertTrue(any("确认推进" in item for item in report.decision_required))
         self.assertTrue(any("行为守恒" in item for item in report.constraints))
 
     def test_analysis_evidence_imports_compliance_alternative_and_removal(self) -> None:
@@ -2616,6 +2630,124 @@ packages:
             MODULE.write_bundle(bundle, args, output)
             self.assertFalse((output / "upstream-evidence").exists())
             self.assertNotIn("upstream_evidence", bundle.report_paths)
+
+    def test_exact_upgrade_requires_proceed_confirmation_exit_7(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "package.json").write_text(json.dumps({
+                "engines": {"node": ">=18"},
+                "dependencies": {"axios": "1.6.8"},
+            }), encoding="utf-8")
+            (root / "package-lock.json").write_text(json.dumps({
+                "lockfileVersion": 3,
+                "packages": {"node_modules/axios": {"version": "1.6.8"}},
+            }), encoding="utf-8")
+            (root / ".nvmrc").write_text("20.18.0\n", encoding="utf-8")
+            with (
+                patch.object(MODULE, "current_host_node_runtime", return_value=("20.18.0", "C:/node/node.exe")),
+                patch.object(MODULE, "detect_node_managers", return_value=(["nvm-windows"], {"nvm-windows": ["20.18.0"]})),
+            ):
+                code = MODULE.main([
+                    str(root), "--upgrade", "axios::1.7.9", "--offline",
+                    "--output-dir", str(root / "out"),
+                ])
+            self.assertEqual(code, 7)
+            text = (root / "out" / "frontend-dependency-upgrade-report.md").read_text(encoding="utf-8")
+            self.assertIn("proceed:axios@1.7.9", text)
+            self.assertIn("batch_implementation_gate", text)
+            self.assertIn("`frozen`", text)
+
+    def test_exact_upgrade_proceed_decision_clears_choice_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "package.json").write_text(json.dumps({
+                "engines": {"node": ">=18"},
+                "dependencies": {"axios": "1.6.8"},
+            }), encoding="utf-8")
+            (root / "package-lock.json").write_text(json.dumps({
+                "lockfileVersion": 3,
+                "packages": {"node_modules/axios": {"version": "1.6.8"}},
+            }), encoding="utf-8")
+            (root / ".nvmrc").write_text("20.18.0\n", encoding="utf-8")
+            decisions = root / "human-decisions.json"
+            decisions.write_text(json.dumps({"decisions": [{
+                "package": "axios",
+                "track": "proceed-exact",
+                "choice": "proceed:axios@1.7.9",
+                "selected_package": "axios",
+                "selected_version": "1.7.9",
+                "rationale": "test proceed",
+            }]}), encoding="utf-8")
+            with (
+                patch.object(MODULE, "current_host_node_runtime", return_value=("20.18.0", "C:/node/node.exe")),
+                patch.object(MODULE, "detect_node_managers", return_value=(["nvm-windows"], {"nvm-windows": ["20.18.0"]})),
+            ):
+                code = MODULE.main([
+                    str(root), "--upgrade", "axios::1.7.9", "--offline",
+                    "--decision-file", str(decisions),
+                    "--output-dir", str(root / "out"),
+                ])
+            self.assertEqual(code, 0)
+            args = MODULE.parse_args([
+                str(root), "--upgrade", "axios::1.7.9", "--offline",
+                "--decision-file", str(decisions),
+                "--output-dir", str(root / "out2"),
+            ])
+            with (
+                patch.object(MODULE, "current_host_node_runtime", return_value=("20.18.0", "C:/node/node.exe")),
+                patch.object(MODULE, "detect_node_managers", return_value=(["nvm-windows"], {"nvm-windows": ["20.18.0"]})),
+            ):
+                bundle = MODULE.build_bundle(args)
+            report = bundle.reports[0]
+            self.assertEqual(report.decision_status, "not_needed")
+            self.assertEqual(report.selection_status, "selected")
+            self.assertEqual(report.recommended_action, MODULE.PROCEED_SELECTED_ACTION)
+            self.assertEqual(bundle.decision_status, "not_needed")
+            self.assertEqual(bundle.batch_implementation_gate, "ready")
+
+    def test_batch_gate_stays_frozen_when_any_package_still_needs_choice(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "package.json").write_text(json.dumps({
+                "engines": {"node": ">=18"},
+                "dependencies": {"axios": "1.6.8", "legacy": "1.0.0"},
+            }), encoding="utf-8")
+            (root / "package-lock.json").write_text(json.dumps({
+                "lockfileVersion": 3,
+                "packages": {
+                    "node_modules/axios": {"version": "1.6.8"},
+                    "node_modules/legacy": {"version": "1.0.0"},
+                },
+            }), encoding="utf-8")
+            (root / ".nvmrc").write_text("20.18.0\n", encoding="utf-8")
+            (root / "src").mkdir()
+            (root / "src" / "a.ts").write_text("import axios from 'axios';\nimport legacy from 'legacy';\n", encoding="utf-8")
+            upgrades = root / "upgrades.json"
+            upgrades.write_text(json.dumps([
+                {"package": "axios", "to": "1.7.9", "intent": "exact-upgrade"},
+                {"package": "legacy", "intent": "auto-assess"},
+            ]), encoding="utf-8")
+            decisions = root / "human-decisions.json"
+            decisions.write_text(json.dumps({"decisions": [{
+                "package": "axios",
+                "track": "proceed-exact",
+                "choice": "proceed:axios@1.7.9",
+                "selected_package": "axios",
+                "selected_version": "1.7.9",
+            }]}), encoding="utf-8")
+            args = MODULE.parse_args([
+                str(root), "--upgrades-file", str(upgrades), "--offline",
+                "--decision-file", str(decisions),
+                "--output-dir", str(root / "out"),
+            ])
+            with (
+                patch.object(MODULE, "current_host_node_runtime", return_value=("20.18.0", "C:/node/node.exe")),
+                patch.object(MODULE, "detect_node_managers", return_value=(["nvm-windows"], {"nvm-windows": ["20.18.0"]})),
+            ):
+                bundle = MODULE.build_bundle(args)
+            self.assertEqual(bundle.decision_status, "needs_choice")
+            self.assertEqual(bundle.batch_implementation_gate, "frozen")
+            self.assertTrue(any("人工确认未完成" in item for item in bundle.batch_gate_reasons))
 
 
 if __name__ == "__main__":

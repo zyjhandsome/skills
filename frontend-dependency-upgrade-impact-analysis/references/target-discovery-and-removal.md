@@ -118,6 +118,7 @@
 | `remove` | 删除结论为 `safe_removal_candidate` | 删除是成本最低的收敛方式 |
 | `replace` | 已确认有使用点，且存在可选的替代包@版本 | 换成一个确定的包@版本 |
 | `native-refactor` | 已确认有使用点，且无可选替代包 | 只能改用平台原生能力或自建实现 |
+| `proceed-exact` | 已指定精确 `to`（精确升级模式） | 不做处置选型；确认是否按该目标推进或延期 |
 
 来源判定先于使用情况：`transitive` 与 `phantom` 直接定轨，不走删除评估门槛。来源为 `both` 时按直接依赖定轨，但 `handle-parent` 会作为备选轨道保持可见。
 
@@ -127,9 +128,11 @@
 
 ## 3.2 人工确认队列
 
-生成器产出机器可读的确认队列：**一包一问**，问题文本与选项由生成器固定，Agent 逐个照问，不临场发挥。
+生成器产出机器可读的确认队列。问题文本与选项由生成器固定，Agent 照问，不临场发挥。
 
-- 选项 ID 形态：`replace:<包>@<版本>`、`remove`、`remove-usage`、`switch-to-declared`、`native-refactor`、`handle-parent`、`pin-override:<包>@<版本>`、`parent-upgrade:<包>@<版本>`、`parent-replace:<包>`、`parent-remove:<包>`、`isolate-behind-wrapper`、`internal-fork`、`remove-feature`、`switch:<轨道>`、`other`。**不存在 `same-package:` 选项**。
+- **开放目标（无 `to`）**：**一包一问**。
+- **精确升级（`proceed-exact`）**：**可同批汇总**确认 `proceed:<包>@<版本>` / `defer` / `other`。
+- 选项 ID 形态：`proceed:<包>@<版本>`、`defer`、`replace:<包>@<版本>`、`remove`、`remove-usage`、`switch-to-declared`、`native-refactor`、`handle-parent`、`pin-override:<包>@<版本>`、`parent-upgrade:<包>@<版本>`、`parent-replace:<包>`、`parent-remove:<包>`、`isolate-behind-wrapper`、`internal-fork`、`remove-feature`、`switch:<轨道>`、`other`。**不存在 `same-package:` 选项**。
 - 替换轨的问题只列每个候选的**推荐版本**，其余版本留在候选表里；想换版本走 `other`。
 - 末位固定 `other`：自行指定包与版本，或改走其他处置方式。
 - `switch:<轨道>` 是改轨答案，Agent 接着问该轨道的问题，最终结果才落盘。
@@ -226,8 +229,9 @@
 | 字段 | 取值示例 | 调用方应如何理解 |
 |---|---|---|
 | `analysis_status` | `partial` / `blocked` / `complete` | `blocked` 时不得当作可实施结论；**禁止**与 `needs_choice` 同时为 `complete` |
-| `decision_status` | `not_needed` / `needs_choice` | `needs_choice` 必须等人选删除/替代/原生等；此时生成器 exit `7` |
-| `selection_status` | `selected` / `needs_explicit_choice` / `not_applicable` | 区分已明确目标和真正待选项 |
+| `decision_status` | `not_needed` / `needs_choice` | `needs_choice` 必须等人确认（开放目标选型或精确升级推进）；此时生成器 exit `7` |
+| `selection_status` | `selected` / `needs_explicit_choice` / `not_applicable` | 区分已确认推进/处置与真正待选项 |
+| `batch_implementation_gate` | `frozen` / `ready` | `frozen` 时整批不得开 Stage B/C；见 `human-confirmation-gates.md` |
 | `constraints` | 包级约束列表 | 行为守恒等约束不得混入待决策 |
 | `behavior_parity_required` | `yes` / `no` | 默认为 `yes`；为 yes 时不得把删除/换库当默认范围 |
 | `report_paths` | `markdown` / 可选 `json` | 证据附件路径，不是第二状态源 |
@@ -238,7 +242,7 @@
 | `disposition_options[].availability` | `evidence-available` / `needs-research` / `not-applicable` | 只说明本轮是否已产出证据，不是推荐 |
 | `provenance.kind` | `direct` / `both` / `phantom` / `transitive` / `unknown` | 决定哪些路径存在；`unknown` 时先补证据 |
 | `provenance.override_version` | 精确版本或空 | 满足全部父包 range 的最低可行版本，仍需人确认 |
-| `primary_track` | `remove` / `replace` / `native-refactor` / `handle-parent` / `fix-phantom` / `pending-removal-evidence` | 本轮证据指向的单一路径，人可改轨 |
+| `primary_track` | `remove` / `replace` / `native-refactor` / `handle-parent` / `fix-phantom` / `pending-removal-evidence` / `proceed-exact` | 本轮证据指向的单一路径；开放目标人可改轨 |
 | `confirmation.status` | `ready` / `blocked` / `decided` | `blocked` 时不得向人提选型问题 |
 | `decision.status` | `confirmed` / `invalidated` / `unknown-package` | `confirmed` 也只是选型，不是实施授权 |
 | `refactor_plan.status` | `established` / `needs-research` | 仅前者可作为“无可替代包”时的兜底路径 |

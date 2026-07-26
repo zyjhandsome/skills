@@ -8,14 +8,15 @@ description: >
   authoritative lock baseline, collects version-specific upstream and code-impact
   evidence, detects host/project Node conflicts, scores seven-factor risk, and writes a
   Markdown decision report plus optional structured JSON in Simplified Chinese.
-  Behavior preservation is the default. Open-target removal/replacement/rewrite stay
-  human choices via the confirmation queue; this skill ends at the decision report,
+  Behavior preservation is the default. Open-target disposition and exact-upgrade
+  proceed/defer stay human choices via the confirmation queue; batch_implementation_gate
+  freezes Stage B/C until the batch is clear. This skill ends at the decision report,
   never at implementation.
 ---
 
 # Frontend Dependency Upgrade Impact Analysis
 
-Produce an evidence-backed decision packet and validation plan — analysis only. The generator collects and renders; review heuristics before treating a report as authoritative. Exact upgrades (clear `from → to`) need no disposition choice. Open targets must finish the human confirmation queue before `complete`.
+Produce an evidence-backed decision packet and validation plan — analysis only. The generator collects and renders; review heuristics before treating a report as authoritative. Exact upgrades (clear `from → to`) skip disposition choice but still need proceed/defer confirmation (batchable). Open targets must finish one-package-at-a-time disposition questions. Stage A ends only when `decision_status≠needs_choice`; Stage B/C require `batch_implementation_gate=ready` plus caller authorization.
 
 ## Boundaries
 
@@ -24,7 +25,7 @@ Produce an evidence-backed decision packet and validation plan — analysis only
 - Read-only Node/runtime probes are allowed. Runtime switching, Node installation, dependency installation, and project scripts require explicit implementation authorization.
 - Treat report generation as analysis only, never as implementation approval.
 - Do not create lifecycle/change records or redefine caller scope. The caller owns approvals and lifecycle state.
-- **Human Decision Interaction Gate:** If `decision_status=needs_choice`, do not end as “analysis done.” Read the queue phase (`evidence`/`choice`/`mixed`): on `blocked`, gather evidence and regenerate; on `ready`, ask one package at a time verbatim (replace `@version` + `other`). After `switch:<track>`, ask the rendered alternate-track question, do not write switch to the decision file. `handle-parent` alone is not final—finish `pkg<-parent` follow-ups. Record finals in `--decision-file`, regenerate to `disposition-selected`. Exit `7` = draft written, open target unfinished. Read `references/human-confirmation-gates.md`.
+- **Human Decision Interaction Gate:** If `decision_status=needs_choice`, do not end Stage A. Read queue phase (`evidence`/`choice`/`mixed`) and `batch_implementation_gate`. On `blocked`, gather evidence / clear blockers and regenerate. On `ready`: open targets → ask one package at a time verbatim; exact upgrades (`proceed-exact`) → may batch-confirm `proceed:pkg@version` / `defer` / `other`. After `switch:<track>`, ask the alternate-track question; do not write switch to the decision file. `handle-parent` alone is not final. Record finals in `--decision-file`, regenerate to `disposition-selected` / `proceed-selected`. Exit `7` = draft written, confirmations unfinished. If `batch_implementation_gate=frozen`, do not open implementation plans or execute. Read `references/human-confirmation-gates.md`.
 
 ## Resolve scope and baseline
 
@@ -59,7 +60,7 @@ Preserve observable behavior unless the user explicitly allows behavior change, 
 
 Modes:
 
-- **Exact upgrade:** analyze the confirmed `from → to` interval.
+- **Exact upgrade:** analyze the confirmed `from → to` interval, then require proceed/defer confirmation before Stage B/C.
 - **Open target:** a listed package has to go, so the only routes are remove, replace, native rewrite, or handling the parent that pulls it in. **A same-package upgrade is never offered** — the version number moving forward does not resolve whatever put the package on the list; pass an exact target version if an upgrade is what you want. "Keep it" and "time-boxed exemption" are not offered either. Triage into one `primary_track` by asking, in order, *where does it come from → is it actually used → is there a package to switch to → otherwise rewrite it in first-party code*: `handle-parent` / `fix-phantom` / `pending-removal-evidence` / `remove` / `replace` / `native-refactor`. Alternate tracks stay visible and the human can switch tracks.
 - **Provenance:** classify every package as `direct` / `both` / `phantom` / `transitive` / `unknown` from the manifest, the lock's dependency edges, and real call sites. Provenance decides which routes exist at all: an undeclared package has no declaration to drop, and one nobody calls cannot be rewritten. Transitive packages get parent chains, per-parent ranges, whether each parent's newest stable already dropped the dependency, and the lowest override version that satisfies every parent.
 - **Removal:** inspect direct, indirect, dynamic, tooling, peer, and transitive use. Zero static hits do not prove safe removal.
@@ -84,8 +85,8 @@ Read `references/target-discovery-and-removal.md` whenever `to` is absent or rem
 10. When the curated map has no entry, the emitted research checklist is mandatory work, not a suggestion: research candidates against the listed criteria (never download counts) and write the verdict back through `--analysis-evidence-file` per `references/analysis-evidence-schema.md`, alongside reviewed removal/runtime facts.
 11. Score the seven factors in `references/risk-model.md`, then derive regression scope, rollout controls, monitoring, and rollback triggers.
 12. Generate and validate the Markdown report. Review every incomplete or heuristic section. A full menu in the report is not a final disposition.
-13. Open targets: work the confirmation queue before claiming completion. Ask one `ready` package at a time, verbatim (replace offers exact `package@version` plus `other`). Never ask `blocked` packages — interrupt to gather removal/replacement/refactor evidence, regenerate, then ask. `switch:<track>` asks that track next and is not a decision. After `handle-parent`, ask per-parent follow-ups.
-14. Record final answers per `references/decision-record-schema.md`, regenerate, and stop at the decision packet. Confirmed selections are not implementation approval.
+13. Work the confirmation queue before claiming Stage A complete. Open targets: one `ready` package at a time (replace offers exact `package@version` plus `other`). Exact upgrades: batch-confirm proceed/defer when multiple `to` targets are ready. Never ask `blocked` packages. `switch:<track>` is not a decision. After `handle-parent`, ask per-parent follow-ups.
+14. Record final answers per `references/decision-record-schema.md`, regenerate, and stop at the decision packet. Only hand off to Stage B when `batch_implementation_gate=ready`. Confirmed selections are not implementation approval.
 
 Read `references/impact-analysis-method.md` for evidence priority, impact-chain mapping, and stopping conditions. Read only the relevant family in `references/package-categories.md`.
 
@@ -157,7 +158,7 @@ Only after matching explicit approvals, add `--execute --approve-runtime-switch`
 
 Before marking the analysis complete, verify:
 
-- `decision_status` is not `needs_choice`; open-target packages are `disposition-selected` via the decision file. **Never** set `analysis_status=complete` while `needs_choice` remains;
+- `decision_status` is not `needs_choice`; open targets are `disposition-selected` and exact upgrades are `proceed-selected` or `deferred` via the decision file. **Never** set `analysis_status=complete` while `needs_choice` remains; do not open Stage B/C while `batch_implementation_gate=frozen`;
 - baseline, lock type, workspace, and importer are confirmed (`importer_resolution=confirmed`; non-frontend roots stay blocked);
 - current host Node, project Node constraints, runtime manager availability, selected project runtime, execution readiness, and restoration plan are explicit;
 - contradictory project Node constraints remain blocked; missing managers/runtimes remain implementation blockers until explicitly installed; `unknown` Node status never treats host Node as the project runtime;

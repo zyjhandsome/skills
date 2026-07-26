@@ -37,7 +37,14 @@ Markdown 必须按以下顺序包含中文可见标题，并保留对应的英�
 
 package、analysis mode、governance/upgrade reason、from、to、recommended action、selection status、decision status、constraints、change type、dependency type、manifest spec、lock direct version、baseline status、risk score、risk level、evidence completeness。
 
-包级 `selection_status` 取值：`selected`（已确定精确目标）、`needs_explicit_choice`（等待人工在删除/替换/原生改造/父包处置之间选择）、`not_applicable`（该包不需要选择动作）。
+包级 `selection_status` 取值：`selected`（已确认推进或已选定处置）、`needs_explicit_choice`（等待人工确认：开放目标处置选型，或精确升级 `proceed-exact` 推进/延期）、`not_applicable`（该包不需要选择动作）。
+
+首页与结论还必须声明批次实施闸门：
+
+- `batch_implementation_gate`：`frozen` / `ready`
+- `batch_gate_reasons`：导致 `frozen` 的原因列表（确认未完成、精确升级 blocked、Node 执行 blocked 等）
+
+`frozen` 时整批不得进入 Stage B（实施计划）或 Stage C（实施）。详见 `human-confirmation-gates.md`。
 
 整单摘要另需：
 
@@ -66,11 +73,11 @@ package、analysis mode、governance/upgrade reason、from、to、recommended ac
 
 「依赖来源与父包链」小节必须写明 `provenance.kind`（`direct` / `both` / `phantom` / `transitive` / `unknown`）、manifest 声明字段、代码是否有直接用法、判定证据与未决项。存在父包时另需父包表：父包、已解析版本、对该包的 range、父包最新稳定版、是否已摆脱该依赖（`dropped`/`still-depends`/`unknown`）、说明；父包链最多展示 5 条，超出只计数。解析出 overrides 最低可行版本时写明该版本及会被破坏的父包约束。
 
-目标未知时还要在依赖变化中写明主轨判定：`primary_track` 取 `remove`、`replace`、`native-refactor`、`handle-parent`、`fix-phantom` 或 `pending-removal-evidence`，附判定依据与备选轨道。判定顺序固定为「先看依赖来源 → 是否真的被使用 → 是否有可换的包 → 都没有则原生改造」。主轨只表示本轮证据指向哪条路径，人可改轨。
+目标未知时还要在依赖变化中写明主轨判定：`primary_track` 取 `remove`、`replace`、`native-refactor`、`handle-parent`、`fix-phantom` 或 `pending-removal-evidence`，附判定依据与备选轨道。判定顺序固定为「先看依赖来源 → 是否真的被使用 → 是否有可换的包 → 都没有则原生改造」。精确升级主轨为 `proceed-exact`。主轨只表示本轮证据指向哪条路径，开放目标人可改轨。
 
 ### Human Confirmation Queue
 
-一包一问，按队列顺序逐个确认。必须包含：决策记录文件路径、队列总表（包、主轨、`ready`/`blocked`/`decided`、问题、前置条件），以及每个 `ready` 包的选项表（选项 ID、选项、说明）。
+开放目标一包一问；精确升级（主轨 `proceed-exact`）可同批汇总确认。必须包含：决策记录文件路径、`batch_implementation_gate`、队列总表（包、主轨、`ready`/`blocked`/`decided`、问题、前置条件），精确升级批量确认表（若有），以及每个 `ready` 包的选项表（选项 ID、选项、说明）。
 
 选项 ID 形态固定：`replace:<包>@<版本>`、`remove`、`remove-usage`、`switch-to-declared`、`native-refactor`、`handle-parent`、`pin-override:<包>@<版本>`、`parent-upgrade:<包>@<版本>`、`parent-replace:<包>`、`parent-remove:<包>`、`isolate-behind-wrapper`、`internal-fork`、`remove-feature`、`switch:<轨道>`、`other`。ready 问题末位固定为 `other`。**不得出现 `same-package:` 或 `reject-native-refactor`。**
 
@@ -80,7 +87,7 @@ package、analysis mode、governance/upgrade reason、from、to、recommended ac
 
 `blocked` 的包不呈现选项，只写阻塞原因与前置条件；横幅标「待补证据」。`ready` 包横幅标「待人工选型」。报告须声明本轮确认阶段 `evidence` / `choice` / `mixed` / `none`。
 
-已有决策时追加「人工决策记录」表：包、轨道、选择、选定包、选定版本、状态（`confirmed` / `invalidated` / `unknown-package`）、来源、时间、理由或失效原因。确认后的建议动作为 `disposition-selected`（分析终点，不是实施批准）。
+已有决策时追加「人工决策记录」表：包、轨道、选择、选定包、选定版本、状态（`confirmed` / `invalidated` / `unknown-package`）、来源、时间、理由或失效原因。确认后的建议动作为 `disposition-selected`（开放目标）或 `proceed-selected` / `deferred`（精确升级）——均为 Stage A 终点，不是实施批准。
 
 ### Detailed Code Modification Points
 
@@ -134,14 +141,15 @@ Node 约束冲突、EOL 运行时、需要全局切换或恢复未验证时，�
 
 - `analysis_status`：`partial`、`blocked` 或经人工复核后的 `complete`；
 - `decision_status`：`not_needed` 或 `needs_choice`。
+- `batch_implementation_gate`：`frozen` 或 `ready`。
 
-候选版本、替代库、处置方案选项和删除可行性都属于决策证据，不是已批准结论。呈现完整选择面不等于推荐其中任何一条，也不等于人选轨完成。
+候选版本、替代库、处置方案选项和删除可行性都属于决策证据，不是已批准结论。呈现完整选择面不等于推荐其中任何一条，也不等于人选轨完成。精确升级的目标版本明确也不等于已批准推进。
 
-**完成态互斥：** `analysis_status=complete` **不得**与 `decision_status=needs_choice` 同时成立。开放目标在确认队列未清空前，报告状态保持 `draft`、`analysis_status` 最高为 `partial`；生成器在无更高优先级阻塞时以 exit `7` 表示「草稿已写出、待人工选型」。精确升级（目标版本已明确）通常为 `decision_status=not_needed`，不受该选型闸门约束。人选轨并写入决策文件后，`decision_status` 变为 `not_needed`，Agent 仍须完成证据复核才能升 `complete`。本技能终点是分析/决策报告，不是实施。
+**完成态互斥：** `analysis_status=complete` **不得**与 `decision_status=needs_choice` 同时成立。确认队列未清空前，报告状态保持 `draft`、`analysis_status` 最高为 `partial`；生成器在无更高优先级阻塞时以 exit `7` 表示「草稿已写出、待人工确认」（开放目标选型或精确升级 `proceed-exact`）。人选轨/推进写入决策文件后，`decision_status` 变为 `not_needed`；仅当 `batch_implementation_gate=ready` 时才可交接 Stage B。Agent 仍须完成证据复核才能升 `complete`。本技能终点是分析/决策报告，不是实施。
 
 选项完整性闸门：未指定目标版本的包必须至少产出一个可执行选项（替代包、已成立的原生重构方案、已解析出父包的父包处置，或 `safe_removal_candidate`/`requires_migration` 的删除路径）。任一包 `option_status=missing` 时，结论必须点名该包，且报告不得提升为 `complete`。该闸门只约束完成状态，不改写 `recommended_action`。
 
-当 `decision_status=needs_choice` 时，报告首页与结论章必须置顶「待人工确认」说明，并指向「人工确认队列」；Agent 不得在未提问、未写入决策文件并重跑前宣称分析完成。细则见 `human-confirmation-gates.md`。
+当 `decision_status=needs_choice` 时，报告首页与结论章必须置顶「待人工确认」说明，并指向「人工确认队列」；Agent 不得在未提问、未写入决策文件并重跑前宣称 Stage A 完成。`batch_implementation_gate=frozen` 时不得开实施计划或执行变更。细则见 `human-confirmation-gates.md`。
 
 当 `behavior_parity_required=yes`（默认）时：删除、替换、原生改造与父包处置都必须保持对外可观察行为不变，且都只能作为待选证据；报告不得偏好其中任何一条，也不得把同库升级作为选项；必要 API/配置适配可列为改造候选并标注为适配。
 

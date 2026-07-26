@@ -176,7 +176,10 @@ PRIMARY_TRACKS = {
     "handle-parent": "处置父包",
     "fix-phantom": "修复幽灵依赖",
     "pending-removal-evidence": "先补删除证据",
+    "proceed-exact": "确认推进精确升级",
 }
+PROCEED_EXACT_TRACK = "proceed-exact"
+BATCH_IMPLEMENTATION_GATES = ("frozen", "ready")
 # Where the package comes from. This decides which routes are even possible: a package
 # the workspace never declared cannot be "removed" from the manifest.
 PROVENANCE_KINDS = {
@@ -197,6 +200,9 @@ CONFIRMATION_STATUSES = ("ready", "blocked", "decided")
 DECISION_RECORD_STATUSES = ("confirmed", "invalidated", "unknown-package")
 # Open-target disposition selected in the decision file (analysis endpoint — not implementation).
 DISPOSITION_SELECTED_ACTION = "disposition-selected"
+# Exact-upgrade proceed confirmation recorded (still analysis endpoint — not implementation).
+PROCEED_SELECTED_ACTION = "proceed-selected"
+DEFERRED_ACTION = "deferred"
 PARENT_DECISION_SEPARATOR = "<-"
 # Deterministic size grading for a first-party rewrite, from this run's own scan counts.
 REFACTOR_SCALE_SMALL_FILES = 2
@@ -642,6 +648,9 @@ class AnalysisBundle:
     importer_resolution: str = "confirmed"
     decision_file: str = ""
     decision_warnings: list[str] = field(default_factory=list)
+    # frozen: do not open implementation plans or execute; ready: Stage A clear for Stage B/C handoff.
+    batch_implementation_gate: str = "frozen"
+    batch_gate_reasons: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -2833,6 +2842,58 @@ def curated_lead_note(report: PackageReport) -> str:
     )
 
 
+def build_proceed_exact_question(report: PackageReport) -> ConfirmationQuestion:
+    """Exact upgrades still need a human proceed/defer gate before Stage B/C."""
+    package = report.upgrade.package
+    target = report.upgrade.to_version
+    source = report.upgrade.from_version or report.current_lock_version or "?"
+    question = ConfirmationQuestion(package=package, track=PROCEED_EXACT_TRACK)
+    report.primary_track = PROCEED_EXACT_TRACK
+    report.primary_track_basis = "精确目标版本已明确；进入计划/实施前须确认推进或延期"
+    if report.exact_upgrade_status == "blocked":
+        question.status = "blocked"
+        question.blocked_reason = (
+            "精确升级仍有实施阻塞项；解除阻塞前不确认推进。"
+            "同批任一包 blocked 时 `batch_implementation_gate=frozen`。"
+        )
+        question.prerequisites = list(report.implementation_blockers) or [
+            "解决 Node/父依赖/lock 收敛等 implementation_blockers 后重跑"
+        ]
+        report.decision_status = "needs_choice"
+        report.selection_status = "needs_explicit_choice"
+        append_unique(
+            report.decision_required,
+            "精确升级阻塞未解除；解除前不得确认推进，也不得开实施计划。",
+        )
+        return question
+    proceed_id = f"proceed:{package}@{target}"
+    question.prompt = (
+        f"确认按精确目标推进 `{package}` `{source}` → `{target}` 吗？"
+        "同批多个精确升级可汇总一张表一次确认；开放目标仍须一包一问。"
+    )
+    question.options = [
+        ConfirmationOption(
+            proceed_id,
+            f"确认推进到 {package}@{target}",
+            f"策略：`{report.exact_upgrade_strategy or 'direct-upgrade'}`；"
+            "写入决策后仅表示分析选型完成，不等于实施批准。",
+        ),
+        ConfirmationOption(
+            "defer",
+            "本轮不推进（保留分析，不进入计划/实施）",
+            "记为 deferred；不阻止同批其他已确认包在闸门解冻后推进。",
+        ),
+    ]
+    append_other_option(question)
+    report.decision_status = "needs_choice"
+    report.selection_status = "needs_explicit_choice"
+    append_unique(
+        report.decision_required,
+        "精确升级目标已明确，但仍需确认推进（proceed）或延期（defer）后，方可进入计划/实施阶段。",
+    )
+    return question
+
+
 def build_confirmation_question(
     report: PackageReport,
     track: str | None = None,
@@ -3043,7 +3104,30 @@ def revalidate_decision(report: PackageReport, decision: HumanDecision) -> str:
         if report.refactor_plan.status != "established":
             return "改造方向已不成立（缺少调用点证据），需重新确认"
         return ""
-    if choice in {"remove-usage", "switch-to-declared", "remove-feature"}:
+    if choice in {"remove-usage", "switch-to-declared", "remove-feature", "defer"}:
+        return ""
+    if choice == "proceed" or choice.startswith("proceed:"):
+        if not is_exact_upgrade_target(report.upgrade):
+            return "proceed 仅适用于精确升级目标"
+        if report.exact_upgrade_status == "blocked":
+            return "精确升级仍有实施阻塞项，不能确认推进"
+        if choice.startswith("proceed:"):
+            body = choice.split(":", 1)[1]
+            if "@" not in body:
+                return "proceed 选项缺少 包@版本"
+            package, version = body.rsplit("@", 1)
+            if package != report.upgrade.package:
+                return f"proceed 目标包 {package} 与分析包 {report.upgrade.package} 不一致"
+            if version != report.upgrade.to_version:
+                return (
+                    f"proceed 目标版本 {version} 与当前分析目标 "
+                    f"{report.upgrade.to_version} 不一致，需重新确认"
+                )
+            decision.selected_package = decision.selected_package or package
+            decision.selected_version = decision.selected_version or version
+        else:
+            decision.selected_package = decision.selected_package or report.upgrade.package
+            decision.selected_version = decision.selected_version or report.upgrade.to_version
         return ""
     if choice.startswith("parent-upgrade:") or choice.startswith("parent-replace:") or choice.startswith("parent-remove:"):
         return ""
@@ -3107,6 +3191,32 @@ def mark_disposition_selected(report: PackageReport, decision: HumanDecision) ->
     )
 
 
+def mark_proceed_selected(report: PackageReport, decision: HumanDecision) -> None:
+    """Record exact-upgrade proceed/defer. Still analysis endpoint, not implementation approval."""
+    decision.status = "confirmed"
+    if not decision.track:
+        decision.track = PROCEED_EXACT_TRACK
+    report.decision = decision
+    report.selection_status = "selected"
+    report.decision_status = "not_needed"
+    if decision.choice == "defer":
+        report.recommended_action = DEFERRED_ACTION
+        note = "已记录延期：本轮不进入计划/实施；需要时重新确认 proceed。"
+    else:
+        report.recommended_action = PROCEED_SELECTED_ACTION
+        note = (
+            f"已记录推进确认：{decision.choice}；"
+            "仅完成 Stage A。`batch_implementation_gate=ready` 且调用方批准后才可开计划/实施。"
+        )
+    if report.confirmation is not None:
+        report.confirmation.status = "decided"
+    report.decision_required = [
+        item for item in report.decision_required
+        if "仍需确认推进" not in item and "阻塞未解除" not in item
+    ]
+    append_unique(report.decision_required, note)
+
+
 def apply_decisions(reports: list[PackageReport], decisions: list[HumanDecision]) -> list[str]:
     """Attach still-valid decisions, and re-open invalidated ones with the reason."""
     warnings: list[str] = []
@@ -3135,8 +3245,33 @@ def apply_decisions(reports: list[PackageReport], decisions: list[HumanDecision]
             decision.status = "unknown-package"
             warnings.append(f"人工决策文件中的 {package_key} 不在本次分析清单内；已忽略。")
             continue
+        exact_proceed = (
+            is_exact_upgrade_target(report.upgrade)
+            or report.primary_track == PROCEED_EXACT_TRACK
+        )
+        if exact_proceed:
+            reason = revalidate_decision(report, decision)
+            report.decision = decision
+            if reason:
+                decision.status = "invalidated"
+                decision.invalidation_reason = reason
+                if report.confirmation is not None and report.confirmation.status == "ready":
+                    report.confirmation.prompt = f"（原选择已失效：{reason}）" + report.confirmation.prompt
+                append_unique(report.decision_required, f"原人工选择已失效并需重新确认：{reason}")
+                warnings.append(f"{package_key} 的人工选择已失效：{reason}")
+                continue
+            if decision.choice not in {"defer", "proceed"} and not decision.choice.startswith("proceed:"):
+                if decision.source == "other":
+                    mark_proceed_selected(report, decision)
+                    continue
+                decision.status = "invalidated"
+                decision.invalidation_reason = "精确升级仅接受 proceed / proceed:包@版本 / defer / other"
+                warnings.append(f"{package_key} 的人工选择无效：{decision.invalidation_reason}")
+                continue
+            mark_proceed_selected(report, decision)
+            continue
         if report.primary_track == "not_applicable":
-            warnings.append(f"{package_key} 已指定精确目标版本，人工决策记录不适用；已忽略。")
+            warnings.append(f"{package_key} 无可用确认轨，人工决策记录不适用；已忽略。")
             continue
         reason = revalidate_decision(report, decision)
         report.decision = decision
@@ -4321,11 +4456,16 @@ def collect_package_report(upgrade: Upgrade, args: argparse.Namespace) -> Packag
         package_url(upgrade.package),
         change_type=change_type,
         analysis_mode=upgrade.intent,
-        decision_status="not_needed" if upgrade.to_version else "needs_choice",
+        decision_status="needs_choice",
         recommended_action="upgrade" if upgrade.to_version else "assess",
-        selection_status="selected" if upgrade.to_version else "needs_explicit_choice",
+        selection_status="needs_explicit_choice",
+        primary_track=PROCEED_EXACT_TRACK if upgrade.to_version else "not_applicable",
     )
-    if not upgrade.to_version:
+    if upgrade.to_version:
+        report.decision_required.append(
+            "精确升级目标已明确，但仍需确认推进（proceed）或延期（defer）后，方可进入计划/实施阶段。"
+        )
+    else:
         report.decision_required.append("未指定目标版本；需要由人在删除、替换、原生改造或父包处置之间确认方案，同库升级不在选项内。")
     if not upgrade.reason and upgrade.intent in {"auto-assess", "compliance-assessment", "target-discovery"}:
         report.decision_required.append("尚未建立治理或不合规依据；先核对仓库政策、安全、license、兼容性和维护状态。")
@@ -5353,7 +5493,7 @@ def report_section(anchor: str) -> list[str]:
 
 
 def confirmation_queue_phase(bundle: AnalysisBundle) -> str:
-    """Return evidence | choice | mixed | none for open-target confirmation gating."""
+    """Return evidence | choice | mixed | none for confirmation gating."""
     if bundle.decision_status != "needs_choice":
         return "none"
     ready = False
@@ -5375,32 +5515,94 @@ def confirmation_queue_phase(bundle: AnalysisBundle) -> str:
     return "choice"
 
 
+def compute_batch_implementation_gate(
+    reports: list[PackageReport],
+    *,
+    decision_status: str,
+    importer_resolution: str,
+    baseline_blockers: list[str],
+    node_runtime: NodeRuntimeAssessment,
+    workspace_failed: bool,
+    remediation_blocked: bool,
+) -> tuple[str, list[str]]:
+    """Stage A must be clear and non-deferred packages must be technically ready."""
+    reasons: list[str] = []
+    if workspace_failed or importer_resolution == "failed":
+        reasons.append("前端 workspace 未确认")
+    if baseline_blockers:
+        reasons.append("基线未对齐：" + "、".join(baseline_blockers))
+    if decision_status == "needs_choice":
+        reasons.append("人工确认未完成（开放目标选型或精确升级推进确认）")
+    if node_runtime.status == "constraint-conflict":
+        reasons.append("Node 约束冲突")
+    if node_runtime.execution_readiness == "blocked":
+        reasons.append("Node 执行就绪度为 blocked")
+    for report in reports:
+        package = report.upgrade.package
+        if report.recommended_action == DEFERRED_ACTION:
+            continue
+        if report.exact_upgrade_status == "blocked":
+            reasons.append(f"{package}：精确升级仍 blocked")
+        if report.confirmation is not None and report.confirmation.status in {"ready", "blocked"}:
+            reasons.append(f"{package}：确认队列仍为 {report.confirmation.status}")
+        if (
+            report.recommended_action == PROCEED_SELECTED_ACTION
+            and report.exact_upgrade_status != "ready"
+        ):
+            reasons.append(f"{package}：已确认推进但精确升级未 ready")
+    if remediation_blocked and not any("精确升级仍 blocked" in item for item in reasons):
+        reasons.append("存在 remediation-blocked / exact_upgrade blocked")
+    # Deduplicate while preserving order
+    unique: list[str] = []
+    for item in reasons:
+        if item not in unique:
+            unique.append(item)
+    return ("frozen" if unique else "ready"), unique
+
+
 def confirmation_status_banners(bundle: AnalysisBundle, location: str = "header") -> list[str]:
     phase = confirmation_queue_phase(bundle)
-    if phase == "none":
-        return []
+    lines: list[str] = []
     if phase == "evidence":
         title = "待补证据（确认队列 blocked）" if location == "header" else "待补证据（结论闸门）"
-        body = (
-            f"> **{title}**：`decision_status=needs_choice`，但尚不能问选型。"
-            "请先完成删除面核验 / 替代方案调研 / 调用点证据，回填后重跑。"
-            "生成器 exit `7`。`analysis_status=complete` 不得与 `needs_choice` 并存。"
+        lines.append(
+            f"> **{title}**：`decision_status=needs_choice`，但尚不能问选型/推进。"
+            "请先完成删除面核验 / 替代方案调研 / 调用点证据 / 精确升级阻塞项，回填后重跑。"
+            "生成器 exit `7`（若无更高优先级 exit）。`batch_implementation_gate=frozen`。"
         )
     elif phase == "mixed":
-        title = "待补证据 + 待选型" if location == "header" else "待补证据 + 待选型（结论闸门）"
-        body = (
-            f"> **{title}**：部分包确认队列 `blocked`（先补证据），部分 `ready`（可原文提问）。"
-            "curated-map 线索不可直接当替换选项。exit `7`。"
+        title = "待补证据 + 待确认" if location == "header" else "待补证据 + 待确认（结论闸门）"
+        lines.append(
+            f"> **{title}**：部分包确认队列 `blocked`（先补证据），部分 `ready`。"
+            "开放目标一包一问；精确升级 `proceed-exact` 可同批汇总确认。exit `7`。闸门 `frozen`。"
         )
-    else:
-        title = "待人工选型" if location == "header" else "待人工选型（结论闸门）"
-        body = (
+    elif phase == "choice":
+        title = "待人工确认" if location == "header" else "待人工确认（结论闸门）"
+        lines.append(
             f"> **{title}**：`decision_status=needs_choice`。"
-            "按「人工确认队列」逐包原文提问（替换含精确 `包@版本` 与末位 `other`；"
-            "`switch:<track>` 后改问同节「改轨问题」）。"
-            "写入决策文件并重跑后，本技能分析终点才完成。exit `7`。本技能不实施变更。"
+            "开放目标：逐包原文提问（替换含精确 `包@版本` 与 `other`；`switch:<track>` 后改问）。"
+            "精确升级：可汇总确认 `proceed:包@版本` / `defer` / `other`。"
+            "写入决策文件并重跑后，Stage A 才完成。exit `7`。本技能不实施变更。"
         )
-    return [body, ""]
+    if bundle.batch_implementation_gate == "frozen":
+        reason_text = "；".join(bundle.batch_gate_reasons) or "见确认队列与阻塞项"
+        title = "批次实施闸门 frozen" if location == "header" else "批次实施闸门 frozen（结论）"
+        lines.append(
+            f"> **{title}**：`batch_implementation_gate=frozen`。"
+            f"原因：{reason_text}。"
+            "整批不得开实施计划或执行变更；待全部策略确认且非延期包技术就绪后才为 `ready`。"
+        )
+    elif phase == "none" and location == "header":
+        lines.append(
+            "> **批次实施闸门 ready**：Stage A 已清空确认队列且无整批冻结原因。"
+            "仍须调用方进入 Stage B（计划）并另给 Stage C（实施）授权；本技能不实施。"
+        )
+    if not lines:
+        return []
+    out: list[str] = []
+    for body in lines:
+        out.extend([body, ""])
+    return out
 
 
 def markdown_report(bundle: AnalysisBundle) -> str:
@@ -5424,6 +5626,8 @@ def markdown_report(bundle: AnalysisBundle) -> str:
         f"- 执行就绪度：`{bundle.node_runtime.execution_readiness}`",
         f"- 本机当前 Node：`{bundle.node_runtime.current_host_node or '未检测到'}`；路径：`{bundle.node_runtime.current_host_node_path or '未检测到'}`",
         f"- 项目 Node：`{bundle.node_runtime.selected_project_node or '未建立'}`；管理器：`{bundle.node_runtime.selected_manager or '未建立'}`",
+        f"- 批次实施闸门：`{bundle.batch_implementation_gate}`",
+        f"- 闸门原因：{('；'.join(bundle.batch_gate_reasons) if bundle.batch_gate_reasons else '无')}",
         f"- 关联 change/任务目录：`{bundle.change_dir or '未绑定'}`",
         f"- 报告目录：`{bundle.report_output_dir}`",
         *format_path_list(bundle.report_paths),
@@ -5797,13 +6001,16 @@ def markdown_report(bundle: AnalysisBundle) -> str:
         f"- 报告状态：`{bundle.status}`",
         f"- 分析状态：`{bundle.analysis_status}`",
         f"- 决策状态：`{bundle.decision_status}`",
+        f"- 批次实施闸门：`{bundle.batch_implementation_gate}`",
+        f"- 闸门原因：{('；'.join(bundle.batch_gate_reasons) if bundle.batch_gate_reasons else '无')}",
         f"- 行为守恒要求：`{bundle.behavior_parity_required}`",
         f"- Node 运行时状态：`{runtime.status}`；执行就绪度：`{runtime.execution_readiness}`",
         f"- Node 阻塞项：{'; '.join(runtime.blockers) or '无'}",
         f"- 报告目录：`{bundle.report_output_dir}`",
         "- 最低可接受验证：确认准确 lock/peer/engine，执行受影响自动化检查，覆盖关键成功/失败/恢复流程，具备监控和已验证的回滚路径。",
         "- 剩余工作：标记为 `complete` 前，解决所有“未建立”“需要 Agent 复核”、基线不一致、证据警告、未翻译上游摘要和间接调用方映射缺口；"
-        "若 `decision_status=needs_choice`，还必须完成人工确认队列（exit `7`：待补证据或待选型）。",
+        "若 `decision_status=needs_choice`，还必须完成人工确认队列（exit `7`：待补证据、待选型或待精确升级推进确认）。"
+        "`batch_implementation_gate=frozen` 时不得开实施计划或执行变更。",
     ])
     option_gaps = [report.upgrade.package for report in bundle.reports if report.option_status == "missing"]
     research_gaps = [report.upgrade.package for report in bundle.reports if report.research_status == "pending"]
@@ -5907,20 +6114,55 @@ def render_confirmation_queue(bundle: AnalysisBundle) -> list[str]:
     lines = ["", *report_section("Human Confirmation Queue"), ""]
     questions = [report for report in bundle.reports if report.confirmation is not None]
     phase = confirmation_queue_phase(bundle)
+    proceed_ready = [
+        report for report in questions
+        if report.confirmation is not None
+        and report.confirmation.track == PROCEED_EXACT_TRACK
+        and report.confirmation.status == "ready"
+    ]
     lines.extend([
         f"- 决策记录文件：`{bundle.decision_file}`（生成器只读；由 Agent 在人确认后写入）",
-        f"- 本轮确认阶段：`{phase}`（`evidence`=先补证据；`choice`=可选型；`mixed`=二者并存；`none`=无需）",
-        "- 提问规则：一包一问，按下表顺序逐个确认；`blocked` 的包先补前置证据，不得提前问选型。",
+        f"- 本轮确认阶段：`{phase}`（`evidence`=先补证据；`choice`=可确认；`mixed`=二者并存；`none`=无需）",
+        f"- 批次实施闸门：`{bundle.batch_implementation_gate}`",
+        "- 提问规则：开放目标（无 `to`）一包一问；精确升级（`proceed-exact`）可同批汇总一张表确认。",
+        "- `blocked` 的包先补前置证据，不得提前问选型/推进。同批任一 blocked/未确认 → 整批 `frozen`。",
         "- 替换轨必须给出精确 `replace:<包>@<版本>`（仅 `analysis-evidence` eligible）；`curated-map` 只是线索。",
+        "- 精确升级选项：`proceed:<包>@<版本>` / `defer` / `other`。",
         "- 选项末位固定为 `other`。`switch:<track>` 后改问同包「改轨问题」整表，勿把 switch 写入决策文件。",
         "- `handle-parent` 本身不是最终选择；须继续写 `包<-父包` 追问，或选 pin-override / remove-feature / other。",
-        "- 记录选型不等于实施授权；本技能终点是分析报告（`disposition-selected`）。",
-        "- Agent 协议：`decision_status=needs_choice` 时不得宣称分析完成；见 `references/human-confirmation-gates.md`。",
+        "- 记录选型/推进不等于实施授权；终点是分析报告（`disposition-selected` / `proceed-selected`）。",
+        "- Agent 协议：`decision_status=needs_choice` 或 `batch_implementation_gate=frozen` 时不得开计划/实施；见 `references/human-confirmation-gates.md`。",
         "",
     ])
     if not questions:
-        lines.extend(["- 本轮无未指定目标版本的包，确认队列为空（精确升级不做人选型确认）。", ""])
+        lines.extend(["- 本轮确认队列为空。", ""])
         return lines
+    if proceed_ready:
+        lines.extend([
+            "### 精确升级批量确认（可一次询问）",
+            "",
+            "| 包 | 原版本 | 目标版本 | 策略 | 建议选项 ID |",
+            "|---|---|---|---|---|",
+        ])
+        for report in proceed_ready:
+            question = report.confirmation
+            assert question is not None
+            proceed_id = next(
+                (option.option_id for option in question.options if option.option_id.startswith("proceed:")),
+                f"proceed:{report.upgrade.package}@{report.upgrade.to_version}",
+            )
+            lines.append("| " + " | ".join(md_cell(value) for value in (
+                report.upgrade.package,
+                report.upgrade.from_version or report.current_lock_version or "-",
+                report.upgrade.to_version,
+                report.exact_upgrade_strategy or "-",
+                proceed_id,
+            )) + " |")
+        lines.extend([
+            "",
+            "- 对上表一次确认即可；每包将对应 `proceed:包@版本` 或统一 `defer` 写入决策文件。",
+            "",
+        ])
     lines.extend([
         "| 包 | 主轨 | 队列状态 | 问题 | 前置条件 |",
         "|---|---|---|---|---|",
@@ -6064,7 +6306,12 @@ def apply_behavior_parity(report: PackageReport) -> None:
     """
     if report.analysis_mode == "exact-upgrade" and report.upgrade.to_version:
         report.constraints.append("行为守恒：仅允许为实现该精确目标所必需的适配；禁止顺手重构业务/UI。")
-        report.selection_status = "selected"
+        report.decision_status = "needs_choice"
+        report.selection_status = "needs_explicit_choice"
+        append_unique(
+            report.decision_required,
+            "行为守恒：精确目标已定，仍须人确认推进或延期；报告不自动批准实施。",
+        )
         return
     report.constraints.append(
         "行为守恒：删除／替换／原生改造／父包处置都必须保持对外可观察行为不变；"
@@ -6310,6 +6557,7 @@ def build_bundle(
     for report in reports:
         if report.upgrade.to_version or report.analysis_mode == "exact-upgrade":
             finalize_exact_upgrade_report(report, node_runtime)
+            report.confirmation = build_proceed_exact_question(report)
             continue
         reconcile_open_target_report(report)
         if report.provenance.parents:
@@ -6418,6 +6666,15 @@ def build_bundle(
     evidence_root = getattr(args, "upstream_evidence_root", None)
     if evidence_root is not None and Path(evidence_root).is_dir():
         report_paths["upstream_evidence"] = str(Path(evidence_root).resolve())
+    batch_gate, batch_reasons = compute_batch_implementation_gate(
+        reports,
+        decision_status=decision_status,
+        importer_resolution=workspace.status,
+        baseline_blockers=baseline_blockers,
+        node_runtime=node_runtime,
+        workspace_failed=workspace_failed,
+        remediation_blocked=remediation_blocked,
+    )
     return AnalysisBundle(
         args.title,
         dt.datetime.now(dt.timezone.utc).astimezone().isoformat(timespec="seconds"),
@@ -6432,6 +6689,8 @@ def build_bundle(
         workspace.status,
         str(decision_path or (output_dir / DECISION_FILE_NAME).resolve()),
         decision_warnings,
+        batch_gate,
+        batch_reasons,
     )
 
 
@@ -6537,17 +6796,25 @@ def main(argv: list[str]) -> int:
         ]
         phase = confirmation_queue_phase(bundle)
         phase_hint = {
-            "evidence": "当前为待补证据，勿问选型",
-            "choice": "当前为待人工选型，请原文提问",
-            "mixed": "部分待补证据、部分可选型",
+            "evidence": "当前为待补证据，勿问选型/推进",
+            "choice": "当前为待人工确认：开放目标一包一问；精确升级可批量 proceed/defer",
+            "mixed": "部分待补证据、部分可确认",
         }.get(phase, "见人工确认队列")
         print(
-            f"开放目标未完成（decision_status=needs_choice，phase={phase}）："
+            f"人工确认未完成（decision_status=needs_choice，phase={phase}，"
+            f"batch_implementation_gate={bundle.batch_implementation_gate}）："
             + ("、".join(str(name) for name in pending_packages) or "见人工确认队列")
-            + f"。{phase_hint}。报告已写出为 draft；写入 decision-file 并重跑前不得标 complete。",
+            + f"。{phase_hint}。报告已写出为 draft；写入 decision-file 并重跑前不得标 complete，不得开计划/实施。",
             file=sys.stderr,
         )
         return 7
+    if bundle.batch_implementation_gate == "frozen":
+        print(
+            "警告：批次实施闸门仍为 frozen（"
+            + ("；".join(bundle.batch_gate_reasons) or "见报告")
+            + "）。Stage A 决策可能已完成，但不得开实施计划或执行变更。",
+            file=sys.stderr,
+        )
     return 0
 
 

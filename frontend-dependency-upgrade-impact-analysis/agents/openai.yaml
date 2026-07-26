@@ -1,4 +1,12 @@
 interface:
   display_name: "Frontend Dependency Upgrade Impact Analysis"
-  short_description: "Upgrade impact and Node runtime compatibility analysis"
-  default_prompt: "Use $frontend-dependency-upgrade-impact-analysis for analysis only. Open targets: honor exit 7 and queue phase (evidence vs choice), ask verbatim including alternate-track questions after switch, write disposition to the decision file, stop at disposition-selected—never implement."
+  short_description: "Upgrade impact analysis with human gates before plans"
+  default_prompt: >
+    Use $frontend-dependency-upgrade-impact-analysis for analysis only (Stage A).
+    Honor exit 7 and queue phase (evidence vs choice). Open targets: ask one package
+    at a time verbatim, including alternate-track questions after switch. Exact
+    upgrades: require proceed/defer (batchable when multiple to-versions are ready).
+    Write decisions to the decision file; stop at disposition-selected or
+    proceed-selected. If batch_implementation_gate=frozen, do not open
+    implementation plans or execute. Stage B/C need caller authorization and
+    runner approve flags — never implement from this skill alone.
