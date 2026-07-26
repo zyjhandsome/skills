@@ -8,13 +8,14 @@ description: >
   authoritative lock baseline, collects version-specific upstream and code-impact
   evidence, detects host/project Node conflicts, scores seven-factor risk, and writes a
   Markdown decision report plus optional structured JSON in Simplified Chinese.
-  Behavior preservation is the default; removal, replacement, and runtime installation
-  stay human choices unless the user explicitly allows them.
+  Behavior preservation is the default. Open-target removal/replacement/rewrite stay
+  human choices via the confirmation queue; this skill ends at the decision report,
+  never at implementation.
 ---
 
 # Frontend Dependency Upgrade Impact Analysis
 
-Produce an evidence-backed decision packet and validation plan. The bundled generator is a deterministic collector and Markdown renderer; review and enrich its heuristic findings before presenting a report as authoritative.
+Produce an evidence-backed decision packet and validation plan — analysis only. The generator collects and renders; review heuristics before treating a report as authoritative. Exact upgrades (clear `from → to`) need no disposition choice. Open targets must finish the human confirmation queue before `complete`.
 
 ## Boundaries
 
@@ -23,6 +24,7 @@ Produce an evidence-backed decision packet and validation plan. The bundled gene
 - Read-only Node/runtime probes are allowed. Runtime switching, Node installation, dependency installation, and project scripts require explicit implementation authorization.
 - Treat report generation as analysis only, never as implementation approval.
 - Do not create lifecycle/change records or redefine caller scope. The caller owns approvals and lifecycle state.
+- **Human Decision Interaction Gate:** If `decision_status=needs_choice`, do not end as “analysis done.” Read the queue phase (`evidence`/`choice`/`mixed`): on `blocked`, gather evidence and regenerate; on `ready`, ask one package at a time verbatim (replace `@version` + `other`). After `switch:<track>`, ask the rendered alternate-track question, do not write switch to the decision file. `handle-parent` alone is not final—finish `pkg<-parent` follow-ups. Record finals in `--decision-file`, regenerate to `disposition-selected`. Exit `7` = draft written, open target unfinished. Read `references/human-confirmation-gates.md`.
 
 ## Resolve scope and baseline
 
@@ -44,17 +46,7 @@ Read `references/lockfile-and-evidence.md` for lock formats, workspace rules, an
 
 ## Node runtime compatibility gate
 
-Before recommending implementation:
-
-1. Record the Node currently active on the host, then detect project Node constraints from runtime pins (`.nvmrc`, `.node-version`, `.tool-versions`, Volta, `pnpm.executionEnv`, `.npmrc#use-node-version`, mise), `package.json#engines`, and target-package engines. When the project declares none, derive a constraint from `engines.node` that the lockfile or installed metadata records for whitelisted toolchain packages; CI/container/deployment configs and non-toolchain dependency engines stay `observed` evidence only.
-2. Compare the current host Node with the project-compatible range. Do not introduce optional orchestration tools as a default runtime axis.
-3. Stop on contradictory authoritative project constraints. If the host Node is incompatible but a compatible project Node exists, mark `runtime-switch-required`, not `constraint-conflict`.
-4. Prefer an already installed compatible project runtime in an isolated child process. Use a guarded global switch only when isolation is unavailable.
-5. Support nvm-windows, POSIX nvm, fnm, Volta, and asdf. If the manager or compatible Node is missing, report the blocker and exact one-time installation guidance; do not install automatically.
-6. After approved execution, restore and verify the original host Node/runtime state in a `finally` path. Do not add temporary `.nvmrc`, engine, CI, shell-profile, or compatibility changes.
-7. When `node_runtime_status=unknown` (no authoritative project constraints), keep `selected_project_node` unset. Never recommend implementation commands or treat the host Node as the project runtime.
-
-Read `references/node-runtime-compatibility.md` before determining runtime readiness or executing any project command.
+Before recommending any project command: record host Node; collect authoritative pins/engines (and toolchain-derived ranges when undeclared); stop on constraint conflicts; prefer an isolated installed project Node over global switch; support nvm-windows/nvm/fnm/Volta/asdf without auto-install; restore host state after approved execution; keep `selected_project_node` unset when status is `unknown`. Full rules in `references/node-runtime-compatibility.md`.
 
 ## Default posture and modes
 
@@ -91,9 +83,9 @@ Read `references/target-discovery-and-removal.md` whenever `to` is absent or rem
 9. For open targets, classify provenance, assess removal, list replacement packages with exact registry-resolved versions ranked by machine-checkable signals only, give a scan-driven native refactor direction as the fallback when no package fits, resolve parent chains and the lowest viable override for transitive packages, and render the full disposition menu. Curated replacement leads are `curated-map`/`unknown` evidence and never change the recommendation; only reviewed `analysis-evidence` candidates can. Every open target must end with at least one actionable option — removal, a replacement package, an established refactor plan, or parent handling; `option_status=missing` blocks `complete`.
 10. When the curated map has no entry, the emitted research checklist is mandatory work, not a suggestion: research candidates against the listed criteria (never download counts) and write the verdict back through `--analysis-evidence-file` per `references/analysis-evidence-schema.md`, alongside reviewed removal/runtime facts.
 11. Score the seven factors in `references/risk-model.md`, then derive regression scope, rollout controls, monitoring, and rollback triggers.
-12. Generate and validate the Markdown report. Review every incomplete or heuristic section before delivery.
-13. Work the confirmation queue: ask the generated question for one package at a time, verbatim, with its options and the trailing `other`. Never ask `blocked` packages — clear their prerequisites and regenerate first. A `switch:<track>` answer means asking that track's question next, not a decision. On the `handle-parent` track, ask the follow-up parent questions only after the human picks `handle-parent`.
-14. Record each final answer in the decision file per `references/decision-record-schema.md`, then regenerate. Confirmed packages are not asked again unless the evidence invalidated them. Recording a selection is not implementation approval.
+12. Generate and validate the Markdown report. Review every incomplete or heuristic section. A full menu in the report is not a final disposition.
+13. Open targets: work the confirmation queue before claiming completion. Ask one `ready` package at a time, verbatim (replace offers exact `package@version` plus `other`). Never ask `blocked` packages — interrupt to gather removal/replacement/refactor evidence, regenerate, then ask. `switch:<track>` asks that track next and is not a decision. After `handle-parent`, ask per-parent follow-ups.
+14. Record final answers per `references/decision-record-schema.md`, regenerate, and stop at the decision packet. Confirmed selections are not implementation approval.
 
 Read `references/impact-analysis-method.md` for evidence priority, impact-chain mapping, and stopping conditions. Read only the relevant family in `references/package-categories.md`.
 
@@ -137,21 +129,14 @@ python scripts/generate_upgrade_report.py . \
   --change-dir openspec/changes/<id> \
   --json-output
 
-# Explicit opt-out from behavior preservation
-python scripts/generate_upgrade_report.py . \
-  --assess legacy-client \
-  --allow-behavior-change \
-  --change-dir openspec/changes/<id>
-
-# Offline draft (uses report-adjacent upstream-evidence when present); swap --offline for
-# --no-upstream-evidence or --cleanup-upstream-evidence to disable or clean the pack
+# Offline draft (local upstream-evidence readback allowed)
 python scripts/generate_upgrade_report.py . \
   --upgrade vite:4.5.0:5.2.0 \
   --change-dir openspec/changes/<id> \
   --offline
 ```
 
-Upstream collection uses bounded concurrency (`--network-workers`, default `6`) and a six-hour public-response cache in the user cache directory. Use `--no-http-cache` for a forced fresh read, `--http-cache-ttl` to change freshness, or `--http-cache-dir` to relocate the cache. Use `--max-versions` only for an explicitly incomplete exploratory draft.
+Upstream collection uses bounded concurrency (`--network-workers`, default `6`) and a six-hour HTTP cache. Flags: `--no-http-cache`, `--http-cache-ttl`, `--http-cache-dir`, `--max-versions` (exploratory truncation only).
 
 For exact upgrades, the generator also writes a report-adjacent `upstream-evidence/` pack (npm registry slice plus per-version release/changelog artifacts). Network success overwrites local files; network failure or `--offline` reads the same directory when present. Disable with `--no-upstream-evidence`. Default is keep; delete after a successful report write with `--cleanup-upstream-evidence`. Local readback must not mark evidence `complete`.
 
@@ -172,10 +157,11 @@ Only after matching explicit approvals, add `--execute --approve-runtime-switch`
 
 Before marking the analysis complete, verify:
 
+- `decision_status` is not `needs_choice`; open-target packages are `disposition-selected` via the decision file. **Never** set `analysis_status=complete` while `needs_choice` remains;
 - baseline, lock type, workspace, and importer are confirmed (`importer_resolution=confirmed`; non-frontend roots stay blocked);
 - current host Node, project Node constraints, runtime manager availability, selected project runtime, execution readiness, and restoration plan are explicit;
 - contradictory project Node constraints remain blocked; missing managers/runtimes remain implementation blockers until explicitly installed; `unknown` Node status never treats host Node as the project runtime;
-- exact upgrades cover the full version interval; open targets preserve the required decision order;
+- exact upgrades cover the full version interval; open targets preserve the required decision order and option completeness;
 - every eligible candidate has checked criteria and evidence URLs;
 - removal evidence covers all required dimensions or remains visibly uncertain;
 - high-confidence modification points cite both application and upstream evidence;
@@ -185,8 +171,11 @@ Before marking the analysis complete, verify:
 - all required Markdown sections and table widths validate;
 - visible prose is in the requested language and heuristic output has been reviewed.
 
+The skill endpoint is the finalized analysis/decision report. Implementation stays outside this skill.
+
 ## References
 
+- `references/human-confirmation-gates.md` — where humans must confirm; exit `7`; Agent pause rules.
 - `references/impact-analysis-method.md` — evidence sequence, impact mapping, completeness.
 - `references/target-discovery-and-removal.md` — open targets, behavior posture, removal, alternatives.
 - `references/analysis-evidence-schema.md` — reviewed JSON evidence contract.

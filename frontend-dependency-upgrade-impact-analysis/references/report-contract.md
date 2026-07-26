@@ -72,13 +72,15 @@ package、analysis mode、governance/upgrade reason、from、to、recommended ac
 
 一包一问，按队列顺序逐个确认。必须包含：决策记录文件路径、队列总表（包、主轨、`ready`/`blocked`/`decided`、问题、前置条件），以及每个 `ready` 包的选项表（选项 ID、选项、说明）。
 
-选项 ID 形态固定：`replace:<包>@<版本>`、`remove`、`remove-usage`、`switch-to-declared`、`native-refactor`、`handle-parent`、`pin-override:<包>@<版本>`、`parent-upgrade:<包>@<版本>`、`parent-replace:<包>`、`parent-remove:<包>`、`isolate-behind-wrapper`、`internal-fork`、`remove-feature`、`switch:<轨道>`、`other`。末位固定为 `other`。**不得出现 `same-package:` 选项**。`switch:<轨道>` 只是改轨答案，不是最终选择，不得写入决策文件。
+选项 ID 形态固定：`replace:<包>@<版本>`、`remove`、`remove-usage`、`switch-to-declared`、`native-refactor`、`handle-parent`、`pin-override:<包>@<版本>`、`parent-upgrade:<包>@<版本>`、`parent-replace:<包>`、`parent-remove:<包>`、`isolate-behind-wrapper`、`internal-fork`、`remove-feature`、`switch:<轨道>`、`other`。ready 问题末位固定为 `other`。**不得出现 `same-package:` 或 `reject-native-refactor`。**
 
-`handle-parent` 轨为两段式：主问题选处置方式，选中「处置父包」后再按父包逐个追问，追问的 `package` 字段形如 `<目标包><-<父包>`，且必须标注「仅在选择 `handle-parent` 后提问」。
+`switch:<轨道>` 与对话中的 `handle-parent` 都不是最终选择，不得写入决策文件。Agent 在 `switch:<轨道>` 后必须改问同包已渲染的「改轨问题：`<轨道>`」整表（含该轨完整选项）。
 
-`blocked` 的包不呈现选项，只写阻塞原因与前置条件清单，Agent 不得提前提问。
+`handle-parent` 轨为两段式：主问题可选 pin-override / remove-feature / other（可直接落盘），或在对话中选「处置父包」后再按父包逐个追问；追问的 `package` 形如 `<目标包><-<父包>`。全部父包追问确认后主包才算选型完成。
 
-已有决策时追加「人工决策记录」表：包、轨道、选择、选定包、选定版本、状态（`confirmed`/`invalidated`/`unknown-package`）、来源、时间、理由或失效原因。记录选型不等于实施授权。
+`blocked` 的包不呈现选项，只写阻塞原因与前置条件；横幅标「待补证据」。`ready` 包横幅标「待人工选型」。报告须声明本轮确认阶段 `evidence` / `choice` / `mixed` / `none`。
+
+已有决策时追加「人工决策记录」表：包、轨道、选择、选定包、选定版本、状态（`confirmed` / `invalidated` / `unknown-package`）、来源、时间、理由或失效原因。确认后的建议动作为 `disposition-selected`（分析终点，不是实施批准）。
 
 ### Detailed Code Modification Points
 
@@ -133,9 +135,13 @@ Node 约束冲突、EOL 运行时、需要全局切换或恢复未验证时，�
 - `analysis_status`：`partial`、`blocked` 或经人工复核后的 `complete`；
 - `decision_status`：`not_needed` 或 `needs_choice`。
 
-候选版本、替代库、处置方案选项和删除可行性都属于决策证据，不是已批准结论。`analysis_status=complete` 可以与 `decision_status=needs_choice` 同时存在。呈现完整选择面不等于推荐其中任何一条。
+候选版本、替代库、处置方案选项和删除可行性都属于决策证据，不是已批准结论。呈现完整选择面不等于推荐其中任何一条，也不等于人选轨完成。
+
+**完成态互斥：** `analysis_status=complete` **不得**与 `decision_status=needs_choice` 同时成立。开放目标在确认队列未清空前，报告状态保持 `draft`、`analysis_status` 最高为 `partial`；生成器在无更高优先级阻塞时以 exit `7` 表示「草稿已写出、待人工选型」。精确升级（目标版本已明确）通常为 `decision_status=not_needed`，不受该选型闸门约束。人选轨并写入决策文件后，`decision_status` 变为 `not_needed`，Agent 仍须完成证据复核才能升 `complete`。本技能终点是分析/决策报告，不是实施。
 
 选项完整性闸门：未指定目标版本的包必须至少产出一个可执行选项（替代包、已成立的原生重构方案、已解析出父包的父包处置，或 `safe_removal_candidate`/`requires_migration` 的删除路径）。任一包 `option_status=missing` 时，结论必须点名该包，且报告不得提升为 `complete`。该闸门只约束完成状态，不改写 `recommended_action`。
+
+当 `decision_status=needs_choice` 时，报告首页与结论章必须置顶「待人工确认」说明，并指向「人工确认队列」；Agent 不得在未提问、未写入决策文件并重跑前宣称分析完成。细则见 `human-confirmation-gates.md`。
 
 当 `behavior_parity_required=yes`（默认）时：删除、替换、原生改造与父包处置都必须保持对外可观察行为不变，且都只能作为待选证据；报告不得偏好其中任何一条，也不得把同库升级作为选项；必要 API/配置适配可列为改造候选并标注为适配。
 

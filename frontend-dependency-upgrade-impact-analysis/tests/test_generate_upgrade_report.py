@@ -1725,7 +1725,7 @@ packages:
         self.assertEqual(report.primary_track, "handle-parent")
         self.assertEqual(
             [option.option_id for option in question.options],
-            ["handle-parent", "pin-override:buried@4.3.0", "remove-feature"],
+            ["handle-parent", "pin-override:buried@4.3.0", "remove-feature", "other"],
         )
         self.assertIn("parent-a", question.options[0].detail)
         self.assertEqual([item.package for item in followups], ["buried<-parent-a", "buried<-parent-b"])
@@ -1830,11 +1830,13 @@ packages:
         MODULE.assign_primary_track(report)
         question = MODULE.build_confirmation_question(report)
         self.assertEqual(report.primary_track, "replace")
-        self.assertEqual(sorted(report.alternate_tracks), ["native-refactor", "remove"])
+        # requires_migration is not a safe removal candidate, so remove is not an alternate track
+        self.assertEqual(sorted(report.alternate_tracks), ["native-refactor"])
         ids = [option.option_id for option in question.options]
         self.assertEqual(ids[0], "replace:ky@1.9.0")
         self.assertEqual(ids[-1], "other")
         self.assertIn("switch:native-refactor", ids)
+        self.assertNotIn("switch:remove", ids)
         self.assertFalse(any(option_id.startswith("same-package:") for option_id in ids))
 
     def test_track_falls_back_to_native_refactor_without_package_options(self) -> None:
@@ -1847,25 +1849,20 @@ packages:
         question = MODULE.build_confirmation_question(report)
         self.assertEqual(report.primary_track, "native-refactor")
         self.assertEqual(question.status, "ready")
-        self.assertEqual(
-            [option.option_id for option in question.options],
-            ["native-refactor", "reject-native-refactor"],
-        )
+        ids = [option.option_id for option in question.options]
+        self.assertEqual(ids[0], "native-refactor")
+        self.assertEqual(ids[-1], "other")
+        self.assertNotIn("reject-native-refactor", ids)
 
-    def test_rejecting_native_refactor_marks_remediation_blocked(self) -> None:
-        report = self.open_target_report()
-        report.primary_track = "native-refactor"
-        report.refactor_plan.status = "established"
-        report.confirmation = MODULE.build_confirmation_question(report)
-        decision = MODULE.HumanDecision(
-            package="legacy",
-            track="native-refactor",
-            choice="reject-native-refactor",
-        )
-        MODULE.apply_decisions([report], [decision])
-        self.assertEqual(report.recommended_action, "remediation-blocked")
-        self.assertEqual(report.selection_status, "not_applicable")
-        self.assertTrue(report.implementation_blockers)
+    def test_reject_native_refactor_records_are_ignored(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw) / "chosen.json"
+            path.write_text(json.dumps({"decisions": [{
+                "package": "legacy", "choice": "reject-native-refactor",
+            }]}), encoding="utf-8")
+            decisions, warnings = MODULE.load_decision_record(path)
+            self.assertEqual(decisions, [])
+            self.assertTrue(any("已废除" in item for item in warnings))
 
     def test_refactor_plan_grades_scale_and_lists_every_call_site(self) -> None:
         report = self.open_target_report()
@@ -1909,11 +1906,58 @@ packages:
             ])
             bundle = MODULE.build_bundle(args)
             markdown = MODULE.markdown_report(bundle)
+            self.assertEqual(bundle.decision_status, "needs_choice")
             self.assertIn("<!-- section: Human Confirmation Queue -->", markdown)
             self.assertIn("人工确认队列", markdown)
-            self.assertIn("| reject-native-refactor |", markdown)
+            self.assertIn("| other |", markdown)
+            self.assertIn("改轨问题", markdown)
             self.assertIn("human-decisions.json", markdown)
+            self.assertIn("待人工选型", markdown)
+            self.assertIn("exit `7`", markdown)
             self.assertEqual(MODULE.validate_report_contract(markdown), [])
+
+    def test_main_returns_7_when_open_target_needs_choice(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "package.json").write_text(json.dumps({"dependencies": {"axios": "^1.0.0"}}), encoding="utf-8")
+            (root / "package-lock.json").write_text(json.dumps({
+                "lockfileVersion": 3,
+                "packages": {"node_modules/axios": {"version": "1.2.3"}},
+            }), encoding="utf-8")
+            (root / "src").mkdir()
+            (root / "src" / "api.ts").write_text("import axios from 'axios';\naxios.get('/x');\n", encoding="utf-8")
+            code = MODULE.main([
+                str(root), "--assess", "axios", "--offline",
+                "--output-dir", str(root / "out"),
+            ])
+            self.assertEqual(code, 7)
+            report_path = root / "out" / "frontend-dependency-upgrade-report.md"
+            self.assertTrue(report_path.is_file())
+            text = report_path.read_text(encoding="utf-8")
+            self.assertTrue("待人工选型" in text or "待补证据" in text)
+            self.assertIn("本轮确认阶段", text)
+
+    def test_main_returns_0_after_open_target_decision_recorded(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "package.json").write_text(json.dumps({"dependencies": {"axios": "^1.0.0"}}), encoding="utf-8")
+            (root / "package-lock.json").write_text(json.dumps({
+                "lockfileVersion": 3,
+                "packages": {"node_modules/axios": {"version": "1.2.3"}},
+            }), encoding="utf-8")
+            (root / "src").mkdir()
+            (root / "src" / "api.ts").write_text("import axios from 'axios';\naxios.get('/x');\n", encoding="utf-8")
+            decisions = root / "chosen.json"
+            decisions.write_text(json.dumps({"decisions": [{
+                "package": "axios", "track": "native-refactor", "choice": "native-refactor",
+                "rationale": "test", "decided_at": "2026-07-25T22:00:00+08:00",
+            }]}), encoding="utf-8")
+            code = MODULE.main([
+                str(root), "--assess", "axios", "--offline",
+                "--decision-file", str(decisions),
+                "--output-dir", str(root / "out"),
+            ])
+            self.assertEqual(code, 0)
 
     def test_recorded_decision_stops_the_question_and_is_not_an_approval(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
@@ -1936,10 +1980,11 @@ packages:
             self.assertEqual(report.decision.status, "confirmed")
             self.assertEqual(report.confirmation.status, "decided")
             self.assertEqual(report.selection_status, "selected")
-            self.assertEqual(report.recommended_action, "awaiting-implementation-approval")
+            self.assertEqual(report.recommended_action, MODULE.DISPOSITION_SELECTED_ACTION)
             markdown = MODULE.markdown_report(bundle)
             self.assertIn("人工决策记录", markdown)
-            self.assertIn("记录选型不等于实施授权", markdown)
+            self.assertIn("disposition-selected", markdown)
+            self.assertIn("本技能到此结束", markdown)
 
     def test_invalidated_decision_is_asked_again_with_the_reason(self) -> None:
         report = self.open_target_report()
@@ -1984,6 +2029,101 @@ packages:
             decisions, warnings = MODULE.load_decision_record(path)
             self.assertEqual(decisions, [])
             self.assertTrue(any("不是最终选择" in item for item in warnings))
+
+    def test_handle_parent_alone_is_not_a_final_decision(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw) / "chosen.json"
+            path.write_text(json.dumps({"decisions": [
+                {"package": "left-pad", "choice": "handle-parent"},
+            ]}), encoding="utf-8")
+            decisions, warnings = MODULE.load_decision_record(path)
+            self.assertEqual(decisions, [])
+            self.assertTrue(any("父包追问" in item for item in warnings))
+
+    def test_parent_followups_complete_marks_disposition_selected(self) -> None:
+        report = self.open_target_report()
+        report.upgrade.package = "qs"
+        report.provenance.kind = "transitive"
+        report.provenance.parents = [
+            MODULE.ParentEdge("express", "4.18.2", "^6.0.0", "4.19.0", "still-depends", ""),
+        ]
+        report.primary_track = "handle-parent"
+        report.confirmation = MODULE.build_confirmation_question(report)
+        report.parent_questions = MODULE.build_parent_followups(report)
+        report.decision_status = "needs_choice"
+        report.selection_status = "needs_explicit_choice"
+        decision = MODULE.HumanDecision(
+            package="qs<-express",
+            track="handle-parent",
+            choice="parent-upgrade:express@4.19.0",
+        )
+        MODULE.apply_decisions([report], [decision])
+        self.assertEqual(report.selection_status, "selected")
+        self.assertEqual(report.recommended_action, MODULE.DISPOSITION_SELECTED_ACTION)
+        self.assertEqual(report.decision_status, "not_needed")
+
+    def test_offline_reviewed_alternative_stays_selectable(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "package.json").write_text(json.dumps({"dependencies": {"axios": "^1.0.0"}}), encoding="utf-8")
+            (root / "package-lock.json").write_text(json.dumps({
+                "lockfileVersion": 3,
+                "packages": {"node_modules/axios": {"version": "1.2.3"}},
+            }), encoding="utf-8")
+            (root / "src").mkdir()
+            (root / "src" / "api.ts").write_text("import axios from 'axios';\naxios.get('/x');\n", encoding="utf-8")
+            evidence = root / "evidence.json"
+            evidence.write_text(json.dumps({"packages": {"axios": {
+                "alternative_candidates": [{
+                    "package": "ky",
+                    "version": "1.14.3",
+                    "compliance_status": "eligible",
+                    "criteria_checked": [
+                        "node", "framework", "peer", "security", "license", "maintenance",
+                    ],
+                    "evidence_urls": ["https://example.invalid/ky"],
+                }],
+                "removal": {
+                    "status": "requires_migration",
+                    "coverage_checked": list(MODULE.REMOVAL_COVERAGE_AREAS),
+                    "evidence": ["src/api.ts"],
+                },
+            }}}), encoding="utf-8")
+            args = MODULE.parse_args([
+                str(root), "--assess", "axios", "--offline",
+                "--analysis-evidence-file", str(evidence),
+                "--output-dir", str(root / "out"),
+            ])
+            report = MODULE.build_bundle(args).reports[0]
+            self.assertEqual(report.primary_track, "replace")
+            ids = [option.option_id for option in (report.confirmation.options if report.confirmation else [])]
+            self.assertIn("replace:ky@1.14.3", ids)
+            self.assertIn("other", ids)
+
+    def test_alternate_track_questions_are_rendered_for_switch(self) -> None:
+        report = self.open_target_report()
+        report.removal.status = "requires_migration"
+        report.alternative_candidates = [MODULE.AlternativeCandidate(
+            "ky", "1.9.0", compliance_status="eligible", constraint_fit="fits",
+            origin="analysis-evidence",
+            criteria_checked=["node", "framework", "peer", "security", "license", "maintenance"],
+            evidence_urls=["https://example.invalid/ky"],
+        )]
+        report.refactor_plan = MODULE.build_refactor_plan(report, [
+            MODULE.CodeModificationPoint("legacy", "src/app.ts", 1, "Direct package usage", "", "", "", "", "P1", "high"),
+        ])
+        MODULE.assign_primary_track(report)
+        report.confirmation = MODULE.build_confirmation_question(report)
+        report.alternate_questions = MODULE.build_alternate_track_questions(report)
+        self.assertEqual(report.primary_track, "replace")
+        self.assertTrue(any(item.track == "native-refactor" for item in report.alternate_questions))
+        bundle = MODULE.AnalysisBundle(
+            "t", "now", ".", "draft", [report], [], [], MODULE.ManifestSnapshot(),
+            MODULE.LockSnapshot(), MODULE.LockSnapshot(), MODULE.LockSnapshot(), [],
+            decision_status="needs_choice",
+        )
+        markdown = "\n".join(MODULE.render_confirmation_queue(bundle))
+        self.assertIn("改轨问题：`native-refactor`", markdown)
 
     def test_truncated_cell_stays_on_one_markdown_row(self) -> None:
         row = "| " + " | ".join(MODULE.md_cell(value) for value in ("a" * 900, "b", "c")) + " |"

@@ -225,8 +225,8 @@
 
 | 字段 | 取值示例 | 调用方应如何理解 |
 |---|---|---|
-| `analysis_status` | `partial` / `blocked` / `complete` | `blocked` 时不得当作可实施结论 |
-| `decision_status` | `not_needed` / `needs_choice` | `needs_choice` 必须等人选 to/删除/替代等 |
+| `analysis_status` | `partial` / `blocked` / `complete` | `blocked` 时不得当作可实施结论；**禁止**与 `needs_choice` 同时为 `complete` |
+| `decision_status` | `not_needed` / `needs_choice` | `needs_choice` 必须等人选删除/替代/原生等；此时生成器 exit `7` |
 | `selection_status` | `selected` / `needs_explicit_choice` / `not_applicable` | 区分已明确目标和真正待选项 |
 | `constraints` | 包级约束列表 | 行为守恒等约束不得混入待决策 |
 | `behavior_parity_required` | `yes` / `no` | 默认为 `yes`；为 yes 时不得把删除/换库当默认范围 |

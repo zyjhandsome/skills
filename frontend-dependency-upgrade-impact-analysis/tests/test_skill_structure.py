@@ -57,6 +57,7 @@ class SkillStructureTests(unittest.TestCase):
                 "target-discovery-and-removal.md",
                 "analysis-evidence-schema.md",
                 "decision-record-schema.md",
+                "human-confirmation-gates.md",
             )
         }
         missing: list[str] = []
@@ -92,6 +93,8 @@ class SkillStructureTests(unittest.TestCase):
         require("report-contract.md", GENERATOR.CONFIRMATION_STATUSES, "确认队列状态枚举")
         require("report-contract.md", GENERATOR.DECISION_RECORD_STATUSES, "决策记录状态枚举")
         require("decision-record-schema.md", GENERATOR.DECISION_RECORD_STATUSES, "决策记录状态枚举")
+        require("human-confirmation-gates.md", ("needs_choice", "exit `7`", "other"), "确认门禁关键短语")
+        require("report-contract.md", ("exit `7`", "decision_status=needs_choice"), "完成态互斥 / exit 7")
         require("target-discovery-and-removal.md", GENERATOR.REFACTOR_SCALES, "改造规模枚举")
         require("target-discovery-and-removal.md", GENERATOR.PROVENANCE_KINDS, "依赖来源枚举")
         require("report-contract.md", GENERATOR.PROVENANCE_KINDS, "依赖来源枚举")

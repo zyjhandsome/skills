@@ -72,4 +72,10 @@
 
 `source=other` 的自填选择只做能核对的检查（精确 semver、若该包也在候选中则同样核对弃用与约束冲突），其余按未经生成器核对呈现。
 
-确认后的包：`selection_status=selected`、`decision_status=not_needed`、`recommended_action=awaiting-implementation-approval`，队列状态为 `decided`。
+确认后的包：`selection_status=selected`、`decision_status=not_needed`、`recommended_action=disposition-selected`，队列状态为 `decided`。
+
+`disposition-selected` 只表示**本技能内的分析选型已落盘**；本技能到此结束，不会也不应开始改依赖或跑项目脚本。实施授权须由调用方另行给出。
+
+不得作为最终选择写入本文件：`switch:*`、`handle-parent`（须继续写 `包<-父包` 追问）、无版本的 `pin-override`、已废除的 `reject-native-refactor`。父包追问的 `package` 形如 `目标包<-父包`；全部父包追问确认后，主包也会变为 `disposition-selected`。
+
+开放目标在选型完成前生成器以 exit `7` 退出；精确升级（目标已明确）通常不写入本文件。

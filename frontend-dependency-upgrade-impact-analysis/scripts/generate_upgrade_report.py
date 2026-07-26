@@ -195,6 +195,9 @@ NODE_BUILTINS = frozenset({
 })
 CONFIRMATION_STATUSES = ("ready", "blocked", "decided")
 DECISION_RECORD_STATUSES = ("confirmed", "invalidated", "unknown-package")
+# Open-target disposition selected in the decision file (analysis endpoint — not implementation).
+DISPOSITION_SELECTED_ACTION = "disposition-selected"
+PARENT_DECISION_SEPARATOR = "<-"
 # Deterministic size grading for a first-party rewrite, from this run's own scan counts.
 REFACTOR_SCALE_SMALL_FILES = 2
 REFACTOR_SCALE_SMALL_POINTS = 5
@@ -592,6 +595,8 @@ class PackageReport:
     primary_track_basis: str = ""
     alternate_tracks: list[str] = field(default_factory=list)
     confirmation: ConfirmationQuestion | None = None
+    # Full questions for alternate tracks (switch:<track>); Agent asks these verbatim after a switch.
+    alternate_questions: list[ConfirmationQuestion] = field(default_factory=list)
     parent_questions: list[ConfirmationQuestion] = field(default_factory=list)
     decision: HumanDecision | None = None
     # available | missing — whether this run produced at least one actionable route.
@@ -2305,8 +2310,12 @@ def verify_replacement_recommendations(
             if candidate.origin != "analysis-evidence" or candidate.compliance_status != "eligible":
                 continue
             if args.offline:
-                candidate.constraint_fit = "unknown"
-                append_unique(candidate.disqualifiers, "离线模式无法确认其为满足全部约束的最新稳定版")
+                # Keep the human-reviewed version selectable; freshness is a warning, not a veto.
+                append_unique(
+                    report.warnings,
+                    f"{candidate.package}@{candidate.version}：离线模式未向 registry 复核是否为最新稳定兼容版；"
+                    "联网重跑前请人工确认版本仍适用。",
+                )
                 continue
             metadata = request_json(registry_url(candidate.package), args.timeout)
             if not isinstance(metadata, dict):
@@ -2343,6 +2352,10 @@ def assess_alternative_constraint_fit(
                 continue
             peers = candidate.peer_dependencies or {}
             if not peers:
+                # No declared peers to contradict the project: treat as fits so reviewed
+                # analysis-evidence candidates can enter the replace confirmation options.
+                if candidate.constraint_fit == "unknown":
+                    candidate.constraint_fit = "fits"
                 continue
             verified = True
             for peer, requirement in sorted(peers.items()):
@@ -2797,14 +2810,40 @@ def assign_primary_track(report: PackageReport) -> None:
     ]
 
 
-def build_confirmation_question(report: PackageReport) -> ConfirmationQuestion:
-    """One question per package, asked verbatim by the Agent.
+def append_other_option(question: ConfirmationQuestion) -> None:
+    if any(option.option_id == "other" for option in question.options):
+        return
+    question.options.append(ConfirmationOption(
+        "other", "其他：自行指定依赖包与版本，或改走其他处置方式",
+        "自填内容会以 `source=other` 记录，并按同样的约束重新核对。",
+    ))
 
-    The wording and options are produced here so two runs on the same evidence ask the
-    same thing; the last option is always `other`, which hands control back to the human.
+
+def curated_lead_note(report: PackageReport) -> str:
+    curated = [
+        candidate.package for candidate in report.alternative_candidates
+        if candidate.origin == "curated-map"
+    ]
+    if not curated or eligible_alternative_candidates(report):
+        return ""
+    names = "、".join(f"`{name}`" for name in curated[:5])
+    return (
+        f"报告中的 curated-map 线索（{names}）不可直接点选；"
+        "须调研回填 `--analysis-evidence-file` 后才会出现 `replace:<包>@<版本>`。"
+    )
+
+
+def build_confirmation_question(
+    report: PackageReport,
+    track: str | None = None,
+) -> ConfirmationQuestion:
+    """One question per package/track, asked verbatim by the Agent.
+
+    Pass `track` to render an alternate-track question after `switch:<track>`.
+    Ready questions end with `other` (blocked questions have no options).
     """
     package = report.upgrade.package
-    track = report.primary_track
+    track = track or report.primary_track
     question = ConfirmationQuestion(package=package, track=track)
     routes = package_route_options(report)
     plan = report.refactor_plan
@@ -2848,16 +2887,30 @@ def build_confirmation_question(report: PackageReport) -> ConfirmationQuestion:
             ))
         if routes:
             question.options.append(ConfirmationOption(
-                "switch:replace", "改走替换（下一步再选具体包与版本）",
+                "switch:replace", "改走替换（下一步用下方「改轨问题：replace」选题）",
                 "候选：" + "、".join(option.label.split("（")[0] for option in routes),
             ))
         if plan.status == "established":
             question.options.append(ConfirmationOption(
-                "switch:native-refactor", "改走原生改造", f"改造规模 {plan.scale}（{plan.scale_basis}）",
+                "switch:native-refactor", "改走原生改造（下一步用下方「改轨问题：native-refactor」）",
+                f"改造规模 {plan.scale}（{plan.scale_basis}）",
             ))
     elif track == "replace":
+        lead = curated_lead_note(report)
         question.prompt = f"`{package}` 需要处置但未指定目标版本，选择替换成哪个包与版本？"
+        if lead:
+            question.prompt += f" {lead}"
         question.options = list(routes)
+        if not routes:
+            question.status = "blocked"
+            question.blocked_reason = (
+                "尚无已复核的 `replace:<包>@<版本>` 可选项。"
+                + (lead or "请完成替代方案调研并回填 --analysis-evidence-file。")
+            )
+            question.prerequisites = [
+                "按「替代方案调研任务」回填 analysis-evidence 候选",
+            ]
+            return question
         if report.provenance.kind == "both":
             question.options.append(ConfirmationOption(
                 "switch:handle-parent", "先处置父包（该包同时被其他包引入）",
@@ -2865,16 +2918,16 @@ def build_confirmation_question(report: PackageReport) -> ConfirmationQuestion:
             ))
         if report.removal.status == "safe_removal_candidate":
             question.options.append(ConfirmationOption(
-                "switch:remove", "改走删除",
+                "switch:remove", "改走删除（下一步用下方「改轨问题：remove」）",
                 f"删除结论：{report.removal.status}",
             ))
         if plan.status == "established":
             question.options.append(ConfirmationOption(
-                "switch:native-refactor", "改走原生改造",
+                "switch:native-refactor", "改走原生改造（下一步用下方「改轨问题：native-refactor」）",
                 f"改造规模 {plan.scale}（{plan.scale_basis}）",
             ))
     else:
-        question.prompt = f"`{package}` 无可选替代包，确认走原生改造吗？"
+        lead = curated_lead_note(report)
         if plan.status != "established":
             question.status = "blocked"
             question.blocked_reason = "改造方向尚未建立：缺少声明以外的调用点证据或替代方案调研结论。"
@@ -2883,22 +2936,42 @@ def build_confirmation_question(report: PackageReport) -> ConfirmationQuestion:
                 if report.research_status != "reviewed" else []
             )
             return question
+        question.prompt = f"`{package}` 本轮主轨为原生改造，确认吗？"
+        if lead:
+            question.prompt += f" {lead}"
         question.options = [
             ConfirmationOption(
-                "native-refactor", "是：进行原生改造（改用原生能力或自建最小实现）",
+                "native-refactor", "确认：进行原生改造（改用原生能力或自建最小实现）",
                 f"规模 {plan.scale}（{plan.scale_basis}）；需自建：{'；'.join(plan.capabilities_to_rebuild)}",
             ),
-            ConfirmationOption(
-                "reject-native-refactor", "否：不进行原生改造",
-                "该包将标记为整改阻塞；不再自动提供包装层隔离、内部 fork 或移除功能等路线。",
-            ),
         ]
-        return question
-    question.options.append(ConfirmationOption(
-        "other", "其他：自行指定依赖包与版本，或改走其他处置方式",
-        "自填内容会以 `source=other` 记录，并按同样的约束重新核对。",
-    ))
+        if routes:
+            question.options.append(ConfirmationOption(
+                "switch:replace", "改走替换（下一步用下方「改轨问题：replace」选题）",
+                "候选：" + "、".join(option.label.split("（")[0] for option in routes),
+            ))
+        if report.removal.status == "safe_removal_candidate":
+            question.options.append(ConfirmationOption(
+                "switch:remove", "改走删除（下一步用下方「改轨问题：remove」）",
+                f"删除结论：{report.removal.status}",
+            ))
+        if report.provenance.kind == "both" and report.provenance.parents:
+            question.options.append(ConfirmationOption(
+                "switch:handle-parent", "改走处置父包",
+                f"父包链：{'; '.join(report.provenance.chains[:3]) or '未建立'}",
+            ))
+    append_other_option(question)
     return question
+
+
+def build_alternate_track_questions(report: PackageReport) -> list[ConfirmationQuestion]:
+    """Ready questions for every alternate track so switch:<track> has a verbatim follow-up."""
+    questions: list[ConfirmationQuestion] = []
+    for track in report.alternate_tracks:
+        question = build_confirmation_question(report, track=track)
+        if question.status == "ready" and question.options:
+            questions.append(question)
+    return questions
 
 
 DECISION_FILE_NAME = "human-decisions.json"
@@ -2922,14 +2995,32 @@ def load_decision_record(path: Path | None) -> tuple[list[HumanDecision], list[s
             warnings.append("人工决策文件包含缺少 package 的条目；已忽略。")
             continue
         choice = str(row.get("choice") or "").strip()
+        package = str(row["package"]).strip()
         if choice.startswith("switch:"):
             warnings.append(
-                f"{row.get('package')} 的记录是路由答案 `{choice}`，不是最终选择；"
-                "请改走对应轨道的问题后再记录结果。"
+                f"{package} 的记录是路由答案 `{choice}`，不是最终选择；"
+                "请改问报告中「改轨问题」对应轨道后再记录结果。"
+            )
+            continue
+        if choice == "handle-parent":
+            warnings.append(
+                f"{package} 的记录 `handle-parent` 只表示进入父包追问，不是最终选择；"
+                "请继续写入 `包<-父包` 追问结果，或改选 pin-override / remove-feature / other。"
+            )
+            continue
+        if choice == "reject-native-refactor":
+            warnings.append(
+                f"{package} 的记录 `reject-native-refactor` 已废除；"
+                "请改选 native-refactor、switch 到替换/删除，或 other。"
+            )
+            continue
+        if choice == "pin-override":
+            warnings.append(
+                f"{package} 的记录 `pin-override` 缺少精确版本；请改用 pin-override:<包>@<版本>。"
             )
             continue
         decisions.append(HumanDecision(
-            package=str(row["package"]).strip(),
+            package=package,
             track=str(row.get("track") or "").strip(),
             choice=choice,
             selected_package=str(row.get("selected_package") or "").strip(),
@@ -2948,15 +3039,36 @@ def revalidate_decision(report: PackageReport, decision: HumanDecision) -> str:
         if report.removal.status == "not_viable":
             return "删除结论已变为 not_viable，原“确认删除”不再成立"
         return ""
-    if choice == "reject-native-refactor":
-        return ""
     if choice == "native-refactor":
-        if choice == "native-refactor" and report.refactor_plan.status != "established":
+        if report.refactor_plan.status != "established":
             return "改造方向已不成立（缺少调用点证据），需重新确认"
         return ""
+    if choice in {"remove-usage", "switch-to-declared", "remove-feature"}:
+        return ""
+    if choice.startswith("parent-upgrade:") or choice.startswith("parent-replace:") or choice.startswith("parent-remove:"):
+        return ""
+    if choice.startswith("pin-override:"):
+        pinned = choice.split(":", 1)[1]
+        if "@" not in pinned:
+            return "pin-override 缺少 包@版本"
+        name, version = pinned.rsplit("@", 1)
+        if name != report.upgrade.package:
+            return f"pin-override 目标包 {name} 与分析包 {report.upgrade.package} 不一致"
+        if semver_key(version) is None:
+            return f"pin-override 版本 {version} 不是精确 semver"
+        return ""
+    if choice.startswith("replace:"):
+        body = choice.split(":", 1)[1]
+        if "@" not in body:
+            return "replace 选项缺少 包@版本"
+        package, version = body.rsplit("@", 1)
+        decision.selected_package = decision.selected_package or package
+        decision.selected_version = decision.selected_version or version
     package = decision.selected_package
     version = decision.selected_version
     if not package or not version:
+        if decision.source == "other":
+            return ""
         return "记录缺少 selected_package 或 selected_version，无法核对"
     if semver_key(version) is None:
         return f"selected_version={version} 不是精确 semver"
@@ -2976,18 +3088,55 @@ def revalidate_decision(report: PackageReport, decision: HumanDecision) -> str:
     return ""
 
 
+def mark_disposition_selected(report: PackageReport, decision: HumanDecision) -> None:
+    """Record a final open-target disposition. This is the analysis endpoint, not implementation."""
+    decision.status = "confirmed"
+    report.decision = decision
+    report.selection_status = "selected"
+    report.recommended_action = DISPOSITION_SELECTED_ACTION
+    report.decision_status = "not_needed"
+    if report.confirmation is not None:
+        report.confirmation.status = "decided"
+    report.decision_required = [
+        item for item in report.decision_required
+        if "尚未选择目标版本" not in item and "替代方案调研尚未回填" not in item
+    ]
+    append_unique(
+        report.decision_required,
+        f"已记录分析选型：{decision.choice}；本技能到此结束，实施授权须另行取得。",
+    )
+
+
 def apply_decisions(reports: list[PackageReport], decisions: list[HumanDecision]) -> list[str]:
     """Attach still-valid decisions, and re-open invalidated ones with the reason."""
     warnings: list[str] = []
     by_package = {report.upgrade.package: report for report in reports}
+    parent_confirmed: dict[str, set[str]] = {}
     for decision in decisions:
-        report = by_package.get(decision.package)
+        package_key = decision.package
+        if PARENT_DECISION_SEPARATOR in package_key:
+            target_name, _parent_name = package_key.split(PARENT_DECISION_SEPARATOR, 1)
+            report = by_package.get(target_name)
+            if report is None:
+                decision.status = "unknown-package"
+                warnings.append(f"人工决策文件中的 {package_key} 不在本次分析清单内；已忽略。")
+                continue
+            reason = revalidate_decision(report, decision)
+            if reason:
+                decision.status = "invalidated"
+                decision.invalidation_reason = reason
+                warnings.append(f"{package_key} 的人工选择已失效：{reason}")
+                continue
+            decision.status = "confirmed"
+            parent_confirmed.setdefault(target_name, set()).add(package_key)
+            continue
+        report = by_package.get(package_key)
         if report is None:
             decision.status = "unknown-package"
-            warnings.append(f"人工决策文件中的 {decision.package} 不在本次分析清单内；已忽略。")
+            warnings.append(f"人工决策文件中的 {package_key} 不在本次分析清单内；已忽略。")
             continue
         if report.primary_track == "not_applicable":
-            warnings.append(f"{decision.package} 已指定精确目标版本，人工决策记录不适用；已忽略。")
+            warnings.append(f"{package_key} 已指定精确目标版本，人工决策记录不适用；已忽略。")
             continue
         reason = revalidate_decision(report, decision)
         report.decision = decision
@@ -2997,27 +3146,26 @@ def apply_decisions(reports: list[PackageReport], decisions: list[HumanDecision]
             if report.confirmation is not None:
                 report.confirmation.prompt = f"（原选择已失效：{reason}）" + report.confirmation.prompt
             append_unique(report.decision_required, f"原人工选择已失效并需重新确认：{reason}")
-            warnings.append(f"{decision.package} 的人工选择已失效：{reason}")
+            warnings.append(f"{package_key} 的人工选择已失效：{reason}")
             continue
-        decision.status = "confirmed"
-        if decision.choice == "reject-native-refactor":
-            report.selection_status = "not_applicable"
-            report.recommended_action = "remediation-blocked"
-            append_unique(report.implementation_blockers, "用户拒绝原生改造，且删除与替换均不可行")
-        else:
-            report.selection_status = "selected"
-            report.recommended_action = "awaiting-implementation-approval"
-        report.decision_status = "not_needed"
-        if report.confirmation is not None:
-            report.confirmation.status = "decided"
-        report.decision_required = [
-            item for item in report.decision_required
-            if "尚未选择目标版本" not in item and "替代方案调研尚未回填" not in item
-        ]
-        append_unique(
-            report.decision_required,
-            f"已记录人工选择：{decision.choice}；记录选型不等于实施授权，实施仍需另行批准。",
+        mark_disposition_selected(report, decision)
+    for report in reports:
+        target = report.upgrade.package
+        expected = {question.package for question in report.parent_questions}
+        got = parent_confirmed.get(target, set())
+        if not expected or not expected <= got:
+            continue
+        if report.selection_status == "selected":
+            continue
+        summary = HumanDecision(
+            package=target,
+            track="handle-parent",
+            choice="parent-followups-complete",
+            rationale="全部父包追问已确认",
+            source="confirmation-queue",
+            status="confirmed",
         )
+        mark_disposition_selected(report, summary)
     return warnings
 
 
@@ -3033,10 +3181,13 @@ def build_parent_question(report: PackageReport, question: ConfirmationQuestion)
         ]
         return question
     fixed = [edge for edge in provenance.parents if edge.fix_available == "dropped"]
-    question.prompt = f"`{package}` 是传递依赖，只能从父包侧处置。先选处置方式："
+    question.prompt = (
+        f"`{package}` 是传递依赖，只能从父包侧处置。先选处置方式："
+        "若选「处置父包」，还须继续回答下方每个父包追问；`handle-parent` 本身不是最终选择。"
+    )
     question.options = [
         ConfirmationOption(
-            "handle-parent", "处置引入它的父包（下一步逐个父包确认升级／替换／删除）",
+            "handle-parent", "处置引入它的父包（下一步逐个父包确认；本项勿写入 decision-file）",
             f"父包 {len(provenance.parents)} 个；"
             + (f"其中 {', '.join(edge.package for edge in fixed)} 的最新稳定版已不再依赖它" if fixed
                else "本轮未发现已摆脱该依赖的父包版本"),
@@ -3054,12 +3205,14 @@ def build_parent_question(report: PackageReport, question: ConfirmationQuestion)
         question.options.append(ConfirmationOption(
             "pin-override", "用 overrides/resolutions 钉版本（版本待解析）",
             "本轮未解析出可行版本："
-            + ("；".join(provenance.unknowns) or "需联网核对父包 range 与可用版本"),
+            + ("；".join(provenance.unknowns) or "需联网核对父包 range 与可用版本")
+            + "；解析前勿写入 decision-file",
         ))
     question.options.append(ConfirmationOption(
         "remove-feature", "移除引入该父包的功能",
         f"需确认业务方同意；受影响链路：{'; '.join(provenance.chains[:3]) or '未建立'}",
     ))
+    append_other_option(question)
     return question
 
 
@@ -3068,7 +3221,7 @@ def build_parent_followups(report: PackageReport) -> list[ConfirmationQuestion]:
     questions: list[ConfirmationQuestion] = []
     for edge in report.provenance.parents[:PARENT_CHAIN_LIMIT]:
         question = ConfirmationQuestion(
-            package=f"{report.upgrade.package}<-{edge.package}",
+            package=f"{report.upgrade.package}{PARENT_DECISION_SEPARATOR}{edge.package}",
             track="handle-parent",
             prompt=f"父包 `{edge.package}@{edge.version or '未解析'}` 怎么处置？",
         )
@@ -5199,6 +5352,57 @@ def report_section(anchor: str) -> list[str]:
     return [f"<!-- section: {anchor} -->", f"## {REPORT_SECTION_TITLES[anchor]}"]
 
 
+def confirmation_queue_phase(bundle: AnalysisBundle) -> str:
+    """Return evidence | choice | mixed | none for open-target confirmation gating."""
+    if bundle.decision_status != "needs_choice":
+        return "none"
+    ready = False
+    blocked = False
+    for report in bundle.reports:
+        question = report.confirmation
+        if question is None:
+            continue
+        if question.status == "blocked":
+            blocked = True
+        elif question.status == "ready":
+            ready = True
+    if blocked and ready:
+        return "mixed"
+    if blocked:
+        return "evidence"
+    if ready:
+        return "choice"
+    return "choice"
+
+
+def confirmation_status_banners(bundle: AnalysisBundle, location: str = "header") -> list[str]:
+    phase = confirmation_queue_phase(bundle)
+    if phase == "none":
+        return []
+    if phase == "evidence":
+        title = "待补证据（确认队列 blocked）" if location == "header" else "待补证据（结论闸门）"
+        body = (
+            f"> **{title}**：`decision_status=needs_choice`，但尚不能问选型。"
+            "请先完成删除面核验 / 替代方案调研 / 调用点证据，回填后重跑。"
+            "生成器 exit `7`。`analysis_status=complete` 不得与 `needs_choice` 并存。"
+        )
+    elif phase == "mixed":
+        title = "待补证据 + 待选型" if location == "header" else "待补证据 + 待选型（结论闸门）"
+        body = (
+            f"> **{title}**：部分包确认队列 `blocked`（先补证据），部分 `ready`（可原文提问）。"
+            "curated-map 线索不可直接当替换选项。exit `7`。"
+        )
+    else:
+        title = "待人工选型" if location == "header" else "待人工选型（结论闸门）"
+        body = (
+            f"> **{title}**：`decision_status=needs_choice`。"
+            "按「人工确认队列」逐包原文提问（替换含精确 `包@版本` 与末位 `other`；"
+            "`switch:<track>` 后改问同节「改轨问题」）。"
+            "写入决策文件并重跑后，本技能分析终点才完成。exit `7`。本技能不实施变更。"
+        )
+    return [body, ""]
+
+
 def markdown_report(bundle: AnalysisBundle) -> str:
     exact_count = sum(1 for report in bundle.reports if report.analysis_mode == "exact-upgrade" and report.upgrade.to_version)
     pending_count = sum(1 for report in bundle.reports if report.selection_status == "needs_explicit_choice")
@@ -5225,10 +5429,13 @@ def markdown_report(bundle: AnalysisBundle) -> str:
         *format_path_list(bundle.report_paths),
         f"- 批次：精确升级 `{exact_count}` / 待人工决策 `{pending_count}` / blocked 项 `{blocked_count}`",
         "",
+    ]
+    lines.extend(confirmation_status_banners(bundle))
+    lines.extend([
         *report_section("Upgrade Summary"), "",
         "| 包 | 分析模式 | 治理/升级原因 | 原版本 | 目标版本 | 建议动作 | 选择状态 | 决策状态 | 约束 | 变化类型 | 依赖类型 | Manifest 声明 | Lock 直接解析 | 基线状态 | 风险分 | 风险等级 | 证据完整性 |",
         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---:|---|---|",
-    ]
+    ])
     for report in bundle.reports:
         direct = report.current_lock_version or report.before_lock_version or report.after_lock_version or "-"
         lines.append("| " + " | ".join(md_cell(value) for value in (
@@ -5585,6 +5792,7 @@ def markdown_report(bundle: AnalysisBundle) -> str:
     lines.extend(render_confirmation_queue(bundle))
     lines.extend([
         "", *report_section("Conclusion"), "",
+        *confirmation_status_banners(bundle, location="conclusion"),
         f"- 总体风险：`{level}`",
         f"- 报告状态：`{bundle.status}`",
         f"- 分析状态：`{bundle.analysis_status}`",
@@ -5594,7 +5802,8 @@ def markdown_report(bundle: AnalysisBundle) -> str:
         f"- Node 阻塞项：{'; '.join(runtime.blockers) or '无'}",
         f"- 报告目录：`{bundle.report_output_dir}`",
         "- 最低可接受验证：确认准确 lock/peer/engine，执行受影响自动化检查，覆盖关键成功/失败/恢复流程，具备监控和已验证的回滚路径。",
-        "- 剩余工作：标记为 `complete` 前，解决所有“未建立”“需要 Agent 复核”、基线不一致、证据警告、未翻译上游摘要和间接调用方映射缺口。",
+        "- 剩余工作：标记为 `complete` 前，解决所有“未建立”“需要 Agent 复核”、基线不一致、证据警告、未翻译上游摘要和间接调用方映射缺口；"
+        "若 `decision_status=needs_choice`，还必须完成人工确认队列（exit `7`：待补证据或待选型）。",
     ])
     option_gaps = [report.upgrade.package for report in bundle.reports if report.option_status == "missing"]
     research_gaps = [report.upgrade.package for report in bundle.reports if report.research_status == "pending"]
@@ -5680,19 +5889,37 @@ def alternative_version_options(candidate: AlternativeCandidate) -> str:
     return "; ".join(labelled) or "-"
 
 
+def _render_option_table(question: ConfirmationQuestion) -> list[str]:
+    lines = [
+        "| 选项 ID | 选项 | 说明 |",
+        "|---|---|---|",
+    ]
+    for option in question.options:
+        lines.append("| " + " | ".join(md_cell(value) for value in (
+            option.option_id, option.label, option.detail or "-",
+        )) + " |")
+    lines.append("")
+    return lines
+
+
 def render_confirmation_queue(bundle: AnalysisBundle) -> list[str]:
     """The per-package questions the Agent must ask, plus decisions already recorded."""
     lines = ["", *report_section("Human Confirmation Queue"), ""]
     questions = [report for report in bundle.reports if report.confirmation is not None]
+    phase = confirmation_queue_phase(bundle)
     lines.extend([
         f"- 决策记录文件：`{bundle.decision_file}`（生成器只读；由 Agent 在人确认后写入）",
+        f"- 本轮确认阶段：`{phase}`（`evidence`=先补证据；`choice`=可选型；`mixed`=二者并存；`none`=无需）",
         "- 提问规则：一包一问，按下表顺序逐个确认；`blocked` 的包先补前置证据，不得提前问选型。",
-        "- 除原生改造严格是/否外，选项末位固定为 `other`：可自行指定包与版本，或改走其他处置方式。",
-        "- 记录选型不等于实施授权；实施仍需在本技能之外单独批准。",
+        "- 替换轨必须给出精确 `replace:<包>@<版本>`（仅 `analysis-evidence` eligible）；`curated-map` 只是线索。",
+        "- 选项末位固定为 `other`。`switch:<track>` 后改问同包「改轨问题」整表，勿把 switch 写入决策文件。",
+        "- `handle-parent` 本身不是最终选择；须继续写 `包<-父包` 追问，或选 pin-override / remove-feature / other。",
+        "- 记录选型不等于实施授权；本技能终点是分析报告（`disposition-selected`）。",
+        "- Agent 协议：`decision_status=needs_choice` 时不得宣称分析完成；见 `references/human-confirmation-gates.md`。",
         "",
     ])
     if not questions:
-        lines.extend(["- 本轮无未指定目标版本的包，确认队列为空。", ""])
+        lines.extend(["- 本轮无未指定目标版本的包，确认队列为空（精确升级不做人选型确认）。", ""])
         return lines
     lines.extend([
         "| 包 | 主轨 | 队列状态 | 问题 | 前置条件 |",
@@ -5718,7 +5945,7 @@ def render_confirmation_queue(bundle: AnalysisBundle) -> list[str]:
         lines.append("")
         if question.status == "blocked":
             lines.extend([
-                f"- 状态：`blocked`。{question.blocked_reason}",
+                f"- 状态：`blocked`（待补证据，勿问选型）。{question.blocked_reason}",
                 "- 需先完成：",
                 *[f"  - {item}" for item in question.prerequisites],
                 *([] if question.prerequisites else ["  - 见删除评估与调研任务"]),
@@ -5732,28 +5959,24 @@ def render_confirmation_queue(bundle: AnalysisBundle) -> list[str]:
             ])
             continue
         lines.extend([
-            f"- 问题：{question.prompt}",
+            f"- 主轨问题（先问这个）：{question.prompt}",
             "",
-            "| 选项 ID | 选项 | 说明 |",
-            "|---|---|---|",
+            *_render_option_table(question),
         ])
-        for option in question.options:
-            lines.append("| " + " | ".join(md_cell(value) for value in (
-                option.option_id, option.label, option.detail or "-",
-            )) + " |")
-        lines.append("")
+        for alt in report.alternate_questions:
+            lines.extend([
+                f"- 改轨问题：`{alt.track}`（仅当人回答 `switch:{alt.track}` 后原文改问；勿写入 decision-file）",
+                f"- 问题：{alt.prompt}",
+                "",
+                *_render_option_table(alt),
+            ])
         for followup in report.parent_questions:
             lines.extend([
-                f"- 追问（仅在选择 `handle-parent` 后逐个提问）：{followup.prompt}",
+                f"- 父包追问（仅在对话中选择 `handle-parent` 后逐个提问；decision `package`=`{followup.package}`）："
+                f"{followup.prompt}",
                 "",
-                "| 选项 ID | 选项 | 说明 |",
-                "|---|---|---|",
+                *_render_option_table(followup),
             ])
-            for option in followup.options:
-                lines.append("| " + " | ".join(md_cell(value) for value in (
-                    option.option_id, option.label, option.detail or "-",
-                )) + " |")
-            lines.append("")
     decided = [report for report in bundle.reports if report.decision is not None]
     if decided:
         lines.extend([
@@ -6094,6 +6317,7 @@ def build_bundle(
             resolve_override_version(report, node_runtime.selected_project_node, args)
         assign_primary_track(report)
         report.confirmation = build_confirmation_question(report)
+        report.alternate_questions = build_alternate_track_questions(report)
         if report.primary_track == "handle-parent" or "handle-parent" in report.alternate_tracks:
             report.parent_questions = build_parent_followups(report)
     decision_warnings.extend(apply_decisions(reports, decisions))
@@ -6305,6 +6529,25 @@ def main(argv: list[str]) -> int:
             file=sys.stderr,
         )
         return 6
+    if bundle.decision_status == "needs_choice":
+        pending_packages = [
+            item.get("package") or "?"
+            for item in bundle.pending_human_decisions
+            if item.get("package") not in {"__node_runtime__"}
+        ]
+        phase = confirmation_queue_phase(bundle)
+        phase_hint = {
+            "evidence": "当前为待补证据，勿问选型",
+            "choice": "当前为待人工选型，请原文提问",
+            "mixed": "部分待补证据、部分可选型",
+        }.get(phase, "见人工确认队列")
+        print(
+            f"开放目标未完成（decision_status=needs_choice，phase={phase}）："
+            + ("、".join(str(name) for name in pending_packages) or "见人工确认队列")
+            + f"。{phase_hint}。报告已写出为 draft；写入 decision-file 并重跑前不得标 complete。",
+            file=sys.stderr,
+        )
+        return 7
     return 0
 
 
