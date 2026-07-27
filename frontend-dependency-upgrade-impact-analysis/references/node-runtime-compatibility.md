@@ -103,6 +103,26 @@
 
 每条 install/build/test 命令执行前先在同一子进程环境验证 `node --version` 等于所选精确版本。项目命令只能在项目兼容运行时执行；与项目升级无关的外部工具命令不自动纳入本技能。
 
+### 5.1 Agent 硬规则（实施期）
+
+本机 Node 可用于只读探测与日常终端习惯，但**不得**用本机 Node 执行项目 install/ci/update/build/test/lint 或任何会改写 lock 的命令。
+
+- 实施阶段所有项目命令必须经 `scripts/run_with_compatible_node.py`，禁止在 runner 外直接调用本机 `node`/`npm`/`pnpm`/`yarn`/`bun`。
+- `node_runtime_status=unknown` 且无权威约束时：项目命令硬阻断；须先补齐 pin/engines，或通过 `--analysis-evidence-file` 写入精确 `selected_project_node`。
+- 提交或宣称实施完成前：核对 lock **格式字段**（见 §7.1）未意外变化；变化且未获格式迁移批准 → `blocked`。
+
+### 5.2 npm 与 package-lock 格式兼容（执行前硬门禁）
+
+真正改写 `package-lock.json` / `npm-shrinkwrap.json` 的 `lockfileVersion` 的是 **npm 主版本**（常随 Node 捆绑）。对会改依赖树的 npm 命令，runner 在隔离环境中执行前必须验证：
+
+| 现有 `lockfileVersion` | 允许的 npm 主版本 |
+|---|---|
+| `1` | `<= 6` |
+| `2` | `7`–`8` |
+| `>= 3` | `>= 9` |
+
+不兼容或无法判定 → 执行前硬失败。不得用本机高版本 npm“顺便”升级 lock 格式。pnpm/yarn/bun 至少冻结各自格式字段（见 §7.1）；格式迁移同样需要显式批准。
+
 ## 6. 缺失运行时
 
 缺少管理器或兼容 Node 时：
@@ -113,7 +133,7 @@
 4. 未批准则停止实施，但可以继续完成不依赖项目命令的影响分析；
 5. 安装后重新运行完整预检，不能沿用旧的兼容结论。
 
-不要自动选择并安装“看起来差不多”的 Node。范围允许多个版本时，先把最终精确版本写入报告。
+不要自动选择并安装“看起来差不多”的 Node。范围允许多个版本时，先把最终精确版本写入报告。仓库完全没有权威 Node 约束时，同样 `blocked`，直到人指定精确项目 Node。
 
 ## 7. 恢复与无残留验收
 
@@ -122,17 +142,33 @@
 - 当前 `node --version`、Node 可执行路径、PATH；
 - npm/pnpm/yarn 版本和解析路径；
 - 当前版本管理器及 active version；
-- `.nvmrc`、`.node-version`、`.tool-versions`、`package.json#engines.node`、`volta.node` 和相关 CI Node 配置。
+- `.nvmrc`、`.node-version`、`.tool-versions`、`package.json#engines.node`、`volta.node` 和相关 CI Node 配置；
+- 各受支持 lock 的**格式字段**（§7.1），不是整文件哈希（授权升级可改依赖树内容）。
 
 无论项目命令成功、失败还是中断，都在 `finally` 中：
 
 1. 恢复原 active Node（如果发生全局/会话切换）；
 2. 验证当前 Node、可执行路径和包管理器环境与快照一致；
 3. 验证 Node 约束文件和字段没有因临时兼容处理发生变化；
-4. 记录每条命令、退出码、实际 Node、恢复结果和异常；
-5. 恢复失败时将任务标为 blocked，并立即报告，不继续执行其他命令。
+4. 验证 lock 格式字段未意外变化（除非显式允许格式迁移）；
+5. 记录每条命令、退出码、实际 Node、恢复结果和异常；
+6. 恢复失败或完整性失败时将任务标为 blocked，并立即报告，不继续执行其他命令。
 
 “无残留”只约束临时运行时处理。不要擅自删除正常的构建产物、测试输出或经批准产生的 manifest/lock 变更。
+
+### 7.1 Lock 格式冻结（默认）与迁移闸门
+
+默认**冻结**以下格式字段；授权升级可以改包版本与依赖树，但不得悄悄改格式：
+
+| 文件 | 格式字段 |
+|---|---|
+| `package-lock.json` / `npm-shrinkwrap.json` / `bun.lock` | `lockfileVersion` |
+| `pnpm-lock.yaml` | `lockfileVersion` |
+| `yarn.lock` | classic `v1` 标记或 Berry `__metadata.version` |
+
+- 默认：格式变化 → runner `lock_format_integrity=changed`，exit `7`，任务 `blocked`。
+- 仅当报告/调用方显式批准格式迁移，且执行时传入 `--allow-lockfile-format-migration` 时，才允许格式变化（`migration-allowed`）。
+- 不得把本机 Node/npm 造成的格式漂移提交进仓库。
 
 ## 8. 报告映射
 
@@ -141,8 +177,8 @@
 - **升级摘要**：`node_runtime_status`、`execution_readiness`、本机当前 Node、所选项目 Node。
 - **依赖变化**：完整约束来源、兼容交集、管理器、已安装候选、目标包 engines、`selected_node_support` 与计划表核对日期。
 - **技术风险**：约束冲突、EOL/接近 EOL、全局切换、恢复失败风险。
-- **测试范围**：每条项目命令对应的实际 Node，以及恢复验证。
-- **发布与回滚**：运行时恢复触发条件；不得把本机临时 Node 处理提交进仓库。
-- **结论**：未解决的 manager/runtime/constraint blocker 和所需人工批准。
+- **测试范围**：每条项目命令对应的实际 Node、npm↔lock 兼容结论，以及恢复与 lock 格式验证。
+- **发布与回滚**：运行时恢复触发条件；不得把本机临时 Node 处理或未批准的 lock 格式漂移提交进仓库。
+- **结论**：未解决的 manager/runtime/constraint/lock-format blocker 和所需人工批准。
 
 结构化 JSON 使用单一 `node_runtime` 对象；不得建立第二份运行时状态文件作为平行状态源。

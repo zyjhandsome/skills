@@ -17,14 +17,26 @@ from typing import Any
 
 
 VERSION_RE = re.compile(r"(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)")
+MAJOR_RE = re.compile(r"(\d+)")
 PIN_FILES = (".nvmrc", ".node-version", ".tool-versions")
 CI_FILES = (".gitlab-ci.yml", "azure-pipelines.yml", "azure-pipelines.yaml")
+LOCK_FILES = (
+    "package-lock.json",
+    "npm-shrinkwrap.json",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+    "bun.lock",
+)
 INSTALL_RE = re.compile(
     r"(?:^|&&|\|\||;)\s*(?:"
     r"npm\s+(?:ci|i|install|add|update|uninstall|remove|rm|un)\b|"
     r"pnpm\s+(?:i|install|add|up|update|remove|rm|dlx)\b|"
     r"yarn\s*$|yarn\s+(?:install|add|up|upgrade|remove|dlx)\b|"
     r"bun\s+(?:i|install|add|update|remove)\b|bunx\b|npx\b)",
+    re.I,
+)
+NPM_MUTATING_RE = re.compile(
+    r"(?:^|&&|\|\||;)\s*npm\s+(?:ci|i|install|add|update|uninstall|remove|rm|un)\b",
     re.I,
 )
 NODE_INSTALL_RE = re.compile(
@@ -43,6 +55,11 @@ RUNTIME_MUTATION_RE = re.compile(
 def normalize_version(value: str) -> str:
     match = VERSION_RE.search(str(value or ""))
     return match.group(1) if match else ""
+
+
+def major_version(value: str) -> int | None:
+    match = MAJOR_RE.search(str(value or "").lstrip("v"))
+    return int(match.group(1)) if match else None
 
 
 def file_hash(path: Path) -> str:
@@ -73,6 +90,38 @@ def snapshot_node_constraints(project_root: Path) -> dict[str, Any]:
     return snapshot
 
 
+def read_lockfile_format(path: Path) -> str:
+    """Return the lock *format* token only — not content hash (upgrades may rewrite trees)."""
+    if not path.is_file():
+        return ""
+    name = path.name
+    try:
+        if name in {"package-lock.json", "npm-shrinkwrap.json", "bun.lock"}:
+            data = json.loads(path.read_text(encoding="utf-8-sig"))
+            return str(data.get("lockfileVersion") or "")
+        text = path.read_text(encoding="utf-8-sig", errors="replace")
+    except (OSError, json.JSONDecodeError, UnicodeError):
+        return f"unreadable:{file_hash(path)[:12]}"
+    if name == "pnpm-lock.yaml":
+        match = re.search(r"^lockfileVersion:\s*['\"]?([^'\"\s]+)", text, re.M)
+        return match.group(1) if match else ""
+    if name == "yarn.lock":
+        if re.search(r"(?m)^# yarn lockfile v1\s*$", text):
+            return "yarn-classic-v1"
+        match = re.search(r"(?m)^__metadata:\s*$[\s\S]*?^\s+version:\s*(\d+)\s*$", text)
+        return f"yarn-berry-v{match.group(1)}" if match else "yarn-unknown"
+    return ""
+
+
+def snapshot_lockfile_formats(project_root: Path) -> dict[str, str]:
+    snapshot: dict[str, str] = {}
+    for relative in LOCK_FILES:
+        path = project_root / relative
+        if path.is_file():
+            snapshot[relative] = read_lockfile_format(path)
+    return snapshot
+
+
 def current_node(env: dict[str, str] | None = None) -> tuple[str, str]:
     path_value = (env or os.environ).get("PATH", "")
     executable = shutil.which("node", path=path_value) or ""
@@ -87,6 +136,72 @@ def current_node(env: dict[str, str] | None = None) -> tuple[str, str]:
         check=False,
     )
     return normalize_version(result.stdout or result.stderr), executable
+
+
+def current_tool_version(tool: str, env: dict[str, str] | None = None) -> str:
+    path_value = (env or os.environ).get("PATH", "")
+    executable = shutil.which(tool, path=path_value) or ""
+    if not executable:
+        return ""
+    result = subprocess.run(
+        [executable, "--version"],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    text = (result.stdout or result.stderr or "").strip()
+    match = VERSION_RE.search(text) or MAJOR_RE.search(text.lstrip("v"))
+    if not match:
+        return ""
+    return match.group(1) if match.lastindex else match.group(0)
+
+
+def npm_compatible_with_lockfile_version(npm_version: str, lockfile_version: str) -> bool | None:
+    """True if npm major preserves the existing package-lock format; None if unknown."""
+    npm_major = major_version(npm_version)
+    lock_token = str(lockfile_version or "").strip()
+    if npm_major is None or not lock_token:
+        return None
+    try:
+        lock_major = int(float(lock_token))
+    except ValueError:
+        return None
+    if lock_major <= 1:
+        return npm_major <= 6
+    if lock_major == 2:
+        return 7 <= npm_major <= 8
+    if lock_major >= 3:
+        return npm_major >= 9
+    return None
+
+
+def verify_npm_lock_compatibility(project_root: Path, env: dict[str, str], commands: list[str]) -> None:
+    if not any(NPM_MUTATING_RE.search(command) for command in commands):
+        return
+    formats = snapshot_lockfile_formats(project_root)
+    lock_name = next(
+        (name for name in ("package-lock.json", "npm-shrinkwrap.json") if name in formats),
+        "",
+    )
+    if not lock_name:
+        return
+    lock_version = formats[lock_name]
+    npm_version = current_tool_version("npm", env)
+    compatible = npm_compatible_with_lockfile_version(npm_version, lock_version)
+    if compatible is False:
+        raise RuntimeError(
+            f"执行前硬失败：隔离环境 npm {npm_version or '未检测到'} 与 {lock_name} "
+            f"lockfileVersion={lock_version} 不兼容，继续会改写 lock 格式。"
+            "请改用与该格式兼容的 Node/npm，或在报告中显式批准格式迁移后传入 "
+            "--allow-lockfile-format-migration。"
+        )
+    if compatible is None:
+        raise RuntimeError(
+            f"执行前硬失败：无法判定 npm {npm_version or '未检测到'} 与 {lock_name} "
+            f"lockfileVersion={lock_version or '未知'} 的兼容性；拒绝在不确定情况下改写 lock。"
+        )
 
 
 def runtime_directory_candidates(manager: str, version: str) -> list[Path]:
@@ -221,6 +336,7 @@ def execute(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
         "mode": "isolated-child-process" if runtime_dir else "guarded-global-switch",
         "execute": bool(args.execute),
         "command_timeout_seconds": int(args.command_timeout),
+        "allow_lockfile_format_migration": bool(args.allow_lockfile_format_migration),
         "commands": [
             {"command": command, "scope": classify_command(command)}
             for command in args.command
@@ -230,6 +346,8 @@ def execute(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
         "results": [],
         "restoration": "not-required",
         "constraint_integrity": "not-checked",
+        "lock_format_integrity": "not-checked",
+        "lockfile_formats_before": snapshot_lockfile_formats(project_root),
     }
     if not runtime_dir and not (manager == "nvm-windows" and shutil.which("nvm")):
         raise RuntimeError(
@@ -239,9 +357,11 @@ def execute(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
         raise RuntimeError("无法确定原 Node 精确版本；为避免无法恢复，拒绝使用全局 nvm 切换")
     if not args.execute:
         plan["constraint_integrity"] = "dry-run"
+        plan["lock_format_integrity"] = "dry-run"
         return 0, plan
 
     before_constraints = snapshot_node_constraints(project_root)
+    before_lock_formats = dict(plan["lockfile_formats_before"])
     switched_globally = False
     command_env = dict(os.environ)
     failure_code = 0
@@ -265,6 +385,9 @@ def execute(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
             raise RuntimeError(
                 f"目标运行时验证失败：期望 {target}，实际 {actual_version or '未检测到'}（{actual_path or '无路径'}）"
             )
+        plan["npm_version"] = current_tool_version("npm", command_env)
+        if not args.allow_lockfile_format_migration:
+            verify_npm_lock_compatibility(project_root, command_env, list(args.command))
         for command in args.command:
             result = run_shell_command(command, project_root, command_env, int(args.command_timeout))
             plan["results"].append(result)
@@ -309,11 +432,31 @@ def execute(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
                 for key in sorted(set(before_constraints) | set(after_constraints))
                 if before_constraints.get(key) != after_constraints.get(key)
             }
+        after_lock_formats = snapshot_lockfile_formats(project_root)
+        plan["lockfile_formats_after"] = after_lock_formats
+        if after_lock_formats == before_lock_formats:
+            plan["lock_format_integrity"] = "verified-unchanged"
+        elif args.allow_lockfile_format_migration:
+            plan["lock_format_integrity"] = "migration-allowed"
+            plan["lock_format_changes"] = {
+                key: {"before": before_lock_formats.get(key), "after": after_lock_formats.get(key)}
+                for key in sorted(set(before_lock_formats) | set(after_lock_formats))
+                if before_lock_formats.get(key) != after_lock_formats.get(key)
+            }
+        else:
+            plan["lock_format_integrity"] = "changed"
+            plan["lock_format_changes"] = {
+                key: {"before": before_lock_formats.get(key), "after": after_lock_formats.get(key)}
+                for key in sorted(set(before_lock_formats) | set(after_lock_formats))
+                if before_lock_formats.get(key) != after_lock_formats.get(key)
+            }
 
     if not str(plan["restoration"]).startswith("verified"):
         return 5, plan
     if plan["constraint_integrity"] != "verified-unchanged":
         return 6, plan
+    if plan["lock_format_integrity"] not in {"verified-unchanged", "migration-allowed"}:
+        return 7, plan
     return failure_code, plan
 
 
@@ -327,6 +470,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--approve-runtime-switch", action="store_true")
     parser.add_argument("--approve-dependency-install", action="store_true")
     parser.add_argument("--approve-project-scripts", action="store_true")
+    parser.add_argument(
+        "--allow-lockfile-format-migration",
+        action="store_true",
+        help="Allow lockfileVersion / yarn-berry metadata version changes. Requires explicit report approval.",
+    )
     parser.add_argument(
         "--command-timeout", type=int, default=1800,
         help="Per-command timeout in seconds (default 1800). Use 0 to wait indefinitely.",

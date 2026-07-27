@@ -43,6 +43,7 @@
 - v2/v3：优先读取 `packages["node_modules/<package>"].version`；嵌套 `node_modules` 路径用于识别重复版本。
 - v1：读取 `dependencies[package].version` 并递归观察嵌套 dependencies。
 - 记录 `lockfileVersion`；解析不到直接版本时标 unknown，不回退猜测。
+- `lockfileVersion` 是格式基线：授权升级可改依赖树，默认不得改格式；本机高版本 npm 造成的 v1↔v2↔v3 漂移视为污染。执行门禁见 `references/node-runtime-compatibility.md` §5.2 / §7.1。
 - v2/v3 的直接依赖条目还带 `engines`：读取其中的 `node` 作为该解析版本声明的运行时要求，用途见 `references/node-runtime-compatibility.md` §2 的 `toolchain-engine` / `dependency-engine`。
 
 只有**当前** lock 缺失才是发现项。分析升级前状态时没有 before/after lock 属正常，报告不得输出无主语的"未找到 lockfile"。lock 路径存在但类型不受支持时，必须写出实际文件名和受支持类型清单。
@@ -110,11 +111,23 @@
 | complete | 版本区间完整，且 registry/repository/release/changelog/migration/compatibility/security/support/license 均已确认或有明确 not-applicable 依据 |
 | partial | 有官方来源但部分版本、标签或文档缺失 |
 | ambiguous | monorepo tag/release 无法可靠归属到目标 package |
-| offline | 未联网，仅生成待补来源 |
+| offline | 调用方显式 `--offline` 且未取得联网证据；仅生成待补来源。**禁止**因 `.npmrc`/私有 registry/内网形态推断 |
+
+### 公网可达性门禁
+
+上游取证前必须用**实际公网探测**证明可达性（Agent `curl` + 生成器内置 probe，绕过 HTTP cache）。探测目标是公网端点，不是项目 `.npmrc` 镜像：
+
+1. 先探 `https://registry.npmjs.org/`；
+2. registry 失败时再探 `https://api.github.com/`；
+3. 两者均不可达 → 停住问人是否显式 `--offline`；生成器 exit `8`，stderr JSON 含 `network_reachability=unreachable` 与 `awaiting_offline_confirmation=true`；确认前**禁止**回读本地 `upstream-evidence`，也不得把 `evidence_completeness` 标成 `offline`；
+4. registry 通、或 registry 不通但 GitHub 通 → 保持联网模式；单次抓取失败记 `partial`/`missing` + diagnostics，不得改标 offline；
+5. 精确升级取证中：若 `from→to` 区间内 release 与 changelog **均无可用正文**，再探 GitHub；仅当该探测失败才升级为「问人是否 `--offline`」。403/429 等有响应的失败不算公网不通。
+
+`--offline` **仅**调用方/人显式传入。Agent 不得因私有 registry 或「像内网」擅自添加。
 
 ### 报告级 upstream-evidence
 
-精确升级（明确 `from → to`）默认采用 **download-first**：先把官方 registry / release / changelog 下载落到报告输出目录旁的 `upstream-evidence/`，再以该本地包作为 release/changelog 依据之一。开放目标（无 `to`）不写、不读该目录。
+精确升级（明确 `from → to`）默认采用 **download-first**：先把官方 registry / release / changelog 下载落到报告输出目录旁的 `upstream-evidence/`，再以该本地包作为 release/changelog 依据之一。论证范围仅限该包升级区间。开放目标（无 `to`）不写、不读该目录。
 
 目录内容：
 
@@ -125,11 +138,11 @@
 
 行为：
 
-- 默认开启写与回读；`--no-upstream-evidence` 关闭；
+- 默认开启写入；`--no-upstream-evidence` 关闭；
 - 联网抓取时即使 release/changelog 正文缺失，也必须创建证据目录与 `sources.json`，并写入 `fetch_diagnostics`（如 GitHub `403/429`、未设置 `GITHUB_TOKEN`、超时）；
-- 联网失败或 `--offline` 时回读已有证据包；本地回读最多把完整性标为 `partial`，不得标 `complete`；
+- **本地回读仅在显式 `--offline` 时允许**；联网模式下单次 URL 失败不得静默 merge 本地包；本地回读最多把完整性标为 `partial`，不得标 `complete`；
 - 默认保留目录；`--cleanup-upstream-evidence` 在报告写成功后删除；
-- 与六小时 HTTP cache 并存：后者是传输缓存，前者是报告级可读证据包。
+- 与六小时 HTTP cache 并存：后者是传输缓存，前者是报告级可读证据包；可达性探测必须绕过该 cache。
 
 ### 混批自动拆分
 

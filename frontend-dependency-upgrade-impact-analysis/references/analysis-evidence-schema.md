@@ -86,6 +86,8 @@
 - `node_runtime` 是可选的整单证据对象，不属于单个包，也不是实施授权。
 - `additional_project_constraints` 每项必须包含 `source`、`requirement`、`kind` 和 `authority`；`authority` 只能为 `authoritative` 或 `observed`。`kind` 推荐复用 `references/node-runtime-compatibility.md` §2 的类别名，便于与生成器自动收集的证据并排阅读；这也是把自动探测到的 `observed` 证据（CI 镜像、非白名单依赖 engines）在人工确认后提权为项目约束的唯一通道。
 - `selected_project_node` 必须是精确 semver，并满足所有可解析的权威项目约束；生成器探测结果不一致时保持 blocked。
+- 仓库无权威 pin/engines 时：不得把本机 Node 当作项目运行时；可在本对象写入精确 `selected_project_node`（建议同时写 `selection_reason`）以建立项目运行时基线，否则项目命令保持硬阻断。
+- 本文件不能批准 lock 格式迁移；格式迁移须在实施授权中单独确认，并由 runner 的 `--allow-lockfile-format-migration` 执行。
 - 证据文件不能包含或授予 `runtime-switch`、`node-install`、依赖安装或项目脚本权限；审批只从当前任务的调用方生命周期取得。
 - 候选必须提供精确 semver。
 - `compliance_status` 只能为 `eligible`、`ineligible` 或 `unknown`。

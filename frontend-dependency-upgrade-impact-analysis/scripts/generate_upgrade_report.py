@@ -909,6 +909,176 @@ def registry_url(package: str) -> str:
     return f"https://registry.npmjs.org/{urllib.parse.quote(package, safe='')}"
 
 
+REGISTRY_PROBE_URL = "https://registry.npmjs.org/"
+GITHUB_PROBE_URL = "https://api.github.com/"
+
+
+class NetworkReachabilityError(Exception):
+    """Public network unreachable; caller must confirm --offline before local readback."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        registry_reachable: bool,
+        github_reachable: bool,
+        stage: str = "preflight",
+    ) -> None:
+        super().__init__(message)
+        self.registry_reachable = bool(registry_reachable)
+        self.github_reachable = bool(github_reachable)
+        self.stage = stage
+        self.network_reachability = "unreachable"
+        self.awaiting_offline_confirmation = True
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "network_reachability": self.network_reachability,
+            "awaiting_offline_confirmation": self.awaiting_offline_confirmation,
+            "registry_reachable": self.registry_reachable,
+            "github_reachable": self.github_reachable,
+            "stage": self.stage,
+            "message": str(self),
+        }
+
+
+def probe_http_reachable(url: str, timeout: int) -> bool:
+    """Direct reachability probe — bypasses the HTTP cache so a stale hit cannot fake online.
+
+    An HTTP response (including 401/403/429) means the public path is up; only transport
+    failures (DNS/timeout/connection) count as unreachable.
+    """
+    headers = {
+        "User-Agent": "frontend-dependency-upgrade-impact-analysis/2.0",
+        "Accept": "*/*",
+    }
+    try:
+        request = urllib.request.Request(url, headers=headers, method="GET")
+        with urllib.request.urlopen(request, timeout=max(1, int(timeout))) as response:
+            status = int(getattr(response, "status", 0) or 0)
+            return status > 0
+    except urllib.error.HTTPError as exc:
+        return exc.code is not None and int(exc.code) > 0
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+        return False
+
+
+def assess_network_reachability(timeout: int, *, probe_github: bool | None = None) -> dict[str, Any]:
+    """Two-tier public reachability: registry first; GitHub only when registry fails or forced."""
+    registry_ok = probe_http_reachable(REGISTRY_PROBE_URL, timeout)
+    should_probe_github = bool(probe_github) if probe_github is not None else (not registry_ok)
+    github_ok: bool | None = None
+    if should_probe_github:
+        github_ok = probe_http_reachable(GITHUB_PROBE_URL, timeout)
+    if registry_ok:
+        status = "reachable"
+    elif github_ok:
+        status = "partial-github-only"
+    elif github_ok is False:
+        status = "unreachable"
+    else:
+        status = "unknown"
+    return {
+        "network_reachability": status,
+        "registry_reachable": registry_ok,
+        "github_reachable": github_ok,
+        "awaiting_offline_confirmation": (not registry_ok) and github_ok is False,
+        "registry_probe_url": REGISTRY_PROBE_URL,
+        "github_probe_url": GITHUB_PROBE_URL,
+    }
+
+
+def ensure_network_reachability(args: argparse.Namespace) -> dict[str, Any]:
+    """Generator-side double insurance. Skip when caller already confirmed --offline."""
+    if bool(getattr(args, "offline", False)):
+        result = {
+            "network_reachability": "skipped-offline",
+            "registry_reachable": None,
+            "github_reachable": None,
+            "awaiting_offline_confirmation": False,
+            "registry_probe_url": REGISTRY_PROBE_URL,
+            "github_probe_url": GITHUB_PROBE_URL,
+        }
+        args.network_reachability = result
+        return result
+    result = assess_network_reachability(int(getattr(args, "timeout", 12) or 12))
+    args.network_reachability = result
+    if result.get("awaiting_offline_confirmation"):
+        raise NetworkReachabilityError(
+            "公网不可达：registry.npmjs.org 与 api.github.com 均探测失败。"
+            "请勿因 .npmrc/私有 registry/内网形态推断 offline。"
+            "若确认离线，由调用方显式传入 --offline 后再跑；此前禁止回读本地 upstream-evidence。",
+            registry_reachable=False,
+            github_reachable=False,
+            stage="preflight",
+        )
+    return result
+
+
+def local_upstream_readback_allowed(args: argparse.Namespace) -> bool:
+    """Local upstream-evidence readback is allowed only after explicit --offline."""
+    return bool(getattr(args, "offline", False))
+
+
+def exact_upgrade_interval_lacks_github_bodies(report: PackageReport) -> bool:
+    if not report.notes or not is_exact_upgrade_target(report.upgrade):
+        return False
+    has_release = any(
+        note.release_status in {"substantive", "substantive-linked"} for note in report.notes
+    )
+    has_changelog = any(note.changelog_status == "confirmed" for note in report.notes)
+    return not has_release and not has_changelog
+
+
+def exact_upgrade_targets_github(report: PackageReport) -> bool:
+    if report.repository_url and github_slug(report.repository_url):
+        return True
+    return any(bool(github_slug(note.repository_url)) for note in report.notes)
+
+
+def maybe_require_github_reachability_after_empty_evidence(
+    report: PackageReport,
+    args: argparse.Namespace,
+) -> None:
+    """If exact-upgrade interval has no release/changelog bodies, re-probe GitHub before asking offline."""
+    if bool(getattr(args, "offline", False)):
+        return
+    if not exact_upgrade_interval_lacks_github_bodies(report):
+        return
+    if not exact_upgrade_targets_github(report):
+        return
+    github_ok = probe_http_reachable(GITHUB_PROBE_URL, int(getattr(args, "timeout", 12) or 12))
+    reachability = dict(getattr(args, "network_reachability", None) or {})
+    reachability["github_reachable"] = github_ok
+    if github_ok:
+        reachability["network_reachability"] = (
+            "reachable" if reachability.get("registry_reachable") else "partial-github-only"
+        )
+        args.network_reachability = reachability
+        append_unique(
+            report.warnings,
+            "升级区间内未取得可用的 GitHub release/changelog 正文，但 api.github.com 仍可达；"
+            "保持联网模式（partial/missing），不得改标 offline，也不得擅自加 --offline。",
+        )
+        return
+    reachability["network_reachability"] = "unreachable"
+    reachability["awaiting_offline_confirmation"] = True
+    args.network_reachability = reachability
+    raise NetworkReachabilityError(
+        "精确升级区间内 release 与 changelog 均无可用正文，且 api.github.com 可达性探测失败。"
+        "请确认是否由调用方显式传入 --offline（可回读本地 upstream-evidence）；"
+        "确认前禁止本地回读，也不得因私有 registry 形态推断 offline。",
+        registry_reachable=bool(reachability.get("registry_reachable")),
+        github_reachable=False,
+        stage="exact-upgrade-github-evidence",
+    )
+
+
+def format_network_reachability_error(exc: NetworkReachabilityError) -> str:
+    payload = json.dumps(exc.as_dict(), ensure_ascii=False)
+    return f"{exc}\n{payload}"
+
+
 def default_http_cache_dir() -> Path:
     base = os.environ.get("LOCALAPPDATA") or os.environ.get("XDG_CACHE_HOME")
     if base:
@@ -4128,11 +4298,53 @@ def assess_node_runtime(
         assessment.blockers.append("Node 兼容性尚未完成判定")
 
     if assessment.status == "unknown" and not assessment.project_constraints:
-        if not str(evidence.get("selected_project_node") or ""):
+        evidence_selected = normalize_node_version(str(evidence.get("selected_project_node") or ""))
+        if evidence_selected:
+            # Human-established exact project Node when the repo has no pin/engines.
+            add_node_constraint(
+                assessment.project_constraints,
+                NodeConstraint(
+                    "analysis-evidence#selected_project_node",
+                    evidence_selected,
+                    "runtime-pin",
+                    "authoritative",
+                    "",
+                ),
+            )
+            assessment.selected_project_node = evidence_selected
+            assessment.selected_manager = installed_to_manager.get(evidence_selected, "")
+            assessment.selected_node_support, support_note = node_support_status(evidence_selected)
+            if assessment.selected_node_support != "supported":
+                assessment.warnings.append(support_note)
+            assessment.compatible_installed_versions = sorted(
+                [
+                    version for version in candidate_versions
+                    if version_satisfies_all(version, assessment.project_constraints) is True
+                ],
+                key=lambda value: semver_key(value) or (0, 0, 0, 0, ""),
+            )
+            if assessment.current_host_node == evidence_selected:
+                assessment.status = "compatible-current"
+                assessment.selected_manager = "current"
+                assessment.recommended_strategy = "current-runtime"
+            elif evidence_selected in candidate_versions:
+                assessment.status = "runtime-switch-required"
+                assessment.recommended_strategy = "isolated-child-process"
+            elif assessment.available_managers:
+                assessment.status = "runtime-missing"
+                assessment.blockers.append(f"未安装证据指定的项目 Node {evidence_selected}")
+            else:
+                assessment.status = "manager-missing"
+                assessment.blockers.append("需要切换到证据指定的项目 Node，但未检测到受支持的版本管理器")
+        else:
             assessment.compatible_installed_versions = []
             assessment.selected_project_node = ""
             assessment.selected_manager = ""
             assessment.recommended_strategy = "read-only-analysis"
+            assessment.blockers.append(
+                "未发现权威项目 Node 约束；项目命令硬阻断，直至补齐 pin/engines，"
+                "或通过 --analysis-evidence-file 指定 selected_project_node 精确版本"
+            )
 
     if assessment.status in {"compatible-current", "runtime-switch-required"}:
         assessment.execution_readiness = "ready-awaiting-approval"
@@ -4585,21 +4797,27 @@ def collect_package_report(upgrade: Upgrade, args: argparse.Namespace) -> Packag
         and is_exact_upgrade_target(normalized)
     )
     if args.offline:
-        if persist_evidence:
+        if persist_evidence and local_upstream_readback_allowed(args):
             local_report = collect_exact_upgrade_from_local_evidence(normalized, args, report)
             if local_report is not None:
                 return local_report
         report.notes.append(VersionNote(endpoint, change_type=report.change_type, release_notes="离线模式：需要人工收集官方发布证据。", changelog="离线模式：需要人工收集官方变更日志。", sources=[package_url(upgrade.package, endpoint)], evidence_status="offline"))
         report.evidence_completeness = "offline"
         report.evidence_dimensions = {dimension: "offline" for dimension in EVIDENCE_DIMENSIONS}
-        report.warnings.append("使用了离线模式；报告不能标记为 complete。")
+        report.warnings.append("使用了离线模式（调用方显式 --offline）；报告不能标记为 complete。")
         if not normalized.to_version:
             report.alternative_candidates = build_alternative_candidates(upgrade.package, args, report.warnings)
         return report
     reset_fetch_diagnostics(upgrade.package)
     metadata = request_json(registry_url(upgrade.package), args.timeout)
     metadata_origin = "network"
-    if not isinstance(metadata, dict) and persist_evidence:
+    # Local upstream-evidence readback is gated on explicit --offline only. A failed
+    # fetch while online must not silently look like an offline/intranet fallback.
+    if (
+        not isinstance(metadata, dict)
+        and persist_evidence
+        and local_upstream_readback_allowed(args)
+    ):
         local_metadata = read_upstream_registry(evidence_root, upgrade.package)
         if isinstance(local_metadata, dict):
             metadata = local_metadata
@@ -4914,7 +5132,7 @@ def collect_package_report(upgrade: Upgrade, args: argparse.Namespace) -> Packag
             if changelog else "未找到官方 changelog 文档。"
         )
         evidence_origin = "network"
-        if persist_evidence:
+        if persist_evidence and local_upstream_readback_allowed(args):
             local_version = read_upstream_version_evidence(evidence_root, upgrade.package, version)
             note_release, note_changelog, release_status, changelog_status, used_local = merge_note_fields_from_local(
                 note_release, note_changelog, release_status, changelog_status, local_version,
@@ -5043,6 +5261,7 @@ def collect_package_report(upgrade: Upgrade, args: argparse.Namespace) -> Packag
         report.warnings.append("版本区间跨越不同 repository；已按版本拆分 release/changelog 取证。")
     if source_ambiguous:
         report.evidence_completeness = "ambiguous"
+    maybe_require_github_reachability_after_empty_evidence(report, args)
     return report
 
 
@@ -6550,7 +6769,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument("--json-output", nargs="?", const="__auto__", default=None, help="Optional structured JSON path; bare flag writes beside the Markdown report.")
     parser.add_argument("--title", default="前端依赖升级与治理影响分析报告")
-    parser.add_argument("--offline", action="store_true")
+    parser.add_argument(
+        "--offline",
+        action="store_true",
+        help=(
+            "Caller/human-confirmed offline mode: skip network probes and allow local "
+            "upstream-evidence readback. Agents must not set this from .npmrc, private "
+            "registry, or intranet heuristics — probe public reachability first."
+        ),
+    )
     parser.add_argument(
         "--no-upstream-evidence",
         action="store_true",
@@ -6612,7 +6839,7 @@ def partition_upgrade_batches(upgrades: list[Upgrade]) -> list[tuple[str, list[U
     return [("", open_targets or upgrades, "开放目标")]
 
 
-EXIT_CODE_PRIORITY = (2, 5, 3, 4, 6, 7, 0)
+EXIT_CODE_PRIORITY = (2, 8, 5, 3, 4, 6, 7, 0)
 
 
 def merge_exit_codes(codes: list[int]) -> int:
@@ -6824,7 +7051,9 @@ def build_bundle(
             f"HTTP cache={'disabled' if args.no_http_cache else 'enabled'}；"
             f"ttl={max(0, int(args.http_cache_ttl))}s；"
             f"upstream-evidence={'disabled' if args.no_upstream_evidence else 'enabled'}；"
-            f"cleanup_upstream_evidence={'yes' if args.cleanup_upstream_evidence else 'no'}。"
+            f"cleanup_upstream_evidence={'yes' if args.cleanup_upstream_evidence else 'no'}；"
+            f"network_reachability="
+            f"{(getattr(args, 'network_reachability', None) or {}).get('network_reachability', 'unset')}。"
         ),
         f"报告输出：{output_note}",
         (
@@ -7009,6 +7238,8 @@ def main(argv: list[str]) -> int:
         upgrades = collect_upgrades(args)
         if not upgrades:
             raise ValueError(missing_upgrade_message())
+        # Double insurance with Agent curl: probe before any upstream collection.
+        ensure_network_reachability(args)
         batches = partition_upgrade_batches(upgrades)
         written: list[tuple[str, Path, str]] = []
         codes: list[int] = []
@@ -7031,6 +7262,9 @@ def main(argv: list[str]) -> int:
             index_path = write_batch_index(output_dir, written)
             print(f"已写入批次索引 {index_path}")
         return merge_exit_codes(codes)
+    except NetworkReachabilityError as exc:
+        print(format_network_reachability_error(exc), file=sys.stderr)
+        return 8
     except (ValueError, OSError, json.JSONDecodeError, RuntimeError) as exc:
         print(str(exc), file=sys.stderr)
         return 2

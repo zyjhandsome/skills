@@ -78,7 +78,7 @@ Read `references/target-discovery-and-removal.md` whenever `to` is absent or rem
    - prefer `versions[version].repository` over npm top-level metadata;
    - validate `gitHead` or a package-aware tag against historical package name/version;
    - split evidence when repository lineage changes.
-6. Collect official release, changelog, migration, peer/engine, security, support, and license evidence with direct URLs.
+6. Probe public reachability before upstream collection (Agent `curl` + generator probe). Never infer `--offline` from `.npmrc`/private registry/intranet shape. Collect official release, changelog, migration, peer/engine, security, support, and license evidence with direct URLs (exact-upgrade interval only for release/changelog packs).
 7. Map imports/configuration first. Prefer a code knowledge graph; otherwise use bounded static search. Trace wrappers and callers to pages, routes, workflows, and tests.
 8. Produce modification candidates with file, line, current usage, upstream reason, recommendation, validation, priority, and confidence.
 9. For open targets, classify provenance, assess removal, list replacement packages with exact registry-resolved versions ranked by machine-checkable signals only, give a scan-driven native refactor direction as the fallback when no package fits, resolve parent chains and the lowest viable override for transitive packages, and render the full disposition menu. Curated replacement leads are `curated-map`/`unknown` evidence and never change the recommendation; only reviewed `analysis-evidence` candidates can. Every open target must end with at least one actionable option — removal, a replacement package, an established refactor plan, or parent handling; `option_status=missing` blocks `complete`.
@@ -131,18 +131,18 @@ python scripts/generate_upgrade_report.py . \
   --change-dir openspec/changes/<id> \
   --json-output
 
-# Offline draft (local upstream-evidence readback allowed)
+# Offline draft — ONLY after human/caller confirms (never from .npmrc/intranet heuristics)
 python scripts/generate_upgrade_report.py . \
   --upgrade vite:4.5.0:5.2.0 \
   --change-dir openspec/changes/<id> \
   --offline
 ```
 
-Upstream collection uses bounded concurrency (`--network-workers`, default `6`) and a six-hour HTTP cache. Flags: `--no-http-cache`, `--http-cache-ttl`, `--http-cache-dir`, `--max-versions` (exploratory truncation only).
+**Reachability gate:** Agent `curl -I --max-time 12 https://registry.npmjs.org/` then, on failure, `https://api.github.com/`. Registry or GitHub OK → stay online (no `--offline`). Both fail → ask human; only then `--offline`. Generator re-probes (exit `8`, `network_reachability=unreachable`, `awaiting_offline_confirmation`); no local `upstream-evidence` readback until `--offline`. Exact-upgrade mid-fetch with no usable release **and** changelog in the interval → re-probe GitHub; probe fail asks offline, 403/429 stays `partial`/`missing`. Details: `references/lockfile-and-evidence.md`.
 
-For exact upgrades, the generator also writes a report-adjacent `upstream-evidence/` pack (npm registry slice plus per-version release/changelog artifacts). Network success overwrites local files; network failure or `--offline` reads the same directory when present. Disable with `--no-upstream-evidence`. Default is keep; delete after a successful report write with `--cleanup-upstream-evidence`. Local readback must not mark evidence `complete`.
+Upstream uses `--network-workers` (default `6`) and a six-hour HTTP cache (`--no-http-cache`, `--http-cache-ttl`, `--http-cache-dir`, `--max-versions`). Exact upgrades write `upstream-evidence/` for the `from→to` interval; network success overwrites; **local readback requires `--offline`**. `--no-upstream-evidence` disables; `--cleanup-upstream-evidence` deletes after success. Local readback must not mark evidence `complete`.
 
-An unknown or mismatched baseline is fatal by default. Use `--allow-baseline-mismatch` only for a visibly blocked investigative draft.
+Unknown/mismatched baseline is fatal by default; `--allow-baseline-mismatch` only for a visibly blocked investigative draft.
 
 After the caller has approved implementation, dry-run the selected installed Node and commands first:
 
@@ -153,7 +153,7 @@ python scripts/run_with_compatible_node.py <project-root> \
   --command "<build-or-test-command>"
 ```
 
-Only after matching explicit approvals, add `--execute --approve-runtime-switch` and the applicable `--approve-dependency-install` / `--approve-project-scripts` flags. The runner never installs Node, prefers an isolated child PATH, falls back to guarded nvm-windows switching only when required, and verifies restoration plus Node-constraint integrity. Each command has a `--command-timeout` (default `1800`s, `0` waits forever); a timeout reports exit code `124` and still runs restoration.
+**Implementation hard rules:** never run install/ci/update/build/test/lint (or any lock-mutating command) with host Node outside this runner; `unknown` Node with no pin blocks project commands until an exact `selected_project_node` is established; freeze lock format fields by default (`lockfileVersion` / yarn metadata); npm major must be compatible with the existing lock before mutating commands; format migration requires report approval plus `--allow-lockfile-format-migration`; before claiming done, verify lock format unchanged. Only after matching approvals, add `--execute --approve-runtime-switch` and `--approve-dependency-install` / `--approve-project-scripts`. The runner never installs Node, prefers isolated child PATH, verifies restoration, Node-constraint integrity, and lock-format integrity (exit `7` if format drifts without approval). `--command-timeout` default `1800`s (`0` = forever); timeout exit `124` still restores.
 
 ## Completion gate
 
@@ -162,7 +162,8 @@ Before marking the analysis complete, verify:
 - `decision_status` is not `needs_choice`; open targets are `disposition-selected` and exact upgrades are `proceed-selected` or `deferred` via the decision file. **Never** set `analysis_status=complete` while `needs_choice` remains; do not open Stage B/C while `batch_implementation_gate=frozen`;
 - baseline, lock type, workspace, and importer are confirmed (`importer_resolution=confirmed`; non-frontend roots stay blocked);
 - current host Node, project Node constraints, runtime manager availability, selected project runtime, execution readiness, and restoration plan are explicit;
-- contradictory project Node constraints remain blocked; missing managers/runtimes remain implementation blockers until explicitly installed; `unknown` Node status never treats host Node as the project runtime;
+- contradictory project Node constraints remain blocked; missing managers/runtimes remain implementation blockers until explicitly installed; `unknown` Node status never treats host Node as the project runtime and hard-blocks project commands until an exact project Node is established;
+- lock format fields stay frozen unless migration was explicitly approved; host-Node lock drift must not be committed;
 - exact upgrades cover the full version interval; open targets preserve the required decision order and option completeness;
 - every eligible candidate has checked criteria and evidence URLs;
 - removal evidence covers all required dimensions or remains visibly uncertain;

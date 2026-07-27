@@ -51,7 +51,8 @@ package、analysis mode、governance/upgrade reason、from、to、recommended ac
 - `behavior_parity_required`：默认为 `yes`；仅当用户显式允许行为变化/删除/替换时为 `no`
 - `importer_resolution`：`confirmed` 或 `failed`（失败时报告状态与 `analysis_status` 均为 `blocked`，并在待人工决策中包含 `__frontend_workspace__`）
 - `node_runtime_status`、`execution_readiness`、`current_host_node`、`selected_project_node`、`selected_node_support`
-- `selected_project_node`：仅在存在权威项目约束或经证据明确指定且通过校验时填写；`node_runtime_status=unknown` 且无约束时必须为空
+- `selected_project_node`：仅在存在权威项目约束或经证据明确指定且通过校验时填写；`node_runtime_status=unknown` 且无约束时必须为空，并硬阻断项目命令直至建立精确项目 Node
+- lock 格式字段（`lockfileVersion` / yarn metadata）默认冻结；未批准格式迁移时不得把格式漂移写入实施结论
 - 批次计数：精确升级数 / 待人工决策数 / blocked 数
 - `report_paths`：实际写入路径；键为 `markdown`，可选 `json`，可选 `upstream_evidence`（报告旁 `upstream-evidence/` 目录；仅在目录实际存在时出现；`--cleanup-upstream-evidence` 删除后不再保留该键）
 

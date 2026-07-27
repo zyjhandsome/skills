@@ -1048,6 +1048,31 @@ packages:
             self.assertEqual(runtime.selected_manager, "")
             self.assertEqual(runtime.compatible_installed_versions, [])
             self.assertTrue(any("未发现权威项目 Node 约束" in warning for warning in runtime.warnings))
+            self.assertTrue(any("项目命令硬阻断" in item for item in runtime.blockers))
+
+    def test_evidence_selected_project_node_establishes_runtime_without_repo_pin(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            with (
+                patch.object(MODULE, "current_host_node_runtime", return_value=("26.5.0", "C:/node/node.exe")),
+                patch.object(
+                    MODULE,
+                    "detect_node_managers",
+                    return_value=(["nvm-windows"], {"nvm-windows": ["20.18.0"]}),
+                ),
+            ):
+                runtime = MODULE.assess_node_runtime(
+                    root,
+                    MODULE.ManifestSnapshot(),
+                    [],
+                    evidence={"selected_project_node": "20.18.0"},
+                )
+            self.assertEqual(runtime.status, "runtime-switch-required")
+            self.assertEqual(runtime.execution_readiness, "ready-awaiting-approval")
+            self.assertEqual(runtime.selected_project_node, "20.18.0")
+            self.assertTrue(
+                any(item.source == "analysis-evidence#selected_project_node" for item in runtime.project_constraints)
+            )
 
     def test_node_runtime_conflicting_pins_block(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
@@ -1185,6 +1210,152 @@ packages:
             }), encoding="utf-8")
             after = RUNNER.snapshot_node_constraints(root)
             self.assertEqual(before, after)
+
+    def test_lockfile_format_snapshot_tracks_version_not_tree_content(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            lock = root / "package-lock.json"
+            lock.write_text(json.dumps({
+                "lockfileVersion": 3,
+                "packages": {"node_modules/axios": {"version": "0.27.2"}},
+            }), encoding="utf-8")
+            before = RUNNER.snapshot_lockfile_formats(root)
+            lock.write_text(json.dumps({
+                "lockfileVersion": 3,
+                "packages": {"node_modules/axios": {"version": "1.7.9"}},
+            }), encoding="utf-8")
+            after = RUNNER.snapshot_lockfile_formats(root)
+            self.assertEqual(before, {"package-lock.json": "3"})
+            self.assertEqual(before, after)
+            lock.write_text(json.dumps({
+                "lockfileVersion": 2,
+                "packages": {"node_modules/axios": {"version": "1.7.9"}},
+            }), encoding="utf-8")
+            drifted = RUNNER.snapshot_lockfile_formats(root)
+            self.assertEqual(drifted, {"package-lock.json": "2"})
+
+    def test_npm_lockfile_compatibility_matrix(self) -> None:
+        self.assertTrue(RUNNER.npm_compatible_with_lockfile_version("6.14.18", "1"))
+        self.assertFalse(RUNNER.npm_compatible_with_lockfile_version("9.8.1", "1"))
+        self.assertTrue(RUNNER.npm_compatible_with_lockfile_version("8.19.4", "2"))
+        self.assertFalse(RUNNER.npm_compatible_with_lockfile_version("10.5.0", "2"))
+        self.assertTrue(RUNNER.npm_compatible_with_lockfile_version("10.5.0", "3"))
+        self.assertFalse(RUNNER.npm_compatible_with_lockfile_version("6.14.18", "3"))
+
+    def test_runner_blocks_npm_install_when_npm_incompatible_with_lockfile(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "package-lock.json").write_text(json.dumps({
+                "lockfileVersion": 1,
+                "dependencies": {"axios": {"version": "0.27.2"}},
+            }), encoding="utf-8")
+            args = RUNNER.parse_args([
+                str(root), "--node-version", "20.18.0", "--manager", "auto",
+                "--command", "npm install axios@1.7.9", "--execute",
+                "--approve-runtime-switch", "--approve-dependency-install",
+            ])
+            with (
+                patch.object(RUNNER, "current_node", side_effect=[
+                    ("20.18.0", "C:/node/node.exe"),
+                    ("20.18.0", "C:/node/node.exe"),
+                    ("20.18.0", "C:/node/node.exe"),
+                ]),
+                patch.object(RUNNER, "select_manager", return_value=("current", Path("C:/node"))),
+                patch.object(RUNNER, "current_tool_version", return_value="10.8.2"),
+                patch.object(RUNNER, "run_shell_command") as run_command,
+            ):
+                code, plan = RUNNER.execute(args)
+            self.assertEqual(code, 2)
+            self.assertIn("不兼容", plan.get("execution_error", ""))
+            run_command.assert_not_called()
+
+    def test_runner_fails_when_lockfile_format_drifts_without_approval(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            lock = root / "package-lock.json"
+            lock.write_text(json.dumps({
+                "lockfileVersion": 3,
+                "packages": {"node_modules/axios": {"version": "1.7.9"}},
+            }), encoding="utf-8")
+            args = RUNNER.parse_args([
+                str(root), "--node-version", "20.18.0",
+                "--command", "npm install axios@1.7.9", "--execute",
+                "--approve-runtime-switch", "--approve-dependency-install",
+            ])
+
+            def mutate_lock(command, project_root, env, timeout):
+                lock.write_text(json.dumps({
+                    "lockfileVersion": 2,
+                    "packages": {"node_modules/axios": {"version": "1.7.9"}},
+                }), encoding="utf-8")
+                return {
+                    "command": command,
+                    "scope": "dependency-install-or-upgrade",
+                    "started": "now",
+                    "node_version": "20.18.0",
+                    "node_path": "C:/node/node.exe",
+                    "exit_code": 0,
+                }
+
+            with (
+                patch.object(RUNNER, "current_node", side_effect=[
+                    ("20.18.0", "C:/node/node.exe"),
+                    ("20.18.0", "C:/node/node.exe"),
+                    ("20.18.0", "C:/node/node.exe"),
+                ]),
+                patch.object(RUNNER, "select_manager", return_value=("current", Path("C:/node"))),
+                patch.object(RUNNER, "current_tool_version", return_value="10.8.2"),
+                patch.object(RUNNER, "run_shell_command", side_effect=mutate_lock),
+            ):
+                code, plan = RUNNER.execute(args)
+            self.assertEqual(code, 7)
+            self.assertEqual(plan["lock_format_integrity"], "changed")
+            self.assertEqual(
+                plan["lock_format_changes"]["package-lock.json"],
+                {"before": "3", "after": "2"},
+            )
+
+    def test_runner_allows_lockfile_format_migration_when_flagged(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            lock = root / "package-lock.json"
+            lock.write_text(json.dumps({
+                "lockfileVersion": 2,
+                "packages": {"node_modules/axios": {"version": "1.7.9"}},
+            }), encoding="utf-8")
+            args = RUNNER.parse_args([
+                str(root), "--node-version", "20.18.0",
+                "--command", "npm install axios@1.7.9", "--execute",
+                "--approve-runtime-switch", "--approve-dependency-install",
+                "--allow-lockfile-format-migration",
+            ])
+
+            def migrate_lock(command, project_root, env, timeout):
+                lock.write_text(json.dumps({
+                    "lockfileVersion": 3,
+                    "packages": {"node_modules/axios": {"version": "1.7.9"}},
+                }), encoding="utf-8")
+                return {
+                    "command": command,
+                    "scope": "dependency-install-or-upgrade",
+                    "started": "now",
+                    "node_version": "20.18.0",
+                    "node_path": "C:/node/node.exe",
+                    "exit_code": 0,
+                }
+
+            with (
+                patch.object(RUNNER, "current_node", side_effect=[
+                    ("20.18.0", "C:/node/node.exe"),
+                    ("20.18.0", "C:/node/node.exe"),
+                    ("20.18.0", "C:/node/node.exe"),
+                ]),
+                patch.object(RUNNER, "select_manager", return_value=("current", Path("C:/node"))),
+                patch.object(RUNNER, "run_shell_command", side_effect=migrate_lock),
+            ):
+                code, plan = RUNNER.execute(args)
+            self.assertEqual(code, 0)
+            self.assertEqual(plan["lock_format_integrity"], "migration-allowed")
 
     def test_jquery_discovery_uses_3x_migration_stage_before_4x(self) -> None:
         metadata = {"versions": {version: {} for version in ("1.12.4", "2.2.4", "3.7.1", "4.0.0")}}
@@ -2435,7 +2606,7 @@ packages:
             self.assertEqual(bundle.report_paths.get("upstream_evidence"), str(evidence.resolve()))
             self.assertIn("1.1.0", (evidence / "pkg" / "1.1.0" / "release.md").read_text(encoding="utf-8"))
 
-    def test_upstream_evidence_local_fallback_when_network_fails(self) -> None:
+    def test_online_network_failure_does_not_silently_read_local_upstream_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
             self._seed_frontend(root)
@@ -2480,10 +2651,9 @@ packages:
                 patch.object(MODULE, "fetch_github_tag", return_value={}),
             ):
                 report = MODULE.collect_package_report(MODULE.Upgrade("pkg", "1.0.0", "1.1.0"), args)
-            self.assertTrue(report.used_local_upstream_evidence)
-            self.assertEqual(report.notes[0].version, "1.1.0")
-            self.assertIn("cached release body", report.notes[0].release_notes)
-            self.assertIn("cached changelog", report.notes[0].changelog)
+            self.assertFalse(report.used_local_upstream_evidence)
+            self.assertNotIn("cached release body", report.notes[0].release_notes)
+            self.assertIn("无法获取 npm 元数据", report.notes[0].release_notes)
 
     def test_offline_uses_local_upstream_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
@@ -2543,6 +2713,75 @@ packages:
             self.assertEqual(report.notes[0].evidence_status, "offline")
             self.assertIn("离线模式", report.notes[0].release_notes)
             self.assertFalse((output / "upstream-evidence").exists())
+
+    def test_preflight_unreachable_exits_8_without_offline_report(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            self._seed_frontend(root)
+            out = root / "out"
+
+            def probe(url: str, _timeout: int) -> bool:
+                return False
+
+            with patch.object(MODULE, "probe_http_reachable", side_effect=probe):
+                code = MODULE.main([
+                    str(root), "--upgrade", "pkg:1.0.0:1.1.0",
+                    "--output-dir", str(out),
+                ])
+            self.assertEqual(code, 8)
+            self.assertFalse((out / "frontend-dependency-upgrade-report.md").exists())
+
+    def test_preflight_registry_fail_github_ok_stays_online(self) -> None:
+        args = MODULE.parse_args([".", "--upgrade", "pkg:1.0.0:1.1.0"])
+
+        def probe(url: str, _timeout: int) -> bool:
+            return "api.github.com" in url
+
+        with patch.object(MODULE, "probe_http_reachable", side_effect=probe):
+            result = MODULE.ensure_network_reachability(args)
+        self.assertEqual(result["network_reachability"], "partial-github-only")
+        self.assertFalse(result["awaiting_offline_confirmation"])
+
+    def test_http_error_on_probe_counts_as_reachable(self) -> None:
+        headers = {"X-RateLimit-Remaining": "0"}
+
+        class FakeHTTPError(MODULE.urllib.error.HTTPError):
+            def __init__(self) -> None:
+                super().__init__(MODULE.GITHUB_PROBE_URL, 403, "forbidden", headers, None)
+
+        with patch.object(MODULE.urllib.request, "urlopen", side_effect=FakeHTTPError()):
+            self.assertTrue(MODULE.probe_http_reachable(MODULE.GITHUB_PROBE_URL, timeout=1))
+
+    def test_empty_exact_interval_evidence_reprobes_github_and_exits_8_when_down(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            self._seed_frontend(root)
+            output = root / "reports"
+            metadata = self._sample_metadata()
+            args = MODULE.parse_args([
+                str(root), "--upgrade", "pkg:1.0.0:1.1.0",
+                "--output-dir", str(output), "--network-workers", "1",
+            ])
+            with (
+                patch.object(MODULE, "request_json", return_value=metadata),
+                patch.object(MODULE, "validate_version_repository", return_value=("confirmed", "ok", "")),
+                patch.object(MODULE, "github_default_branch", return_value="main"),
+                patch.object(MODULE, "fetch_github_releases", return_value={}),
+                patch.object(MODULE, "fetch_changelog", return_value=("", "")),
+                patch.object(MODULE, "fetch_github_release_by_tag", return_value={}),
+                patch.object(MODULE, "fetch_github_tag", return_value={}),
+                patch.object(MODULE, "probe_http_reachable", return_value=False),
+            ):
+                with self.assertRaises(MODULE.NetworkReachabilityError) as ctx:
+                    MODULE.collect_package_report(MODULE.Upgrade("pkg", "1.0.0", "1.1.0"), args)
+            self.assertEqual(ctx.exception.stage, "exact-upgrade-github-evidence")
+            self.assertTrue(ctx.exception.awaiting_offline_confirmation)
+
+    def test_offline_flag_skips_reachability_probe(self) -> None:
+        args = MODULE.parse_args([".", "--upgrade", "pkg:1.0.0:1.1.0", "--offline"])
+        with patch.object(MODULE, "probe_http_reachable", side_effect=AssertionError("offline must not probe")):
+            result = MODULE.ensure_network_reachability(args)
+        self.assertEqual(result["network_reachability"], "skipped-offline")
 
     def test_no_upstream_evidence_disables_persist(self) -> None:
         metadata = self._sample_metadata()
@@ -2790,6 +3029,8 @@ packages:
                 patch.object(MODULE, "fetch_changelog", return_value=("", "")),
                 patch.object(MODULE, "validate_version_repository", return_value=("confirmed", "ok", "")),
                 patch.object(MODULE, "github_default_branch", return_value="main"),
+                # Empty release/changelog triggers a GitHub re-probe; keep online when reachable.
+                patch.object(MODULE, "probe_http_reachable", return_value=True),
             ):
                 args = MODULE.parse_args([
                     str(root), "--upgrade", "axios:1.6.8:1.7.9",

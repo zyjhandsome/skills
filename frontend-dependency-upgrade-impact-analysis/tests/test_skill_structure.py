@@ -74,8 +74,23 @@ class SkillStructureTests(unittest.TestCase):
         require("report-contract.md", GENERATOR.SELECTION_STATUSES, "选择状态枚举")
         require("risk-model.md", GENERATOR.RISK_FACTORS, "风险因子")
         require("lockfile-and-evidence.md", GENERATOR.LOCK_NAMES, "受支持 lockfile")
+        require(
+            "lockfile-and-evidence.md",
+            ("registry.npmjs.org", "api.github.com", "exit `8`", "awaiting_offline_confirmation", "--offline"),
+            "公网可达门禁",
+        )
         require("node-runtime-compatibility.md", GENERATOR.NODE_SUPPORT_STATUSES, "Node 支持状态枚举")
         require("node-runtime-compatibility.md", GENERATOR.NODE_CONSTRAINT_KINDS, "Node 约束来源类别")
+        require(
+            "node-runtime-compatibility.md",
+            (
+                "lockfileVersion",
+                "--allow-lockfile-format-migration",
+                "项目命令硬阻断",
+                "run_with_compatible_node.py",
+            ),
+            "lock 格式冻结 / Agent 硬规则",
+        )
         require(
             "target-discovery-and-removal.md",
             [option for option, _title, _applicability, _evidence in GENERATOR.DISPOSITION_OPTIONS],

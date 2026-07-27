@@ -32,7 +32,8 @@ Agent 解析前端 workspace 与 lock 基线 → 用生成器收集/渲染报告
 - 读 manifest、lock、源码、测试、git diff、非变更包元数据
 - 只读 Node / 版本管理器探测（如 `node --version`）
 - 写报告到调用方已有 change 目录下的证据子目录
-- 联网抓取官方 upstream（可关缓存 / offline）
+- 联网抓取官方 upstream（可关缓存；`--offline` 仅人/调用方显式确认后）
+- 公网可达性探测（`registry.npmjs.org` → 必要时 `api.github.com`；不得因 `.npmrc`/内网形态推断 offline）
 
 **默认禁止（需显式授权）**
 
@@ -88,7 +89,7 @@ frontend-dependency-upgrade-impact-analysis/
 
 | 文档 | 何时读 | 挂在流程的哪一环 |
 |---|---|---|
-| `lockfile-and-evidence.md` | 定 scope / baseline / 上游身份 | 步骤 1–2、5；exit `3`/`5` |
+| `lockfile-and-evidence.md` | 定 scope / baseline / 上游身份 / 公网可达门禁 | 步骤 1–2、5–6；exit `3`/`5`/`8` |
 | `node-runtime-compatibility.md` | 任何项目命令 readiness 判断前 | 步骤 3；exit `4`；实施 runner |
 | `target-discovery-and-removal.md` | `to` 缺失，或删除/替换在范围 | 模式选择、主轨、确认队列 |
 | `impact-analysis-method.md` | 证据优先级、影响链路、停止条件 | 步骤 5–8、完成门禁 |
@@ -258,7 +259,7 @@ CLI 入口对应关系：
 | `complete` | 区间完整且九维均 confirmed 或有依据的 not-applicable |
 | `partial` | 有官方来源但有缺口；**本地 upstream-evidence 回读最高 partial** |
 | `ambiguous` | monorepo tag/release 无法归属 |
-| `offline` | 未联网 |
+| `offline` | 调用方显式 `--offline`；**禁止**凭私有 registry/内网形态推断 |
 
 九维：`registry` / `repository` / `release` / `changelog` / `migration` / `compatibility` / `security` / `support` / `license`。
 
@@ -351,7 +352,7 @@ Workspace 失败：`resolve-frontend-workspace`
 |---|---|
 | `frontend-dependency-upgrade-report.md` | 始终 |
 | `frontend-dependency-upgrade-report.json` | `--json-output` |
-| `upstream-evidence/` | 精确升级默认 download-first；即使正文 missing 也落盘 `sources.json` + 抓取诊断；`--no-upstream-evidence` 关；`--cleanup-upstream-evidence` 写成功后删 |
+| `upstream-evidence/` | 精确升级默认 download-first（仅 `from→to` 区间）；即使正文 missing 也落盘 `sources.json` + 抓取诊断；**本地回读仅 `--offline`**；`--no-upstream-evidence` 关；`--cleanup-upstream-evidence` 写成功后删 |
 | 混批拆分 | 同时有精确升级 + 开放目标 → `exact/` + `open-target/` + `BATCH-INDEX.md` |
 | `human-decisions.json` | Agent 写入；生成器只读（默认路径或 `--decision-file`） |
 
@@ -408,7 +409,7 @@ python scripts/generate_upgrade_report.py <project-root> [flags...]
 | `--allow-behavior-change` | bool | 关闭默认行为守恒 |
 | `--json-output` | 可选 path；裸 flag 写在 Markdown 旁 | 结构化 JSON |
 | `--title` | 默认中文标题 | 报告标题 |
-| `--offline` | bool | 不联网；可回读本地 upstream-evidence |
+| `--offline` | bool | **仅人/调用方显式**；跳过公网探测并允许本地 upstream-evidence 回读。Agent 不得因 `.npmrc`/私有镜像擅自添加 |
 | `--no-upstream-evidence` | bool | 关闭报告旁证据包 |
 | `--cleanup-upstream-evidence` | bool | 报告成功后删除证据包 |
 | `--timeout` | int，默认 `12` | 单次 HTTP 超时（秒） |
@@ -434,8 +435,9 @@ python scripts/generate_upgrade_report.py <project-root> [flags...]
 | `5` | `importer_resolution == failed` |
 | `6` | 精确升级被兼容性/父依赖/lock 收敛条件 `exact_upgrade_status=blocked` |
 | `7` | 报告已写出，但 `decision_status=needs_choice`（开放目标待人工确认队列） |
+| `8` | 公网不可达（registry + GitHub 探测均失败，或精确升级区间无 release/changelog 正文且 GitHub 再探失败）；stderr JSON 含 `network_reachability=unreachable` / `awaiting_offline_confirmation`；须人确认后才可 `--offline`。通常**未**写出完整 offline 报告 |
 
-注意：exit ≠ 0 时报告可能已经写出；stderr 说明阻塞原因。exit `0` 也不等于 `analysis_status=complete`。exit `7` 表示草稿可用、选型未完成，不是生成崩溃。优先级：`2` → `5` → `3` → `4` → `6` → `7` → `0`。
+注意：exit ≠ 0 时报告可能已经写出；stderr 说明阻塞原因。exit `0` 也不等于 `analysis_status=complete`。exit `7` 表示草稿可用、选型未完成，不是生成崩溃。exit `8` 表示可达性未证实，不得静默 offline。优先级：`2` → `8` → `5` → `3` → `4` → `6` → `7` → `0`。
 
 ### 9.3 `run_with_compatible_node.py`
 
@@ -456,19 +458,22 @@ python scripts/run_with_compatible_node.py <project-root> \
 | `--approve-runtime-switch` | bool | 执行模式必需 |
 | `--approve-dependency-install` | bool | install/upgrade 类命令必需 |
 | `--approve-project-scripts` | bool | build/test 等脚本必需 |
+| `--allow-lockfile-format-migration` | bool | 仅当报告显式批准 lock 格式迁移时传入 |
 | `--command-timeout` | int，默认 `1800`；`0`=无限 | 单命令超时 |
 | `--log-json` | path | dry-run 与 execute 均可写日志 |
 
 执行策略：优先隔离子进程 PATH → 管理器单命令隔离 → 最后才 nvm-windows 全局切换 + `finally` 恢复。  
-**永不**自动 `node-install`；含 Node 安装意图的 command 直接拒绝。
+**永不**自动 `node-install`；含 Node 安装意图的 command 直接拒绝。  
+实施期禁止在 runner 外用本机 Node 跑项目命令。npm 变更类命令执行前校验：隔离环境的 npm 主版本必须与现有 `lockfileVersion` 兼容（v1→npm≤6，v2→7–8，v3+→≥9）。默认冻结 lock 格式字段；内容（依赖树）可变，格式不可悄然变化。
 
 | Exit | 条件 |
 |---:|---|
-| `0` | dry-run 成功，或全部命令成功且恢复/约束完整性通过 |
+| `0` | dry-run 成功，或全部命令成功且恢复/约束/lock 格式完整性通过 |
 | 命令自身非 0 | 透传该 exit（或规范化为非 0） |
-| `2` | 参数/运行时错误（含缺少批准） |
+| `2` | 参数/运行时错误（含缺少批准、npm↔lock 不兼容） |
 | `5` | 恢复未 verified |
 | `6` | Node 约束文件/字段被改动（`constraint_integrity != verified-unchanged`） |
+| `7` | lock 格式字段被改动且未批准迁移（`lock_format_integrity=changed`） |
 | `124` | 单命令超时（写入该命令的 result；GNU timeout 惯例） |
 
 ---
@@ -576,10 +581,12 @@ python .../generate_upgrade_report.py . \
 | exit `5` / `__frontend_workspace__` | 指定 importer 或消歧前端包 |
 | exit `3` / baseline mismatch | 纠正 `from`、提供 `--before-lock`，或仅调查时 `--allow-baseline-mismatch` |
 | exit `4` / constraint-conflict | 解决互相矛盾的 pin/engines；勿用本机 Node 硬扛 |
-| `runtime-switch-required` | 分析可继续；实施前批准 switch，优先隔离执行 |
+| `unknown`（无权威约束） | 分析可继续；**项目命令硬阻断**，直至证据指定精确 `selected_project_node` 或补齐 pin/engines |
+| `runtime-switch-required` | 分析可继续；实施前批准 switch，优先隔离执行；禁止本机 Node 跑项目命令 |
 | `research_status` 非 reviewed | 必须回填 analysis-evidence |
 | `option_status=missing` | 补替代 / 调用点 / 父包链 / 删除证据之一 |
 | exit `7` / `needs_choice` | 按确认队列提问 → 写 `human-decisions.json` → 重跑 |
+| exit `8` / `awaiting_offline_confirmation` | 先用 curl 复核公网；确认不通后由人显式 `--offline`；禁止因 `.npmrc`/内网形态推断 |
 | 多前端 workspace | **问用户**；禁止默默分析整仓 |
 
 ---
@@ -599,7 +606,7 @@ python .../generate_upgrade_report.py . \
 | 开放目标轨道/队列 | `target-discovery-and-removal.md` | confirmation / provenance |
 | 人确认门禁 / exit 7 | `human-confirmation-gates.md` | 首页横幅、结论闸门、`main` exit |
 | 替代知识表 | （文档描述收录标准） | `upgrade_alternatives.py` + `REPLACEMENT_MAP_REVIEWED` |
-| Lock / 上游包 | `lockfile-and-evidence.md` | `upgrade_lockfiles.py` + upstream 逻辑 |
+| Lock / 上游包 / 公网可达门禁 | `lockfile-and-evidence.md` | `upgrade_lockfiles.py` + upstream / `probe_http_reachable` / exit `8` |
 | Node 闸门 | `node-runtime-compatibility.md` | runtime assessment + runner |
 | 风险阈值 | `risk-model.md` | `CHANGE_SCORES` / `RISK_*` 常量 |
 | 证据/决策 JSON | 对应 schema md | 加载与重验逻辑 |
@@ -631,7 +638,8 @@ python scripts/generate_upgrade_report.py . \
   --allow-behavior-change \
   --change-dir openspec/changes/<id>
 
-# 离线草稿（可回读报告旁 upstream-evidence）
+# 离线草稿（须人确认公网不通后显式传入；可回读 upstream-evidence）
+# 事前：curl -I --max-time 12 https://registry.npmjs.org/ ；失败再 curl api.github.com
 python scripts/generate_upgrade_report.py . \
   --upgrade vite:4.5.0:5.2.0 \
   --change-dir openspec/changes/<id> \
