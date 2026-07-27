@@ -10,13 +10,15 @@ description: >
   Markdown decision report plus optional structured JSON in Simplified Chinese.
   Behavior preservation is the default. Open-target disposition and exact-upgrade
   proceed/defer stay human choices via the confirmation queue; batch_implementation_gate
-  freezes Stage B/C until the batch is clear. This skill ends at the decision report,
-  never at implementation.
+  freezes Stage B/C until the batch is clear. This skill ends only after the queue is
+  cleared, the decision file is written, the report is regenerated, and Agent review
+  raises analysis_status to complete — never at a draft exit-7 handoff, never at
+  implementation.
 ---
 
 # Frontend Dependency Upgrade Impact Analysis
 
-Produce an evidence-backed decision packet and validation plan — analysis only. The generator collects and renders; review heuristics before treating a report as authoritative. Exact upgrades (clear `from → to`) skip disposition choice but still need proceed/defer confirmation (batchable). Open targets must finish one-package-at-a-time disposition questions. Stage A ends only when `decision_status≠needs_choice`; Stage B/C require `batch_implementation_gate=ready` plus caller authorization.
+Produce an evidence-backed decision packet and validation plan — analysis only. The generator collects and renders; review heuristics before treating a report as authoritative. Exact upgrades (clear `from → to`) skip disposition choice but still need proceed/defer confirmation. All packages with `confirmation.status=ready` (open-target and exact-upgrade) are asked in the same wave; `switch:<track>` / `handle-parent` follow-ups open the next wave; `blocked` packages are never asked. Exit `7` / `needs_choice` means **ask the queue now**, not wait for the user to say “继续/放行”. Stage A ends only when `decision_status≠needs_choice`, the report is regenerated, and Agent review sets `analysis_status=complete`. `batch_implementation_gate=frozen` does not block that analysis endpoint; Stage B/C still require `ready` plus caller authorization.
 
 ## Boundaries
 
@@ -25,7 +27,7 @@ Produce an evidence-backed decision packet and validation plan — analysis only
 - Read-only Node/runtime probes are allowed. Runtime switching, Node installation, dependency installation, and project scripts require explicit implementation authorization.
 - Treat report generation as analysis only, never as implementation approval.
 - Do not create lifecycle/change records or redefine caller scope. The caller owns approvals and lifecycle state.
-- **Human Decision Interaction Gate:** If `decision_status=needs_choice`, do not end Stage A. Read queue phase (`evidence`/`choice`/`mixed`) and `batch_implementation_gate`. On `blocked`, gather evidence / clear blockers and regenerate. On `ready`: open targets → ask one package at a time verbatim; exact upgrades (`proceed-exact`) → may batch-confirm `proceed:pkg@version` / `defer` / `other`. After `switch:<track>`, ask the alternate-track question; do not write switch to the decision file. `handle-parent` alone is not final. Record finals in `--decision-file`, regenerate to `disposition-selected` / `proceed-selected`. Exit `7` = draft written, confirmations unfinished. If `batch_implementation_gate=frozen`, do not open implementation plans or execute. Read `references/human-confirmation-gates.md`.
+- **Human Decision Interaction Gate:** If `decision_status=needs_choice`, do not end Stage A and do not stop after pasting the draft report. In the same turn, read queue phase (`evidence`/`choice`/`mixed`) and act: on `blocked` / `evidence`, gather evidence / clear blockers and regenerate (do not ask disposition/proceed); on `choice` / `mixed`, immediately ask **every** currently `ready` package verbatim in one wave (open-target options + exact-upgrade `proceed:pkg@version` / `defer` / `other`). Never ask `blocked` packages. After `switch:<track>`, ask the alternate-track question in the next wave; do not write switch to the decision file. `handle-parent` alone is not final — parent follow-ups are the next wave. Record finals in `--decision-file`, regenerate, then Agent-review to `analysis_status=complete` (`disposition-selected` / `proceed-selected` / `deferred`). Exit `7` = draft written + **next action is ask the queue**, not wait for release. If `batch_implementation_gate=frozen`, do not open implementation plans or execute — but still finish the analysis endpoint when decisions are recorded. Read `references/human-confirmation-gates.md`.
 
 ## Resolve scope and baseline
 
@@ -85,8 +87,8 @@ Read `references/target-discovery-and-removal.md` whenever `to` is absent or rem
 10. When the curated map has no entry, the emitted research checklist is mandatory work, not a suggestion: research candidates against the listed criteria (never download counts) and write the verdict back through `--analysis-evidence-file` per `references/analysis-evidence-schema.md`, alongside reviewed removal/runtime facts.
 11. Score the seven factors in `references/risk-model.md`, then derive regression scope, rollout controls, monitoring, and rollback triggers.
 12. Generate and validate the Markdown report. Review every incomplete or heuristic section. A full menu in the report is not a final disposition.
-13. Work the confirmation queue before claiming Stage A complete. Open targets: one `ready` package at a time (replace offers exact `package@version` plus `other`). Exact upgrades: batch-confirm proceed/defer when multiple `to` targets are ready. Never ask `blocked` packages. `switch:<track>` is not a decision. After `handle-parent`, ask per-parent follow-ups.
-14. Record final answers per `references/decision-record-schema.md`, regenerate, and stop at the decision packet. Only hand off to Stage B when `batch_implementation_gate=ready`. Confirmed selections are not implementation approval.
+13. Work the confirmation queue before claiming Stage A complete. On exit `7` / `needs_choice`, ask immediately in the same turn — never hand back a draft and wait for “放行”. Ask every currently `ready` package in one wave (open-target disposition options including exact `package@version` + `other`; exact-upgrade proceed/defer). Never ask `blocked` packages. `switch:<track>` is not a decision; after switch or `handle-parent`, open the next wave for the follow-up questions.
+14. Record final answers per `references/decision-record-schema.md`, regenerate, Agent-review heuristics/upstream summaries, and only then mark `analysis_status=complete`. That is this skill’s endpoint. Only hand off to Stage B when `batch_implementation_gate=ready`. Confirmed selections are not implementation approval.
 
 Read `references/impact-analysis-method.md` for evidence priority, impact-chain mapping, and stopping conditions. Read only the relevant family in `references/package-categories.md`.
 
@@ -159,7 +161,7 @@ python scripts/run_with_compatible_node.py <project-root> \
 
 Before marking the analysis complete, verify:
 
-- `decision_status` is not `needs_choice`; open targets are `disposition-selected` and exact upgrades are `proceed-selected` or `deferred` via the decision file. **Never** set `analysis_status=complete` while `needs_choice` remains; do not open Stage B/C while `batch_implementation_gate=frozen`;
+- `decision_status` is not `needs_choice`; open targets are `disposition-selected` and exact upgrades are `proceed-selected` or `deferred` via the decision file; the report was regenerated after the decision file write; Agent review raised `analysis_status` to `complete`. **Never** set `analysis_status=complete` while `needs_choice` remains; **never** treat exit `7` draft delivery as skill completion; do not open Stage B/C while `batch_implementation_gate=frozen` (`frozen` may remain after Stage A if Node/runtime blockers exist — that does not block the analysis endpoint);
 - baseline, lock type, workspace, and importer are confirmed (`importer_resolution=confirmed`; non-frontend roots stay blocked);
 - current host Node, project Node constraints, runtime manager availability, selected project runtime, execution readiness, and restoration plan are explicit;
 - contradictory project Node constraints remain blocked; missing managers/runtimes remain implementation blockers until explicitly installed; `unknown` Node status never treats host Node as the project runtime and hard-blocks project commands until an exact project Node is established;

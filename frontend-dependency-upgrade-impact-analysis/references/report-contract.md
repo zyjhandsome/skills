@@ -78,7 +78,7 @@ package、analysis mode、governance/upgrade reason、from、to、recommended ac
 
 ### Human Confirmation Queue
 
-开放目标一包一问；精确升级（主轨 `proceed-exact`）可同批汇总确认。必须包含：决策记录文件路径、`batch_implementation_gate`、队列总表（包、主轨、`ready`/`blocked`/`decided`、问题、前置条件），精确升级批量确认表（若有），以及每个 `ready` 包的选项表（选项 ID、选项、说明）。
+所有当前 `confirmation.status=ready` 的包（开放目标 + 精确升级）同一波提问；`switch:<track>` / `handle-parent` 后续题下一波；`blocked` 不问。必须包含：决策记录文件路径、`batch_implementation_gate`、队列总表（包、主轨、`ready`/`blocked`/`decided`、问题、前置条件），精确升级批量确认表（若有），以及每个 `ready` 包的选项表（选项 ID、选项、说明）。首页/结论横幅与确认队列须写明：exit `7` / `needs_choice` 时**下一动作=照确认队列向用户提问，不是等待放行**。
 
 选项 ID 形态固定：`replace:<包>@<版本>`、`remove`、`remove-usage`、`switch-to-declared`、`native-refactor`、`handle-parent`、`pin-override:<包>@<版本>`、`parent-upgrade:<包>@<版本>`、`parent-replace:<包>`、`parent-remove:<包>`、`isolate-behind-wrapper`、`internal-fork`、`remove-feature`、`switch:<轨道>`、`other`。ready 问题末位固定为 `other`。**不得出现 `same-package:` 或 `reject-native-refactor`。**
 
@@ -146,11 +146,11 @@ Node 约束冲突、EOL 运行时、需要全局切换或恢复未验证时，�
 
 候选版本、替代库、处置方案选项和删除可行性都属于决策证据，不是已批准结论。呈现完整选择面不等于推荐其中任何一条，也不等于人选轨完成。精确升级的目标版本明确也不等于已批准推进。
 
-**完成态互斥：** `analysis_status=complete` **不得**与 `decision_status=needs_choice` 同时成立。确认队列未清空前，报告状态保持 `draft`、`analysis_status` 最高为 `partial`；生成器在无更高优先级阻塞时以 exit `7` 表示「草稿已写出、待人工确认」（开放目标选型或精确升级 `proceed-exact`）。人选轨/推进写入决策文件后，`decision_status` 变为 `not_needed`；仅当 `batch_implementation_gate=ready` 时才可交接 Stage B。Agent 仍须完成证据复核才能升 `complete`。本技能终点是分析/决策报告，不是实施。
+**完成态互斥：** `analysis_status=complete` **不得**与 `decision_status=needs_choice` 同时成立。确认队列未清空前，报告状态保持 `draft`、`analysis_status` 最高为 `partial`；生成器在无更高优先级阻塞时以 exit `7` 表示「草稿已写出、待人工确认；Agent 下一动作=照队列提问/补证据，不是等待放行」。人选轨/推进写入决策文件并重跑后，`decision_status` 变为 `not_needed`；Agent 完成证据复核后升 `analysis_status=complete`——这才是本技能终点。`batch_implementation_gate=frozen` 不阻止该分析终点；仅当闸门为 `ready` 时才可交接 Stage B。本技能终点是定稿分析/决策报告，不是实施。
 
 选项完整性闸门：未指定目标版本的包必须至少产出一个可执行选项（替代包、已成立的原生重构方案、已解析出父包的父包处置，或 `safe_removal_candidate`/`requires_migration` 的删除路径）。任一包 `option_status=missing` 时，结论必须点名该包，且报告不得提升为 `complete`。该闸门只约束完成状态，不改写 `recommended_action`。
 
-当 `decision_status=needs_choice` 时，报告首页与结论章必须置顶「待人工确认」说明，并指向「人工确认队列」；Agent 不得在未提问、未写入决策文件并重跑前宣称 Stage A 完成。`batch_implementation_gate=frozen` 时不得开实施计划或执行变更。细则见 `human-confirmation-gates.md`。
+当 `decision_status=needs_choice` 时，报告首页与结论章必须置顶「待人工确认」说明，指向「人工确认队列」，并写明**下一动作=提问**；Agent 不得只交付 draft 后等待放行，不得在未提问、未写入决策文件、未重跑、未复核升 `complete` 前宣称本技能完成。`batch_implementation_gate=frozen` 时不得开实施计划或执行变更。细则见 `human-confirmation-gates.md`。
 
 当 `behavior_parity_required=yes`（默认）时：删除、替换、原生改造与父包处置都必须保持对外可观察行为不变，且都只能作为待选证据；报告不得偏好其中任何一条，也不得把同库升级作为选项；必要 API/配置适配可列为改造候选并标注为适配。
 

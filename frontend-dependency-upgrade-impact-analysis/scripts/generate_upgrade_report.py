@@ -3147,7 +3147,8 @@ def build_proceed_exact_question(report: PackageReport) -> ConfirmationQuestion:
     proceed_id = f"proceed:{package}@{target}"
     question.prompt = (
         f"确认按精确目标推进 `{package}` `{source}` → `{target}` 吗？"
-        "同批多个精确升级可汇总一张表一次确认；开放目标仍须一包一问。"
+        "所有当前 ready 包（精确升级与开放目标）可同一波确认；"
+        "switch/handle-parent 后续题下一波；blocked 不问。"
     )
     question.options = [
         ConfirmationOption(
@@ -5923,26 +5924,36 @@ def compute_batch_implementation_gate(
 def confirmation_status_banners(bundle: AnalysisBundle, location: str = "header") -> list[str]:
     phase = confirmation_queue_phase(bundle)
     lines: list[str] = []
+    next_action = (
+        "**下一动作=照确认队列向用户提问或补证据，不是等待放行**。"
+        "禁止只贴本报告后收工或等用户说「继续」。"
+    )
     if phase == "evidence":
         title = "待补证据（确认队列 blocked）" if location == "header" else "待补证据（结论闸门）"
         lines.append(
             f"> **{title}**：`decision_status=needs_choice`，但尚不能问选型/推进。"
             "请先完成删除面核验 / 替代方案调研 / 调用点证据 / 精确升级阻塞项，回填后重跑。"
+            f"{next_action}"
             "生成器 exit `7`（若无更高优先级 exit）。`batch_implementation_gate=frozen`。"
         )
     elif phase == "mixed":
         title = "待补证据 + 待确认" if location == "header" else "待补证据 + 待确认（结论闸门）"
         lines.append(
             f"> **{title}**：部分包确认队列 `blocked`（先补证据），部分 `ready`。"
-            "开放目标一包一问；精确升级 `proceed-exact` 可同批汇总确认。exit `7`。闸门 `frozen`。"
+            "对所有当前 `ready` 包同一波原文提问（开放目标 + 精确升级）；`blocked` 不问。"
+            f"{next_action}"
+            "exit `7`。闸门 `frozen`。"
         )
     elif phase == "choice":
         title = "待人工确认" if location == "header" else "待人工确认（结论闸门）"
         lines.append(
             f"> **{title}**：`decision_status=needs_choice`。"
-            "开放目标：逐包原文提问（替换含精确 `包@版本` 与 `other`；`switch:<track>` 后改问）。"
-            "精确升级：可汇总确认 `proceed:包@版本` / `defer` / `other`。"
-            "写入决策文件并重跑后，Stage A 才完成。exit `7`。本技能不实施变更。"
+            "同一波问完所有当前 `ready` 包：开放目标照选项表原文提问（替换含精确 `包@版本` 与 `other`）；"
+            "精确升级确认 `proceed:包@版本` / `defer` / `other`。"
+            "`switch:<track>` / `handle-parent` 后续题下一波。"
+            f"{next_action}"
+            "写入决策文件、重跑并由 Agent 复核至 `analysis_status=complete` 后，本技能才完成。"
+            "exit `7`。本技能不实施变更。"
         )
     if bundle.batch_implementation_gate == "frozen":
         reason_text = "；".join(bundle.batch_gate_reasons) or "见确认队列与阻塞项"
@@ -6369,8 +6380,10 @@ def markdown_report(bundle: AnalysisBundle) -> str:
         f"- 报告目录：`{bundle.report_output_dir}`",
         "- 最低可接受验证：确认准确 lock/peer/engine，执行受影响自动化检查，覆盖关键成功/失败/恢复流程，具备监控和已验证的回滚路径。",
         "- 剩余工作：标记为 `complete` 前，解决所有“未建立”“需要 Agent 复核”、基线不一致、证据警告、未翻译上游摘要和间接调用方映射缺口；"
-        "若 `decision_status=needs_choice`，还必须完成人工确认队列（exit `7`：待补证据、待选型或待精确升级推进确认）。"
-        "`batch_implementation_gate=frozen` 时不得开实施计划或执行变更。",
+        "若 `decision_status=needs_choice`，还必须完成人工确认队列"
+        "（exit `7`：下一动作=照队列提问或补证据，不是等待放行；所有当前 ready 同波问完）。"
+        "决策落盘并重跑后，Agent 须复核并将 `analysis_status` 升为 `complete` 才算本技能结束。"
+        "`batch_implementation_gate=frozen` 时不得开实施计划或执行变更（可不阻止分析定稿）。",
     ])
     option_gaps = [report.upgrade.package for report in bundle.reports if report.option_status == "missing"]
     research_gaps = [report.upgrade.package for report in bundle.reports if report.research_status == "pending"]
@@ -6484,14 +6497,19 @@ def render_confirmation_queue(bundle: AnalysisBundle) -> list[str]:
         f"- 决策记录文件：`{bundle.decision_file}`（生成器只读；由 Agent 在人确认后写入）",
         f"- 本轮确认阶段：`{phase}`（`evidence`=先补证据；`choice`=可确认；`mixed`=二者并存；`none`=无需）",
         f"- 批次实施闸门：`{bundle.batch_implementation_gate}`",
-        "- 提问规则：开放目标（无 `to`）一包一问；精确升级（`proceed-exact`）可同批汇总一张表确认。",
+        "- 提问规则：所有当前 `ready` 包（开放目标 + 精确升级）同一波问完；"
+        "`switch:<track>` / `handle-parent` 后续题下一波。",
+        "- **下一动作**：`needs_choice` / exit `7` 时照本队列向用户提问或补证据，**不是等待放行**；禁止只贴报告收工。",
         "- `blocked` 的包先补前置证据，不得提前问选型/推进。同批任一 blocked/未确认 → 整批 `frozen`。",
         "- 替换轨必须给出精确 `replace:<包>@<版本>`（仅 `analysis-evidence` eligible）；`curated-map` 只是线索。",
         "- 精确升级选项：`proceed:<包>@<版本>` / `defer` / `other`。",
         "- 选项末位固定为 `other`。`switch:<track>` 后改问同包「改轨问题」整表，勿把 switch 写入决策文件。",
         "- `handle-parent` 本身不是最终选择；须继续写 `包<-父包` 追问，或选 pin-override / remove-feature / other。",
-        "- 记录选型/推进不等于实施授权；终点是分析报告（`disposition-selected` / `proceed-selected`）。",
-        "- Agent 协议：`decision_status=needs_choice` 或 `batch_implementation_gate=frozen` 时不得开计划/实施；见 `references/human-confirmation-gates.md`。",
+        "- 记录选型/推进不等于实施授权；本技能终点是决策落盘重跑后经复核的 `analysis_status=complete` 报告"
+        "（`disposition-selected` / `proceed-selected` / `deferred`）。",
+        "- Agent 协议：`decision_status=needs_choice` 时必须当场提问；"
+        "`batch_implementation_gate=frozen` 时不得开计划/实施（可不阻止分析定稿）；"
+        "见 `references/human-confirmation-gates.md`。",
         "",
     ])
     if not questions:
@@ -7207,15 +7225,24 @@ def exit_code_for_bundle(bundle: AnalysisBundle, args: argparse.Namespace) -> in
         ]
         phase = confirmation_queue_phase(bundle)
         phase_hint = {
-            "evidence": "当前为待补证据，勿问选型/推进",
-            "choice": "当前为待人工确认：开放目标一包一问；精确升级可批量 proceed/defer",
-            "mixed": "部分待补证据、部分可确认",
-        }.get(phase, "见人工确认队列")
+            "evidence": "当前为待补证据，勿问选型/推进；下一动作=补证据后重跑，不是等待放行",
+            "choice": (
+                "当前为待人工确认：下一动作=照确认队列向用户提问，不是等待放行；"
+                "所有当前 ready 包（开放目标+精确升级）同一波问完；"
+                "switch/handle-parent 后续题下一波"
+            ),
+            "mixed": (
+                "部分待补证据、部分可确认；对 ready 包同一波提问，blocked 先补证据；"
+                "下一动作不是等待放行"
+            ),
+        }.get(phase, "见人工确认队列；下一动作=提问或补证据，不是等待放行")
         print(
             f"人工确认未完成（decision_status=needs_choice，phase={phase}，"
             f"batch_implementation_gate={bundle.batch_implementation_gate}）："
             + ("、".join(str(name) for name in pending_packages) or "见人工确认队列")
-            + f"。{phase_hint}。报告已写出为 draft；写入 decision-file 并重跑前不得标 complete，不得开计划/实施。",
+            + f"。{phase_hint}。报告已写出为 draft；"
+            "Agent 须当场处理确认队列，写入 decision-file 并重跑、复核至 analysis_status=complete "
+            "前不得宣称本技能完成，不得开计划/实施。",
             file=sys.stderr,
         )
         return 7

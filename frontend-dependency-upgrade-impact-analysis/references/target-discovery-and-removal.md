@@ -130,8 +130,10 @@
 
 生成器产出机器可读的确认队列。问题文本与选项由生成器固定，Agent 照问，不临场发挥。
 
-- **开放目标（无 `to`）**：**一包一问**。
-- **精确升级（`proceed-exact`）**：**可同批汇总**确认 `proceed:<包>@<版本>` / `defer` / `other`。
+- **当前所有 `ready` 包（开放目标 + 精确升级）**：**同一波一次问完**（照生成器原文/选项表）。
+- **精确升级（`proceed-exact`）**选项：`proceed:<包>@<版本>` / `defer` / `other`（与其他 `ready` 包同波）。
+- **`switch:<track>` / `handle-parent` 后续题**：**下一波**再问；`blocked` 不问选型/推进。
+- exit `7` / `needs_choice` 时 Agent **立刻提问**，禁止只贴报告等待「继续/放行」。
 - 选项 ID 形态：`proceed:<包>@<版本>`、`defer`、`replace:<包>@<版本>`、`remove`、`remove-usage`、`switch-to-declared`、`native-refactor`、`handle-parent`、`pin-override:<包>@<版本>`、`parent-upgrade:<包>@<版本>`、`parent-replace:<包>`、`parent-remove:<包>`、`isolate-behind-wrapper`、`internal-fork`、`remove-feature`、`switch:<轨道>`、`other`。**不存在 `same-package:` 选项**。
 - 替换轨的问题只列每个候选的**推荐版本**，其余版本留在候选表里；想换版本走 `other`。
 - 末位固定 `other`：自行指定包与版本，或改走其他处置方式。

@@ -85,10 +85,10 @@
 确认后的包：`selection_status=selected`、`decision_status=not_needed`，队列状态为 `decided`。  
 `recommended_action` 为 `disposition-selected`（开放目标）、`proceed-selected`（精确升级确认推进）或 `deferred`（精确升级本轮不推进）。
 
-上述状态只表示 **Stage A 分析选型/推进确认已落盘**；本技能到此结束，不会也不应开始改依赖或跑项目脚本。仅当整批 `batch_implementation_gate=ready` 时，调用方才可进入 Stage B（计划）并另给 Stage C（实施）授权。
+上述状态只表示 **策略选型/推进确认已落盘**；写入后须重跑，并由 Agent 复核至 `analysis_status=complete` 才算本技能终点。不会也不应开始改依赖或跑项目脚本。仅当整批 `batch_implementation_gate=ready` 时，调用方才可进入 Stage B（计划）并另给 Stage C（实施）授权；`frozen` 不阻止分析定稿。
 
 机读动作名：`disposition-selected`、`proceed-selected`、`deferred`。
 
 不得作为最终选择写入本文件：`switch:*`、`handle-parent`（须继续写 `包<-父包` 追问）、无版本的 `pin-override`、已废除的 `reject-native-refactor`。父包追问的 `package` 形如 `目标包<-父包`；全部父包追问确认后，主包也会变为 `disposition-selected`。
 
-开放目标在选型完成前生成器以 exit `7` 退出；精确升级（目标已明确）通常不写入本文件。
+开放目标与精确升级在确认完成前生成器均可以 exit `7` 退出（下一动作=照确认队列提问，不是等待放行）；精确升级确认推进/延期也写入本文件。

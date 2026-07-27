@@ -2086,6 +2086,9 @@ packages:
             self.assertTrue("待人工确认" in markdown or "待人工选型" in markdown)
             self.assertIn("exit `7`", markdown)
             self.assertIn("batch_implementation_gate", markdown)
+            self.assertIn("下一动作=照确认队列向用户提问或补证据，不是等待放行", markdown)
+            self.assertIn("同一波问完所有当前 `ready` 包", markdown)
+            self.assertNotIn("一包一问", markdown)
             self.assertEqual(MODULE.validate_report_contract(markdown), [])
 
     def test_main_returns_7_when_open_target_needs_choice(self) -> None:
@@ -2110,6 +2113,7 @@ packages:
                 "待人工确认" in text or "待人工选型" in text or "待补证据" in text
             )
             self.assertIn("本轮确认阶段", text)
+            self.assertIn("下一动作=照确认队列向用户提问或补证据，不是等待放行", text)
 
     def test_main_returns_0_after_open_target_decision_recorded(self) -> None:
         with tempfile.TemporaryDirectory() as raw:

@@ -10,18 +10,20 @@
 
 这个 skill **只做证据驱动的决策包（Stage A）**，不做实施计划与实施（Stage B/C）。
 
-Agent 解析前端 workspace 与 lock 基线 → 用生成器收集/渲染报告 → 按确认队列让人完成策略确认（开放目标选型 / 精确升级 proceed·defer）→ 写入决策文件后重跑 → **仅当 `batch_implementation_gate=ready` 才可交接 Stage B**；实施授权仍由调用方另给。生成器是确定性的采集器 + Markdown 渲染器；启发式结论必须经 Agent 复核后才能宣称权威。
+Agent 解析前端 workspace 与 lock 基线 → 用生成器收集/渲染报告 → **当场**按确认队列完成策略确认（所有当前 `ready` 包同波问完：开放目标选型 / 精确升级 proceed·defer）→ 写入决策文件后重跑 → Agent 复核至 `analysis_status=complete`（本技能终点）→ **仅当 `batch_implementation_gate=ready` 才可交接 Stage B**；实施授权仍由调用方另给。生成器是确定性的采集器 + Markdown 渲染器；启发式结论必须经 Agent 复核后才能宣称权威。
 
 四条永不混淆的状态轴：
 
 | 轴 | 回答的问题 | 典型取值 |
 |---|---|---|
-| `analysis_status` | 证据是否够完整？ | `partial` / `blocked` / `complete`（**禁止**与 `needs_choice` 同时为 `complete`） |
+| `analysis_status` | 证据是否够完整？ | `partial` / `blocked` / `complete`（**禁止**与 `needs_choice` 同时为 `complete`；本技能终点要求 `complete`） |
 | `decision_status` / `selection_status` | 人是否已确认路径/推进？ | `needs_choice` / `not_needed`；`selected` / `needs_explicit_choice` / `not_applicable` |
-| `batch_implementation_gate` | 整批是否允许开计划/实施？ | `frozen` / `ready`（任一未确认或非延期包仍 blocked → `frozen`） |
+| `batch_implementation_gate` | 整批是否允许开计划/实施？ | `frozen` / `ready`（任一未确认或非延期包仍 blocked → `frozen`；`frozen` 不阻止分析定稿） |
 | 实施授权 | 是否允许改运行时 / 装依赖 / 跑脚本？ | 默认全部否；报告与决策文件**不能**授予 |
 
-**心智纠偏：** 生成器会一次写出证据 + 主轨建议 + 全菜单 + 确认队列；真正「停下来问人」是 Agent 协议。未写 decision-file 前 exit **`7`**（含精确升级推进确认），不得宣称 Stage A 完成。`frozen` 时整批不得开 Stage B/C。细则见 `references/human-confirmation-gates.md`，摘要见 §11.1。
+**心智纠偏：** 生成器会一次写出证据 + 主轨建议 + 全菜单 + 确认队列；真正「停下来问人」是 Agent 协议。exit **`7`** / `needs_choice` 的**下一动作=照确认队列提问或补证据，不是等待放行**；禁止只贴 draft 报告收工。未写 decision-file、未重跑、未复核升 `complete` 前不得宣称本技能完成。`frozen` 时整批不得开 Stage B/C。细则见 `references/human-confirmation-gates.md`，摘要见 §11.1。
+
+与定框类编排并用时：本 skill **不**引用、也不依赖对方的闸门字段；各自完成后由调用提示词决定下一步。本 skill 必须在确认队列清空并定稿后才结束，避免调用方过早进入「仅放行」类问题。
 
 ---
 
@@ -126,18 +128,17 @@ flowchart TD
   M --> N[写 Markdown ± JSON<br/>默认 draft]
   N --> O{确认队列}
   O -->|blocked 包| P[补前置条件后重跑]
-  O -->|ready 开放目标| R[Agent 一包一问]
-  O -->|ready 精确升级| R2[可批量 proceed/defer]
+  O -->|所有当前 ready| R[Agent 同波原文提问<br/>禁止只贴报告等放行]
   R --> S[写入 decision-file]
-  R2 --> S
   S --> N
   P --> N
   N --> T{完成门禁}
-  T -->|needs_choice| U[draft + exit 7 + frozen]
-  T -->|决策完成| V{batch_implementation_gate}
-  V -->|frozen| X[停止；不得开计划/实施]
+  T -->|needs_choice| U[draft + exit 7<br/>下一动作=提问/补证据]
+  T -->|决策完成| C1[Agent 复核 → analysis_status=complete]
+  C1 --> V{batch_implementation_gate}
+  V -->|frozen| X[分析可定稿；不得开计划/实施]
   V -->|ready| W{调用方 Stage B/C 授权?}
-  W -->|否| X2[停止于决策包]
+  W -->|否| X2[停止于定稿决策包]
   W -->|是| Y[Stage B 计划 → Stage C<br/>run_with_compatible_node]
 ```
 
@@ -155,8 +156,8 @@ flowchart TD
 10. **调研回填**：知识表无条目时，调研清单为必做；经 `--analysis-evidence-file` 回填  
 11. **风险**：七因素 → 回归范围 / 发布控制 / 监控 / 回滚触发  
 12. **生成并校验报告**；Agent 复核启发式段落  
-13. **确认队列**：开放目标一包一问；精确升级可批量 proceed/defer；`blocked` 不问；`switch:<track>` 只改轨  
-14. **决策落盘** → 重跑；仅 `batch_implementation_gate=ready` 可交接 Stage B；选型 ≠ 实施批准  
+13. **确认队列**：exit `7` 时当场提问；所有当前 `ready` 同波问完；`blocked` 不问；`switch`/`handle-parent` 后续题下一波  
+14. **决策落盘** → 重跑 → Agent 复核至 `analysis_status=complete`（本技能终点）；仅 `batch_implementation_gate=ready` 可交接 Stage B；选型 ≠ 实施批准  
 
 ---
 
@@ -504,14 +505,16 @@ flowchart LR
 ## 11. 人工确认循环（Agent 协议）
 
 1. 生成报告，读「人工确认队列」、确认阶段与 `batch_implementation_gate`；`needs_choice` 时 exit `7`  
-2. `blocked`：先补证据 / 解精确升级阻塞，再重跑（勿问选型/推进）  
-3. `ready`：开放目标**一包一问**；精确升级可按「精确升级批量确认」表一次确认 `proceed:包@版本` / `defer` / `other`  
-4. 若答 `switch:<track>` → 改问同节「改轨问题」整表，**不**写 decision-file  
-5. `handle-parent` 勿落盘；继续写 `包<-父包` 追问  
-6. 最终答案写入 `human-decisions.json` → 重跑 → `disposition-selected` / `proceed-selected` / `deferred`  
-7. 仅当 `batch_implementation_gate=ready` 时交接 Stage B；Stage C 另需实施授权 + runner approve flags  
+2. **禁止**只贴 draft / 横幅后等待用户「继续/放行」；下一动作必须是提问或补证据  
+3. `blocked`：先补证据 / 解精确升级阻塞，再重跑（勿问选型/推进）  
+4. 所有当前 `ready`：**同一波**原文提问（开放目标选项表 + 精确升级 `proceed:包@版本` / `defer` / `other`）  
+5. 若答 `switch:<track>` → **下一波**改问同节「改轨问题」整表，**不**写 decision-file  
+6. `handle-parent` 勿落盘；**下一波**继续写 `包<-父包` 追问  
+7. 最终答案写入 `human-decisions.json` → 重跑 → `disposition-selected` / `proceed-selected` / `deferred`  
+8. Agent 复核上游与映射，将 `analysis_status` 升为 `complete`（本技能终点）  
+9. 仅当 `batch_implementation_gate=ready` 时交接 Stage B；Stage C 另需实施授权 + runner approve flags  
 
-**只表示 Stage A 完成**；不是计划批准，更不是实施批准。同批任一包未确认或非延期包仍 blocked → 整批 `frozen`。
+决策落盘 + `complete` **只表示本技能分析终点**；不是计划批准，更不是实施批准。同批任一包未确认或非延期包仍 blocked → 整批 `frozen`（可不阻止分析定稿）。
 
 ### 11.1 人确认点地图（摘要）
 
@@ -519,8 +522,8 @@ flowchart LR
 |---|---|---|
 | 多 frontend workspace | 问 | 问 |
 | 基线 `from` 冲突 | 问 / blocked | 问 / blocked |
-| 处置选型（删/换/原生/父包） | **不问** | **必须问**（G4）；一包一问；exit `7` |
-| 推进确认 proceed/defer | **必须问**（G7）；可批量；exit `7` | 不适用 |
+| 处置选型（删/换/原生/父包） | **不问** | **必须问**（G4）；与其他 ready 同波；exit `7` |
+| 推进确认 proceed/defer | **必须问**（G7）；与其他 ready 同波；exit `7` | 不适用 |
 | 证据/技术阻塞（队列 blocked） | 先解阻塞 | 先补证据 |
 | `batch_implementation_gate` | 未完成或 blocked → `frozen` | 同左 |
 | 实施装依赖/改代码 | 技能外（Stage C） | 技能外 |
@@ -534,7 +537,8 @@ flowchart LR
 文档要求在标 complete 前确认：
 
 - [ ] **`decision_status` 不是 `needs_choice`**（开放目标选型 + 精确升级 proceed/defer 已落盘并重跑）  
-- [ ] **`batch_implementation_gate=ready`** 才交接 Stage B；`frozen` 不得开计划/实施  
+- [ ] **Agent 已复核并将 `analysis_status` 升为 `complete`**（不得把 exit `7` draft 当完成）  
+- [ ] **`batch_implementation_gate=ready`** 才交接 Stage B；`frozen` 不得开计划/实施（可不阻止分析定稿）  
 - [ ] **未**将 `analysis_status=complete` 与 `needs_choice` 并存  
 - [ ] baseline / lock 类型 / workspace / importer 已确认（`importer_resolution=confirmed`）  
 - [ ] 本机 Node、项目约束、管理器、所选项目 Node、execution readiness、恢复计划明确  
@@ -585,7 +589,7 @@ python .../generate_upgrade_report.py . \
 | `runtime-switch-required` | 分析可继续；实施前批准 switch，优先隔离执行；禁止本机 Node 跑项目命令 |
 | `research_status` 非 reviewed | 必须回填 analysis-evidence |
 | `option_status=missing` | 补替代 / 调用点 / 父包链 / 删除证据之一 |
-| exit `7` / `needs_choice` | 按确认队列提问 → 写 `human-decisions.json` → 重跑 |
+| exit `7` / `needs_choice` | **立刻**按确认队列提问（勿等放行）→ 写 `human-decisions.json` → 重跑 → 复核至 `complete` |
 | exit `8` / `awaiting_offline_confirmation` | 先用 curl 复核公网；确认不通后由人显式 `--offline`；禁止因 `.npmrc`/内网形态推断 |
 | 多前端 workspace | **问用户**；禁止默默分析整仓 |
 

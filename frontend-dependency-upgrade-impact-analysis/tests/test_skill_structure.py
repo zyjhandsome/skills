@@ -108,8 +108,37 @@ class SkillStructureTests(unittest.TestCase):
         require("report-contract.md", GENERATOR.CONFIRMATION_STATUSES, "确认队列状态枚举")
         require("report-contract.md", GENERATOR.DECISION_RECORD_STATUSES, "决策记录状态枚举")
         require("decision-record-schema.md", GENERATOR.DECISION_RECORD_STATUSES, "决策记录状态枚举")
-        require("human-confirmation-gates.md", ("needs_choice", "exit `7`", "other", "proceed-exact", "frozen", "ready"), "确认门禁关键短语")
-        require("report-contract.md", ("exit `7`", "decision_status=needs_choice", "frozen", "ready"), "完成态互斥 / exit 7 / 批次闸门")
+        require(
+            "human-confirmation-gates.md",
+            (
+                "needs_choice",
+                "exit `7`",
+                "other",
+                "proceed-exact",
+                "frozen",
+                "ready",
+                "下一动作",
+                "不是等待放行",
+                "同一波",
+                "analysis_status=complete",
+            ),
+            "确认门禁关键短语",
+        )
+        require(
+            "report-contract.md",
+            (
+                "exit `7`",
+                "decision_status=needs_choice",
+                "frozen",
+                "ready",
+                "下一动作=照确认队列向用户提问，不是等待放行",
+            ),
+            "完成态互斥 / exit 7 / 批次闸门 / 下一动作",
+        )
+        skill_text = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+        for phrase in ("ask the queue now", "analysis_status=complete", "same wave"):
+            if phrase not in skill_text:
+                missing.append(f"SKILL.md 缺少 Agent 当场提问与定稿终点：{phrase}")
         require("report-contract.md", GENERATOR.BATCH_IMPLEMENTATION_GATES, "批次实施闸门枚举")
         require("human-confirmation-gates.md", GENERATOR.BATCH_IMPLEMENTATION_GATES, "批次实施闸门枚举")
         require("target-discovery-and-removal.md", (GENERATOR.PROCEED_EXACT_TRACK,), "精确升级推进轨")

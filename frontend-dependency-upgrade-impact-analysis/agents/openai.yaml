@@ -3,10 +3,13 @@ interface:
   short_description: "Upgrade impact analysis with human gates before plans"
   default_prompt: >
     Use $frontend-dependency-upgrade-impact-analysis for analysis only (Stage A).
-    Honor exit 7 and queue phase (evidence vs choice). Open targets: ask one package
-    at a time verbatim, including alternate-track questions after switch. Exact
-    upgrades: require proceed/defer (batchable when multiple to-versions are ready).
-    Write decisions to the decision file; stop at disposition-selected or
-    proceed-selected. If batch_implementation_gate=frozen, do not open
-    implementation plans or execute. Stage B/C need caller authorization and
+    Honor exit 7 and queue phase (evidence vs choice). Exit 7 / needs_choice means
+    ask the confirmation queue now — never paste the draft and wait for the user to
+    say continue or approve. Ask every currently ready package in the same wave
+    (open-target disposition options and exact-upgrade proceed/defer). Never ask
+    blocked packages. After switch:<track> or handle-parent, ask follow-ups in the
+    next wave; do not write switch/handle-parent alone to the decision file. Write
+    decisions, regenerate, Agent-review to analysis_status=complete, then stop.
+    batch_implementation_gate=frozen blocks Stage B/C plans and execution but does
+    not block finishing the analysis report. Stage B/C need caller authorization and
     runner approve flags — never implement from this skill alone.
