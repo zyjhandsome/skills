@@ -97,6 +97,10 @@ needs a better fit:
 - [ ] 延伸术语表 and 文章元数据 render as collapsed <details> at the end
 - [ ] 自检报告 is a hidden <h2> + collapsed <details>
 - [ ] Mermaid diagrams render (open the file in a browser)
+- [ ] Dark mode: toggle theme — no flash on reload; callouts / highlight / strong chips /
+      tables / code / Mermaid stay readable (borders + accent-on badges not washed out)
+- [ ] Light mode: body links / TOC active use readable terracotta (--link); filled badges
+      use --accent-fill + --accent-on (not washed white-on-peach); Mermaid node borders clear
 - [ ] Header source line / subtitle read well
 ```
 
@@ -165,6 +169,12 @@ The template already encodes earlier review decisions — keep them when editing
 - 延伸术语表 + 文章元数据 collapsed by default.
 - Speaker bio uses `callout-info` (blue), distinct from tip insights (orange)
   and the thesis highlight.
+- Dark theme: head script sets `data-theme` before paint (no FOUC); `color-scheme`
+  follows theme; raised `--border` / `--code-bg`; `--accent-on` for text on accent
+  fills; Mermaid uses `theme: "base"` + warm Claude palette variables.
+- Light theme: body links / TOC use `--link` / `--link-hover` (AA terracotta, not the
+  softer brand peach); solid badges use `--accent-fill` + `--accent-on`; topbar has a
+  solid `--bg` fallback before `color-mix` glass.
 
 ## Batch conversion
 
