@@ -13,6 +13,7 @@ Cursor Agent Skills 集合。
 | [github-repo-usage-article](./github-repo-usage-article/SKILL.md) | GitHub 仓库「使用示例」深度文章（房屋风格） |
 | [md2html-lecture](./md2html-lecture/SKILL.md) | 将 content-structuring 的整理稿转换成单文件 HTML 阅读页 |
 | [frontend-dependency-upgrade-impact-analysis](./frontend-dependency-upgrade-impact-analysis/SKILL.md) | 前端依赖升级影响分析：证据驱动的升级/移除/替换决策报告（只分析不实现） |
+| [java-dependency-upgrade-impact-analysis](./java-dependency-upgrade-impact-analysis/SKILL.md) | Java/Maven/Gradle 依赖升级影响分析：处置阶梯、owner-first、确认队列决策包（只分析不实现） |
 
 ## Delivery 流水线
 
@@ -92,9 +93,21 @@ frontend-dependency-upgrade-impact-analysis/
 ├── references/           # 证据 schema、风险模型、报告契约等
 ├── scripts/              # 报告生成与 Node 兼容探测
 └── tests/
+
+java-dependency-upgrade-impact-analysis/
+├── SKILL.md              # 技能加载器（边界、环境前置、工作流、报告闸门）
+├── agents/
+│   └── openai.yaml
+├── fixtures/             # 决策包样例（partial / complete）
+├── references/           # 处置阶梯、owner、拆批、确认队列、报告契约等
+├── scripts/              # validate_report.py 结构校验
+├── templates/            # 决策包 / 决策记录中文模板
+└── tests/
 ```
 
 安装：将需要的技能目录复制到项目的 `.cursor/skills/` 或 `~/.cursor/skills/` 即可。
+
+配套说明见 [`docs/java-dependency-upgrade-delivery-usage.md`](./docs/java-dependency-upgrade-delivery-usage.md)（与 delivery-* 挂载）。
 
 ## md2html-lecture：把整理稿渲染成网页
 

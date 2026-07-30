@@ -1,0 +1,9 @@
+interface:
+  display_name: "Java Dependency Upgrade Impact Analysis"
+  short_description: "JVM upgrade impact analysis with human gates"
+  default_prompt: >
+    Use $java-dependency-upgrade-impact-analysis when the user names this skill
+    or pastes a Java/Maven/Gradle from→to table / inventory ask. Short prompts
+    are enough. Always load SKILL.md first, then only the references needed for
+    the case. Run environment preflight before analysis. Analysis only — no
+    manifest or source edits.
