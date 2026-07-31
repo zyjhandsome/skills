@@ -121,9 +121,19 @@ class SkillStructureTests(unittest.TestCase):
                 "不是等待放行",
                 "同一波",
                 "analysis_status=complete",
+                "EXIT_CODE_PRIORITY",
+                "只给 `defer` / `other`",
             ),
             "确认门禁关键短语",
         )
+        gates_norm = "".join(
+            docs["human-confirmation-gates.md"].replace("**", "").replace("`", "").split()
+        )
+        exit_priority_norm = "→".join(str(code) for code in GENERATOR.EXIT_CODE_PRIORITY)
+        if exit_priority_norm not in gates_norm:
+            missing.append(
+                f"human-confirmation-gates.md 缺少与 EXIT_CODE_PRIORITY 一致的优先级：{GENERATOR.EXIT_CODE_PRIORITY}"
+            )
         require(
             "report-contract.md",
             (

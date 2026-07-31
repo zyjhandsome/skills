@@ -2362,8 +2362,12 @@ packages:
             self.assertEqual(bundle.reports[0].primary_track, MODULE.PROCEED_EXACT_TRACK)
             self.assertIsNotNone(bundle.reports[0].confirmation)
             self.assertEqual(bundle.reports[0].confirmation.track, MODULE.PROCEED_EXACT_TRACK)
-            # Offline fixture has no project Node pin → exact upgrade blocked → queue evidence phase
-            self.assertEqual(bundle.reports[0].confirmation.status, "blocked")
+            # Offline fixture has no project Node pin → exact upgrade blocked → defer/other only
+            self.assertEqual(bundle.reports[0].confirmation.status, "ready")
+            option_ids = [opt.option_id for opt in bundle.reports[0].confirmation.options]
+            self.assertIn("defer", option_ids)
+            self.assertIn("other", option_ids)
+            self.assertFalse(any(item.startswith("proceed:") for item in option_ids))
             self.assertIn("proceed-exact", markdown)
             self.assertIn("batch_implementation_gate", markdown)
             self.assertTrue(bundle.reports[0].constraints)
@@ -2899,6 +2903,83 @@ packages:
             self.assertIn("proceed:axios@1.7.9", text)
             self.assertIn("batch_implementation_gate", text)
             self.assertIn("`frozen`", text)
+
+    def test_exact_upgrade_implementation_blocked_offers_defer_not_proceed(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "package.json").write_text(json.dumps({
+                "engines": {"node": ">=18 <21"},
+                "dependencies": {"axios": "1.6.8"},
+            }), encoding="utf-8")
+            (root / "package-lock.json").write_text(json.dumps({
+                "lockfileVersion": 3,
+                "packages": {"node_modules/axios": {"version": "1.6.8"}},
+            }), encoding="utf-8")
+            (root / ".nvmrc").write_text("20.18.0\n", encoding="utf-8")
+            with (
+                patch.object(MODULE, "current_host_node_runtime", return_value=("26.5.0", "C:/node/node.exe")),
+                patch.object(MODULE, "detect_node_managers", return_value=([], {})),
+            ):
+                code = MODULE.main([
+                    str(root), "--upgrade", "axios::1.7.9", "--offline",
+                    "--output-dir", str(root / "out"), "--json-output",
+                ])
+            self.assertEqual(code, 7)
+            structured = json.loads(
+                (root / "out" / "frontend-dependency-upgrade-report.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(structured["decision_status"], "needs_choice")
+            self.assertEqual(structured["analysis_status"], "partial")
+            report = structured["reports"][0]
+            self.assertEqual(report["exact_upgrade_status"], "blocked")
+            conf = report["confirmation"]
+            self.assertEqual(conf["status"], "ready")
+            option_ids = [opt["option_id"] for opt in conf["options"]]
+            self.assertEqual(option_ids, ["defer", "other"])
+
+    def test_deferred_exact_upgrade_exits_0_with_frozen_gate_not_exit_6(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "package.json").write_text(json.dumps({
+                "engines": {"node": ">=18 <21"},
+                "dependencies": {"axios": "1.6.8"},
+            }), encoding="utf-8")
+            (root / "package-lock.json").write_text(json.dumps({
+                "lockfileVersion": 3,
+                "packages": {"node_modules/axios": {"version": "1.6.8"}},
+            }), encoding="utf-8")
+            (root / ".nvmrc").write_text("20.18.0\n", encoding="utf-8")
+            decisions = root / "human-decisions.json"
+            decisions.write_text(json.dumps({"version": 1, "decisions": [{
+                "package": "axios",
+                "track": "proceed-exact",
+                "choice": "defer",
+                "rationale": "node manager missing; finish Stage A",
+            }]}), encoding="utf-8")
+            with (
+                patch.object(MODULE, "current_host_node_runtime", return_value=("26.5.0", "C:/node/node.exe")),
+                patch.object(MODULE, "detect_node_managers", return_value=([], {})),
+            ):
+                code = MODULE.main([
+                    str(root), "--upgrade", "axios::1.7.9", "--offline",
+                    "--decision-file", str(decisions),
+                    "--output-dir", str(root / "out"), "--json-output",
+                ])
+            self.assertEqual(code, 0)
+            structured = json.loads(
+                (root / "out" / "frontend-dependency-upgrade-report.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(structured["decision_status"], "not_needed")
+            self.assertEqual(structured["analysis_status"], "partial")
+            self.assertEqual(structured["batch_implementation_gate"], "frozen")
+            self.assertTrue(
+                any("Node" in item or "blocked" in item for item in structured["batch_gate_reasons"])
+            )
+            report = structured["reports"][0]
+            self.assertEqual(report["recommended_action"], MODULE.DEFERRED_ACTION)
+            self.assertEqual(report["selection_status"], "selected")
+            self.assertEqual(report["exact_upgrade_status"], "blocked")
+            self.assertEqual(report["confirmation"]["status"], "decided")
 
     def test_exact_upgrade_proceed_decision_clears_choice_gate(self) -> None:
         with tempfile.TemporaryDirectory() as raw:

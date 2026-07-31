@@ -347,11 +347,11 @@ CLI 入口对应关系：
 
 开放目标侧常见：`assess` / `review-removal` / `research-replacement` / `plan-native-refactor` / `plan-migration-before-removal` / `handle-parent-packages` / `fix-phantom-dependency` / `blocked-pending-options` / `remediation-blocked`  
 
-决策确认后：`disposition-selected`  
+决策确认后：`disposition-selected`（开放目标）· `proceed-selected`（精确升级确认推进）· `deferred`（精确升级本轮不推进）  
 
 Workspace 失败：`resolve-frontend-workspace`  
 
-说明：`recommended_action` 是**下一步动作提示**，不是选型结论，更不是实施批准。
+说明：`recommended_action` 是**下一步动作提示**，不是选型结论，更不是实施批准。`deferred` 后分析可定稿；`batch_implementation_gate` 仍可因 Node/实施阻塞保持 `frozen`。
 
 ---
 
@@ -452,8 +452,8 @@ python scripts/generate_upgrade_report.py <project-root> [flags...]
 | `3` | baseline `mismatch`/`unknown` 且未 `--allow-baseline-mismatch` |
 | `4` | `node_runtime.status == constraint-conflict` |
 | `5` | `importer_resolution == failed` |
-| `6` | 精确升级被兼容性/父依赖/lock 收敛条件 `exact_upgrade_status=blocked` |
-| `7` | 报告已写出，但 `decision_status=needs_choice`（开放目标待人工确认队列） |
+| `6` | 精确升级 `exact_upgrade_status=blocked` 且**不是** `deferred`、也**不是**仍待 `defer`/`other` 的 `needs_choice`（兼容性/父依赖/lock/Node 等实施阻塞在策略确认结束后仍卡住） |
+| `7` | 报告已写出，但 `decision_status=needs_choice`（开放目标处置选型 **或** 精确升级 G7 推进/延期确认；实施 blocked 时同为询问 `defer`/`other`） |
 | `8` | 公网不可达（registry + GitHub 探测均失败，或精确升级区间无 release/changelog 正文且 GitHub 再探失败）；stderr JSON 含 `network_reachability=unreachable` / `awaiting_offline_confirmation`；须人确认后才可 `--offline`。通常**未**写出完整 offline 报告 |
 
 注意：exit ≠ 0 时报告可能已经写出；stderr 说明阻塞原因。exit `0` 也不等于 `analysis_status=complete`。exit `7` 表示草稿可用、选型未完成，不是生成崩溃。exit `8` 表示可达性未证实，不得静默 offline。优先级：`2` → `8` → `5` → `3` → `4` → `6` → `7` → `0`。

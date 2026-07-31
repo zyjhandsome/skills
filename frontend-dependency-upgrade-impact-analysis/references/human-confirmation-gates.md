@@ -38,7 +38,7 @@
 | G4 | 开放目标选型 | 队列 `ready` 且无 `to` | **与所有当前 `ready` 包同波原文提问**；替换含 `replace:<包>@<版本>` + `other` | 横幅「待人工确认」；exit `7`；phase=`choice` |
 | G5 | 改轨后的下一问 | 人答 `switch:<track>` | **下一波**原文改问同包「改轨问题：`<track>`」整表；**不**写 decision-file | 仍 `needs_choice` |
 | G6 | 父包追问 | 对话中选了 `handle-parent` | **下一波**按父包写入 `包<-父包` 决策；`handle-parent` 本身**不是**最终选择 | 未答完父包追问不得 `decided` |
-| G7 | 精确升级推进确认 | 有明确 `to`；轨 `proceed-exact` | **与所有当前 `ready` 包同波汇总**：`proceed:<包>@<版本>` / `defer` / `other` | exit `7`；闸门 `frozen`；技术 blocked 时队列 `blocked`（先解阻塞） |
+| G7 | 精确升级推进确认 | 有明确 `to`；轨 `proceed-exact` | **与所有当前 `ready` 包同波汇总**：通常 `proceed:<包>@<版本>` / `defer` / `other`；**实施技术 blocked 时只给 `defer` / `other`（隐藏 proceed）** | exit `7`；闸门 `frozen`；`defer` 后可定稿分析，解除阻塞前不得 proceed / 开 B/C |
 
 **不在本技能内：** Stage B 计划审批、Stage C 实施授权（装依赖 / 改代码 / 跑脚本 / 切 Node）。
 
@@ -47,7 +47,7 @@
 | 包 / 题类型 | 提问方式 |
 |---|---|
 | 当前所有 `confirmation.status=ready`（开放目标 + 精确升级） | **同一波一次问完**（照报告原文/选项表） |
-| `blocked` | **不问**选型/推进；先补证据或解阻塞后重跑 |
+| `blocked` | **不问**选型/推进；先补证据后重跑（证据不足）。精确升级**实施**阻塞不走此行——队列仍为 `ready`，只给 `defer`/`other` |
 | `switch:<track>` / `handle-parent` 触发的后续题 | **下一波**再问；不得与尚未作答的前提题强行同波猜答 |
 | 混合批次 | 本波只问当前 `ready`；任一未完成 → 整批 `frozen`（实施闸门）；分析仍须继续问到队列清空 |
 
@@ -75,12 +75,13 @@
 | exit | 无更高优先级阻塞且 `needs_choice` → exit **`7`**（= 立刻提问/补证据，不是等待放行） |
 | Agent | 未清空队列前不得宣称 Stage A 完成；不得把 draft 交付当成收工；闸门 `frozen` 时不得开计划/实施 |
 
-exit 优先级：`2` → `5` → `3` → `4` → `6` → **`7`** → `0`。  
+exit 优先级：`2` → `8` → `5` → `3` → `4` → `6` → **`7`** → `0`（与生成器 `EXIT_CODE_PRIORITY` 一致；`8`=公网不可达待确认 offline）。  
+精确升级实施 blocked 且确认队列仍 `needs_choice`（仅 `defer`/`other`）时走 **`7`**，不走 `6`；`defer` 落盘后若无更高优先级阻塞则 **`0`** + stderr frozen 警告。  
 `batch_implementation_gate=frozen` 在决策已完成后以报告字段 + stderr 警告表达，不单独占用新 exit（避免 Node 未就绪时永远无法结束 Stage A）。
 
 ## 6. 选项呈现
 
-- **精确升级（G7）**：`proceed:<包>@<版本>` + `defer` + **`other`**。技术 `blocked` 时不给 proceed，先解阻塞。
+- **精确升级（G7）**：`proceed:<包>@<版本>` + `defer` + **`other`**。实施技术 blocked 时**不给 proceed**，队列仍 `ready`，只问 `defer` / `other`；解除阻塞并重跑后才出现 proceed。
 - **替换**：仅 `analysis-evidence` 且 eligible 的 `replace:<包>@<版本>`（最多 3）+ 改轨 + **`other`**。
 - **删除**：确认删除 + 改轨 + **`other`**。
 - **原生改造**：确认原生 +（若有）改轨到替换/删除/父包 + **`other`**。

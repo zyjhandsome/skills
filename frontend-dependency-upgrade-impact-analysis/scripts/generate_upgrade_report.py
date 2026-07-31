@@ -3129,19 +3129,33 @@ def build_proceed_exact_question(report: PackageReport) -> ConfirmationQuestion:
     report.primary_track = PROCEED_EXACT_TRACK
     report.primary_track_basis = "精确目标版本已明确；进入计划/实施前须确认推进或延期"
     if report.exact_upgrade_status == "blocked":
-        question.status = "blocked"
-        question.blocked_reason = (
-            "精确升级仍有实施阻塞项；解除阻塞前不确认推进。"
-            "同批任一包 blocked 时 `batch_implementation_gate=frozen`。"
+        # Implementation blockers hide proceed, but Stage A can still finish via defer.
+        # Keep confirmation ready so Agent asks defer/other (never ask evidence-blocked packages).
+        question.status = "ready"
+        question.prompt = (
+            f"`{package}` `{source}` → `{target}` 精确升级仍有实施阻塞，当前不能确认推进（proceed）。"
+            "可选择本轮延期（defer）以结束 Stage A 策略确认；解除阻塞并重跑后才能 proceed。"
+            "所有当前 ready 包可同一波确认；证据不足的 blocked 包不问。"
         )
+        blocker_note = "；".join(report.implementation_blockers) if report.implementation_blockers else "见 implementation_blockers"
+        question.options = [
+            ConfirmationOption(
+                "defer",
+                "本轮不推进（保留分析，不进入计划/实施）",
+                "记为 deferred；分析可定稿，但 `batch_implementation_gate` 在 Node/实施阻塞解除前保持 frozen。"
+                f" 当前阻塞：{blocker_note}",
+            ),
+        ]
+        append_other_option(question)
         question.prerequisites = list(report.implementation_blockers) or [
-            "解决 Node/父依赖/lock 收敛等 implementation_blockers 后重跑"
+            "解决 Node/父依赖/lock 收敛等 implementation_blockers 后重跑，才能确认 proceed"
         ]
         report.decision_status = "needs_choice"
         report.selection_status = "needs_explicit_choice"
         append_unique(
             report.decision_required,
-            "精确升级阻塞未解除；解除前不得确认推进，也不得开实施计划。",
+            "精确升级阻塞未解除：可确认 defer 结束本轮策略确认，或解除阻塞后重跑再 proceed。"
+            "不得在阻塞未解除时 proceed，也不得开实施计划。",
         )
         return question
     proceed_id = f"proceed:{package}@{target}"
@@ -5911,7 +5925,19 @@ def compute_batch_implementation_gate(
             and report.exact_upgrade_status != "ready"
         ):
             reasons.append(f"{package}：已确认推进但精确升级未 ready")
-    if remediation_blocked and not any("精确升级仍 blocked" in item for item in reasons):
+    non_deferred_remediation = any(
+        report.recommended_action != DEFERRED_ACTION
+        and not (
+            report.exact_upgrade_status == "blocked"
+            and report.decision_status == "needs_choice"
+        )
+        and (
+            report.exact_upgrade_status == "blocked"
+            or report.recommended_action == "remediation-blocked"
+        )
+        for report in reports
+    )
+    if non_deferred_remediation and not any("精确升级仍 blocked" in item for item in reasons):
         reasons.append("存在 remediation-blocked / exact_upgrade blocked")
     # Deduplicate while preserving order
     unique: list[str] = []
@@ -7014,9 +7040,20 @@ def build_bundle(
     ]
     runtime_analysis_blocked = node_runtime.status == "constraint-conflict"
     workspace_failed = workspace.status == "failed"
+    # Deferred exact upgrades keep exact_upgrade_status=blocked (implementation still not ready)
+    # but must not force analysis_status=blocked — Stage A can finish with gate frozen.
+    # While the defer/other menu is still open (needs_choice), keep analysis partial so exit 7
+    # can surface instead of treating the draft as a hard analysis block.
     remediation_blocked = any(
-        report.exact_upgrade_status == "blocked"
-        or report.recommended_action == "remediation-blocked"
+        report.recommended_action != DEFERRED_ACTION
+        and not (
+            report.exact_upgrade_status == "blocked"
+            and report.decision_status == "needs_choice"
+        )
+        and (
+            report.exact_upgrade_status == "blocked"
+            or report.recommended_action == "remediation-blocked"
+        )
         for report in reports
     )
     if workspace_failed:
@@ -7205,10 +7242,14 @@ def exit_code_for_bundle(bundle: AnalysisBundle, args: argparse.Namespace) -> in
             file=sys.stderr,
         )
         return 4
+    # Prefer exit 7 when Stage A can still finish via defer/other on an implementation-blocked
+    # exact upgrade. Exit 6 remains for non-deferred technical blocks after decisions settle.
     exact_blockers = [
         f"{report.upgrade.package}：{'; '.join(report.implementation_blockers)}"
         for report in bundle.reports
         if report.exact_upgrade_status == "blocked"
+        and report.recommended_action != DEFERRED_ACTION
+        and report.decision_status != "needs_choice"
     ]
     if exact_blockers:
         print(

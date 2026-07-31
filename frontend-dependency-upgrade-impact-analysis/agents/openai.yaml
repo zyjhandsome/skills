@@ -6,10 +6,12 @@ interface:
     Honor exit 7 and queue phase (evidence vs choice). Exit 7 / needs_choice means
     ask the confirmation queue now — never paste the draft and wait for the user to
     say continue or approve. Ask every currently ready package in the same wave
-    (open-target disposition options and exact-upgrade proceed/defer). Never ask
-    blocked packages. After switch:<track> or handle-parent, ask follow-ups in the
-    next wave; do not write switch/handle-parent alone to the decision file. Write
-    decisions, regenerate, Agent-review to analysis_status=complete, then stop.
-    batch_implementation_gate=frozen blocks Stage B/C plans and execution but does
+    (open-target disposition; exact-upgrade proceed/defer, or defer/other only when
+    implementation-blocked). Never ask evidence-blocked packages. After switch:<track>
+    or conversational handle-parent parent follow-ups, ask the next wave; pin-override /
+    remove-feature / other on the parent track may be final. Do not write switch or
+    bare handle-parent alone to the decision file. Write decisions, regenerate,
+    Agent-review to analysis_status=complete, then stop. Deferred exact upgrades may
+    exit 0 with gate frozen. batch_implementation_gate=frozen blocks Stage B/C but does
     not block finishing the analysis report. Stage B/C need caller authorization and
     runner approve flags — never implement from this skill alone.
