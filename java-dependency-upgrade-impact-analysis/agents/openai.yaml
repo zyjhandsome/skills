@@ -6,4 +6,6 @@ interface:
     or pastes a Java/Maven/Gradle from→to table / inventory ask. Short prompts
     are enough. Always load SKILL.md first, then only the references needed for
     the case. Run environment preflight before analysis. Analysis only — no
-    manifest or source edits.
+    manifest or source edits. Preserve explicit downgrades with a warning. When
+    a requested target is missing, offer verified alternatives for human choice
+    instead of silently substituting or deadlocking.

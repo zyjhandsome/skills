@@ -23,9 +23,12 @@ curl -I --max-time 12 https://api.github.com/
 
 | Result | Action |
 |---|---|
-| Registry or GitHub OK | Stay online; fetch release/changelog/CVE |
-| Both fail | Ask the human; only then continue with `--offline` / local evidence |
-| Partial (403/429) | Keep `partial` gaps; do not invent notes |
+| Registry or GitHub OK (HTTP 2xx / 3xx) | Stay online; fetch release/changelog/CVE |
+| Both fail (timeout, DNS, or HTTP ≥400) | Ask the human; only then continue with `--offline` / local evidence |
+| Partial (403/429 on one host) | Keep `partial` gaps; do not invent notes |
+
+`scripts/preflight.py` probes the same URLs (`repo1.maven.org/maven2/` then
+`api.github.com/`) and treats only `200 ≤ status < 400` as network OK.
 
 Never infer offline solely because `.m2` or an internal mirror path exists.
 

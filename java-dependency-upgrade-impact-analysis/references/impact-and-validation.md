@@ -54,9 +54,9 @@ For MINOR/MAJOR and every downgrade, name a machine-checkable API-diff step inst
 For MAJOR coordinate/package migrations, record that established migration
 codemods/recipes exist for the pair (with a URL) as an **implementation-stage
 option with its residual risk** — this skill names it, plans validation around it,
-and never runs it. Prefer naming the concrete recipe when known (e.g. OpenRewrite
-`commons-lang.MigrateCommonsLangToCommonsLang3`, or the project's chosen
-equivalent). An unnamed migration path is an evidence gap, not a low risk.
+and never runs it. Name a concrete OpenRewrite/equivalent recipe only after its
+catalog/source URL is verified; otherwise record “recipe unverified” as an
+evidence gap. An unnamed migration path is not low risk.
 
 ## Validation matrix (for the packet)
 

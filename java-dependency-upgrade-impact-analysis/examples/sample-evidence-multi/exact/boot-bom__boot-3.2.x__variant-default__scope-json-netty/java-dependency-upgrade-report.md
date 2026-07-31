@@ -1,20 +1,19 @@
 # Java 依赖升级 — 决策包（boot-bom × 3.2.x）
 
-> 仅作校验器与写法参考的定稿样例；数值为示意。对应「Jackson 已 proceed、Netty 仍 blocked」后的
-> `analysis_status=complete` 状态（实现门保持 frozen）。
+> 仅作校验器与写法参考的样例；数值为示意，不代表任何真实仓库的解析结果。
 
 ## 状态
 
 | 字段 | 取值 |
 |---|---|
-| analysis_status | complete |
-| decision_status | decided |
+| analysis_status | partial |
+| decision_status | needs_choice |
 | batch_implementation_gate | frozen |
 | behavior_parity_required | yes |
 | network_mode | online |
 | report_path | openspec/changes/dep-upgrade-2026q3/evidence/java-dependency-upgrade/exact/boot-bom__boot-3.2.x__variant-default__scope-json-netty/ |
 
-**横幅：** 分析已定稿；Netty 行仍 blocked，整批实施门 frozen
+**横幅：** 待人工确认·下一动作=提问（jackson 行）；Netty 行待补证据
 
 ## 1. 基线与假设
 
@@ -23,10 +22,10 @@
 - 环境前置：`java 17` / `mvn 3.9` / `python 3.12` PASS
 - 主机 JDK（探测）vs 工程声明：均为 17
 - JDK / Spring Boot 线：JDK 17 / Boot `3.2.x`
-- 构建变体：default；批次范围：json-netty
 - 入口：exact-table（精确表）
 - 报告路径（解析结果）：见状态表 `report_path`
-- 假设与限制：本批仅覆盖 `boot-bom` 权威层；人工已确认 Jackson `proceed`；Netty 目标仍不可达
+- 构建变体：default；批次范围：json-netty
+- 假设与限制：本批仅覆盖 `boot-bom` 权威层；其它层另批处理
 
 ## 2. 依赖清单与解析路径
 
@@ -39,7 +38,7 @@
 
 | Owner | 当前版本 | 目标版本 | 阶梯档位 | 兼容性证据 | 变更后预期结果 |
 |---|---|---|---|---|---|
-| `jackson-bom`（属性 `jackson-bom.version`） | 2.21.2 | 2.21.4 | `2-property-override` | https://github.com/FasterXML/jackson-databind/releases | 家族整体对齐，无需单包钉扎 |
+| `jackson-bom`（属性 `jackson-bom.version`） | 2.21.2 | 2.21.4 | `2-property-override` | Jackson 2.21.4 release notes（URL 待附） | 家族整体对齐，无需单包钉扎 |
 | `netty.version` 属性 | 4.2.15.Final | — | — | 目标线缺失成员，暂无可行 Owner 动作 | 阻塞，不提出预期 |
 
 ## 4. 残差冲突与 Override
@@ -70,7 +69,7 @@
 
 | 组件 | 状态 | 问题 | 选项 |
 |---|---|---|---|
-| `com.fasterxml.jackson.core:jackson-databind` | decided | 已确认：`proceed:com.fasterxml.jackson.core:jackson-databind:2.21.4`（upgrade-owner / `jackson-bom.version`） | — |
+| `com.fasterxml.jackson.core:jackson-databind` | ready | 是否按 Owner 属性（`upgrade-owner`）把 Jackson 家族升至 2.21.4？ | `proceed:com.fasterxml.jackson.core:jackson-databind:2.21.4` / `defer` / `other` |
 | `io.netty:netty-*` | blocked | 显式降级至 4.1.136.Final，但成员返回 404，目标不可达 | 重述目标 / `other` |
 
 ## 8. 验证矩阵
@@ -93,5 +92,5 @@
 
 ## 10. 未决问题与证据缺口
 
-- `io.netty:netty-codec-base` 与 `netty-codec-compression` 目标版探测为 HTTP 404；`maven-metadata.xml` 显示两者仅发布于 4.2.x 线。已搜替代：同 GAV 在 4.1.136.Final 无上述成员；跨族相近制品不得静默替换 → `no-viable-path`；队列仍为 `blocked`。需用户**重述可达目标**（或经 `other` follow-up 放弃本行）后方可解冻实施门；**不得**对存在性 `blocked` 行直接答 `defer`。
-- Jackson 行已人工 `proceed`；本包 `analysis_status=complete`，但 `batch_implementation_gate=frozen` 直至 Netty 行不再为证据型 `blocked`。
+- `io.netty:netty-codec-base` 与 `netty-codec-compression` 目标版探测为 HTTP 404；已搜替代：同 GAV 在 4.1.136.Final 无上述成员；跨族相近制品不得静默替换 → `no-viable-path`；确认队列仍为 `blocked`（不得答人工 `defer`）。
+- Jackson 2.21.4 release notes 直链待补，当前仅有仓库地址。

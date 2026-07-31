@@ -11,7 +11,7 @@
 | batch_implementation_gate | frozen |
 | behavior_parity_required | yes |
 | network_mode | online |
-| report_path | openspec/changes/dep-upgrade-2026q3/evidence/java-dependency-upgrade/exact/boot-bom__boot-3.2.x/ |
+| report_path | openspec/changes/dep-upgrade-2026q3/evidence/java-dependency-upgrade/exact/boot-bom__boot-3.2.x__variant-default__scope-json-netty/ |
 
 **横幅：** 待人工确认·下一动作=提问（jackson 行）；Netty 行待补证据
 
@@ -22,16 +22,17 @@
 - 环境前置：`java 17` / `mvn 3.9` / `python 3.12` PASS
 - 主机 JDK（探测）vs 工程声明：均为 17
 - JDK / Spring Boot 线：JDK 17 / Boot `3.2.x`
+- 构建变体：default；批次范围：json-netty
 - 入口：exact-table（精确表）
 - 报告路径（解析结果）：见状态表 `report_path`
 - 假设与限制：本批仅覆盖 `boot-bom` 权威层；`app-library` 层（Lucene、commons-lang）与 `platform-plugin` 层（Eureka）另批处理
 
 ## 2. 依赖清单与解析路径
 
-| 组件 | 模块 | 当前解析版本 | 目标版本 | 目标存在性 | 建议处置 | 依赖路径 | 有效 Owner | 权威层 | 风险 |
-|---|---|---|---|---|---|---|---|---|---|
-| `com.fasterxml.jackson.core:jackson-databind` | `service-api` | 2.21.2 | 2.21.4 | yes | upgrade-owner | `spring-boot-starter-web` → `spring-boot-starter-json` → databind | `boot-bom`（`jackson-bom.version`） | boot-bom | PATCH / 低 |
-| `io.netty:netty-*`（8 个成员，含 `netty-codec-base`、`netty-codec-compression`） | `gateway` | 4.2.15.Final | 4.1.136.Final | no | defer | `spring-boot-starter-webflux` → `reactor-netty-http` → netty 家族 | `boot-bom`（`netty.version`） | boot-bom | 跨线 / 高 |
+| 组件 | 模块 | 当前解析版本 | 目标版本 | 方向 | 目标存在性 | 建议处置 | 推荐替代 | 替代存在性 | 依赖路径 | 有效 Owner | 权威层 | 风险 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `com.fasterxml.jackson.core:jackson-databind` | `service-api` | 2.21.2 | 2.21.4 | upgrade | yes | upgrade-owner | — | n/a | `spring-boot-starter-web` → `spring-boot-starter-json` → databind | `boot-bom`（`jackson-bom.version`） | boot-bom | PATCH / 低 |
+| `io.netty:netty-*`（8 个成员，含 `netty-codec-base`、`netty-codec-compression`） | `gateway` | 4.2.15.Final | 4.1.136.Final | downgrade | no | no-viable-path | — | n/a | `spring-boot-starter-webflux` → `reactor-netty-http` → netty 家族 | `boot-bom`（`netty.version`） | boot-bom | 跨线 / 高 |
 
 ## 3. 主 Owner 决策
 
@@ -51,9 +52,11 @@
 | 层级 | 文件/模块 | 事实或推断 | 所需变更（仅描述，不实施） | 风险 |
 |---|---|---|---|---|
 | 代码 | `service-api/**/JsonConfig.java` | 事实：自定义 `ObjectMapper` 与 `JsonFormat` 注解 | 无需改动，PATCH 区间无 API 变更 | 低 |
+| 配置 | `application.yml` | 事实：无 Jackson 定制属性 | 不适用 | 低 |
+| 数据 | 持久化 JSON 列 | 推断：PATCH 不改默认序列化形状 | 抽样比对 | 低 |
 | 接口 | 对外 JSON 契约 | 推断：日期/枚举/未知字段序列化行为不变 | 契约测试覆盖 | 低 |
 | 测试 | `service-api/src/test/**/JsonContractTest.java` | 事实：已覆盖序列化行为 | 复用现有用例 | 低 |
-| 部署 | `gateway` 容器镜像 | 事实：Netty 行阻塞，暂不评估 | — | — |
+| 部署 | `gateway` 容器镜像 | 事实：Netty 行阻塞，暂不评估 | 不适用 | — |
 
 ## 6. 风险与 SemVer 分类
 
@@ -67,7 +70,7 @@
 | 组件 | 状态 | 问题 | 选项 |
 |---|---|---|---|
 | `com.fasterxml.jackson.core:jackson-databind` | ready | 是否按 Owner 属性（`upgrade-owner`）把 Jackson 家族升至 2.21.4？ | `proceed:com.fasterxml.jackson.core:jackson-databind:2.21.4` / `defer` / `other` |
-| `io.netty:netty-*` | blocked | `netty-codec-base` / `netty-codec-compression` 在 4.1.136.Final 返回 404，目标不可达 | 待用户重述目标后再进队列 |
+| `io.netty:netty-*` | blocked | 显式降级至 4.1.136.Final，但成员返回 404，目标不可达 | 重述目标 / `other` |
 
 ## 8. 验证矩阵
 
@@ -89,5 +92,5 @@
 
 ## 10. 未决问题与证据缺口
 
-- `io.netty:netty-codec-base` 与 `netty-codec-compression` 目标版探测为 HTTP 404；清单「建议处置=defer」仅表示分析义「暂无可行路径」，确认队列仍为 `blocked`（不得答人工 `defer`）。
+- `io.netty:netty-codec-base` 与 `netty-codec-compression` 目标版探测为 HTTP 404；已搜替代：同 GAV 在 4.1.136.Final 无上述成员发布；跨族「相近制品」不得静默替换 → `no-viable-path`，确认队列 `blocked`（不得答人工 `defer`）。
 - Jackson 2.21.4 release notes 直链待补，当前仅有仓库地址。

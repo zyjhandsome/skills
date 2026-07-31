@@ -31,7 +31,7 @@ class SkillStructureTests(unittest.TestCase):
         )
         self.assertIn("OpenRewrite", patterns)
         self.assertIn("OpenRewrite", impact)
-        self.assertIn("MigrateCommonsLangToCommonsLang3", patterns)
+        self.assertIn("verified catalog/source URL", patterns)
         self.assertIn("never runs it", impact)
         self.assertIn("Name, never run, migration recipes", skill)
 
@@ -59,6 +59,7 @@ class SkillStructureTests(unittest.TestCase):
             "common-upgrade-patterns.md",
             "treatment-ladder.md",
             "environment-preflight.md",
+            "next-action-choice-menus.md",
         }
         for name in required:
             text = (ROOT / "references" / name).read_text(encoding="utf-8")
@@ -119,11 +120,18 @@ class SkillStructureTests(unittest.TestCase):
             encoding="utf-8"
         )
         packet = (ROOT / "templates" / "decision-packet.md").read_text(encoding="utf-8")
+        batching = (ROOT / "references" / "dual-entry-and-batching.md").read_text(
+            encoding="utf-8"
+        )
         self.assertIn("treatment-ladder.md", skill)
         self.assertIn("recommended_treatment", ladder)
-        self.assertIn("upgrade-introducer", ladder)
+        self.assertIn("no-viable-path", ladder)
         self.assertIn("GA-only", ladder)
         self.assertIn("建议处置", packet)
+        self.assertNotIn("| `defer` | 暂无可行处置", ladder)
+        self.assertIn("build_variant × bounded batch_scope", ladder)
+        self.assertIn("Same GAV, different GA version", batching)
+        self.assertIn("Different coordinates", batching)
 
     def test_openai_metadata(self) -> None:
         content = (ROOT / "agents" / "openai.yaml").read_text(encoding="utf-8")
@@ -143,8 +151,49 @@ class SkillStructureTests(unittest.TestCase):
         text = (ROOT / "references" / "common-upgrade-patterns.md").read_text(
             encoding="utf-8"
         )
-        for needle in ("downgrade", "Netty", "commons-lang", "jackson", "Family expansion"):
+        for needle in (
+            "downgrade",
+            "Netty",
+            "commons-lang",
+            "jackson",
+            "Family expansion",
+            "Pending baseline",
+            "next-action-choice-menus.md",
+        ):
             self.assertIn(needle, text)
+
+    def test_next_action_choice_menus(self) -> None:
+        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+        menus = (ROOT / "references" / "next-action-choice-menus.md").read_text(
+            encoding="utf-8"
+        )
+        gates = (ROOT / "references" / "human-confirmation-gates.md").read_text(
+            encoding="utf-8"
+        )
+        ladder = (ROOT / "references" / "treatment-ladder.md").read_text(
+            encoding="utf-8"
+        )
+        record = (ROOT / "templates" / "decision-record.md").read_text(encoding="utf-8")
+        self.assertIn("next-action-choice-menus.md", skill)
+        self.assertIn("Pending baseline ≠ downgrade block", skill)
+        self.assertIn("queue-`pending`", skill)
+        self.assertIn("path menu", skill.lower())
+        for needle in (
+            "pending-tooling",
+            "move-introducer",
+            "force-align",
+            "原生改造",
+            "可行",
+            "dependency:tree",
+            "队列 **`pending`**",
+        ):
+            self.assertIn(needle, menus)
+        self.assertIn("Feasible but pending baseline", gates)
+        self.assertIn("queue status **`pending`**", gates)
+        self.assertIn("Missing Maven/tree", gates)
+        self.assertIn("路径选项菜单", ladder)
+        self.assertIn("baseline_evidence_status", record)
+        self.assertIn("路径选项菜单", record)
 
     def test_target_existence_gate(self) -> None:
         skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
@@ -177,10 +226,22 @@ class SkillStructureTests(unittest.TestCase):
         contract = (ROOT / "references" / "report-contract.md").read_text(
             encoding="utf-8"
         )
-        for text in (skill, contract):
+        delivery = (
+            ROOT.parents[0]
+            / "docs"
+            / "java-dependency-upgrade-delivery-usage.md"
+        ).read_text(encoding="utf-8")
+        full_layout = (
+            "__variant-<build-variant>__scope-<batch-scope>"
+        )
+        for text in (skill, contract, delivery):
             self.assertIn("BATCH-INDEX.md", text)
             self.assertIn("<authority-layer>__<boot-line>", text)
+            self.assertIn(full_layout, text)
             self.assertIn("no-boot", text)
+        self.assertIn("decision-domain", skill)
+        self.assertIn("decision-domain", contract)
+        self.assertIn("boot_line=3.2.x", delivery)
 
     def test_validator_wired_in(self) -> None:
         skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
@@ -226,6 +287,8 @@ class SkillStructureTests(unittest.TestCase):
         record = (ROOT / "templates" / "decision-record.md").read_text(encoding="utf-8")
         for text in (schema, record):
             self.assertIn("目标存在性", text)
+            self.assertIn("请求目标", text)
+            self.assertIn("推荐替代目标", text)
             self.assertIn("Owner 阶梯", text)
             self.assertIn("scope", text)
             self.assertIn("建议处置", text)
@@ -234,7 +297,7 @@ class SkillStructureTests(unittest.TestCase):
         self.assertIn("classifier", schema)
         self.assertIn("upgrade-introducer", record)
         self.assertIn("确认队列状态", record)
-        self.assertIn("ready / blocked / decided / deferred", record)
+        self.assertIn("ready / pending / blocked / decided / deferred", record)
         self.assertNotIn("proceed-selected", record)
         self.assertIn("upgrade / downgrade / same / unknown", record)
         self.assertIn("状态枚举映射", schema)
@@ -269,6 +332,45 @@ class SkillStructureTests(unittest.TestCase):
         )
         self.assertNotIn("整行 `deferred`", complete)
         self.assertIn("对存在性 `blocked` 行直接答 `defer`", complete)
+        self.assertIn("no-viable-path", complete)
+
+    def test_decision_records_layout_documented(self) -> None:
+        contract = (ROOT / "references" / "report-contract.md").read_text(
+            encoding="utf-8"
+        )
+        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("decision-records/", contract)
+        self.assertIn("__", contract)
+        self.assertIn("decision-records/", skill)
+        self.assertTrue(
+            (ROOT / "fixtures" / "decision-records" / "io.netty__netty-ALL.md").is_file()
+        )
+        self.assertTrue(
+            (
+                ROOT
+                / "examples"
+                / "sample-evidence-multi"
+                / "BATCH-INDEX.md"
+            ).is_file()
+        )
+
+    def test_extra_fixtures_exist(self) -> None:
+        for name in (
+            "valid-report-remove.md",
+            "valid-report-replace.md",
+            "valid-report-open-target.md",
+            "valid-report-choose-alternative.md",
+            "valid-report-pending-baseline.md",
+        ):
+            self.assertTrue((ROOT / "fixtures" / name).is_file(), name)
+        self.assertTrue(
+            (
+                ROOT
+                / "fixtures"
+                / "decision-records"
+                / "com.netflix.eureka__eureka-client.md"
+            ).is_file()
+        )
     def test_candidate_schema_jvm_fields(self) -> None:
         batching = (ROOT / "references" / "dual-entry-and-batching.md").read_text(
             encoding="utf-8"
@@ -282,6 +384,10 @@ class SkillStructureTests(unittest.TestCase):
             "`usage_status`",
             "`introducer_gav`",
             "`target_channel`",
+            "`requested_gav`",
+            "`recommended_gav`",
+            "`recommended_target_exists`",
+            "`decision_domain`",
         ):
             self.assertIn(field, batching)
 
@@ -308,17 +414,44 @@ class SkillStructureTests(unittest.TestCase):
         self.assertIn("Environment preflight", skill)
         self.assertIn("environment-preflight.md", skill)
         self.assertIn("Run environment preflight", skill)
-        self.assertIn("wrappers do not count", skill.lower())
+        self.assertIn("wrapper-only is a graded pass", skill.lower())
         self.assertIn("do not write", skill.lower())
         for needle in (
             "java -version",
             "mvn -v",
             "gradle -v",
             "python",
-            "Wrappers",
+            "graded pass",
+            "wrapper",
         ):
             self.assertIn(needle, preflight)
         self.assertIn("do not write", preflight.lower())
+
+    def test_executable_preflight_and_lifecycle_safety(self) -> None:
+        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+        preflight = (ROOT / "references" / "environment-preflight.md").read_text(
+            encoding="utf-8"
+        )
+        gates = (ROOT / "references" / "human-confirmation-gates.md").read_text(
+            encoding="utf-8"
+        )
+        script = (ROOT / "scripts" / "preflight.py").read_text(encoding="utf-8")
+        self.assertIn("scripts/preflight.py", preflight)
+        self.assertIn("| `0` |", preflight)
+        self.assertIn("| `5` |", preflight)
+        self.assertIn("| `6` |", preflight)
+        self.assertIn("dependency:analyze-only", skill)
+        self.assertIn("Never run bare `dependency:analyze`", skill)
+        self.assertNotIn("`dependency:analyze`);", skill)
+        self.assertIn("hard_gates_passed", script)
+        self.assertIn("needs_build_tool_selection", script)
+        self.assertIn("return 6", script)
+        self.assertIn("api.github.com", script)
+        self.assertIn("current-interpreter", script)
+        self.assertIn("for name in (\"python\", \"python3\")", script)
+        self.assertIn("shutil.which(name)", script)
+        self.assertIn("TimeoutExpired", script)
+        self.assertIn("exit `6`", preflight)
         self.assertIn("environment preflight failed", gates)
         self.assertIn("no report write", gates)
         self.assertIn("Environment preflight passed", skill)
@@ -326,7 +459,7 @@ class SkillStructureTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("环境前置", contract)
-        self.assertIn("不要对 `fixtures/` 直接 `--evidence-dir`", contract)
+        self.assertIn("不要对 `fixtures/` 根直接 `--evidence-dir`", contract)
         # preflight must run before target existence / owner work
         self.assertLess(
             skill.index("Run environment preflight"),

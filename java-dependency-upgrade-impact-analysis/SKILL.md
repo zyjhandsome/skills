@@ -14,40 +14,38 @@ Produce an evidence-backed decision packet — analysis only. Do not change
 manifests, run version-mutating build commands, apply migration codemods, or
 edit application code.
 
-Callers may use a **short prompt** (skill name + project root + upgrade table
-or “整仓巡检”). All hard rules below still apply; do not wait for the user to
-restate owner-first, treatment-ladder, confirmation-queue, or batching rules.
-
 ## Minimal caller input
 
-Require only:
-
-1. This skill invoked (by name or description match)
-2. Project root (or cwd assumption stated)
-3. Either an exact from→to table / GAV list, or an inventory request
-
-Report directory is resolved by the skill (see Output). Callers need not
-restate the path in the prompt unless they must override it.
+A **short prompt** is enough: invoke the skill, give the project root (or accept
+the stated cwd), and provide either an exact from→to table/GAV list or “整仓巡检”.
+Resolve the report directory under Output unless the caller overrides it.
 
 ## Environment preflight
 
 Before any analysis (including manifest-only reads), run
 `references/environment-preflight.md`. Missing `java`, the **selected** build
-tool (system `mvn` or `gradle` on PATH — wrappers do not count), or Python →
-batch-wide `analysis_status=blocked`; list gaps in chat; **do not write**
-reports. Host JDK vs project declaration mismatch is recorded, not a block.
-Network probe runs in the same wave; dual registry+GitHub failure follows the
-existing offline confirm gate (not a tool-preflight failure).
+tool (system `mvn`/`gradle` preferred; wrapper-only is a graded pass — see
+preflight), or Python → batch-wide `analysis_status=blocked`; list gaps in
+chat; **do not write** reports. Host JDK vs project declaration mismatch is
+recorded, not a block. Network probe runs in the same wave; dual
+registry+GitHub failure follows the existing offline confirm gate (not a
+tool-preflight failure).
 
 ## Boundaries
 
 - **Allowed:** read `pom.xml` / Gradle files / version catalogs; run
-  non-mutating resolution (`dependency:tree`, `help:effective-pom`,
-  `dependencies`, `dependencyInsight`, `dependency:analyze`); search
+  verified non-mutating resolution (`dependency:tree`, `help:effective-pom`,
+  `dependencies`, `dependencyInsight`); search
   source/tests; fetch upstream release/changelog/CVE evidence; write reports
   under the resolved Output directory.
 - **Forbidden:** install/upgrade/remove dependencies; edit build or source
   files; run migration codemods; treat compile/startup success as release proof.
+- **Lifecycle safety:** before any Maven/Gradle goal that can enter a build
+  lifecycle, inspect bound goals for format/apply/flatten/codegen writes.
+  Never run bare `dependency:analyze`; use `dependency:analyze-only` only when
+  fresh compiled outputs already exist, otherwise use call-site/config evidence
+  and mark `usage_status=ambiguous`. Snapshot `git status` before/after every
+  build-tool probe and stop on a new tracked-file change.
 - **Default posture:** preserve observable behavior unless the user explicitly
   allows behavior change.
 - **Treatment then owner:** pick `recommended_treatment` from
@@ -60,7 +58,14 @@ existing offline confirm gate (not a tool-preflight failure).
 - **GA-only targets** for production recommendations; non-GA → `blocked` unless
   the user explicitly allows (`target_channel=non-ga`).
 - **Name, never run, migration recipes** for MAJOR coordinate/package moves.
-- **Downgrades** use the same workflow as upgrades when `from → to` is explicit.
+- **Explicit downgrades are allowed for analysis.** Caller `from > to` authorizes
+  analyzing the target (not implementing it): downgrade warning + High scrutiny +
+  normal per-unit confirmation. Missing motive is an evidence gap, not a
+  batch-wide blocker. **Pending baseline ≠ downgrade block:** reachable target
+  with unconfirmed `resolved_from` → queue-`pending` + evidence checklist, not
+  queue-`blocked` or `ready`+`proceed`. **Transitive moves need a path menu:**
+  prefer `upgrade-introducer` / `move-introducer`, then `force-align` with full
+  DR — never lead with a bare leaf pin (`next-action-choice-menus.md`).
 
 ## Dual entry
 
@@ -71,36 +76,50 @@ existing offline confirm gate (not a tool-preflight failure).
 
 Normalize every item to the candidate schema in
 `references/dual-entry-and-batching.md`. One analysis batch = **one authority
-layer × one Boot line**. Apply `references/common-upgrade-patterns.md` for
-family / CVE / unused / replace patterns.
+layer × one Boot line × one build variant × one bounded batch scope**, with an
+additional `decision_domain` only when a MAJOR/coordinate migration must be
+isolated inside that combination. Apply
+`references/common-upgrade-patterns.md` for family / CVE / unused / replace
+patterns.
 
 ## Workflow
 
 1. Run environment preflight; resolve project root, build tool, modules, JDK
-   and Spring Boot lines. State assumptions. Tool/Python failure → stop
-   (`blocked`).
+   and Spring Boot lines plus active Maven profiles / Gradle properties. State
+   assumptions. Exit `5` → stop (`blocked`); exit `6` → ask build tool (not blocked).
 2. Collect **declared** and **effective** versions. Prefer tree/insight over
-   pom-only parsers. For directs, record `usage_status` via analyze/call sites.
+   pom-only parsers. Use bounded leaf-module probes with explicit timeouts; do
+   not run an unbounded whole-reactor tree before batch selection. For directs,
+   record `usage_status` from safe analyze-only evidence plus call sites/config;
+   framework/reflection-only dependencies default to `ambiguous`, not `unused`.
 3. **Target existence precheck — before owner and impact work.** Probe
    reachability (`references/reachability-and-upstream.md`). Verify every family
    member at exact `to` (`target_artifact_exists`); reject non-GA unless allowed.
-   Missing member → `blocked`. Treatments without a target use `n/a`.
+   If a requested target/member is missing, preserve it as `requested_*`, then
+   search for 1–3 verified GA alternatives. Same-GAV version →
+   `choose-alternative` + `proceed:`; coordinate change → `replace-*` +
+   `replace:`; none → `no-viable-path` + `blocked`. Treatments without a target
+   use `n/a`.
 4. Classify effective owner; for transitives record `introducer_gav` and whether
-   an introducer upgrade already lifts the hole. Assign `recommended_treatment`.
+   an introducer move converges to the target. Assign `recommended_treatment`.
+   Pending tooling/tree → `next-action-choice-menus.md` §A before any `proceed`.
 5. If Maven Tools MCP is available, use it for version/CVE/POM facts; else
    registry/GitHub/`gh`/WebFetch. Never invent versions or silently substitute
-   artifacts (replacement is a confirmed `replace-*` treatment).
+   artifacts. Every alternative remains a human choice; same-GAV alternatives
+   use `proceed:g:a:v`, coordinate changes use `replace:g:a:v`.
 6. Map SemVer risk and gather official changelog/migration notes for the exact
    interval (`references/common-gav-repos.md`). Open/CVE without `to`: recommend
    a GA fix range with URLs, then ask — do not auto-pick.
 7. Map code/config/test impact (`references/impact-and-validation.md`). Mark
-   fact vs inference.
-8. Score risk; draft the packet (`templates/decision-packet.md`) and Decision
-   Records (`templates/decision-record.md`).
+   fact vs inference. Transitive moves: explore path menu §B with verified
+   evidence (introducer / force-align / replace starter-or-stack / native rewrite).
+8. Score risk; draft packet + Decision Records (baseline checklist + path-option
+   menu fields when §A/§B apply).
 9. Work the confirmation queue (`references/human-confirmation-gates.md`): list
-   every `ready` **decision unit** in one wave; each unit needs its own explicit
-   answer (`proceed:g:a:v` / `remove` / `exclude` / `replace:…` / `defer` /
-   `other`). No blanket proceed. Never ask `blocked`. Record, regenerate, Agent
+   every `ready`/`pending` unit in one wave; each needs its own explicit answer.
+   `pending` = tooling catch-up only (`defer`/`other`); `ready` uses
+   `proceed:…` / `remove` / `exclude` / `replace:…` / `defer` / `other`. No
+   blanket proceed. Never ask proceed on `blocked`. Record, regenerate, Agent
    review → `analysis_status=complete`.
 10. Stop. Do not open implementation plans from this skill.
 
@@ -121,7 +140,8 @@ preflight passed, **read-only analysis is allowed**; **do not write** reports.
 Preflight failure → stop (no analysis, no write).
 
 Write at least `java-dependency-upgrade-report.md`. Multi-batch layout:
-`<entry-kind>/<authority-layer>__<boot-line>/…` plus root `BATCH-INDEX.md`
+`<entry-kind>/<authority-layer>__<boot-line>__variant-<build-variant>__scope-<batch-scope>[__domain-<decision-domain>]/…`
+plus root `BATCH-INDEX.md`
 (`entry-kind` = `exact` / `open-target`; `boot-line` = `boot-<line>` / `no-boot`).
 Prose defaults to Simplified Chinese; keep GAV/versions/paths/commands/enums/URLs
 verbatim. Required sections: `references/report-contract.md`. State the actual
@@ -135,9 +155,10 @@ python scripts/validate_report.py --evidence-dir <evidence-dir> [--json]
 ```
 
 Exit `0` pass / `3` errors / `4` path missing. A pass means well-formed, never that
-evidence is sufficient. Reference fixtures: `fixtures/valid-report.md` (partial /
-needs_choice) and `fixtures/valid-report-complete.md` (complete with residual
-blocked).
+evidence is sufficient. Fixtures: `fixtures/valid-report*.md` (partial/complete/
+remove/replace/open-target/choose-alternative/pending-baseline); multi-batch under
+`examples/sample-evidence-multi/`. Decision records live in `decision-records/`
+beside each report.
 
 ## Status axes
 
@@ -146,44 +167,28 @@ blocked).
 | `analysis_status` | `partial` / `blocked` / `complete` — packet-level; `blocked` = batch-wide baseline/offline/**environment-preflight** gate (see confirmation gates) |
 | `decision_status` | `needs_choice` / `not_needed` / `decided` |
 | `batch_implementation_gate` | `frozen` / `ready` (informational; this skill never implements) |
+| also required | `behavior_parity_required`, `network_mode`, `report_path` — see `references/report-contract.md` |
 
-Never set `analysis_status=complete` while `decision_status=needs_choice` or while
-any confirmation-queue row is still `ready`. Never set `analysis_status=blocked`
-while any queue row is `ready`. Residual evidence-`blocked` rows may remain after
-complete; they keep the implementation gate `frozen`. See
-`references/human-confirmation-gates.md` status transition table.
-
-Uncleared `ready` queue ⇒ **ask now**, not wait for “继续/放行”.
+Never set `analysis_status=complete` while `decision_status=needs_choice` or any
+queue `ready`/`pending`. Never set `analysis_status=blocked` while any queue
+`ready`/`pending`. Residual evidence-`blocked` may remain after complete (gate
+stays `frozen`). Uncleared `ready`/`pending` ⇒ **ask now**, not “继续/放行”.
 
 ## Completion gate
 
-- Environment preflight passed (JDK + selected `mvn`|`gradle` + Python)
-- Baseline effective versions recorded; owner + treatment classified
-- `target_artifact_exists` verified (or `n/a` for no-target treatments); non-GA
-  blocked unless explicitly allowed
-- Treatment ladder + owner-first attempted or ruled out with evidence
-- Upstream interval evidence cited with URLs (or explicit offline gaps)
-- Impact items separate fact/inference; empty test scope stated when applicable
-- Confirmation queue: zero `ready` (answered → `decided` / `deferred`; evidence
-  gaps may remain `blocked`); Decision Records complete
-- Report regenerated; `scripts/validate_report.py` exits `0`; Agent review sets
-  `analysis_status=complete`
+- Environment preflight passed (JDK + selected `mvn`|`gradle`|wrapper + Python)
+- Baselines/owner/treatment recorded; targets + alternatives verified; ladder +
+  owner-first done or ruled out; upstream URLs or offline gaps; fact/inference
+  split; queue zero `ready`/`pending`; `decision-records/` complete; validator
+  exit `0`; Agent review → `analysis_status=complete`
 
 ## References
 
-- `references/treatment-ladder.md` — remove/upgrade/exclude/force/replace
-- `references/environment-preflight.md` — JDK / mvn|gradle / Python PATH gates
-- `references/owner-and-resolution.md` — effective graph, ownership, override
-- `references/dual-entry-and-batching.md` — inventory, exact table, batching
-- `references/reachability-and-upstream.md` — network probe, changelog, MCP
-- `references/impact-and-validation.md` — six-layer impact, validation matrix
-- `references/human-confirmation-gates.md` — per-unit proceed/defer protocol
-- `references/report-contract.md` — Markdown sections and status fields
-- `references/decision-record-schema.md` — Decision Record fields
-- `references/common-gav-repos.md` — common GAV → GitHub mapping
-- `references/common-upgrade-patterns.md` — PATCH/CVE/unused/replace heuristics
-- `templates/decision-packet.md` — report skeleton
-- `templates/decision-record.md` — per-component record
-- `scripts/validate_report.py` — structural validator
-- `fixtures/valid-report.md` — partial / needs_choice reference packet
-- `fixtures/valid-report-complete.md` — complete with residual blocked
+`references/next-action-choice-menus.md`, `references/environment-preflight.md`,
+`references/treatment-ladder.md`, `references/owner-and-resolution.md`,
+`references/dual-entry-and-batching.md`, `references/reachability-and-upstream.md`,
+`references/impact-and-validation.md`, `references/human-confirmation-gates.md`,
+`references/report-contract.md`, `references/decision-record-schema.md`,
+`references/common-gav-repos.md`, `references/common-upgrade-patterns.md`,
+`templates/decision-packet.md`, `templates/decision-record.md`, `scripts/`,
+`fixtures/`, `examples/sample-evidence-multi/`.

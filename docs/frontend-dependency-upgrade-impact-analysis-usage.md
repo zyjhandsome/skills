@@ -6,6 +6,24 @@
 
 ---
 
+## 0. 小白一张图（工作流）
+
+> 先看图再读细节。蓝 = Agent 自动做；黄 = 要你拍板；绿 = 本技能终点；红 = 实施另授权（技能外）。
+
+![前端依赖升级影响分析工作流](./assets/frontend-dependency-upgrade-workflow.svg)
+
+**读图顺序（5 步）：**
+
+1. **定范围** — 锁定前端 workspace + lock 基线（多前端时先问你）
+2. **收集证据** — 精确升级查 `from→to` 区间；开放目标查删/换/自写/父包
+3. **出草稿** — 报告 + 确认队列；草稿 ≠ 做完
+4. **当场问你** — 所有 `ready` 包同波确认 → 写决策文件 → 重跑（有 follow-up 再问下一波）
+5. **定稿** — `analysis_status=complete` 才是终点；`frozen` 停决策包，`ready` 且另授权才可实施
+
+源文件：[`docs/assets/frontend-dependency-upgrade-workflow.svg`](./assets/frontend-dependency-upgrade-workflow.svg)
+
+---
+
 ## 1. 一句话心智模型
 
 这个 skill **只做证据驱动的决策包（Stage A）**，不做实施计划与实施（Stage B/C）。

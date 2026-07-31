@@ -23,18 +23,24 @@
 - 环境前置：`java` / 选用 `mvn`|`gradle` / `python`（PASS 摘要或 blocked 缺口）
 - 主机 JDK（探测）vs 工程声明：
 - JDK / Spring Boot 线：
+- 构建变体（Maven profiles / Gradle properties）：
+- 批次范围（有界模块/依赖族）：
 - 入口：inventory（整仓巡检） / exact-table（精确表）
 - 报告路径（解析结果）：
 - 假设与限制：
 
 ## 2. 依赖清单与解析路径
 
-| 组件 | 模块 | 当前解析版本 | 目标版本 | 目标存在性 | 建议处置 | 依赖路径 | 有效 Owner | 权威层 | 风险 |
-|---|---|---|---|---|---|---|---|---|---|
+| 组件 | 模块 | 当前解析版本 | 目标版本 | 方向 | 目标存在性 | 建议处置 | 推荐替代 | 替代存在性 | 依赖路径 | 有效 Owner | 权威层 | 风险 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
 
-目标存在性取值：`yes` / `no` / `unknown` / `n/a`；`no` / `unknown` 的行在确认队列中必须为 `blocked`。  
-`n/a` 仅用于无目标制品的处置（`remove` / `exclude` 等）。  
-建议处置取值见 `treatment-ladder.md`。含 classifier 的制品须按 classifier 单独探测存在性。scope / optional / exclusions / introducer 记入各组件决策记录。
+目标存在性取值：`yes` / `no` / `unknown` / `n/a`；`no` / `unknown`
+且无已验证替代时为 `blocked`，有替代则用 `choose-alternative` / `replace-*`
+进入 `ready` 供用户选择。
+`n/a` 仅用于无目标制品的处置（`remove` / `exclude` / `no-viable-path` 等）。
+建议处置取值见 `treatment-ladder.md`（分析无路写 `no-viable-path`，不要写 `defer`）。含 classifier 的制品须按 classifier 单独探测存在性。scope / optional / exclusions / introducer 记入各组件决策记录。
+`choose-alternative` / `replace-*` 行必须保留原请求目标，并填写独立探测为 `yes` 的 `g:a:v` 推荐替代；否则写 `推荐替代=—`、`替代存在性=n/a`。
+显式降级写 `方向=downgrade`、风险=高，并在确认问题中标注“降级”；不增加第二个授权闸。
 
 ## 3. 主 Owner 决策
 
@@ -69,8 +75,9 @@
 | 组件 | 状态 | 问题 | 选项 |
 |---|---|---|---|
 
-状态：`ready` / `blocked` / `decided` / `deferred`。  
-人工答复后：`proceed`/`remove`/`exclude`/`replace` → `decided`；`defer` → `deferred`。`analysis_status=complete` 时不得残留 `ready`。  
+状态：`ready` / `pending` / `blocked` / `decided` / `deferred`。  
+`pending`=可行·待补证（选项仅 `defer`/`other`；问题须含待补证标记）；基线证实后升为 `ready`。  
+人工答复后：`proceed`/`remove`/`exclude`/`replace` → `decided`；`defer` → `deferred`。`analysis_status=complete` 时不得残留 `ready`/`pending`。  
 选项按**决策单元**逐条显式答复（禁止「全部 proceed」）：`proceed:g:a:v` / `remove` / `exclude` / `replace:g:a[:v]` / `defer` / `other`。  
 无目标版本时每个需定版本或替换的单元必须由人选定。
 
@@ -88,4 +95,6 @@
 
 ## 10. 未决问题与证据缺口
 
+- （pending baseline：有序补证清单 — 恢复构建工具 / 分期 `dependency:tree` / 证实 `resolved_from`）
+- （传递升降级：已探路径菜单摘要 — introducer / force-align / 换 starter 或换栈 / 原生改造；等人选）
 -

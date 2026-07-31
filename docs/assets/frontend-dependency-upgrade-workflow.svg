@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 1180" role="img" aria-labelledby="title desc">
+  <title id="title">前端依赖升级影响分析 - 小白流程图</title>
+  <desc id="desc">从触发分析到人类确认、报告定稿的端到端工作流；本技能只做到决策包，不自动实施升级。</desc>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#475569"/>
+    </marker>
+    <marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#b45309"/>
+    </marker>
+    <filter id="shadow" x="-4%" y="-4%" width="108%" height="112%">
+      <feDropShadow dx="0" dy="1.5" stdDeviation="2" flood-color="#0f172a" flood-opacity="0.08"/>
+    </filter>
+    <style>
+      .bg { fill: #f8fafc; }
+      .title { font: 700 22px/1.3 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 13px/1.4 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; fill: #64748b; }
+      .phase { font: 700 12px/1.2 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; fill: #334155; letter-spacing: 0.04em; }
+      .box-title { font: 700 15px/1.3 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; fill: #0f172a; }
+      .box-sub { font: 400 12px/1.35 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; fill: #475569; }
+      .label { font: 600 11px/1.2 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; fill: #64748b; }
+      .label-warn { font: 600 11px/1.2 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; fill: #b45309; }
+      .label-ok { font: 600 11px/1.2 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; fill: #047857; }
+      .label-stop { font: 600 11px/1.2 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; fill: #b91c1c; }
+      .legend { font: 400 12px/1.35 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; fill: #334155; }
+      .foot { font: 500 12px/1.35 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; fill: #64748b; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="920" height="1180" rx="16"/>
+
+  <text class="title" x="40" y="48">前端依赖升级影响分析 - 工作流一张图</text>
+  <text class="subtitle" x="40" y="72">只做「查清楚 + 帮你拍板」，不自动改代码 / 装包 / 跑构建</text>
+
+  <g transform="translate(40, 92)">
+    <rect x="0" y="0" width="840" height="52" rx="10" fill="#fff" stroke="#e2e8f0"/>
+    <rect x="16" y="16" width="18" height="18" rx="4" fill="#dbeafe" stroke="#2563eb"/>
+    <text class="legend" x="42" y="30">Agent 自动做</text>
+    <rect x="150" y="16" width="18" height="18" rx="4" fill="#fef3c7" stroke="#d97706"/>
+    <text class="legend" x="176" y="30">需要你做选择</text>
+    <rect x="310" y="16" width="18" height="18" rx="4" fill="#d1fae5" stroke="#059669"/>
+    <text class="legend" x="336" y="30">本技能终点（报告定稿）</text>
+    <rect x="520" y="16" width="18" height="18" rx="4" fill="#fee2e2" stroke="#dc2626"/>
+    <text class="legend" x="546" y="30">本技能之外（实施另授权）</text>
+  </g>
+
+  <text class="phase" x="40" y="180">1 定范围</text>
+  <text class="phase" x="40" y="360">2 收集证据</text>
+  <text class="phase" x="40" y="560">3 出报告草稿</text>
+  <text class="phase" x="40" y="720">4 人工确认（最关键）</text>
+  <text class="phase" x="40" y="900">5 定稿 / 是否可实施</text>
+
+  <g filter="url(#shadow)">
+    <rect x="160" y="158" width="280" height="64" rx="12" fill="#dbeafe" stroke="#2563eb"/>
+    <text class="box-title" x="300" y="184" text-anchor="middle">你提出需求</text>
+    <text class="box-sub" x="300" y="206" text-anchor="middle">升级 / 治理 / 删除 / 合规</text>
+  </g>
+
+  <line x1="300" y1="222" x2="300" y2="248" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="160" y="248" width="280" height="72" rx="12" fill="#dbeafe" stroke="#2563eb"/>
+    <text class="box-title" x="300" y="276" text-anchor="middle">锁定前端项目 + 版本基线</text>
+    <text class="box-sub" x="300" y="298" text-anchor="middle">找对 workspace / lock / 当前版本</text>
+  </g>
+
+  <path d="M440 284 H560" stroke="#b45309" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrow-amber)"/>
+  <g filter="url(#shadow)">
+    <rect x="560" y="256" width="200" height="56" rx="10" fill="#fef3c7" stroke="#d97706"/>
+    <text class="box-sub" x="660" y="280" text-anchor="middle">多个前端时先问你</text>
+    <text class="box-sub" x="660" y="298" text-anchor="middle">绝不默默分析全仓</text>
+  </g>
+
+  <line x1="300" y1="320" x2="300" y2="348" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="120" y="348" width="360" height="64" rx="12" fill="#dbeafe" stroke="#2563eb"/>
+    <text class="box-title" x="300" y="374" text-anchor="middle">检查本机 Node 是否匹配项目</text>
+    <text class="box-sub" x="300" y="396" text-anchor="middle">只读探测，不切换 / 不安装 Node</text>
+  </g>
+
+  <line x1="300" y1="412" x2="300" y2="438" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <text class="label" x="300" y="430" text-anchor="middle">分两条路收集证据</text>
+
+  <g filter="url(#shadow)">
+    <rect x="80" y="438" width="200" height="80" rx="12" fill="#dbeafe" stroke="#2563eb"/>
+    <text class="box-title" x="180" y="468" text-anchor="middle">精确升级</text>
+    <text class="box-sub" x="180" y="490" text-anchor="middle">已有 from -&gt; to</text>
+    <text class="box-sub" x="180" y="508" text-anchor="middle">查区间变更 + 影响</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="320" y="438" width="200" height="80" rx="12" fill="#dbeafe" stroke="#2563eb"/>
+    <text class="box-title" x="420" y="468" text-anchor="middle">开放目标</text>
+    <text class="box-sub" x="420" y="490" text-anchor="middle">只有包名、没有目标版</text>
+    <text class="box-sub" x="420" y="508" text-anchor="middle">删 / 换 / 自写 / 管父包</text>
+  </g>
+
+  <path d="M180 518 V548 H300" fill="none" stroke="#475569" stroke-width="2"/>
+  <path d="M420 518 V548 H300" fill="none" stroke="#475569" stroke-width="2"/>
+  <line x1="300" y1="548" x2="300" y2="568" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="120" y="568" width="360" height="88" rx="12" fill="#dbeafe" stroke="#2563eb"/>
+    <text class="box-title" x="300" y="598" text-anchor="middle">生成报告草稿</text>
+    <text class="box-sub" x="300" y="620" text-anchor="middle">影响点 · 风险分 · 验证/回滚建议</text>
+    <text class="box-sub" x="300" y="640" text-anchor="middle">+ 一张「待你确认」的问题清单</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="520" y="576" width="340" height="72" rx="10" fill="#fff7ed" stroke="#ea580c"/>
+    <text class="label-warn" x="690" y="604" text-anchor="middle">草稿不等于做完</text>
+    <text class="box-sub" x="690" y="626" text-anchor="middle">exit 7 / needs_choice 时不能收工</text>
+    <text class="box-sub" x="690" y="644" text-anchor="middle">下一动作必须是：当场问你</text>
+  </g>
+
+  <line x1="300" y1="656" x2="300" y2="688" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="100" y="688" width="400" height="100" rx="12" fill="#fef3c7" stroke="#d97706"/>
+    <text class="box-title" x="300" y="718" text-anchor="middle">你做选择（同波问完所有 ready 包）</text>
+    <text class="box-sub" x="300" y="742" text-anchor="middle">精确升级：推进 proceed / 暂缓 defer</text>
+    <text class="box-sub" x="300" y="762" text-anchor="middle">开放目标：删除 / 替换@版本 / 原生改造 / 父包</text>
+  </g>
+
+  <line x1="300" y1="788" x2="300" y2="818" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="140" y="818" width="320" height="56" rx="12" fill="#dbeafe" stroke="#2563eb"/>
+    <text class="box-title" x="300" y="842" text-anchor="middle">写入决策文件 -&gt; 重跑报告</text>
+    <text class="box-sub" x="300" y="862" text-anchor="middle">human-decisions.json + 再生成</text>
+  </g>
+
+  <path d="M460 846 H500 V638 H480" fill="none" stroke="#b45309" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arrow-amber)"/>
+  <text class="label-warn" x="510" y="740">还有 follow-up</text>
+  <text class="label-warn" x="510" y="756">再问下一波</text>
+
+  <line x1="300" y1="874" x2="300" y2="908" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="120" y="908" width="360" height="72" rx="12" fill="#d1fae5" stroke="#059669"/>
+    <text class="box-title" x="300" y="938" text-anchor="middle">分析定稿</text>
+    <text class="box-sub" x="300" y="960" text-anchor="middle">analysis_status = complete（本技能终点）</text>
+  </g>
+
+  <line x1="300" y1="980" x2="300" y2="1008" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="150" y="1008" width="300" height="48" rx="24" fill="#fff" stroke="#334155" stroke-width="2"/>
+    <text class="box-title" x="300" y="1038" text-anchor="middle">整批实施闸门？</text>
+  </g>
+
+  <path d="M150 1032 H80 V1088" fill="none" stroke="#b91c1c" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M450 1032 H560 V1088" fill="none" stroke="#047857" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="20" y="1088" width="200" height="56" rx="10" fill="#fee2e2" stroke="#dc2626"/>
+    <text class="label-stop" x="120" y="1112" text-anchor="middle">frozen -&gt; 停在决策包</text>
+    <text class="box-sub" x="120" y="1132" text-anchor="middle">不得开计划 / 实施</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="460" y="1088" width="240" height="56" rx="10" fill="#fee2e2" stroke="#dc2626"/>
+    <text class="label-ok" x="580" y="1112" text-anchor="middle">ready + 另给授权</text>
+    <text class="box-sub" x="580" y="1132" text-anchor="middle">才可 Stage B/C 实施（技能外）</text>
+  </g>
+
+  <text class="foot" x="460" y="1164" text-anchor="middle">心智一句话：查清 -&gt; 当场问你 -&gt; 写决策 -&gt; 定稿报告。升级本身永远要另开绿灯。</text>
+</svg>

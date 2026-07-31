@@ -18,6 +18,12 @@ Re-run the same graph command:
 
 A pom-only parser that skips managed dependencies (no explicit `<version>`) **under-reports** Boot-managed jars. Always pair inventory with resolution.
 
+If a bounded tree/insight probe fails, a direct declaration plus management
+property may establish `declared_from`, but **never** `resolved_from`. Keep the
+effective baseline `unknown` and record the resolver failure. Do not clear a
+claimed-from mismatch gate or offer `proceed` until a successful selected-version
+probe (or equivalent lockfile/resolver evidence) confirms the effective version.
+
 `maven-dependency-plugin` 3.x documents `-Dverbose` as **not fully accurate** (it reconstructs the graph with the legacy resolver and prints a warning). Treat verbose output as a lead for conflict paths, then confirm the selected version with non-verbose `dependency:tree -Dincludes=…`, `dependency:list`, or `help:effective-pom`. Never present a verbose-only line as the selected version.
 
 ## Ownership classes
@@ -67,12 +73,24 @@ weak *authority* move when you still need the artifact on the classpath.”
 
 ### Unused direct dependencies
 
-Before recommending `upgrade-self` on a **direct** declaration, run or cite
-`mvn dependency:analyze` (or Gradle equivalent / call-site search). Record
-`usage_status` (`used` / `unused` / `ambiguous`). Prefer `recommended_treatment=remove`
-when unused; never auto-remove when ambiguous. If the compliance table still
-supplies a `to`, keep recommending `remove` and ask `remove` / `defer` / `other`
-(see `treatment-ladder.md`).
+Before recommending `upgrade-self` on a **direct** declaration, gather safe
+usage evidence. Do **not** run bare `mvn dependency:analyze`: it forks
+`test-compile` and can execute lifecycle-bound writers such as `spotless:apply`,
+`flatten`, or code generation. Use `mvn dependency:analyze-only` only when
+compiled outputs already exist and are demonstrably fresh; otherwise use
+call-site/configuration/SPI evidence and record `usage_status=ambiguous`.
+
+`dependency:analyze-only` is bytecode-reference based and commonly reports
+Spring starters, JDBC drivers, logging bindings, serializers, SPI providers, and
+reflection/configuration-loaded libraries as unused. Never accept that result
+alone as `unused`. Prefer `recommended_treatment=remove` only when analyze-only,
+call-site/config/SPI inspection, and runtime-duty review agree. If the compliance
+table still supplies a `to`, keep recommending `remove` and ask
+`remove` / `defer` / `other`.
+
+Before and after any build-tool probe, capture `git status --short`. A new
+tracked-file change is a hard safety stop; report the command and affected files
+without reverting unrelated user work.
 
 For Gradle, also read version catalogs (`gradle/libs.versions.toml` / catalog
 aliases) as declaration evidence; still confirm the **selected** version with
@@ -82,14 +100,17 @@ aliases) as declaration evidence; still confirm the **selected** version with
 
 ### Maven
 
-Prefer system `mvn` (environment-preflight gate). `./mvnw` may be used **after**
-system `mvn -v` already passed; wrapper-only environments stay `blocked`.
+Prefer system `mvn` (environment-preflight gate). `./mvnw` may be used after a
+system **or** wrapper graded pass; if only the wrapper exists, record
+`build_tool_source=wrapper` and use it for tree/insight. Neither system nor
+wrapper → `blocked`.
 
 ```shell
 mvn dependency:tree -Dverbose
 mvn dependency:tree -Dincludes=groupId:artifactId
 mvn help:effective-pom -Dverbose
-mvn dependency:analyze
+# Only with fresh compiled outputs; does not fork test-compile:
+mvn dependency:analyze-only
 ```
 
 When Enforcer dependency-convergence is configured:
@@ -102,9 +123,10 @@ Do not claim convergence from a tree alone.
 
 ### Gradle
 
-Prefer `./gradlew` when present **after** system `gradle -v` already passed
-environment preflight (see `environment-preflight.md`). If only the wrapper
-exists, preflight must stay `blocked`.
+Prefer `./gradlew` when present after a system **or** wrapper graded pass
+(see `environment-preflight.md`). If only the wrapper exists, record
+`build_tool_source=wrapper` and continue. If neither system `gradle` nor
+wrapper works, preflight must stay `blocked`.
 
 ```shell
 ./gradlew dependencies

@@ -7,9 +7,13 @@
 本文件说明如何把 **分析-only** 的 Java 升级 Skill 挂到 `delivery-*` 脊柱上。  
 **Skill 本身不写 OpenSpec/delivery 状态机**；状态只在 OpenSpec change 中。
 
+小白先看动态全流程导览（与 delivery 解耦、可单独使用）：  
+[`java-dependency-upgrade-impact-analysis-usage.md`](./java-dependency-upgrade-impact-analysis-usage.md) ·  
+[`assets/java-dependency-upgrade-workflow.svg`](./assets/java-dependency-upgrade-workflow.svg)
+
 ---
 
-## 0. 一张图
+## 0. Delivery 挂载一张图
 
 ```text
 delivery-explore          整仓巡检 / 拆批 / 选定方向
@@ -32,12 +36,13 @@ delivery-execute-verify   仅在实现闸门 + 显式 go 后改 pom/代码并验
 | 轴 | 问题 | 典型取值 |
 |---|---|---|
 | `analysis_status` | 证据是否够完整？ | `partial` / `blocked`（批级环境前置/基线/离线闸） / `complete` |
-| `decision_status` | 人是否已确认？ | `needs_choice` / `decided` … |
+| `decision_status` | 人是否已确认？ | `needs_choice` / `not_needed` / `decided` |
 | `batch_implementation_gate` | 调用方可否开实施？ | `frozen` / `ready` |
-| 实施授权 | 是否允许改构建/代码？ | 默认否；报告不能授权 |
+| 实施授权（delivery-only） | 是否允许改构建/代码？ | 默认否；报告不能授权 |
 
-Skill 终点 = 确认队列清空 + 决策落盘 + `analysis_status=complete`。  
-**不等于** delivery 实现闸门，更不等于可以改仓库。
+Skill 终点 = 确认队列清空（零 `ready`）+ 决策落盘 + `analysis_status=complete`。  
+**不等于** delivery 实现闸门，更不等于可以改仓库。  
+心智模型 = **三状态轴**（上表前三行）+ **实施授权**（仅 delivery；本 skill 不写）。
 
 ---
 
@@ -48,8 +53,8 @@ Skill 终点 = 确认队列清空 + 决策落盘 + `analysis_status=complete`。
 | 门闩 | 通过 | 失败 |
 |---|---|---|
 | JDK | PATH 上 `java -version` | batch-wide `blocked`；对话列出缺口；**不写**报告 |
-| 构建工具 | 本次选用 Maven → 系统 `mvn -v`；Gradle → 系统 `gradle -v`（`mvnw`/`gradlew` 不算） | 同上 |
-| 双构建仓 | 只验选用的那套；无法判定则先问人 | — |
+| 构建工具 | 优先系统 `mvn -v` / `gradle -v`；若无则项目 `mvnw`/`gradlew -v` 为 **graded pass**（记 `build_tool_source=wrapper`） | 系统与 wrapper 皆无 → 同上硬 blocked |
+| 双构建仓 | 只验选用的那套；`preflight.py` exit `6` = 先问人再 `--build-tool`（**不是**批级 blocked） | — |
 | Python | `python` 或 `python3 --version`（供 `validate_report.py`） | 同上硬 blocked |
 | 网络 | 同波探测；双挂 → 问人后可 offline（见 `reachability-and-upstream.md`） | **不算**工具前置失败 |
 
@@ -66,7 +71,8 @@ Skill 终点 = 确认队列清空 + 决策落盘 + `analysis_status=complete`。
 | 主报告 | `…/java-dependency-upgrade-report.md` |
 | 模板 | skill 内 `templates/*.md`（中文表头） |
 | 结构校验 | `python scripts/validate_report.py <report.md>` 或 `--evidence-dir <目录>` |
-| 样例决策包 | skill 内 `fixtures/valid-report.md`（partial）与 `fixtures/valid-report-complete.md`（定稿）；用单文件路径校验，勿对 `fixtures/` 直接 `--evidence-dir` |
+| 决策记录 | 报告同目录 `decision-records/<group>__<artifact>.md` |
+| 样例决策包 | skill 内 `fixtures/valid-report*.md` 与 `examples/sample-evidence-multi/`；用单文件路径或该多批目录校验，勿对 `fixtures/` 根直接 `--evidence-dir` |
 
 报告目录解析（与 skill `Output` / `report-contract.md` 一致）：
 
@@ -85,7 +91,7 @@ Skill 终点 = 确认队列清空 + 决策落盘 + `analysis_status=complete`。
 
 | 入口 | 谁发起 | 归一化 |
 |---|---|---|
-| A 整仓巡检 | `delivery-explore` | 候选清单 → 人选一个「权威层 × Boot 线」方向 → frame |
+| A 整仓巡检 | `delivery-explore` | 候选清单 → 人选一个「权威层 × Boot 线 × 构建变体 × 有界范围」方向 → frame |
 | B 合规精确表 | 用户/合规直接给表 | 正规化为同一候选项 → 直接或经 explore 选批 → frame |
 
 候选项字段见 skill：`references/dual-entry-and-batching.md`。
@@ -107,13 +113,14 @@ Skill 终点 = 确认队列清空 + 决策落盘 + `analysis_status=complete`。
 
 ## 5. 拆批与风险路由
 
-- 一个 OpenSpec change ≈ **一层权威 × 一条 Boot 线**。  
+- 一个分析批 / 确认波 ≈ **一层权威 × 一条 Boot 线 × 一个构建变体 × 一个有界范围**（必要时再加 `decision_domain`）；一个 OpenSpec change 可承载该批，但勿把 JDK+Boot+业务库塞进同一批。  
 - Quick：仅 direct + PATCH + 非 BOM/非安全/非降级（极少）。  
 - Standard：默认。  
 - High：BOM/Netty/Security/降级/跨线/核心路径/排除/替换组件。  
 - **处置阶梯**（`treatment-ladder.md`）先于版本钉扎：  
   - Direct：`remove`（unused）→ `upgrade-self` / `upgrade-owner` → `replace-component`  
-  - Transitive：`exclude`（未触达证据）→ `upgrade-introducer` → `force-align` → `replace-introducer`  
+  - Transitive：`exclude`（未触达证据）→ `upgrade-introducer` / `move-introducer` → `force-align` → `replace-introducer`  
+  - 目标缺失：同 GAV 替代 → `choose-alternative`；换坐标 → `replace-*`；无候选 → `no-viable-path`  
 - owner-first：能升 Boot/BOM/属性则不推荐单包 override；破例须完整决策记录（见 schema）。  
 - 无目标版本 / 替换路径：按**决策单元**逐个确认，禁止「全部 proceed」。  
 - 生产目标默认 **GA-only**；Beta/RC/Snapshot 不得进 `ready`（除非人显式允许）。
@@ -123,6 +130,7 @@ Skill 终点 = 确认队列清空 + 决策落盘 + `analysis_status=complete`。
 ## 6. 确认队列（frame 内必须做完）
 
 - `ready`：同波列出全部 ready **决策单元**，但每个单元要有独立显式答复（`proceed:g:a:v` / `remove` / `exclude` / `replace:…` / `defer` / `other`）。  
+- `pending`：目标可达但基线/tree 未证实；只问补证（`defer`/`other`），证实后再升 `ready`。  
 - `blocked`：先补证据，不问推进。  
 - 禁止只贴 draft 等「继续/放行」。  
 - 定稿后才可谈 plan；`frozen` 时不得进 execute。
@@ -139,7 +147,7 @@ Skill 终点 = 确认队列清空 + 决策落盘 + `analysis_status=complete`。
 | jackson-databind `2.21.2→2.21.4` | 优先 `upgrade-owner`（Boot BOM 属性）；忌盲目单钉 |
 | 未使用的直接依赖 | `usage_status=unused` → 默认 `remove`，须人确认 |
 | 传递 CVE，上层已有安全 GA | 优先 `upgrade-introducer`，而非先 `force-align` |
-| Eureka `2.0.6→2.0.5` | **降级**；先判 groupId 属 `com.netflix.eureka` 还是 Spring Cloud 一族；High；证据充分才可 `proceed`，否则 `defer` |
+| Eureka `2.0.6→2.0.5` | **降级**；先判 groupId 与是否传递。目标可达但缺 Maven/tree → 队列 **`pending`**（可行·待补证：恢复 mvn → 分期 tree 证实 `2.0.6`），不要标存在性 `blocked`，也不要 `ready`+`proceed`。基线证实后升 `ready`；传递侧默认 `move-introducer` 或破例 `force-align`，并给换 starter/换栈/原生改造菜单供人选；High |
 | Netty `4.2.15→4.1.136` | 目标存在性先行：`netty-codec-base` / `netty-codec-compression` 仅存在于 4.2 线，目标版 404 → 整族行 `blocked`，退回请用户重述目标；不得替换「相近制品」 |
 | commons-lang `2.6→3.20.0` | MAJOR + 坐标/包名变更；`replace-component` 向；单独 `app-library` 批；Phase 分析只出迁移影响，并**命名**既有 recipe（如 OpenRewrite `MigrateCommonsLangToCommonsLang3`）为实施期选项，本阶段不执行 |
 | CVE 只给 GAV 无 `to` | 查官方修复 GA 区间后推荐；**逐单元**等人选定 `proceed:g:a:v` |
@@ -147,8 +155,10 @@ Skill 终点 = 确认队列清空 + 决策落盘 + `analysis_status=complete`。
 验收：目标存在性逐成员（含 classifier）探测过、决策包十章齐全、确认队列曾出现、`validate_report.py` 退出码 0、`analysis_status` 在确认后可为 `complete`、实施门仍由 delivery go 控制。
 
 多批次时报告布局固定为
-`<entry-kind>/<authority-layer>__<boot-line>/java-dependency-upgrade-report.md`
+`<entry-kind>/<authority-layer>__<boot-line>__variant-<build-variant>__scope-<batch-scope>[__domain-<decision-domain>]/java-dependency-upgrade-report.md`
 且证据根须有 `BATCH-INDEX.md`（见 skill `references/report-contract.md`）。
+示例：`exact/boot-bom__boot-3.2.x__variant-default__scope-json-netty/`；
+字段 `boot_line=3.2.x` ↔ 目录 token `boot-3.2.x`（或 `no-boot`）。
 
 Owner 内部调整优先用 BOM 属性（如 `netty.version` / `jackson-bom.version`），不要默认单包钉扎；详见 `owner-and-resolution.md` 阶梯。
 
@@ -158,22 +168,23 @@ Owner 内部调整优先用 BOM 属性（如 `netty.version` / `jackson-bom.vers
 
 | 同构 | 差异 |
 |---|---|
-| Stage A 分析-only、确认队列、状态四轴 | lock → 解析树/BOM；npm → Maven/Gradle |
+| Stage A 分析-only、确认队列、三状态轴 + 实施授权（delivery） | lock → 解析树/BOM；npm → Maven/Gradle |
 | 证据目录挂在已有 change 下 | 模板与报告正文默认中文 |
 | `batch_implementation_gate` 语义 | owner-first / Boot 线拆批 / 处置阶梯 |
 | 均有结构校验脚本 | 前端 `generate_upgrade_report.py` 是生成器；Java `validate_report.py` 只校验，报告由 Agent 按模板写 |
 
-Java 分析阶段已有 `environment-preflight.md`（PATH 上 `java` + 选用 `mvn`|`gradle` +
-Python；失败 batch-wide `blocked`、不写报告）。仍**没有**前端
-`run_with_compatible_node.py` 那样的**实施期**护栏（JDK toolchain 切换、pom 格式冻结、
-执行授权）。实施阶段护栏仍依赖 `delivery-execute-verify` 的通用闸门。
+Java 分析阶段已有 `environment-preflight.md`（PATH 上 `java` + 选用
+`mvn`|`gradle` **或** wrapper graded pass + Python；失败 batch-wide `blocked`、
+不写报告）。仍**没有**前端 `run_with_compatible_node.py` 那样的**实施期**护栏
+（JDK toolchain 切换、pom 格式冻结、执行授权）。实施阶段护栏仍依赖
+`delivery-execute-verify` 的通用闸门。
 
 ---
 
 ## 9. 常见误区
 
 - 用 pom 声明版本代替 `dependency:tree` / `dependencyInsight`  
-- 缺系统 `mvn`/`gradle` 却用 wrapper「凑合」过环境前置  
+- 缺系统 `mvn`/`gradle` 时可用 wrapper graded pass，但须记录 `build_tool_source=wrapper`；二者皆无才硬 blocked  
 - 缺 Python 仍宣称可定稿（校验脚本跑不了）  
 - 把 `dependency:tree -Dverbose` 单独当作选中版本的权威证据（须用 includes / list / effective-pom 复核）  
 - 未验证目标版本/族内成员（含 classifier）是否真实存在就开始 owner 与影响分析  
@@ -181,7 +192,9 @@ Python；失败 batch-wide `blocked`、不写报告）。仍**没有**前端
 - Boot 托管 jar 直接单包钉扎，而不先查 `netty.version` / `jackson-bom.version` 等 BOM 属性  
 - 传递洞优先钉传递包，而不先评估 `upgrade-introducer` / 有证据的 `exclude`  
 - 对 unused 直接依赖默认升级，而不先给 `remove`  
+- 清单处置写成 `defer`（应用 `no-viable-path`）；或对存在性 `blocked` 行答人工 `defer`  
 - MAJOR 迁移不写迁移路径选项，或在分析阶段执行 OpenRewrite/codemod  
+- 未写 `decision-records/` 就宣称分析完成  
 - 未问确认队列就宣称分析完成；无 `to` 时用「全部 proceed」蒙混  
 - 把决策包当作实施批准  
 - JDK + Boot + 业务库塞进同一 change  
@@ -237,6 +250,7 @@ Skill 已内置处置阶梯、owner-first、确认队列、拆批、路径解析
 - 中文模板：`…/templates/decision-packet.md`、`decision-record.md`  
 - 校验脚本：`…/scripts/validate_report.py`；样例包：`…/fixtures/valid-report.md`  
 - 处置阶梯：`…/references/treatment-ladder.md`  
+- 补证清单 × 路径选项菜单：`…/references/next-action-choice-menus.md`  
 - 环境前置：`…/references/environment-preflight.md`  
 - Owner 内部调整阶梯（属性覆盖 vs 单包钉扎）：`…/references/owner-and-resolution.md`  
 - JVM 专有陷阱与 API 差异验证：`…/references/impact-and-validation.md`  
