@@ -7,7 +7,7 @@
 ```delivery-handoff
 {
   "schema_version": "delivery-handoff/v1",
-  "family_version": "delivery-family/1.3",
+  "family_version": "delivery-family/1.4",
   "type": "delivery-handoff",
   "handoff_id": "<change-id>-<stage>-<序号>",
   "previous_handoff_id": null,
@@ -168,6 +168,6 @@
 ```
 
 - `overall_status: verified` 时：`archive.status` 只能是 `deferred_to_openspec` 或 `not_applicable`；`next_action` 为已解析的 `archive_change` 入口；不得写 `closed`、预计 archive 路径或已归档。
-- **Medium/High verified**：`code_review.mode: independent`（SubAgent 或人），`independent_review` 为 `required_pass` 或 `required_warn_accepted`（警告须出现在 `accepted_warning_ids`）。SubAgent 为硬前提，独立审查始终可用；`self_fresh_context` 不是关闭选项。
+- **Medium/High verified**：`code_review.mode: independent`（独立 SubAgent **或** 人类），`independent_review` 为 `required_pass` 或 `required_warn_accepted`（警告须出现在 `accepted_warning_ids`）。无独立审查载体时不得 `verified`，但可继续 inline 实施；`self_fresh_context` 不是关闭选项。
 - 回流到 Frame/Plan 时必须把完整 `alignment_backflow` 对象写入 `stage_payload`（发现、证据、影响范围、失效工件、所需决定、推荐处理、恢复点），且 `next_skill`/`next_action` 皆 `null`（回流由再入阶段自行开始）。
 - 阻塞时如实用 `blocked`，填当前失败、必需输入和停止条件。

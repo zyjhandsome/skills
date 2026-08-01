@@ -88,7 +88,7 @@ Read `references/target-discovery-and-removal.md` whenever `to` is absent or rem
 11. Score the seven factors in `references/risk-model.md`, then derive regression scope, rollout controls, monitoring, and rollback triggers.
 12. Generate and validate the Markdown report. Review every incomplete or heuristic section. A full menu in the report is not a final disposition.
 13. Work the confirmation queue before claiming Stage A complete. On exit `7` / `needs_choice`, ask immediately in the same turn — never hand back a draft and wait for “放行”. Ask every currently `ready` package in one wave (open-target disposition options including exact `package@version` + `other`; exact-upgrade proceed/defer). Never ask `blocked` packages. `switch:<track>` is not a decision; after switch or `handle-parent`, open the next wave for the follow-up questions.
-14. Record final answers per `references/decision-record-schema.md`, regenerate, Agent-review heuristics/upstream summaries, and only then mark `analysis_status=complete`. That is this skill’s endpoint. Only hand off to Stage B when `batch_implementation_gate=ready`. Confirmed selections are not implementation approval.
+14. Record final answers per `references/decision-record-schema.md`, regenerate, Agent-review heuristics/upstream summaries, then regenerate once more with `--finalize-review` so the generator sets `analysis_status=complete`. That is this skill’s endpoint. Only hand off to Stage B when `batch_implementation_gate=ready`. Confirmed selections are not implementation approval.
 
 Read `references/impact-analysis-method.md` for evidence priority, impact-chain mapping, and stopping conditions. Read only the relevant family in `references/package-categories.md`.
 
@@ -138,30 +138,27 @@ python scripts/generate_upgrade_report.py . \
   --upgrade vite:4.5.0:5.2.0 \
   --change-dir openspec/changes/<id> \
   --offline
+
+# After decisions + Agent review (online evidence): finalize Stage A
+python scripts/generate_upgrade_report.py . \
+  --upgrade axios::1.7.9 \
+  --change-dir openspec/changes/<id> \
+  --finalize-review
 ```
 
 **Reachability gate:** Agent `curl -I --max-time 12 https://registry.npmjs.org/` then, on failure, `https://api.github.com/`. Registry or GitHub OK → stay online (no `--offline`). Both fail → ask human; only then `--offline`. Generator re-probes (exit `8`, `network_reachability=unreachable`, `awaiting_offline_confirmation`); no local `upstream-evidence` readback until `--offline`. Exact-upgrade mid-fetch with no usable release **and** changelog in the interval → re-probe GitHub; probe fail asks offline, 403/429 stays `partial`/`missing`. Details: `references/lockfile-and-evidence.md`.
 
 Upstream uses `--network-workers` (default `6`) and a six-hour HTTP cache (`--no-http-cache`, `--http-cache-ttl`, `--http-cache-dir`, `--max-versions`). Exact upgrades write `upstream-evidence/` for the `from→to` interval; network success overwrites; **local readback requires `--offline`**. `--no-upstream-evidence` disables; `--cleanup-upstream-evidence` deletes after success. Local readback must not mark evidence `complete`.
 
-Unknown/mismatched baseline is fatal by default; `--allow-baseline-mismatch` only for a visibly blocked investigative draft.
+Unknown/mismatched baseline is fatal by default; `--allow-baseline-mismatch` only for a visibly blocked investigative draft. Baseline `mismatch`/`unknown` packages skip upstream network fetch unless that flag is set.
 
-After the caller has approved implementation, dry-run the selected installed Node and commands first:
-
-```bash
-python scripts/run_with_compatible_node.py <project-root> \
-  --node-version <exact-version> \
-  --command "<install-or-upgrade-command>" \
-  --command "<build-or-test-command>"
-```
-
-**Implementation hard rules:** never run install/ci/update/build/test/lint (or any lock-mutating command) with host Node outside this runner; `unknown` Node with no pin blocks project commands until an exact `selected_project_node` is established; freeze lock format fields by default (`lockfileVersion` / yarn metadata); npm major must be compatible with the existing lock before mutating commands; format migration requires report approval plus `--allow-lockfile-format-migration`; before claiming done, verify lock format unchanged. Only after matching approvals, add `--execute --approve-runtime-switch` and `--approve-dependency-install` / `--approve-project-scripts`. The runner never installs Node, prefers isolated child PATH, verifies restoration, Node-constraint integrity, and lock-format integrity (exit `7` if format drifts without approval). `--command-timeout` default `1800`s (`0` = forever); timeout exit `124` still restores.
+**Implementation (outside this skill):** only after Stage A is complete, `batch_implementation_gate=ready`, and the caller explicitly authorizes install/scripts/runtime changes, use `scripts/run_with_compatible_node.py` with `--execute` plus the matching `--approve-*` flags. Hard rules (host-Node ban, lock-format freeze, restoration) live in `references/node-runtime-compatibility.md` — do not implement from this skill alone.
 
 ## Completion gate
 
 Before marking the analysis complete, verify:
 
-- `decision_status` is not `needs_choice`; open targets are `disposition-selected` and exact upgrades are `proceed-selected` or `deferred` via the decision file; the report was regenerated after the decision file write; Agent review raised `analysis_status` to `complete`. **Never** set `analysis_status=complete` while `needs_choice` remains; **never** treat exit `7` draft delivery as skill completion; do not open Stage B/C while `batch_implementation_gate=frozen` (`frozen` may remain after Stage A if Node/runtime blockers exist — that does not block the analysis endpoint);
+- `decision_status` is not `needs_choice`; open targets are `disposition-selected` and exact upgrades are `proceed-selected` or `deferred` via the decision file; the report was regenerated after the decision file write; Agent review then re-runs with `--finalize-review` so the generator sets `analysis_status=complete` (refused for `--offline`, `needs_choice`, `blocked`, or `option_status=missing`). **Never** claim complete without that finalized report; **never** treat exit `7` draft delivery as skill completion; do not open Stage B/C while `batch_implementation_gate=frozen` (`frozen` may remain after Stage A if Node/runtime blockers exist — that does not block the analysis endpoint);
 - baseline, lock type, workspace, and importer are confirmed (`importer_resolution=confirmed`; non-frontend roots stay blocked);
 - current host Node, project Node constraints, runtime manager availability, selected project runtime, execution readiness, and restoration plan are explicit;
 - contradictory project Node constraints remain blocked; missing managers/runtimes remain implementation blockers until explicitly installed; `unknown` Node status never treats host Node as the project runtime and hard-blocks project commands until an exact project Node is established;

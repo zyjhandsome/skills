@@ -7,7 +7,7 @@
  *   1. test_family_integrity.mjs         — references resolve, atomic set present, version majors
  *   2. ../../delivery-execute-verify/tests/test_template_anchor_consistency.mjs
  *                                        — machine anchors + limited synonym lock
- *   3. run_fixture_tests.mjs             — 12 pass/neg handoff fixtures (hard profile)
+ *   3. run_fixture_tests.mjs             — pass/neg handoff fixtures (hard profile)
  *   4. test_single_chain.mjs             — Standard 4-stage chain + cascade + High slice
  *
  * Exit 0 only when every suite passes. Zero dependencies (Node >= 18).

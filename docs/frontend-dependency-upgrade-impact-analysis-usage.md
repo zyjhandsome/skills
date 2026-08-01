@@ -429,6 +429,7 @@ python scripts/generate_upgrade_report.py <project-root> [flags...]
 | `--json-output` | 可选 path；裸 flag 写在 Markdown 旁 | 结构化 JSON |
 | `--title` | 默认中文标题 | 报告标题 |
 | `--offline` | bool | **仅人/调用方显式**；跳过公网探测并允许本地 upstream-evidence 回读。Agent 不得因 `.npmrc`/私有镜像擅自添加 |
+| `--finalize-review` | bool | Agent 复核完成后用于定稿：闸门通过则写入 `analysis_status=complete`；`--offline` / `needs_choice` / `blocked` / 缺选项时拒绝（exit `2`） |
 | `--no-upstream-evidence` | bool | 关闭报告旁证据包 |
 | `--cleanup-upstream-evidence` | bool | 报告成功后删除证据包 |
 | `--timeout` | int，默认 `12` | 单次 HTTP 超时（秒） |

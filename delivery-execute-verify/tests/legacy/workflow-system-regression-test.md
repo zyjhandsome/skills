@@ -1,9 +1,11 @@
 # 四阶段系统规则回归测试
 
-> **历史版本标注（v1.1 场景集）：** 本文件基于 `delivery-family/1.1` 的规则快照编写。`delivery-family/1.2` 起四大能力（OpenSpec / Memory / Superpowers / SubAgent）为硬前提、无降级模式；`1.3` 将失败报告固定为三行中文形状，并明确 `openspec: cli-only` → `initialize_repo` 恢复路径（仍非 degraded）。本文件中涉及**能力降级、`evidence_mode: degraded`** 的场景在 1.2+ 下不再适用（对应行为为「停止并报告」）。其余路由、闸门、纵向任务、并行安全场景仍有效。按当前 family 重写场景集前，勿以本文件为当前行为的验收标准。
+> **非现行验收（legacy）。** 现行入口：`node delivery-frame-spec/tests/run_all.mjs`。详见同目录 `README.md`。
+>
+> **历史版本标注（v1.1 场景集）：** 本文件基于 `delivery-family/1.1` 的规则快照编写。`1.2`–`1.3` 曾将 OpenSpec / Memory / Superpowers / SubAgent 列为硬前提；**`delivery-family/1.4`** 起硬前提收窄为 OpenSpec + Memory，Superpowers 改为软依赖（`method-discipline-inline.md`），Explore 不再要求 SubAgent。本文件中涉及**能力降级、`evidence_mode: degraded`、Superpowers 硬停机**的期望均已过期。其余路由、闸门、纵向任务、并行安全场景仍可作对照阅读，但**不得**当作当前行为验收标准。
 >
 > 测试性质：规则级 prompt 对照，不代表真实项目、团队或生产效果。  
-> 日期：2026-07-16（补充结构化展示版本、能力枚举适配与问题 UI 适配回归）
+> 日期：2026-07-16（2026-08-01 迁入 `tests/legacy/` 并标注 1.4）
 
 ## 方法
 

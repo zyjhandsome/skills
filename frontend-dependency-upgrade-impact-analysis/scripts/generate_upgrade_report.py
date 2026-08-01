@@ -10,6 +10,7 @@ import csv
 import datetime as dt
 import hashlib
 import html
+import http.client
 import json
 import os
 import re
@@ -77,8 +78,14 @@ TEXT_EXTENSIONS = {
 }
 SKIP_DIRS = {
     ".git", ".hg", ".svn", ".next", ".nuxt", ".output", ".turbo", ".vite",
+    ".cursor", ".claude", ".codex", ".idea", ".vscode",
     "build", "coverage", "dist", "node_modules", "out",
+    "openspec",
 }
+SKIP_PATH_PARTS = frozenset({
+    "frontend-dependency-upgrade",
+    "upstream-evidence",
+})
 CONFIG_FILE_HINTS = (
     "babel.config", "eslint.config", "jest.config", "next.config", "nuxt.config",
     "package.json", "playwright.config", "postcss.config", "tailwind.config",
@@ -1198,7 +1205,7 @@ def _http_error_diagnostic(url: str, exc: urllib.error.HTTPError) -> str:
     return f"{url} → {detail}"
 
 
-def request_text(url: str, timeout: int, attempts: int = 2) -> str | None:
+def request_text(url: str, timeout: int, attempts: int = 3) -> str | None:
     cache_hit, cached = read_http_cache(url)
     if cache_hit:
         return cached
@@ -1228,11 +1235,12 @@ def request_text(url: str, timeout: int, attempts: int = 2) -> str | None:
             if exc.code not in {403, 429, 500, 502, 503, 504} or attempt + 1 >= attempts:
                 record_fetch_diagnostic(last_error)
                 return None
-        except (urllib.error.URLError, TimeoutError) as exc:
-            last_error = f"{url} → 网络错误/超时：{exc}"
+        except (urllib.error.URLError, TimeoutError, http.client.IncompleteRead, OSError) as exc:
+            last_error = f"{url} → 网络错误/超时/不完整响应：{exc}"
             if attempt + 1 >= attempts:
                 record_fetch_diagnostic(last_error)
                 return None
+            time.sleep(min(1.5, 0.25 * (attempt + 1)))
     if last_error:
         record_fetch_diagnostic(last_error)
     return None
@@ -4811,6 +4819,26 @@ def collect_package_report(upgrade: Upgrade, args: argparse.Namespace) -> Packag
         and evidence_root is not None
         and is_exact_upgrade_target(normalized)
     )
+    skip_upstream = upgrade.package in getattr(args, "skip_upstream_packages", set())
+    if skip_upstream and not args.offline:
+        report.notes.append(
+            VersionNote(
+                endpoint,
+                change_type=report.change_type,
+                release_notes="基线未对齐或未知：已跳过上游抓取。",
+                changelog="先对齐基线后再收集上游证据。",
+                sources=[package_url(upgrade.package, endpoint)],
+                evidence_status="missing",
+                release_status="missing",
+                changelog_status="missing",
+            )
+        )
+        report.warnings.append("基线未对齐或未知：已跳过上游网络抓取。")
+        report.evidence_completeness = "partial"
+        report.evidence_dimensions = {dimension: "missing" for dimension in EVIDENCE_DIMENSIONS}
+        if not normalized.to_version:
+            report.alternative_candidates = build_alternative_candidates(upgrade.package, args, report.warnings)
+        return report
     if args.offline:
         if persist_evidence and local_upstream_readback_allowed(args):
             local_report = collect_exact_upgrade_from_local_evidence(normalized, args, report)
@@ -5282,6 +5310,8 @@ def collect_package_report(upgrade: Upgrade, args: argparse.Namespace) -> Packag
 
 def is_code_scan_candidate(path: Path) -> bool:
     if path.name.lower() in LOCK_NAMES:
+        return False
+    if any(part.lower() in SKIP_PATH_PARTS for part in path.parts):
         return False
     return path.suffix.lower() in TEXT_EXTENSIONS or any(path.name.lower().startswith(hint) for hint in CONFIG_FILE_HINTS)
 
@@ -6823,6 +6853,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--finalize-review",
+        action="store_true",
+        help=(
+            "Agent attests heuristic/upstream/code-map review is done; when all finalize "
+            "gates pass, set analysis_status=complete and report status=complete. "
+            "Refused for offline/needs_choice/blocked/missing options."
+        ),
+    )
+    parser.add_argument(
         "--no-upstream-evidence",
         action="store_true",
         help="Disable writing/reading report-adjacent upstream-evidence/ for exact upgrades.",
@@ -6850,9 +6889,56 @@ def missing_upgrade_message() -> str:
     return "请至少提供包名：使用 --upgrade package::target、--assess package、--removal-candidate package，或提供结构化 upgrades 文件。"
 
 
+def packages_skipping_upstream(
+    upgrades: list[Upgrade],
+    manifest: ManifestSnapshot,
+    before_lock: LockSnapshot,
+    current_lock: LockSnapshot,
+    after_lock: LockSnapshot,
+    *,
+    allow_mismatch: bool,
+) -> set[str]:
+    """Baseline mismatch/unknown packages skip network upstream unless explicitly allowed."""
+    if allow_mismatch:
+        return set()
+    skipped: set[str] = set()
+    for upgrade in upgrades:
+        preview = PackageReport(upgrade, package_url(upgrade.package))
+        baseline_for(preview, manifest, before_lock, current_lock, after_lock)
+        if preview.baseline_status in {"mismatch", "unknown"}:
+            skipped.add(upgrade.package)
+    return skipped
+
+
+def finalize_review_blockers(bundle: AnalysisBundle, args: argparse.Namespace) -> list[str]:
+    """Machine gates that must clear before --finalize-review may set analysis_status=complete."""
+    blockers: list[str] = []
+    if bool(args.offline):
+        blockers.append("使用了 --offline；离线草稿不得 finalize 为 complete")
+    if any(report.evidence_completeness == "offline" for report in bundle.reports):
+        blockers.append("存在 evidence_completeness=offline 的包")
+    if bundle.decision_status == "needs_choice":
+        blockers.append("decision_status=needs_choice")
+    if bundle.status == "blocked" or bundle.analysis_status == "blocked":
+        blockers.append("报告/分析状态仍为 blocked")
+    if bundle.importer_resolution != "confirmed":
+        blockers.append("importer_resolution 未 confirmed")
+    for report in bundle.reports:
+        package = report.upgrade.package
+        if report.option_status == "missing":
+            blockers.append(f"{package}: option_status=missing")
+        if report.selection_status == "needs_explicit_choice" or report.decision_status == "needs_choice":
+            blockers.append(f"{package}: 确认队列未清空")
+        if report.baseline_status in {"mismatch", "unknown"}:
+            blockers.append(f"{package}: baseline={report.baseline_status}")
+    return blockers
+
+
 def collect_package_reports(upgrades: list[Upgrade], args: argparse.Namespace) -> list[PackageReport]:
     total_workers = max(1, int(args.network_workers))
-    if bool(args.offline) or len(upgrades) < 2 or total_workers < 2:
+    skip_upstream = getattr(args, "skip_upstream_packages", set()) or set()
+    # Baseline-skipped packages need no network fan-out; keep them on the serial path.
+    if bool(args.offline) or skip_upstream or len(upgrades) < 2 or total_workers < 2:
         return [collect_package_report(upgrade, args) for upgrade in upgrades]
     package_workers = min(len(upgrades), max(1, total_workers // 2))
     workers_per_package = max(1, total_workers // package_workers)
@@ -6958,6 +7044,14 @@ def build_bundle(
     current_path = None if args.before_lock or args.after_lock else detect_lock(project_root)
     current_lock = parse_lock(current_path, initial_analysis_packages, args.workspace_importer, role="current")
     infer_current_versions(upgrades, before_lock, current_lock)
+    args.skip_upstream_packages = packages_skipping_upstream(
+        upgrades,
+        manifest,
+        before_lock,
+        current_lock,
+        after_lock,
+        allow_mismatch=bool(args.allow_baseline_mismatch),
+    )
     reports = collect_package_reports(upgrades, args)
     peer_names = sorted({
         peer
@@ -7071,6 +7165,8 @@ def build_bundle(
         report.decision_status == "needs_choice" or report.selection_status == "needs_explicit_choice"
         for report in reports
     ) or workspace_failed else "not_needed"
+    # Placeholder bundle fields needed by finalize_review_blockers; refined below after gate compute.
+    finalize_requested = bool(getattr(args, "finalize_review", False))
     pending_human_decisions = [
         {
             "package": report.upgrade.package,
@@ -7153,7 +7249,7 @@ def build_bundle(
         workspace_failed=workspace_failed,
         remediation_blocked=remediation_blocked,
     )
-    return AnalysisBundle(
+    bundle = AnalysisBundle(
         args.title,
         dt.datetime.now(dt.timezone.utc).astimezone().isoformat(timespec="seconds"),
         str(project_root), status, reports, points, scan_warnings, manifest,
@@ -7170,6 +7266,15 @@ def build_bundle(
         batch_gate,
         batch_reasons,
     )
+    if finalize_requested:
+        blockers = finalize_review_blockers(bundle, args)
+        if blockers:
+            for item in blockers:
+                append_unique(bundle.decision_warnings, f"finalize-review 未通过：{item}")
+        else:
+            bundle.analysis_status = "complete"
+            bundle.status = "complete"
+    return bundle
 
 
 def write_bundle(bundle: AnalysisBundle, args: argparse.Namespace, output_dir: Path | None = None) -> Path:
@@ -7294,6 +7399,19 @@ def exit_code_for_bundle(bundle: AnalysisBundle, args: argparse.Namespace) -> in
             + "）。Stage A 决策可能已完成，但不得开实施计划或执行变更。",
             file=sys.stderr,
         )
+    if bool(getattr(args, "finalize_review", False)) and bundle.analysis_status != "complete":
+        reasons = [
+            warning.removeprefix("finalize-review 未通过：")
+            for warning in bundle.decision_warnings
+            if warning.startswith("finalize-review 未通过：")
+        ]
+        print(
+            "finalize-review 未通过，analysis_status 保持 "
+            f"{bundle.analysis_status}："
+            + ("；".join(reasons) or "见报告 decision_warnings"),
+            file=sys.stderr,
+        )
+        return 2
     return 0
 
 

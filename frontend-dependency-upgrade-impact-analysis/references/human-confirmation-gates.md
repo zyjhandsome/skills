@@ -59,7 +59,7 @@
 4. `blocked` / `evidence`：只补证据 / 解阻塞，不提问选型或推进。
 5. `choice` / `mixed`：在**同一轮对话**把所有当前 `ready` 包原文问完（开放目标 + 精确升级）。
 6. 若答 `switch:<track>` → **下一波**改问「改轨问题」整表，**不**写 decision-file。
-7. 最终答案写入 decision-file → 重跑 → `disposition-selected` / `proceed-selected` / `deferred` → Agent 复核上游与代码映射 → `analysis_status=complete`。
+7. 最终答案写入 decision-file → 重跑 → `disposition-selected` / `proceed-selected` / `deferred` → Agent 复核上游与代码映射 → 再以 `--finalize-review` 重跑，使生成器写入 `analysis_status=complete`（offline / 未清空队列 / blocked / 缺选项时拒绝）。
 8. 仅当 `decision_status≠needs_choice` **且** `batch_implementation_gate=ready` 时，才可向调用方交接 Stage B；Stage C 另需实施授权。本技能可在 `frozen` 时仍以定稿报告结束（不得开 B/C）。
 
 不得写入 decision-file 的答案：`switch:*`、`handle-parent`、`pin-override`（无版本）、已废除的 `reject-native-refactor`。

@@ -142,11 +142,17 @@ class SkillStructureTests(unittest.TestCase):
                 "frozen",
                 "ready",
                 "下一动作=照确认队列向用户提问，不是等待放行",
+                "--finalize-review",
             ),
-            "完成态互斥 / exit 7 / 批次闸门 / 下一动作",
+            "完成态互斥 / exit 7 / 批次闸门 / 下一动作 / finalize",
+        )
+        require(
+            "human-confirmation-gates.md",
+            ("--finalize-review",),
+            "finalize-review 定稿闸门",
         )
         skill_text = (ROOT / "SKILL.md").read_text(encoding="utf-8")
-        for phrase in ("ask the queue now", "analysis_status=complete", "same wave"):
+        for phrase in ("ask the queue now", "analysis_status=complete", "same wave", "--finalize-review"):
             if phrase not in skill_text:
                 missing.append(f"SKILL.md 缺少 Agent 当场提问与定稿终点：{phrase}")
         require("report-contract.md", GENERATOR.BATCH_IMPLEMENTATION_GATES, "批次实施闸门枚举")

@@ -16,7 +16,7 @@
 ## 1. 权威边界
 
 - 使用 `schema_version: delivery-handoff/v1` 和 `type: delivery-handoff`。
-- `family_version` 以 `family-contract.md` 为权威（当前 `delivery-family/1.3`）；major 不受支持时停止自动链式转换。
+- `family_version` 以 `family-contract.md` 为权威（当前 `delivery-family/1.4`）；major 不受支持时停止自动链式转换。
 - 保持本契约的 snake_case 键和内部能力枚举；不要把 UI 的 camelCase 或兼容枚举写回本对象。
 - **前向兼容扩展位：** 顶层附加信息使用 `x_` 前缀键；校验器忽略 `x_*`。`x_*` 不得承载权威状态、批准或任务完成事实。`stage_payload` 允许阶段专属附加字段，无需前缀。
 - 只写已有事实。未知值使用 `null`、空数组或明确的 `unknown`。
@@ -28,7 +28,7 @@
 ```json
 {
   "schema_version": "delivery-handoff/v1",
-  "family_version": "delivery-family/1.3",
+  "family_version": "delivery-family/1.4",
   "type": "delivery-handoff",
   "handoff_id": "<唯一 id>",
   "previous_handoff_id": null,
@@ -90,7 +90,7 @@
 - `handoff_id`：本次交付内唯一（建议 `<change-id>-<stage>-<序号>`）。`previous_handoff_id`（可选，可 `null`）：指向本次交付链中上一个 handoff，含回流；家族首个 handoff 为 `null`。
 - `state_source.kind`：Explore 恒为 `none`；正式 OpenSpec change 使用 `openspec_change` 并填写真实 `anchor`。
 - `source_revision`：记录生成时观测到的 repo HEAD、权威工件修订和时间。`artifact_revision` 优先使用 OpenSpec 原生 revision；否则运行 `../scripts/hash_change_artifacts.mjs`（按路径排序的规范化相对路径 + 原始字节的 SHA-256）。不得用时间戳或聊天轮次冒充修订。
-- `capability_snapshot`：硬前提 profile 下预期恒为标称值（见 `family-contract.md`）。出现非标称值时不得携带阶段转换。
+- `capability_snapshot`：阶段转换时硬前提须标称（`memory: ok`、`openspec: initialized`；见 `family-contract.md` 第 2 节）。`superpowers` 为软依赖（`loaded`/`missing`/`inline`/`partial(...)`），单独不阻断转换。硬前提非标称时不得携带阶段转换。
 - `capability_bindings`：形状见 `family-contract.md`；记录实际解析结果。
 - `gate_status.status`：Explore 可用 `n/a`；未放行用 `pending`/`block`；有已公开且允许继续的警告用 `warn`；完全通过用 `pass`。
 - `gate_status.binds_to_revision`：任何批准必须绑定当前 `artifact_revision`；无正式批准时保持 `null`。`accepted_warning_ids` 只列用户在可见 gate 摘要中明确接受的 warning id。
@@ -158,8 +158,8 @@ Execute 带 `alignment_backflow` 回流到 frame/plan 时，再入阶段在继�
 
 把最终 JSON 通过 stdin 或文件传给 `../scripts/validate_handoff.mjs`；退出码非 0 时不得交接。校验通过后按第 4 节落盘。
 
-脚本默认按**硬前提 profile** 校验（`--profile hard`）：`evidence_mode` 必须为 `full`；`capability_snapshot` 非标称值时不得携带 `next_skill`/`next_action`（只能报告故障 + `stop_condition`）。校验 1.2 之前的历史 handoff 时用 `--profile legacy`。
+脚本默认按**硬前提 profile** 校验（`--profile hard`）：`evidence_mode` 必须为 `full`；硬前提非标称（`memory`/`openspec`）时不得携带 `next_skill`/`next_action`（只能报告故障 + `stop_condition`）。`superpowers` 软依赖缺失不阻断转换。校验 1.2 之前的历史 handoff 时用 `--profile legacy`。
 
 **骨架生成：** 不要手写整个 JSON。`../scripts/delivery_scaffold.mjs new-handoff <stage> --change-dir <change> [--previous <id>]` 生成已通过校验的非转换骨架（标称快照、时间戳、`artifact_revision`、阶段载荷骨架），Agent 只填业务字段与闸门后再校验。
 
-**回归夹具：** `../tests/fixtures/` 中的 `pass-*`/`neg-*` 夹具锁定本契约的关键拒绝行为（warn 未回显、verified 未 defer 归档、双转换目标、非标称快照携带转换、degraded 取证、自审 verified 等）。修改校验器或契约后必须跑 `../tests/run_fixture_tests.mjs`；某个 `neg-*` 开始通过即表示护栏被削弱。
+**回归夹具：** `../tests/fixtures/` 中的 `pass-*`/`neg-*` 夹具锁定本契约的关键行为（含 `superpowers: missing|inline` 仍可转换、硬前提非标称不可转换、warn 未回显、verified 未 defer 归档、双转换目标、degraded 取证、自审 verified 等）。修改校验器或契约后必须跑 `../tests/run_fixture_tests.mjs`；某个 `neg-*` 开始通过即表示护栏被削弱。

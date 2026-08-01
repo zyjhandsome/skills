@@ -13,28 +13,42 @@ description: |
   - 明确需求边界
   - 判断 Quick/Standard/High/Debug 路由
 
-  触发词：定框、delivery、frame、需求边界、就绪度、规范、frame-spec
+  触发词：定框、需求边界、规格闸门、Quick/Standard/High、frame-spec、立项
 ---
 
 # Delivery Frame Spec
 
-Shared family protocol (versioning, hard prerequisites, language rules, naming): `references/family-contract.md`. Handoff schema, persistence, and templates: `references/handoff-contract.md` + `references/handoff-template.md`. Question protocol: `references/batch-clarification.md`. Do not restate those files; follow them.
+Shared family protocol (versioning, hard/soft prerequisites, language rules, naming): `references/family-contract.md`. Handoff schema, persistence, and templates: `references/handoff-contract.md` + `references/handoff-template.md`. Question protocol: `references/batch-clarification.md`. Do not restate those files; follow them.
+
+## Stage load card
+
+| When | Read |
+|---|---|
+| Always | This file; `family-contract.md` |
+| Route / gates | `routing-and-gates.md` |
+| Before asking | `batch-clarification.md` (+ `question-ui-adapters.md` only if mapping host UI) |
+| Writing brief/spec | `brief-template.md`; `spec-template.md` as needed |
+| Explore handoff present | `explore-handoff-consume.md` |
+| OpenSpec ops | `openspec-adapter.md` |
+| Before handoff | `handoff-contract.md` + `handoff-template.md` (Frame); prefer `scripts/delivery_scaffold.mjs new-handoff` |
+| Superpowers missing | `method-discipline-inline.md` |
+| Skip by default | `structured-presentation-adapter.md`; plan/execute bodies until transition |
 
 ## Iron Rules
 
 1. No implementation until an explicit user go is recorded for this route (Quick/Debug-Low: contract go here; Standard/High: implementation gate in `delivery-plan-tasks`).
 2. OpenSpec is the only artifact/state backend — never invent parallel Markdown state beside a change.
 3. If direction is still open, hand to `delivery-explore`; do not invent a locked goal.
-4. Specification gate = **one** user ask. High’s five facets stay Agent-internal — never a user multi-quiz.
-5. Stage end: emit one complete `delivery-handoff/v1` object (including read-only, blocked, and end states), validate, persist per the handoff contract. When a transition is allowed, follow the chain relay rule (`family-contract.md` §1): if the host can load skill files directly (e.g. Claude Code), read the next skill's `SKILL.md` and continue in the same session; only when the host cannot, tell the user「请使用 <next_skill>」.
-6. OpenSpec / Codebase Memory MCP / Superpowers / SubAgent are hard prerequisites: use them directly; on a real runtime failure stop and report per `family-contract.md` — no degraded modes, no substitute backends.
+4. Specification gate = **one** user ask. High's five facets stay Agent-internal — never a user multi-quiz.
+5. Stage end: emit one complete `delivery-handoff/v1` object (including read-only, blocked, and end states), validate, persist per the handoff contract. When a transition is allowed, follow the chain relay rule (`family-contract.md` section 1): if the host can load skill files directly (e.g. Claude Code / Cursor), read the next skill's `SKILL.md` and continue in the same session; only when the host cannot, tell the user「请使用 <next_skill>」.
+6. Hard prerequisites: **OpenSpec** + **Codebase Memory MCP**. Superpowers is soft (prefer when loaded; else `method-discipline-inline.md` and `superpowers: missing|inline`). SubAgent is optional here. On hard-prerequisite runtime failure stop and report per `family-contract.md` — no degraded modes, no substitute backends.
 
 ### Runtime failure report (Chinese, fixed 3 lines)
 
-When a hard prerequisite fails at runtime, tell the user exactly:
+When a **hard** prerequisite fails at runtime, tell the user exactly:
 
 ```text
-缺什么：<memory|openspec|superpowers 的具体异常枚举或错误摘要>
+缺什么：<memory|openspec 的具体异常枚举或错误摘要>
 能否降级：否（硬前提）；必须恢复后继续
 下一步请你：<例如：同意已解析的 initialize_repo 操作 / 修复 Memory 索引后回复继续 / 仅继续只读调查>
 ```
@@ -74,10 +88,10 @@ If the product direction is genuinely open (suggestions, opportunity mapping, �
 
 ## Capability roles
 
-- **Codebase Memory MCP** — evidence provider only: architecture, symbols, call paths, snippets, blast radius. Discover the current tool schema before calling. It indexes code facts, never requirement artifacts, state, or product decisions. Index freshness rule: `family-contract.md` §5. When OpenWiki/ADR/glossary exist and are in scope, read them as semantic context; if docs and the physical call graph disagree, prefer the call graph and verify with source/tests.
+- **Codebase Memory MCP** — evidence provider only: architecture, symbols, call paths, snippets, blast radius. Discover the current tool schema before calling. It indexes code facts, never requirement artifacts, state, or product decisions. Index freshness rule: `family-contract.md` section 5. When OpenWiki/ADR/glossary exist and are in scope, read them as semantic context; if docs and the physical call graph disagree, prefer the call graph and verify with source/tests.
 - **OpenSpec** — the only artifact backend. Resolve semantic operations via `references/openspec-adapter.md`; record bindings in `capability_bindings.openspec`. Recover/create one change through `inspect_change` / `create_change`. This skill owns framing and gates; OpenSpec owns physical change/artifact state.
 - **`openspec: cli-only` (exceptional recovery, not degraded mode):** when the first real OpenSpec call finds the CLI available but the repo not initialized, set `capability_snapshot.openspec: cli-only`, emit the fixed 3-line failure report, and propose the resolved `initialize_repo` operation (common candidate: `openspec init`). If the user accepts, run it and resume at `initialized`; if they decline, stop all mutation / artifact / gate writes (read-only investigation may continue). Never invent a parallel Markdown state source.
-- **Superpowers** — method layer. Prefer `delivery-explore` for open ideation; brainstorming disciplines may inform framing but never own artifacts, state, or question delivery.
+- **Superpowers / inline** — method layer (soft). Prefer Superpowers when loaded; otherwise follow `method-discipline-inline.md`. Prefer `delivery-explore` for open ideation; method skills never own artifacts, state, or question delivery.
 
 ### Explore handoff consume
 
@@ -92,7 +106,7 @@ When a `delivery-explore` handoff is present, consume fields per `references/exp
 | Standard / High | full change: `proposal.md` (brief) + delta spec now; `design.md` + `tasks.md` in `delivery-plan-tasks` | `delivery-plan-tasks` |
 | Debug — Medium / High mutation | Standard / High artifacts respectively | `delivery-plan-tasks` |
 
-Map Delivery artifacts to the slots the current OpenSpec schema reports (`references/openspec-adapter.md` §3). When a Quick task escalates, upgrade the same change; never start a second state source.
+Map Delivery artifacts to the slots the current OpenSpec schema reports (`references/openspec-adapter.md` section 3). When a Quick task escalates, upgrade the same change; never start a second state source.
 
 ## Routes
 
@@ -169,7 +183,7 @@ If any check fails, remain in this skill. When it passes, ask **one** scope-appr
 
 ## Backflow re-entry
 
-When Execute returns here with an `alignment_backflow` packet, complete the three-item re-entry consume check in `handoff-contract.md` §7 before reopening any gate.
+When Execute returns here with an `alignment_backflow` packet, complete the three-item re-entry consume check in `handoff-contract.md` section 7 before reopening any gate.
 
 ## Handoff
 

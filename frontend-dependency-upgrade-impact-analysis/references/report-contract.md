@@ -136,17 +136,17 @@ Node 约束冲突、EOL 运行时、需要全局切换或恢复未验证时，�
 - `draft`：存在证据、映射或人工复核缺口；
 - `blocked`：baseline/version/workspace 等阻塞项未解决。
 
-生成器默认输出 `draft`。只有 Agent 完成上游证据补齐、调用图/业务映射和人工复核后，才能将其提升为 `complete`。
+生成器默认输出 `draft` / `analysis_status=partial`。Agent 完成上游证据补齐、调用图/业务映射和人工复核后，必须再跑一遍并显式传入 `--finalize-review`；闸门全部通过时生成器才把报告状态与 `analysis_status` 升为 `complete`。`--offline`、`needs_choice`、`blocked`、`option_status=missing` 或基线未对齐时 finalize 被拒绝（exit `2`，报告保持原状态）。
 
 同时分离声明：
 
-- `analysis_status`：`partial`、`blocked` 或经人工复核后的 `complete`；
+- `analysis_status`：`partial`、`blocked` 或经 `--finalize-review` 的 `complete`；
 - `decision_status`：`not_needed` 或 `needs_choice`。
 - `batch_implementation_gate`：`frozen` 或 `ready`。
 
 候选版本、替代库、处置方案选项和删除可行性都属于决策证据，不是已批准结论。呈现完整选择面不等于推荐其中任何一条，也不等于人选轨完成。精确升级的目标版本明确也不等于已批准推进。
 
-**完成态互斥：** `analysis_status=complete` **不得**与 `decision_status=needs_choice` 同时成立。确认队列未清空前，报告状态保持 `draft`、`analysis_status` 最高为 `partial`；生成器在无更高优先级阻塞时以 exit `7` 表示「草稿已写出、待人工确认；Agent 下一动作=照队列提问/补证据，不是等待放行」。人选轨/推进写入决策文件并重跑后，`decision_status` 变为 `not_needed`；Agent 完成证据复核后升 `analysis_status=complete`——这才是本技能终点。`batch_implementation_gate=frozen` 不阻止该分析终点；仅当闸门为 `ready` 时才可交接 Stage B。本技能终点是定稿分析/决策报告，不是实施。
+**完成态互斥：** `analysis_status=complete` **不得**与 `decision_status=needs_choice` 同时成立。确认队列未清空前，报告状态保持 `draft`、`analysis_status` 最高为 `partial`；生成器在无更高优先级阻塞时以 exit `7` 表示「草稿已写出、待人工确认；Agent 下一动作=照队列提问/补证据，不是等待放行」。人选轨/推进写入决策文件并重跑后，`decision_status` 变为 `not_needed`；Agent 完成证据复核并以 `--finalize-review` 重跑升 `analysis_status=complete`——这才是本技能终点。`batch_implementation_gate=frozen` 不阻止该分析终点；仅当闸门为 `ready` 时才可交接 Stage B。本技能终点是定稿分析/决策报告，不是实施。
 
 选项完整性闸门：未指定目标版本的包必须至少产出一个可执行选项（替代包、已成立的原生重构方案、已解析出父包的父包处置，或 `safe_removal_candidate`/`requires_migration` 的删除路径）。任一包 `option_status=missing` 时，结论必须点名该包，且报告不得提升为 `complete`。该闸门只约束完成状态，不改写 `recommended_action`。
 

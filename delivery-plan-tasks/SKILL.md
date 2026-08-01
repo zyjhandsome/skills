@@ -13,12 +13,25 @@ description: |
   - 可执行任务拆解
   - 实现就绪度评审
 
-  触发词：交付计划、delivery、plan、任务拆解、技术设计、plan-tasks
+  触发词：技术设计、任务拆解、实现闸门、就绪审查、plan-tasks、纵向切片
 ---
 
 # Delivery Plan Tasks
 
 Shared family protocol: `../delivery-frame-spec/references/family-contract.md`. Handoff schema and template: `../delivery-frame-spec/references/handoff-contract.md` + `../delivery-frame-spec/references/handoff-template.md` (Plan block). Question protocol: `../delivery-frame-spec/references/batch-clarification.md`. OpenSpec operations: `../delivery-frame-spec/references/openspec-adapter.md`.
+
+## Stage load card
+
+| When | Read |
+|---|---|
+| Always | This file; `../delivery-frame-spec/references/family-contract.md` |
+| Before asking | `../delivery-frame-spec/references/batch-clarification.md` |
+| Writing plan/tasks | `references/plan-template.md`, `references/tasks-template.md` |
+| Before readiness/gate | `references/readiness-review.md` + `../delivery-execute-verify/references/artifact-gate-checks.md` (G1–G3, G8, G5) |
+| OpenSpec ops | `../delivery-frame-spec/references/openspec-adapter.md` |
+| Before handoff | handoff-contract + handoff-template (Plan); prefer `delivery_scaffold.mjs new-handoff` |
+| Superpowers missing | `../delivery-frame-spec/references/method-discipline-inline.md` |
+| Skip by default | explore SKILL; execute body until transition; structured-presentation-adapter |
 
 ## Iron Rules
 
@@ -26,15 +39,15 @@ Shared family protocol: `../delivery-frame-spec/references/family-contract.md`. 
 2. OpenSpec `design.md` / `tasks.md` (per the active schema's slots) are the only plan/tasks truth — no parallel Markdown copies.
 3. Vertical behavior slices with real paths/symbols and falsifiable validation; no horizontal “all types → all backend → tests last.”
 4. Implementation go = **one** user ask (High: same ask + cost/risk/rollback summary; five facets Agent-internal).
-5. Stage end: emit one complete `delivery-handoff/v1` object (including blocked/end states), validate, persist. Only after the gate permits transition, follow the chain relay rule (`family-contract.md` §1): if the host can load skill files directly (e.g. Claude Code), read `delivery-execute-verify/SKILL.md` and continue in the same session; only when the host cannot, tell the user「请使用 delivery-execute-verify」.
-6. Hard prerequisites are assumed available; on a real runtime failure stop and report per `family-contract.md` — no degraded planning mode.
+5. Stage end: emit one complete `delivery-handoff/v1` object (including blocked/end states), validate, persist. Only after the gate permits transition, follow the chain relay rule (`family-contract.md` section 1): if the host can load skill files directly (e.g. Claude Code / Cursor), read `delivery-execute-verify/SKILL.md` and continue in the same session; only when the host cannot, tell the user「请使用 delivery-execute-verify」.
+6. Hard prerequisites: **OpenSpec** + **Codebase Memory MCP**. Superpowers is soft (prefer when loaded; else `method-discipline-inline.md`). On hard-prerequisite runtime failure stop and report per `family-contract.md` — no degraded planning mode.
 
 ### Runtime failure report (Chinese, fixed 3 lines)
 
-When a hard prerequisite fails at runtime, tell the user exactly:
+When a **hard** prerequisite fails at runtime, tell the user exactly:
 
 ```text
-缺什么：<memory|openspec|superpowers 的具体异常枚举或错误摘要>
+缺什么：<memory|openspec 的具体异常枚举或错误摘要>
 能否降级：否（硬前提）；必须恢复后继续
 下一步请你：<例如：恢复 OpenSpec 后再写 design/tasks / 修复 Memory 索引后回复继续>
 ```
@@ -53,7 +66,7 @@ If the spec has blocking ambiguity, code facts are stale, or planning would chan
 
 - **Codebase Memory MCP — path and impact verification.** Verify real integration points and symbols, callers and shared boundaries, tests and regression surface, and whether facts survived a rebase/refactor. Never invent a path from naming conventions. Index freshness rule: `family-contract.md` §5.
 - **OpenSpec — the only artifact backend.** Resolve `inspect_change`, `continue_artifacts`, `validate_structure`. Recover the active change; check other active changes for overlap; generate/update design and tasks via `continue_artifacts`; run `validate_structure` where supported; keep requirement/scenario traceability.
-- **Superpowers — planning-quality inputs only.** `writing-plans` for granularity/completeness; `dispatching-parallel-agents` for independence domains; `using-git-worktrees` for isolation feasibility. Actual dispatch and worktrees belong to `delivery-execute-verify`.
+- **Superpowers / inline — planning-quality inputs only (soft).** Prefer Superpowers `writing-plans` / parallel-planning methods when loaded; otherwise follow `method-discipline-inline.md`. Actual dispatch and worktrees belong to `delivery-execute-verify`.
 
 ## Refresh Facts Before Planning
 

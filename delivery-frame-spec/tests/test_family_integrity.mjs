@@ -26,6 +26,7 @@ const REQUIRED_SHARED = [
   "delivery-frame-spec/references/batch-clarification.md",
   "delivery-frame-spec/references/openspec-adapter.md",
   "delivery-frame-spec/references/explore-handoff-consume.md",
+  "delivery-frame-spec/references/method-discipline-inline.md",
   "delivery-frame-spec/scripts/validate_handoff.mjs",
   "delivery-frame-spec/scripts/hash_change_artifacts.mjs",
   "delivery-frame-spec/scripts/delivery_scaffold.mjs",

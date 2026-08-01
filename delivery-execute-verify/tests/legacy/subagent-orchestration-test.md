@@ -1,6 +1,8 @@
 # 子代理编排规则回归测试
 
-> **历史版本标注（v1.1 场景集）：** 基于 `delivery-family/1.1` 规则快照。`delivery-family/1.2` 起 SubAgent 与独立审查为硬前提；`1.3` 沿用硬前提并统一三行失败报告。「无 SubAgent / 无独立 Reviewer 时如何降级」类问题（下方 Prompt 第 6 问）在 1.2+ 下的正确答案是**停止并报告宿主异常**，不再是降级序列。其余编排、波次、worktree、基线失败场景仍有效。
+> **非现行验收（legacy）。** 现行入口：`node delivery-frame-spec/tests/run_all.mjs`。详见同目录 `README.md`。
+>
+> **历史版本标注（v1.1 场景集）：** 基于 `delivery-family/1.1` 规则快照。`1.2`–`1.3` 曾将 SubAgent 列为硬前提；**`delivery-family/1.4`** 起 SubAgent 为软依赖（Explore 不要求；Execute 默认 inline；Medium/High `verified` 仍需独立 SubAgent **或** 人类审查）。下方 Prompt 第 6 问的旧「硬停机」答案已过期——现行见 `family-contract.md` 与 `method-discipline-inline.md`。其余编排、波次、worktree、基线失败场景仍可对照阅读。
 >
 > 测试性质：规则级 prompt 回归，不代表真实仓库吞吐、质量或生产稳定性数据。
 

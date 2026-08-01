@@ -13,27 +13,38 @@ description: |
   - 需要权衡分析或 tradeoff 地图
   - 基于代码库证据探索（不实现）
 
-  触发词：交付探索、delivery、explore、方向、建议、权衡、证据
+  触发词：交付探索、机会地图、方向选型、权衡地图、还想加啥、explore-direction
 ---
 
 # Delivery Explore
 
 Shared family protocol: `../delivery-frame-spec/references/family-contract.md`. Handoff schema and template: `../delivery-frame-spec/references/handoff-contract.md` + `../delivery-frame-spec/references/handoff-template.md` (Explore block). Question protocol: `../delivery-frame-spec/references/batch-clarification.md`.
 
+## Stage load card
+
+| When | Read |
+|---|---|
+| Always | This file; `family-contract.md` (hard/soft prereqs + chain relay) |
+| Before asking | `batch-clarification.md` |
+| Before handoff | `handoff-contract.md` + `handoff-template.md` (Explore block); validate via `validate_handoff.mjs` |
+| Output shape | `references/explore-output-template.md` |
+| Superpowers missing | `../delivery-frame-spec/references/method-discipline-inline.md` |
+| Skip by default | plan/execute SKILL bodies; `structured-presentation-adapter.md` |
+
 ## Iron Rules
 
 1. No implementation code; no formal OpenSpec delivery state; the map is never an approved spec.
 2. Memory-first evidence; bind claims to paths/symbols/clusters.
 3. Next skill only: `delivery-frame-spec` (or end). Never hand off to plan or execute.
-4. Stage end: emit one complete `delivery-handoff/v1` object (including end states), validate it. When a transition is allowed, follow the chain relay rule (`family-contract.md` §1): if the host can load skill files directly (e.g. Claude Code), read `delivery-frame-spec/SKILL.md` and continue in the same session; only when the host cannot, tell the user「请使用 delivery-frame-spec」.
-5. Hard prerequisites (OpenSpec/Memory/Superpowers/SubAgent) are assumed available; on a real runtime failure stop and report per `family-contract.md` — no degraded exploration mode.
+4. Stage end: emit one complete `delivery-handoff/v1` object (including end states), validate it. When a transition is allowed, follow the chain relay rule (`family-contract.md` section 1): if the host can load skill files directly (e.g. Claude Code / Cursor), read `delivery-frame-spec/SKILL.md` and continue in the same session; only when the host cannot, tell the user「请使用 delivery-frame-spec」.
+5. Hard prerequisites for this stage: **Codebase Memory MCP** (evidence). OpenSpec is read-only context only — if unavailable, advice-only end is allowed (`next_skill: null`), but transition to frame requires `openspec: initialized`. **SubAgent is not required.** Superpowers is soft: if missing, use `method-discipline-inline.md` and set `superpowers: missing` or `inline`. On Memory (or transition-blocking OpenSpec) runtime failure, stop and report per `family-contract.md` — no degraded exploration mode.
 
 ### Runtime failure report (Chinese, fixed 3 lines)
 
-When a hard prerequisite fails at runtime, tell the user exactly:
+When a **hard** prerequisite fails at runtime, tell the user exactly:
 
 ```text
-缺什么：<memory|openspec|superpowers 的具体异常枚举或错误摘要>
+缺什么：<memory|openspec 的具体异常枚举或错误摘要>
 能否降级：否（硬前提）；必须恢复后继续
 下一步请你：<例如：修复 Memory 索引后回复继续 / 恢复 OpenSpec 后继续>
 ```
@@ -50,9 +61,10 @@ Use this skill for open-ended ideation, opportunity mapping, “还想加啥功�
 
 ## Capability roles
 
-- **Codebase Memory MCP — primary evidence provider.** Discover tool schemas first. Typical sequence: confirm index readiness → `get_architecture` (overview/clusters/boundaries/hotspots) → `search_graph` / `query_graph` / `search_code` for user themes → `trace_path` / `get_code_snippet` for high-value candidates before recommending them. Index freshness rule: `family-contract.md` §5. Never replace a graph query with an unbounded whole-repository dump.
+- **Codebase Memory MCP — primary evidence provider.** Discover tool schemas first. Typical sequence: confirm index readiness → `get_architecture` (overview/clusters/boundaries/hotspots) → `search_graph` / `query_graph` / `search_code` for user themes → `trace_path` / `get_code_snippet` for high-value candidates before recommending them. Index freshness rule: `family-contract.md` section 5. Never replace a graph query with an unbounded whole-repository dump.
 - **OpenSpec — read-only context only.** Read active changes and main specs (via the adapter's `inspect_change`) to avoid duplicate or conflicting suggestions. **Before the explore handoff is emitted and validated, it is forbidden to** call `create_change`, write `openspec/changes/<id>/` artifacts as delivery state, or invent a parallel Markdown state file. Creating the change belongs exclusively to `delivery-frame-spec` after direction selection.
-- **Superpowers `brainstorming` — method reuse, not owner.** Reuse its disciplines (2–3 options, tradeoffs, recommendation) without letting it own artifacts or state.
+- **Superpowers / inline — method reuse, not owner.** Prefer Superpowers `brainstorming` disciplines when loaded; otherwise follow `method-discipline-inline.md`. Never let method skills own artifacts or state.
+- **SubAgent — not used in explore.** Do not dispatch SubAgents for opportunity mapping.
 
 ## Start Here
 
@@ -111,5 +123,6 @@ Follow the shared contract and template (Explore block). `next_skill: delivery-f
 - Writing implementation, scaffolds, or “quick spikes” that mutate the repo.
 - Running unbounded repo-wide dumps instead of targeted queries.
 - Presenting the exploration map as an approved spec.
+- Stopping the whole explore because Superpowers or SubAgent is missing.
 
 Any red flag: stop, correct course, and remain in explore or hand off cleanly without carrying false approval.

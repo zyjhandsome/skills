@@ -2,7 +2,7 @@
 
 `delivery-frame-spec` 在收到 `delivery-explore` handoff 时按本表消费字段。不要从 explore 输出发明第二状态源；OpenSpec change 仍由本阶段创建/恢复。
 
-硬前提 profile（`delivery-family/1.3`）：`evidence_mode` 必须为 `full`；不存在 degraded 续跑。Explore 若遇硬前提故障应已停止，不得带着非标称能力快照进入 Frame 转换。
+硬前提 profile（`delivery-family/1.4`）：`evidence_mode` 必须为 `full`；不存在 degraded 续跑。Explore 若遇 Memory/OpenSpec 硬前提故障应已停止；`superpowers: missing|inline` 允许进入 Frame（用 `method-discipline-inline.md`）。不得带着硬前提非标称快照（`memory`/`openspec`）进入 Frame 转换。
 
 ## Incoming field → how consumed
 
@@ -10,7 +10,7 @@
 |---|---|
 | `family_version` | Must be a supported Delivery Family major before automatic chaining |
 | `source_revision` | Compare with current repo/artifact state; mismatch makes the handoff stale and triggers state recovery |
-| `capability_snapshot` | Expect nominal values under hard profile; any non-nominal value blocks transition (`next_skill`/`next_action` null) and uses the fixed 3-line failure report in `family-contract.md` |
+| `capability_snapshot` | Hard-nominal required for transition: `memory: ok`, `openspec: initialized`. Soft `superpowers` may be `missing`/`inline`. Hard non-nominal blocks transition and uses the fixed 3-line failure report in `family-contract.md` |
 | `capability_bindings` | Reuse resolved aliases/versions that are still valid; refresh route-required operations when missing or changed |
 | `evidence_mode` | Must be `full`; anything else is a hard-profile fault — stop and report, do not frame |
 | `stage_payload.direction_alignment` | Must be `selected` before framing; `needs_choice` returns to `delivery-explore` instead of inventing a locked goal |

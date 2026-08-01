@@ -3191,6 +3191,178 @@ packages:
             self.assertEqual(bundle.batch_implementation_gate, "frozen")
             self.assertTrue(any("人工确认未完成" in item for item in bundle.batch_gate_reasons))
 
+    def test_request_text_retries_incomplete_read_without_raising(self) -> None:
+        class _BrokenBody:
+            def read(self) -> bytes:
+                raise MODULE.http.client.IncompleteRead(b"partial")
+
+            def decode(self, *_args: object, **_kwargs: object) -> str:
+                raise AssertionError("decode should not run")
+
+        class _Response:
+            headers = type("H", (), {"get_content_charset": staticmethod(lambda: "utf-8")})()
+
+            def read(self) -> bytes:
+                raise MODULE.http.client.IncompleteRead(b"partial")
+
+            def __enter__(self) -> "_Response":
+                return self
+
+            def __exit__(self, *_args: object) -> None:
+                return None
+
+        calls = {"n": 0}
+
+        def fake_urlopen(_request: object, timeout: int = 0) -> _Response:
+            calls["n"] += 1
+            return _Response()
+
+        with (
+            patch.object(MODULE, "read_http_cache", return_value=(False, None)),
+            patch.object(MODULE, "write_http_cache"),
+            patch.object(MODULE.urllib.request, "urlopen", side_effect=fake_urlopen),
+            patch.object(MODULE.time, "sleep", return_value=None),
+        ):
+            text = MODULE.request_text("https://example.test/releases", timeout=1, attempts=3)
+        self.assertIsNone(text)
+        self.assertEqual(calls["n"], 3)
+
+    def test_code_scan_skips_openspec_and_report_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            src = root / "src"
+            src.mkdir()
+            (src / "main.js").write_text("import axios from 'axios'\n", encoding="utf-8")
+            artifact_dir = root / "openspec" / "changes" / "x" / "evidence" / "frontend-dependency-upgrade"
+            artifact_dir.mkdir(parents=True)
+            (artifact_dir / "frontend-dependency-upgrade-report.json").write_text(
+                json.dumps({"mockjs": {"version": "1.1.0"}}),
+                encoding="utf-8",
+            )
+            (root / "package.json").write_text(json.dumps({"dependencies": {"axios": "1.6.8"}}), encoding="utf-8")
+            files, _warnings = MODULE.iter_code_files(root, max_files=100, max_file_bytes=1_000_000)
+            relative = {str(path.relative_to(root)).replace("\\", "/") for path in files}
+            self.assertIn("src/main.js", relative)
+            self.assertIn("package.json", relative)
+            self.assertFalse(any("openspec/" in item for item in relative))
+            self.assertFalse(any("frontend-dependency-upgrade" in item for item in relative))
+
+    def test_baseline_mismatch_skips_upstream_fetch_online(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "package.json").write_text(json.dumps({"dependencies": {"axios": "0.27.2"}}), encoding="utf-8")
+            (root / "package-lock.json").write_text(json.dumps({
+                "lockfileVersion": 3,
+                "packages": {"node_modules/axios": {"version": "0.26.0"}},
+            }), encoding="utf-8")
+            args = MODULE.parse_args([
+                str(root), "--upgrade", "axios:0.27.2:1.7.9",
+                "--output-dir", str(root / "out"),
+            ])
+            with (
+                patch.object(MODULE, "ensure_network_reachability", return_value={"network_reachability": "ok"}),
+                patch.object(MODULE, "request_json", side_effect=AssertionError("upstream should be skipped")) as request_json,
+                patch.object(MODULE, "current_host_node_runtime", return_value=("20.18.0", "C:/node/node.exe")),
+                patch.object(MODULE, "detect_node_managers", return_value=(["nvm-windows"], {"nvm-windows": ["20.18.0"]})),
+            ):
+                bundle = MODULE.build_bundle(args)
+            self.assertEqual(bundle.analysis_status, "blocked")
+            self.assertEqual(bundle.reports[0].baseline_status, "mismatch")
+            self.assertTrue(any("跳过上游" in item for item in bundle.reports[0].warnings))
+            request_json.assert_not_called()
+
+    def test_finalize_review_sets_complete_when_gates_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "package.json").write_text(json.dumps({
+                "engines": {"node": ">=18"},
+                "dependencies": {"axios": "1.6.8"},
+            }), encoding="utf-8")
+            (root / "package-lock.json").write_text(json.dumps({
+                "lockfileVersion": 3,
+                "packages": {"node_modules/axios": {"version": "1.6.8"}},
+            }), encoding="utf-8")
+            (root / "src").mkdir()
+            (root / "src" / "main.js").write_text("import axios from 'axios'\n", encoding="utf-8")
+            decisions = root / "human-decisions.json"
+            decisions.write_text(json.dumps({"decisions": [{
+                "package": "axios",
+                "track": "proceed-exact",
+                "choice": "proceed:axios@1.7.9",
+                "selected_package": "axios",
+                "selected_version": "1.7.9",
+            }]}), encoding="utf-8")
+            metadata = {
+                "versions": {
+                    "1.6.8": {"version": "1.6.8", "repository": {"type": "git", "url": "https://github.com/axios/axios.git"}},
+                    "1.7.9": {"version": "1.7.9", "repository": {"type": "git", "url": "https://github.com/axios/axios.git"}},
+                },
+                "time": {"1.6.8": "2024-01-01T00:00:00.000Z", "1.7.9": "2024-06-01T00:00:00.000Z"},
+            }
+
+            def fake_request_json(url: str, _timeout: int) -> object:
+                if "registry.npmjs.org/axios" in url and "/axios/" not in url.split("registry.npmjs.org/")[-1]:
+                    return metadata
+                return None
+
+            args = MODULE.parse_args([
+                str(root), "--upgrade", "axios:1.6.8:1.7.9",
+                "--decision-file", str(decisions),
+                "--output-dir", str(root / "out"),
+                "--finalize-review",
+                "--no-upstream-evidence",
+            ])
+            with (
+                patch.object(MODULE, "ensure_network_reachability", return_value={"network_reachability": "ok"}),
+                patch.object(MODULE, "request_json", side_effect=fake_request_json),
+                patch.object(MODULE, "request_text", return_value=None),
+                patch.object(MODULE, "current_host_node_runtime", return_value=("20.18.0", "C:/node/node.exe")),
+                patch.object(MODULE, "detect_node_managers", return_value=(["nvm-windows"], {"nvm-windows": ["20.18.0"]})),
+            ):
+                bundle = MODULE.build_bundle(args)
+            self.assertEqual(bundle.decision_status, "not_needed")
+            self.assertEqual(bundle.analysis_status, "complete")
+            self.assertEqual(bundle.status, "complete")
+            self.assertEqual(MODULE.exit_code_for_bundle(bundle, args), 0)
+
+    def test_finalize_review_rejected_for_offline(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / "package.json").write_text(json.dumps({
+                "engines": {"node": ">=18"},
+                "dependencies": {"axios": "1.6.8"},
+            }), encoding="utf-8")
+            (root / "package-lock.json").write_text(json.dumps({
+                "lockfileVersion": 3,
+                "packages": {"node_modules/axios": {"version": "1.6.8"}},
+            }), encoding="utf-8")
+            (root / ".nvmrc").write_text("20.18.0\n", encoding="utf-8")
+            decisions = root / "human-decisions.json"
+            decisions.write_text(json.dumps({"decisions": [{
+                "package": "axios",
+                "track": "proceed-exact",
+                "choice": "proceed:axios@1.7.9",
+                "selected_package": "axios",
+                "selected_version": "1.7.9",
+            }]}), encoding="utf-8")
+            args = MODULE.parse_args([
+                str(root), "--upgrade", "axios:1.6.8:1.7.9", "--offline",
+                "--decision-file", str(decisions),
+                "--output-dir", str(root / "out"),
+                "--finalize-review",
+            ])
+            with (
+                patch.object(MODULE, "current_host_node_runtime", return_value=("20.18.0", "C:/node/node.exe")),
+                patch.object(MODULE, "detect_node_managers", return_value=(["nvm-windows"], {"nvm-windows": ["20.18.0"]})),
+            ):
+                bundle = MODULE.build_bundle(args)
+            self.assertEqual(bundle.decision_status, "not_needed")
+            self.assertEqual(bundle.analysis_status, "partial")
+            self.assertNotEqual(bundle.status, "complete")
+            self.assertEqual(MODULE.exit_code_for_bundle(bundle, args), 2)
+            self.assertTrue(any("finalize-review 未通过" in item for item in bundle.decision_warnings))
+            self.assertTrue(any("offline" in item.lower() or "离线" in item for item in bundle.decision_warnings))
+
 
 if __name__ == "__main__":
     unittest.main()

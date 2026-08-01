@@ -13,12 +13,25 @@ description: |
   - 修复范围缺陷或调试异常
   - 新鲜验证（运行时测试 + 规格核对）通过后标记 verified
 
-  触发词：交付执行、delivery、verify、实施、验证、TDD、openspec
+  触发词：开始实施、新鲜验证、verified、按 tasks 执行、TDD 实施、execute-verify
 ---
 
 # Delivery Execute Verify
 
 Shared family protocol: `../delivery-frame-spec/references/family-contract.md`. Handoff schema and template: `../delivery-frame-spec/references/handoff-contract.md` + `../delivery-frame-spec/references/handoff-template.md` (Execute block). Question protocol: `../delivery-frame-spec/references/batch-clarification.md`. OpenSpec operations: `../delivery-frame-spec/references/openspec-adapter.md`.
+
+## Stage load card
+
+| When | Read |
+|---|---|
+| Always | This file; `../delivery-frame-spec/references/family-contract.md` |
+| Before mutation | Preflight below; confirm go bound to current revision |
+| Task loop / TDD | `references/implementation-loop.md` |
+| Parallel / SubAgent | `references/subagent-orchestration.md` (only when not default-inline) |
+| Before verified | `references/artifact-gate-checks.md` (G1–G7) + `references/verification-template.md` |
+| Close-out | Prefer `../delivery-frame-spec/scripts/delivery_scaffold.mjs close-out` |
+| Superpowers missing | `../delivery-frame-spec/references/method-discipline-inline.md` |
+| Skip by default | explore/frame deep templates already consumed; `tests/legacy/*` prompt docs |
 
 ## Iron Rules
 
@@ -26,15 +39,15 @@ Shared family protocol: `../delivery-frame-spec/references/family-contract.md`. 
 2. No completion / merge / “done” language while required validation is failing or stale.
 3. Ends at `overall_status: verified` + `stage_payload.archive.status: deferred_to_openspec` — **never** sync/archive OpenSpec inside this skill.
 4. Default execute inline; parallel SubAgents only when independence checks pass. Trust diffs and reviews, not SubAgent summaries alone.
-5. Stage end: emit one complete `delivery-handoff/v1` object (in-progress, blocked, verified, and end states), validate, persist. After verified, state the resolved archive operation (`next_action`); ask before any commit/PR. Backflow returns to frame/plan follow the chain relay rule (`family-contract.md` §1): continue in the same session when the host can load the upstream skill directly.
-6. Hard prerequisites are assumed available; on a real runtime failure stop and report per `family-contract.md` — no degraded execution or verification mode.
+5. Stage end: emit one complete `delivery-handoff/v1` object (in-progress, blocked, verified, and end states), validate, persist. After verified, state the resolved archive operation (`next_action`); ask before any commit/PR. Backflow returns to frame/plan follow the chain relay rule (`family-contract.md` section 1): continue in the same session when the host can load the upstream skill directly.
+6. Hard prerequisites: **OpenSpec** + **Codebase Memory MCP**. Superpowers is soft (prefer when loaded; else `method-discipline-inline.md`). SubAgent is optional for parallel work; Medium/High `verified` still requires independent review (SubAgent **or** human). On hard-prerequisite runtime failure stop and report per `family-contract.md` — no degraded execution or verification mode.
 
 ### Runtime failure report (Chinese, fixed 3 lines)
 
-When a hard prerequisite fails at runtime, tell the user exactly:
+When a **hard** prerequisite fails at runtime, tell the user exactly:
 
 ```text
-缺什么：<memory|openspec|superpowers 的具体异常枚举或错误摘要>
+缺什么：<memory|openspec 的具体异常枚举或错误摘要>
 能否降级：否（硬前提）；必须恢复后继续
 下一步请你：<例如：恢复 OpenSpec 后再继续实施与 verify / 修复 Memory 索引后回复继续>
 ```
@@ -56,8 +69,8 @@ If inputs are missing, return to `delivery-frame-spec` or `delivery-plan-tasks`.
 ## Capability roles
 
 - **OpenSpec — the only execution backend.** Resolve `inspect_change`, `apply_tasks`, `continue_artifacts`, `validate_structure`, `verify_coherence`, `archive_change` as needed. OpenSpec tasks are the only task state. **Do not** invoke `archive_change` here and do not silently sync delta specs; after verified close-out, point `next_action` at the resolved archive operation.
-- **Codebase Memory MCP — impact evidence.** Locate implementation and failure paths, check actual blast radius against planned scope, identify affected callers/tests, review final diff impact. Refresh the index after edits before relying on impact evidence (`family-contract.md` §5). Never a task store or state source.
-- **Superpowers — quality methods.** `test-driven-development`, `systematic-debugging`, `verification-before-completion`, `dispatching-parallel-agents`, `subagent-driven-development`, `using-git-worktrees`, `requesting-code-review` / `receiving-code-review`, `finishing-a-development-branch`. Methods never become a second task owner.
+- **Codebase Memory MCP — impact evidence.** Locate implementation and failure paths, check actual blast radius against planned scope, identify affected callers/tests, review final diff impact. Refresh the index after edits before relying on impact evidence (`family-contract.md` section 5). Never a task store or state source.
+- **Superpowers / inline — quality methods (soft).** Prefer Superpowers methods when loaded (`test-driven-development`, `systematic-debugging`, `verification-before-completion`, parallel/worktree/review helpers). If missing, follow `method-discipline-inline.md` and record `superpowers: missing|inline`. Methods never become a second task owner.
 
 ## Preflight
 
@@ -72,7 +85,7 @@ Before editing:
 
 ## SubAgent Orchestration
 
-SubAgents and independent review are available (hard prerequisite); resolve the host's **actual maximum concurrency and worktree support** into `capability_bindings.subagents` — never infer capacity from desired parallelism. Choose execution mode from task facts; ask the user only when isolation, uncommitted state, cost, or destructive integration requires a decision.
+SubAgents are optional for parallelism; independent review for Medium/High `verified` requires an independent SubAgent **or** a human. Resolve the host's **actual maximum concurrency and worktree support** into `capability_bindings.subagents` — never infer capacity from desired parallelism. Choose execution mode from task facts; ask the user only when isolation, uncommitted state, cost, or destructive integration requires a decision.
 
 **Default: inline.** Sequential fresh SubAgents when multiple well-specified tasks need clean context + two-stage review but shared integration makes parallel unsafe. Parallel batches only when 2+ tasks are dependency-ready with no overlapping files/shared mutable state, independent validation, isolated workspaces, and available slots.
 
@@ -161,7 +174,8 @@ Read as needed:
 - `references/subagent-orchestration.md` — Chinese templates and checklists
 - `scripts/validate_delivery_change.mjs`
 - `../delivery-frame-spec/scripts/delivery_scaffold.mjs` — new-handoff / quick-pack / close-out scaffolds
-- `tests/` — dev-time regression scripts; run `tests/test_template_anchor_consistency.mjs` whenever templates or `validate_delivery_change.mjs` anchors change
+- `tests/test_template_anchor_consistency.mjs` — run whenever templates or `validate_delivery_change.mjs` anchors change
+- `tests/legacy/` — historical prompt-contrast docs only; **not** current acceptance (use `../delivery-frame-spec/tests/run_all.mjs`)
 
 ## Red Flags
 
