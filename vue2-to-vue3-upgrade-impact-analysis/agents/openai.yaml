@@ -1,0 +1,12 @@
+interface:
+  display_name: "Vue 2 → Vue 3 Upgrade Impact Analysis"
+  short_description: "Vue2→Vue3 framework upgrade impact analysis with human gates"
+  default_prompt: >
+    Use $vue2-to-vue3-upgrade-impact-analysis when the user names this skill
+    or asks for Vue 2 to Vue 3 upgrade impact analysis / inventory. Short
+    prompts are enough. Always load SKILL.md first, then the minimum references
+    (environment-preflight, subsystem-inventory, human-confirmation-gates).
+    Run environment preflight before analysis. Analysis only — no install,
+    codemod, or source edits. Name migration recipes, never run them. Confirm
+    migration path first, then High/blocker subsystems. Default report dir is
+    <project>/.vue2-to-vue3-upgrade-analysis after explicit path confirmation.

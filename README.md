@@ -23,18 +23,21 @@ delivery-explore  →  delivery-frame-spec  →  delivery-plan-tasks  →  deliv
 
 ## 依赖升级影响分析
 
-两个独立 skill：只分析、不实现；互不接力，也不挂接交付流水线。可单独调用；报告可写入已有 OpenSpec change 的 `evidence/`，或用 `--output-dir`。
+三个独立 skill：只分析、不实现；互不接力，也不挂接交付流水线。可单独调用；报告可写入已有 OpenSpec change 的 `evidence/`，或用 `--output-dir`。
 
 | 技能 | 说明 |
 |------|------|
 | [frontend-dependency-upgrade-impact-analysis](./frontend-dependency-upgrade-impact-analysis/SKILL.md) | 前端依赖升级影响分析：证据驱动的升级/移除/替换决策报告 |
 | [java-dependency-upgrade-impact-analysis](./java-dependency-upgrade-impact-analysis/SKILL.md) | Java/Maven/Gradle 依赖升级影响分析：处置阶梯、owner-first、确认队列决策包 |
+| [vue2-to-vue3-upgrade-impact-analysis](./vue2-to-vue3-upgrade-impact-analysis/SKILL.md) | Vue 2→Vue 3 框架升级影响分析：迁移路径、子系统风险、确认队列决策包 |
 
 配套说明：
 
 - [`docs/frontend-dependency-upgrade-impact-analysis-usage.md`](./docs/frontend-dependency-upgrade-impact-analysis-usage.md)
 - [`docs/java-dependency-upgrade-impact-analysis-usage.md`](./docs/java-dependency-upgrade-impact-analysis-usage.md)
 - [`docs/java-dependency-upgrade-delivery-usage.md`](./docs/java-dependency-upgrade-delivery-usage.md)（与 delivery-* 可选挂载）
+- [`docs/vue2-to-vue3-upgrade-impact-analysis-usage.md`](./docs/vue2-to-vue3-upgrade-impact-analysis-usage.md)
+- [`docs/vue2-to-vue3-upgrade-delivery-usage.md`](./docs/vue2-to-vue3-upgrade-delivery-usage.md)（与 delivery-* 可选挂载）
 
 ## 内容整理与发布
 
@@ -126,6 +129,16 @@ java-dependency-upgrade-impact-analysis/
 ├── fixtures/             # 决策包样例（partial / complete）
 ├── references/           # 处置阶梯、owner、拆批、确认队列、报告契约等
 ├── scripts/              # validate_report.py 结构校验
+├── templates/            # 决策包 / 决策记录中文模板
+└── tests/
+
+vue2-to-vue3-upgrade-impact-analysis/
+├── SKILL.md              # 技能加载器（边界、环境前置、工作流、报告闸门）
+├── agents/
+│   └── openai.yaml
+├── fixtures/             # 决策包样例（partial / complete）
+├── references/           # 迁移路径、子系统清单、确认闸门、报告契约等
+├── scripts/              # preflight / profile_inventory / validate_report
 ├── templates/            # 决策包 / 决策记录中文模板
 └── tests/
 
