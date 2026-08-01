@@ -23,13 +23,48 @@ delivery-explore  →  delivery-frame-spec  →  delivery-plan-tasks  →  deliv
 
 ## 依赖升级影响分析
 
-三个独立 skill：只分析、不实现；互不接力，也不挂接交付流水线。可单独调用；报告可写入已有 OpenSpec change 的 `evidence/`，或用 `--output-dir`。
+三个独立 skill：只分析、不实现；互不接力，也不内置挂接交付流水线。可单独调用；也可用下方提示词与 `delivery-frame-spec` 软挂载（frame 建/恢复 OpenSpec change，分析 skill 只写 `evidence/`）。报告可写入已有 change 的 `evidence/`，或用 `--output-dir`。
 
 | 技能 | 说明 |
 |------|------|
 | [frontend-dependency-upgrade-impact-analysis](./frontend-dependency-upgrade-impact-analysis/SKILL.md) | 前端依赖升级影响分析：证据驱动的升级/移除/替换决策报告 |
 | [java-dependency-upgrade-impact-analysis](./java-dependency-upgrade-impact-analysis/SKILL.md) | Java/Maven/Gradle 依赖升级影响分析：处置阶梯、owner-first、确认队列决策包 |
 | [vue2-to-vue3-upgrade-impact-analysis](./vue2-to-vue3-upgrade-impact-analysis/SKILL.md) | Vue 2→Vue 3 框架升级影响分析：迁移路径、子系统风险、确认队列决策包 |
+
+### 与 delivery-* 联用（短提示词）
+
+分析定稿后，仅当 `batch_implementation_gate=ready` 且你显式 go，再进入 `delivery-plan-tasks` / `delivery-execute-verify`。
+
+**前端依赖**
+
+```text
+/delivery-frame-spec 结合 /frontend-dependency-upgrade-impact-analysis
+对以下依赖做升级影响分析（只出决策包，不改代码）。
+项目：<仓库或前端 workspace>
+目标：
+- axios:1.6.0:1.7.9
+- <开放目标包名>  # 或：移除/替换说明
+```
+
+**Java 依赖**
+
+```text
+/delivery-frame-spec 结合 /java-dependency-upgrade-impact-analysis
+对以下依赖做升级影响分析（只出决策包，不改代码）。
+项目：<仓库路径>
+目标：
+- <groupId:artifactId:from:to>
+# 或写：整仓巡检，先候选再问我选批
+```
+
+**Vue2→Vue3**
+
+```text
+/delivery-frame-spec 结合 /vue2-to-vue3-upgrade-impact-analysis
+做 Vue2→Vue3 升级影响分析（只出决策包，不改代码/不跑 codemod）。
+项目：<前端 workspace>
+# 或多仓：多仓巡检，先候选再问我选批
+```
 
 配套说明：
 
