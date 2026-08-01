@@ -2,16 +2,21 @@
 
 ## Evidence priority
 
-1. Lockfile + `package.json` declared versions (fact). **No lockfile** → record
-   in §1 with `lockfile` wording and treat version reproducibility as elevated
-   risk (still not a preflight hard block).
+1. Lockfile + `package.json` declared versions (fact). Record the scanner's
+   `lockfile_status: present|absent|unparsed` in §1. Anything except `present`
+   keeps `batch_implementation_gate=frozen` (still not a preflight hard block).
 2. Config presence (`vue.config.js`, `vite.config.*`, babel, eslint)
 3. Bounded source search via `profile_inventory.py`: filters / `Vue.filter`,
    `$listeners`, `.sync`, `new Vue(`, `Vue.use`, `slot-scope` / legacy `slot=`,
-   event bus, router `addRoutes` / `*`, lifecycle destroy hooks. Also complete
-   §10 `人工补搜检查` for residual gaps and non-`vue-*` blockers
-   (`tui-editor`, editors, etc.).
-4. Official docs URLs for the exact interval / library major
+   event bus, router `addRoutes` / `*`, lifecycle destroy hooks,
+   `Vue.prototype.$*` definitions/consumers, `globalProperties`, and packages
+   registered through `Vue.use`. Also complete §10 `人工补搜检查` for residual
+   gaps and non-`vue-*` blockers (`tui-editor`, internal plugins, editors, etc.).
+4. Official docs URLs for the exact interval / library major — start from
+   `official-docs-index.md` (EOL + two-layer modification model + canonical
+   hubs + high-signal checklist), then fetch the linked page; do not invent
+   breaks from memory. Static checklist = candidates; name Migration Build
+   warnings / per-component `compatConfig` as the dynamic backlog (do not run)
 5. Inference — label explicitly
 
 ## Impact layers (report §5)

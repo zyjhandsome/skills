@@ -14,6 +14,9 @@ Run before any analysis write. Prefer `scripts/preflight.py`.
 
 - Host Node vs `package.json` `engines.node` mismatch → record in baseline
 - Multiple lockfiles → record; ask which workspace/manager if ambiguous
+- Package-manager detection can pass without a lockfile; consume
+  `profile_inventory.py`'s `lockfile_status` separately and keep handoff frozen
+  for `absent` / `unparsed`
 - Multiple frontend workspaces → ask (not exit `5`)
 - Network: npm registry HEAD + `https://v3-migration.vuejs.org/` HEAD in same wave; dual failure → offline confirm gate (not tool-preflight failure)
 

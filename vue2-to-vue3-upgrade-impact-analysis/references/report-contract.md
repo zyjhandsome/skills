@@ -4,7 +4,7 @@
 
 - `vue2-to-vue3-upgrade-report.md`（必填）
 - `decision-records/migration-path__<path-id>.md`（路径单元必填）
-- `decision-records/subsystem__<subsystem-id>.md`（每个 High/blocker 子系统必填；其余可选）
+- `decision-records/subsystem__<subsystem-id>.md`（每个 High/blocker 或 `required_for_path=yes` 子系统必填；其余可选）
 - `vue2-to-vue3-upgrade-report.json`（可选）
 
 语言：可见正文默认简体中文；枚举、包名、版本、路径、命令、URL 保持英文原文。
@@ -33,10 +33,17 @@
 |---|---|
 | `analysis_status` | `partial` / `blocked` / `complete` |
 | `decision_status` | `needs_choice` / `not_needed` / `decided` |
-| `batch_implementation_gate` | `frozen` / `ready` |
+| `batch_implementation_gate` | `frozen` / `ready`（**仅分析交接**；≠实施授权） |
+| `implementation_readiness` | `not_assessed`（本技能固定值） |
 | `behavior_parity_required` | `yes` / `no` |
 | `network_mode` | `online` / `offline` / `partial` |
-| `report_path` | 实际目录 |
+| `report_path` | 实际报告目录（禁止单独 `.` / `./`；须与校验时目录 resolve 等价；相对路径相对进程 cwd） |
+| `evidence_as_of` | 证据采集日，`YYYY-MM-DD`（registry/官方页/仓画像读取日；非“永远正确”证明） |
+
+`batch_implementation_gate=ready` 额外要求：§1 的结构化字段必须为
+`lockfile_status: present`；`absent` / `unparsed` 一律保持 `frozen`。每个
+High/blocker 与每个 `required_for_path=yes` 均为 `decided`（`deferred` 只允许
+`complete`+`frozen`）。
 
 ## 必选章节（按顺序）
 
@@ -51,17 +58,46 @@
 9. 回滚与责任人
 10. 未决问题与证据缺口
 
-章节「1. 基线与假设」必须出现字面 `lockfile`（大小写不敏感），说明 lock 路径或「无 lockfile」及复现性风险。
+章节「1. 基线与假设」必须出现结构化字段
+`lockfile_status: present|absent|unparsed`，并说明 lock 路径、解析错误或缺失时的
+复现性风险。即使正文另写「无 lockfile」，也不得用自然语言同义词代替该字段；
+非 `present` 时 handoff gate 必须
+`frozen`。
+§1 可复述 `evidence_as_of`；若复述则必须与状态表一致。
 章节「3. 推荐迁移路径」必须出现字面：`Composition API 全仓重写：另立项，本次不评估工作量`。
+章节「3」必须出现 `推荐路径 id：<path-id>`，且 `<path-id>` ∈
+`compat-big-bang` / `direct-vue3` / `microfrontend-coexist` /
+`deferred-inventory-only`。
+章节「3」必须出现三轴标记（取值见 `migration-path-ladder.md`）：
+
+- `runtime_axis:` `compat` / `direct-vue3`
+- `build_axis:` `vite` / `cli5-webpack5` / `existing-vite`
+- `topology_axis:` `single-cutover` / `coexist`
+
+三轴须与 path preset 一致（例如 `compat-big-bang` ⇒ `runtime_axis: compat` +
+`topology_axis: single-cutover`；`build_axis` 可为 `vite` 或 `cli5-webpack5`）。
+非默认轴组合须改选匹配的 path id，或 Wave 1 走 `other` 后把最终 path id /
+轴写进 Decision Record——校验器拒绝 preset 与轴互相矛盾的报告。
+§7 唯一 path 行的 id 必须与 §3 `推荐路径 id` 相同。
+
 章节「3」或「7」附近必须出现：`Name, never run`，**或**同时出现「命名配方」与「不执行」（二者缺一不可；仅有「命名配方」表头不算）。
 章节「10」必须出现字面：`人工补搜检查`，并勾选/回答下列项（即使 profile 已扫描）：
 
 - `slot-scope` / 旧 `slot=` 模板
 - 全局 `Vue.filter` 注册
 - 非 `vue-*` 前缀的 Vue2-only / 编辑器类包
+- `Vue.prototype.$*` 定义与 `this.$*` 消费点（独立行）
+- 对应的 `app.config.globalProperties` 或 `provide/inject` 迁移目标（独立行）
 - lockfile 缺失或未解析时的版本复现风险
 
-§4 中每个 `risk` 为 `high`/`blocker` 且非 `not_applicable` 的子系统，必须出现在 §7 确认队列；`analysis_status=complete` 时还须有对应 `decision-records/subsystem__<id>.md`。
+上述每一项必须有**独立行**与非空实质结果；禁止一行打包全部项，禁止仅写
+`已声明` / `已检查` / `已核对` / `ok` 等空泛词。
+
+§4 必须覆盖默认子系统全集（`core-vue` / `router` / `build` / `store` /
+`ui` / `test` / `lint-ide` / `i18n-plugins` / `composition-existing` /
+`blockers`）；不适用者标 `not_applicable`，不得省略。
+§4 中每个 `risk` 为 `high`/`blocker` 且非 `not_applicable` 的子系统，以及每个 `required_for_path=yes` 行，必须出现在 §7 确认队列；`analysis_status=complete` 时还须有对应 `decision-records/subsystem__<id>.md`。
+`in_scope` 且 `high`/`blocker` 的行必须 `required_for_path=yes`。
 路径未 `decided` 前，子系统行不得为 `ready`。
 
 ## 仓画像表列（§2）
@@ -72,7 +108,9 @@
 
 ## 子系统表列（§4）
 
-`子系统 | scope_status | 风险 | 就绪度 | 命名配方 | 说明`
+`子系统 | scope_status | 风险 | 就绪度 | required_for_path | 命名配方 | 说明`
+
+`required_for_path`：`yes` / `no`
 
 ## 确认队列表列（§7）
 

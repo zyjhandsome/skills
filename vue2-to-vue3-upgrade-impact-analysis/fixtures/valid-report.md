@@ -9,9 +9,11 @@
 | analysis_status | partial |
 | decision_status | needs_choice |
 | batch_implementation_gate | frozen |
+| implementation_readiness | not_assessed |
 | behavior_parity_required | yes |
 | network_mode | online |
-| report_path | . |
+| report_path | fixtures |
+| evidence_as_of | 2026-08-01 |
 
 **横幅：** 待人工确认·下一动作=提问（迁移路径）
 
@@ -23,7 +25,9 @@
 - 主机 Node vs `engines`：均为 `>=18`
 - 构建变体 / 批次范围：`default` / `full-stack`
 - 入口：workspace
-- lockfile：示例假定有 package-lock（或写 无 lockfile 并标注复现性风险）
+- lockfile：`package-lock.json`（样例；若缺失须写「无 lockfile」且 handoff 保持 frozen）
+- lockfile_status: present
+- evidence_as_of: 2026-08-01
 - 报告路径（解析结果）：见状态表 `report_path`
 - 假设与限制：单仓画像；不实施、不执行 codemod
 
@@ -41,6 +45,9 @@
 ## 3. 推荐迁移路径
 
 - 推荐路径 id：`compat-big-bang`
+- runtime_axis: compat
+- build_axis: vite
+- topology_axis: single-cutover
 - 理由：单仓可切流；依赖含 Element UI 与 CLI，需仓内 compat 清 warning，构建必须同升
 - 备选路径：`direct-vue3`（表面太大，不推荐）
 - Composition API 全仓重写：另立项，本次不评估工作量
@@ -48,18 +55,18 @@
 
 ## 4. 子系统影响清单
 
-| 子系统 | scope_status | 风险 | 就绪度 | 命名配方 | 说明 |
-|---|---|---|---|---|---|
-| `core-vue` | in_scope | high | needs-major | `vue-compat` | 2.7 → 3 |
-| `router` | in_scope | high | needs-major | `manual-router4` | vue-router 3 → 4 |
-| `build` | in_scope | high | needs-major | `webpack-to-vite` | CLI → Vite |
-| `store` | in_scope | medium | needs-major | `manual-pinia-or-vuex4` | Vuex3；不进 Wave 2 |
-| `ui` | in_scope | blocker | replace | `gogocode-element` | Element UI → Plus |
-| `test` | in_scope | medium | needs-major | — | test-utils v1 |
-| `lint-ide` | in_scope | medium | needs-major | `eslint-vue3` | eslint-plugin-vue |
-| `i18n-plugins` | in_scope | high | unknown | — | vue-count-to 等残余插件 |
-| `composition-existing` | in_scope | low | unused | — | 未使用 composition-api 桥 |
-| `blockers` | in_scope | n/a | replace | — | element-ui 已由 `ui` 覆盖，不单列进队 |
+| 子系统 | scope_status | 风险 | 就绪度 | required_for_path | 命名配方 | 说明 |
+|---|---|---|---|---|---|---|
+| `core-vue` | in_scope | high | needs-major | yes | `vue-compat` | 2.7 → 3 |
+| `router` | in_scope | high | needs-major | yes | `manual-router4` | vue-router 3 → 4 |
+| `build` | in_scope | high | needs-major | yes | `webpack-to-vite` | CLI → Vite |
+| `store` | in_scope | medium | needs-major | no | `manual-pinia-or-vuex4` | Vuex3；不进 Wave 2 |
+| `ui` | in_scope | blocker | replace | yes | `gogocode-element` | Element UI → Plus |
+| `test` | in_scope | medium | needs-major | no | — | test-utils v1 |
+| `lint-ide` | in_scope | medium | needs-major | no | `eslint-vue3` | eslint-plugin-vue |
+| `i18n-plugins` | in_scope | high | unknown | yes | — | vue-count-to 等残余插件 |
+| `composition-existing` | in_scope | low | unused | no | — | 未使用 composition-api 桥 |
+| `blockers` | in_scope | n/a | replace | no | — | element-ui 已由 `ui` 覆盖，不单列进队 |
 
 ## 5. 分层影响分析
 
@@ -111,8 +118,10 @@
 |---|---|
 | `slot-scope` / 旧 `slot=` | 待精确扫描 |
 | 全局 `Vue.filter` | 待精确扫描 |
-| 非 `vue-*` Vue2-only / 编辑器包 | 待核对 |
-| lockfile 缺失或未解析 | 已声明 |
+| 非 `vue-*` Vue2-only / 编辑器包 | 待核对候选（含 vue-count-to） |
+| `Vue.prototype.$*` / `this.$*` 定义与消费点 | 待逐一登记 |
+| `globalProperties` / `provide/inject` 迁移目标 | 待逐一登记 |
+| lockfile 缺失或未解析 | lockfile_status=present（样例 package-lock.json） |
 
 - 过滤器与 `$listeners` 的静态命中数待补精确扫描
 - Element Plus 视觉回归范围待产品确认

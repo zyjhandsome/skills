@@ -54,6 +54,7 @@ class ProfileInventoryTests(unittest.TestCase):
             self.assertEqual(data["builder"], "vue-cli")
             self.assertEqual(data["ui_stack"], "element-ui")
             self.assertEqual(data["store"], "vuex")
+            self.assertEqual(data["lockfile_status"], "absent")
             self.assertEqual(
                 data["related_packages"]["element-ui"]["readiness"], "replace"
             )
@@ -99,6 +100,62 @@ class ProfileInventoryTests(unittest.TestCase):
             self.assertGreaterEqual(signals.get("composition_setup", 0), 1)
             samples = data["source_impact_signals"]["samples"]
             self.assertNotIn("src/Tinymce/index.vue", samples.get("composition_setup", []))
+
+    def test_discovers_opaque_plugins_and_global_prototype_mounts(self) -> None:
+        pkg = {
+            "name": "legacy-plugin-web",
+            "dependencies": {
+                "vue": "2.6.14",
+                "legacy-tree-grid-pro": "1.2.3",
+                "acme-rich-editor": "4.5.6",
+                "@corp/legacy-kit": "2.0.0",
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "package.json").write_text(json.dumps(pkg), encoding="utf-8")
+            src = root / "src"
+            src.mkdir()
+            (src / "main.js").write_text(
+                "import VueAlias from 'vue'\n"
+                "import LegacyKit from '@corp/legacy-kit'\n"
+                "VueAlias.use(LegacyKit)\n"
+                "VueAlias.prototype.$http = client\n",
+                encoding="utf-8",
+            )
+            (src / "Feature.vue").write_text(
+                "<script>export default { mounted() { this.$http('/health') } }</script>",
+                encoding="utf-8",
+            )
+            data = self._run_profile(root)
+            related = data["related_packages"]
+            for name in (
+                "legacy-tree-grid-pro",
+                "acme-rich-editor",
+                "@corp/legacy-kit",
+            ):
+                self.assertIn(name, related)
+                self.assertEqual(related[name]["readiness"], "unknown")
+            self.assertIn(
+                "registered-via-Vue.use",
+                related["@corp/legacy-kit"]["candidate_reasons"],
+            )
+            mounts = data["source_impact_signals"]["global_mounts"]
+            self.assertEqual(mounts["$http"]["legacy_definition_samples"], ["src/main.js"])
+            self.assertEqual(mounts["$http"]["consumer_samples"], ["src/Feature.vue"])
+            self.assertFalse(mounts["$http"]["unresolved_consumer"])
+
+    def test_marks_malformed_package_lock_unparsed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "package.json").write_text(
+                json.dumps({"name": "bad-lock", "dependencies": {"vue": "2.6.14"}}),
+                encoding="utf-8",
+            )
+            (root / "package-lock.json").write_text("{broken", encoding="utf-8")
+            data = self._run_profile(root)
+            self.assertEqual(data["lockfile_status"], "unparsed")
+            self.assertTrue(data["lockfile_errors"])
 
 
 if __name__ == "__main__":

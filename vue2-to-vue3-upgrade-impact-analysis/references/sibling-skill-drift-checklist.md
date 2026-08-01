@@ -11,7 +11,9 @@ semantics here, manually compare (do not couple) with the sibling analysis skill
 |---|---|
 | Natural-language reject | 「继续 / 全部放行」still never writes `decided` |
 | Ask-now vs wait | `needs_choice` / exit-style still means ask now |
-| Gate meaning | `batch_implementation_gate=ready` informational only; no install/codemod |
+| Gate meaning | `batch_implementation_gate=ready` = handoff only; `implementation_readiness=not_assessed`; no install/codemod |
+| Lockfile / required_for_path | `ready` still blocked by `lockfile_status` ≠ `present` or deferred required rows |
+| Freshness | status `evidence_as_of` (`YYYY-MM-DD`) required; external usage docs must not call gate “实施授权” |
 | Analysis endpoint | complete only after queue cleared + report regenerated + Agent review |
 | Output confirmation | Writes still need explicit path confirmation |
 | Independence | Neither skill's `SKILL.md` imports or requires the other |

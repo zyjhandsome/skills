@@ -9,11 +9,13 @@
 | analysis_status | complete |
 | decision_status | decided |
 | batch_implementation_gate | ready |
+| implementation_readiness | not_assessed |
 | behavior_parity_required | yes |
 | network_mode | online |
-| report_path | . |
+| report_path | fixtures |
+| evidence_as_of | 2026-08-01 |
 
-**横幅：** 分析完成；`batch_implementation_gate=ready` 仅信息性——实施需另授权，本技能不改代码
+**横幅：** 分析完成；`batch_implementation_gate=ready` 仅 handoff only——实施需另授权，本技能不改代码；`implementation_readiness=not_assessed`
 
 ## 1. 基线与假设
 
@@ -24,6 +26,8 @@
 - 构建变体 / 批次范围：`default` / `full-stack`
 - 入口：workspace
 - lockfile：`package-lock.json`（示例）
+- lockfile_status: present
+- evidence_as_of: 2026-08-01
 - 报告路径（解析结果）：见状态表 `report_path`
 - 假设与限制：决策已确认；实施另授权
 
@@ -40,6 +44,9 @@
 ## 3. 推荐迁移路径
 
 - 推荐路径 id：`compat-big-bang`（已确认）
+- runtime_axis: compat
+- build_axis: vite
+- topology_axis: single-cutover
 - 理由：人工已 `proceed:path:compat-big-bang`
 - 备选路径：—
 - Composition API 全仓重写：另立项，本次不评估工作量
@@ -47,18 +54,18 @@
 
 ## 4. 子系统影响清单
 
-| 子系统 | scope_status | 风险 | 就绪度 | 命名配方 | 说明 |
-|---|---|---|---|---|---|
-| `core-vue` | in_scope | high | needs-major | `vue-compat` | 已 proceed |
-| `router` | in_scope | high | needs-major | `manual-router4` | 已 proceed |
-| `build` | in_scope | high | needs-major | `webpack-to-vite` | 已 proceed |
-| `store` | in_scope | medium | needs-major | `manual-pinia-or-vuex4` | 未进队 |
-| `ui` | in_scope | blocker | replace | `gogocode-element` | 已 proceed |
-| `test` | in_scope | medium | needs-major | — | 未进队 |
-| `lint-ide` | in_scope | medium | needs-major | `eslint-vue3` | 未进队 |
-| `i18n-plugins` | in_scope | high | unknown | — | 已 proceed |
-| `composition-existing` | in_scope | low | unused | — | 未进队 |
-| `blockers` | in_scope | n/a | replace | — | 已由 `ui` / `i18n-plugins` 覆盖 |
+| 子系统 | scope_status | 风险 | 就绪度 | required_for_path | 命名配方 | 说明 |
+|---|---|---|---|---|---|---|
+| `core-vue` | in_scope | high | needs-major | yes | `vue-compat` | 已 proceed |
+| `router` | in_scope | high | needs-major | yes | `manual-router4` | 已 proceed |
+| `build` | in_scope | high | needs-major | yes | `webpack-to-vite` | 已 proceed |
+| `store` | in_scope | medium | needs-major | no | `manual-pinia-or-vuex4` | 未进队 |
+| `ui` | in_scope | blocker | replace | yes | `gogocode-element` | 已 proceed |
+| `test` | in_scope | medium | needs-major | no | — | 未进队 |
+| `lint-ide` | in_scope | medium | needs-major | no | `eslint-vue3` | 未进队 |
+| `i18n-plugins` | in_scope | high | unknown | yes | — | 已 proceed |
+| `composition-existing` | in_scope | low | unused | no | — | 未进队 |
+| `blockers` | in_scope | n/a | replace | no | — | 已由 `ui` / `i18n-plugins` 覆盖 |
 
 ## 5. 分层影响分析
 
@@ -106,7 +113,9 @@
 |---|---|
 | `slot-scope` / 旧 `slot=` | 已纳入影响面 |
 | 全局 `Vue.filter` | 已纳入影响面 |
-| 非 `vue-*` Vue2-only / 编辑器包 | 已核对 |
+| 非 `vue-*` Vue2-only / 编辑器包 | 已覆盖 vue-count-to 等残余候选 |
+| `Vue.prototype.$*` / `this.$*` 定义与消费点 | 已登记定义与消费者 |
+| `globalProperties` / `provide/inject` 迁移目标 | 已登记迁移目标 |
 | lockfile 缺失或未解析 | 有 lockfile |
 
 - 无阻塞缺口；实施需另授权

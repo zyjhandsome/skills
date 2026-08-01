@@ -25,14 +25,79 @@ STATUS_ENUMS = {
     "analysis_status": {"partial", "blocked", "complete"},
     "decision_status": {"needs_choice", "not_needed", "decided"},
     "batch_implementation_gate": {"frozen", "ready"},
+    "implementation_readiness": {"not_assessed"},
     "behavior_parity_required": {"yes", "no"},
     "network_mode": {"online", "offline", "partial"},
 }
 STATUS_HEADERS = ("字段", "取值")
 INVENTORY_HEADERS = ("包名", "当前版本", "Vue3 就绪度", "建议", "证据")
-SUBSYSTEM_HEADERS = ("子系统", "scope_status", "风险", "就绪度", "命名配方", "说明")
+SUBSYSTEM_HEADERS = (
+    "子系统",
+    "scope_status",
+    "风险",
+    "就绪度",
+    "required_for_path",
+    "命名配方",
+    "说明",
+)
 QUEUE_HEADERS = ("单元", "类型", "状态", "问题", "选项")
 RECORD_HEADERS = ("字段", "内容")
+YES_NO = {"yes", "no"}
+AXIS_MARKERS = (
+    ("runtime_axis:", {"compat", "direct-vue3"}),
+    ("build_axis:", {"vite", "cli5-webpack5", "existing-vite"}),
+    ("topology_axis:", {"single-cutover", "coexist"}),
+)
+LOCKFILE_STATUSES = {"present", "absent", "unparsed"}
+PATH_IDS = {
+    "compat-big-bang",
+    "direct-vue3",
+    "microfrontend-coexist",
+    "deferred-inventory-only",
+}
+# Preset constraints from migration-path-ladder.md (build_axis may vary).
+PATH_AXIS_CONSTRAINTS: dict[str, dict[str, str]] = {
+    "compat-big-bang": {
+        "runtime_axis": "compat",
+        "topology_axis": "single-cutover",
+    },
+    "direct-vue3": {
+        "runtime_axis": "direct-vue3",
+        "topology_axis": "single-cutover",
+    },
+    "microfrontend-coexist": {
+        "topology_axis": "coexist",
+    },
+}
+DEFAULT_SUBSYSTEMS = (
+    "core-vue",
+    "router",
+    "build",
+    "store",
+    "ui",
+    "test",
+    "lint-ide",
+    "i18n-plugins",
+    "composition-existing",
+    "blockers",
+)
+RECOMMENDED_PATH_RE = re.compile(
+    r"(?im)推荐路径\s*id\s*[:：]\s*`?([A-Za-z0-9_-]+)`?"
+)
+EVIDENCE_AS_OF_RE = re.compile(
+    r"(?im)^\s*[-*]?\s*`?evidence_as_of`?\s*[:：]\s*`?(\d{4}-\d{2}-\d{2})`?"
+)
+HTTP_URL_RE = re.compile(r"https?://\S+")
+SHALLOW_CHECKLIST_ANSWERS = {
+    "已声明",
+    "已检查",
+    "已核对",
+    "ok",
+    "yes",
+    "y",
+    "done",
+    "通过",
+}
 
 REQUIRED_SECTIONS = (
     "基线与假设",
@@ -69,6 +134,15 @@ UNIT_TYPES = {"path", "subsystem"}
 HIGH_BLOCKER_RISKS = {"high", "blocker"}
 COMPOSITION_MARKER = "Composition API 全仓重写：另立项，本次不评估工作量"
 MANUAL_GAP_CHECKLIST_MARKER = "人工补搜检查"
+MANUAL_GAP_ITEMS = (
+    ("legacy slot syntax", ("slot-scope",)),
+    ("global Vue.filter", ("Vue.filter",)),
+    ("non-vue-prefixed Vue plugin", ("非 `vue-*`", "非 vue-*")),
+    ("legacy global prototype mount", ("Vue.prototype",)),
+    ("global mount migration target", ("globalProperties", "provide/inject")),
+    ("lockfile reproducibility", ("lockfile",)),
+)
+CHECKLIST_PLACEHOLDERS = {"", "-", "—", "todo", "待填", "待填写"}
 UNIT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 FENCE = re.compile(r"(?ms)^[ \t]*(```|~~~).*?^[ \t]*\1[ \t]*$")
 HTML_COMMENT = re.compile(r"(?s)<!--.*?-->")
@@ -173,7 +247,7 @@ def parse_status(text: str) -> tuple[dict[str, str], list[str]]:
     end = start + next_heading.start() if next_heading else len(text)
     rows, errors = parse_table(text[start:end], STATUS_HEADERS)
     values: dict[str, str] = {}
-    allowed_keys = set(STATUS_ENUMS) | {"report_path"}
+    allowed_keys = set(STATUS_ENUMS) | {"report_path", "evidence_as_of"}
     for row in rows:
         key, value = row
         if key in values:
@@ -190,18 +264,169 @@ def parse_status(text: str) -> tuple[dict[str, str], list[str]]:
             errors.append(f"invalid {key}={value!r}; allowed={sorted(allowed)}")
     if not values.get("report_path"):
         errors.append("missing status field: report_path")
+    as_of = values.get("evidence_as_of")
+    if not as_of:
+        errors.append("missing status field: evidence_as_of")
+    elif not re.fullmatch(r"\d{4}-\d{2}-\d{2}", as_of):
+        errors.append(
+            f"invalid evidence_as_of={as_of!r}; expected YYYY-MM-DD"
+        )
     return values, errors
 
 
 def path_matches_report(value: str, report: Path) -> bool:
-    normalized = value.strip().strip("`").replace("\\", "/").rstrip("/") or "."
+    """Require a concrete path that resolve-equals the report directory.
+
+    Bare `.` / `./` are rejected. Soft `endswith` matching is not allowed.
+    Relative paths resolve against the process cwd (portable fixtures).
+    Leading-`/` paths are treated as POSIX absolutes even on Windows.
+    """
+    text = value.strip().strip("`").replace("\\", "/").rstrip("/")
+    if not text or text in {".", "./"}:
+        return False
     expected = report.parent.resolve()
-    candidate = Path(normalized)
-    if candidate.is_absolute():
-        return candidate.resolve() == expected
-    if normalized == ".":
-        return True
-    return expected.as_posix().rstrip("/").endswith("/" + normalized.lstrip("./"))
+    expected_posix = expected.as_posix()
+
+    if text.startswith("/"):
+        if expected_posix == text or expected_posix.lower() == text.lower():
+            return True
+        if sys.platform == "win32":
+            mapped = Path(expected.anchor + text.lstrip("/"))
+            try:
+                return mapped.resolve() == expected
+            except OSError:
+                return False
+        try:
+            return Path(text).resolve() == expected
+        except OSError:
+            return False
+
+    candidate = Path(text)
+    try:
+        if candidate.is_absolute():
+            return candidate.resolve() == expected
+        return (Path.cwd() / text).resolve() == expected
+    except OSError:
+        return False
+
+
+def parse_evidence_as_of_baseline(baseline: str, status_value: str | None, result: ReportResult) -> None:
+    """Allow §1 to restate evidence_as_of; status table remains authoritative."""
+    match = EVIDENCE_AS_OF_RE.search(baseline)
+    if match and status_value and match.group(1) != status_value:
+        result.error(
+            f"§1 evidence_as_of {match.group(1)!r} != status evidence_as_of {status_value!r}"
+        )
+
+
+def parse_lockfile_status(baseline: str, result: ReportResult) -> str | None:
+    match = re.search(
+        r"(?im)^\s*[-*]?\s*`?lockfile_status`?\s*[:：]\s*`?([A-Za-z_-]+)`?",
+        baseline,
+    )
+    if not match:
+        result.error(
+            "§1 missing structured lockfile_status: present / absent / unparsed"
+        )
+        return None
+    value = match.group(1).lower()
+    if value not in LOCKFILE_STATUSES:
+        result.error(
+            f"§1 invalid lockfile_status {value!r}; allowed={sorted(LOCKFILE_STATUSES)}"
+        )
+        return None
+    return value
+
+
+def _checklist_answer(line: str) -> str:
+    stripped = line.strip()
+    if stripped.startswith("|"):
+        cells = [clean_cell(cell) for cell in stripped.strip("|").split("|")]
+        return cells[-1].strip() if len(cells) >= 2 else ""
+    match = re.search(r"[:：]\s*(.+?)\s*$", stripped)
+    return match.group(1).strip() if match else ""
+
+
+def validate_manual_gap_checklist(block: str, result: ReportResult) -> None:
+    if MANUAL_GAP_CHECKLIST_MARKER not in block:
+        result.error(f"§10 missing required checklist marker: {MANUAL_GAP_CHECKLIST_MARKER}")
+        return
+    lines = block.splitlines()
+    matched_lines: dict[str, str] = {}
+    for label, alternatives in MANUAL_GAP_ITEMS:
+        matched = next(
+            (
+                line
+                for line in lines
+                if any(marker.lower() in line.lower() for marker in alternatives)
+            ),
+            None,
+        )
+        if matched is None:
+            result.error(f"§10 manual checklist missing item: {label}")
+            continue
+        matched_lines[label] = matched
+        answer = _checklist_answer(matched)
+        if answer.lower() in CHECKLIST_PLACEHOLDERS:
+            result.error(f"§10 manual checklist item has no answer: {label}")
+        elif answer.lower() in {item.lower() for item in SHALLOW_CHECKLIST_ANSWERS}:
+            result.error(
+                f"§10 manual checklist item has shallow answer {answer!r}: {label}"
+            )
+    line_owners: dict[str, list[str]] = {}
+    for label, line in matched_lines.items():
+        line_owners.setdefault(line, []).append(label)
+    for line, owners in line_owners.items():
+        if len(owners) > 1:
+            result.error(
+                "§10 manual checklist items must each have a dedicated line; "
+                f"shared line covers {owners!r}"
+            )
+            break
+
+
+def parse_axes(path_block: str, result: ReportResult) -> dict[str, str]:
+    axes: dict[str, str] = {}
+    for marker, allowed in AXIS_MARKERS:
+        match = re.search(
+            rf"(?im)^\s*[-*]?\s*`?{re.escape(marker)}`?\s*`?([A-Za-z0-9_-]+)`?",
+            path_block,
+        )
+        if not match:
+            # also allow inline "runtime_axis: compat"
+            match = re.search(
+                rf"(?i){re.escape(marker)}\s*`?([A-Za-z0-9_-]+)`?",
+                path_block,
+            )
+        if not match:
+            result.error(f"§3 missing required axis marker {marker}")
+            continue
+        value = match.group(1).strip()
+        if value not in allowed:
+            result.error(
+                f"§3 invalid {marker} {value!r}; allowed={sorted(allowed)}"
+            )
+            continue
+        axes[marker.rstrip(":")] = value
+    return axes
+
+
+def validate_path_axis_consistency(
+    path_id: str, axes: dict[str, str], result: ReportResult
+) -> None:
+    if path_id == "deferred-inventory-only":
+        return
+    constraints = PATH_AXIS_CONSTRAINTS.get(path_id)
+    if not constraints:
+        return
+    for axis_key, expected in constraints.items():
+        actual = axes.get(axis_key)
+        if actual and actual != expected:
+            result.error(
+                f"path id {path_id!r} conflicts with {axis_key}={actual!r}; "
+                f"preset requires {expected!r} "
+                f"(Wave 1 `other` + matching path id, or change axes)"
+            )
 
 
 def parse_subsystems(block: str, result: ReportResult) -> list[dict[str, str]]:
@@ -213,7 +438,7 @@ def parse_subsystems(block: str, result: ReportResult) -> list[dict[str, str]]:
     parsed: list[dict[str, str]] = []
     seen: set[str] = set()
     for cells in rows:
-        sid, scope, risk, readiness, recipe, note = cells
+        sid, scope, risk, readiness, required, recipe, note = cells
         if not UNIT_ID.fullmatch(sid):
             result.error(f"invalid subsystem id: {sid!r}")
         if sid in seen:
@@ -225,9 +450,33 @@ def parse_subsystems(block: str, result: ReportResult) -> list[dict[str, str]]:
             result.error(f"invalid risk for {sid}: {risk!r}")
         if readiness not in READINESS:
             result.error(f"invalid readiness for {sid}: {readiness!r}")
+        if required not in YES_NO:
+            result.error(f"invalid required_for_path for {sid}: {required!r}")
+        if (
+            scope == "in_scope"
+            and risk in HIGH_BLOCKER_RISKS
+            and required != "yes"
+        ):
+            result.error(
+                f"in_scope high/blocker subsystem {sid!r} must set required_for_path=yes"
+            )
         if not recipe or not note:
             result.error(f"subsystem row has blank recipe/note: {sid}")
-        parsed.append({"id": sid, "scope_status": scope, "risk": risk, "readiness": readiness})
+        parsed.append(
+            {
+                "id": sid,
+                "scope_status": scope,
+                "risk": risk,
+                "readiness": readiness,
+                "required_for_path": required,
+            }
+        )
+    missing_defaults = [sid for sid in DEFAULT_SUBSYSTEMS if sid not in seen]
+    if missing_defaults:
+        result.error(
+            "§4 missing default subsystem rows (use not_applicable if unused): "
+            + ", ".join(missing_defaults)
+        )
     return parsed
 
 
@@ -249,6 +498,10 @@ def parse_queue(block: str, result: ReportResult) -> list[dict[str, str]]:
         unit_id = unit[len(prefix) :] if prefix and unit.startswith(prefix) else ""
         if not unit_id or not UNIT_ID.fullmatch(unit_id):
             result.error(f"queue unit/type mismatch or invalid id: {unit!r} / {unit_type!r}")
+        if unit_type == "path" and unit_id and unit_id not in PATH_IDS:
+            result.error(
+                f"unknown path id {unit_id!r}; allowed={sorted(PATH_IDS)}"
+            )
         if status not in QUEUE_STATUSES:
             result.error(f"invalid queue status for {unit}: {status!r}")
         if not question or not options:
@@ -308,6 +561,11 @@ def parse_record(path: Path, expected_unit: str, expected_status: str, result: R
             result.error(f"{path.name}: decided 人工答复 must equal {expected_token!r}")
     elif expected_status == "deferred" and answer != "defer":
         result.error(f"{path.name}: deferred 人工答复 must equal 'defer'")
+    evidence_url = values.get("兼容性证据（URL）", "")
+    if evidence_url and not HTTP_URL_RE.search(evidence_url):
+        result.error(
+            f"{path.name}: 兼容性证据（URL） must contain an http(s) URL"
+        )
 
 
 def validate_report(path: Path) -> ReportResult:
@@ -344,6 +602,8 @@ def validate_report(path: Path) -> ReportResult:
     baseline = sections.get("基线与假设", "")
     if "lockfile" not in baseline.lower():
         result.error("§1 must state lockfile status (e.g. path present, or 无 lockfile)")
+    lock_status = parse_lockfile_status(baseline, result)
+    parse_evidence_as_of_baseline(baseline, status.get("evidence_as_of"), result)
 
     path_block = sections.get("推荐迁移路径", "")
     if COMPOSITION_MARKER not in path_block:
@@ -353,24 +613,52 @@ def validate_report(path: Path) -> ReportResult:
     )
     if not name_marker_ok:
         result.error("§3 missing Name-never-run marker")
+    axes = parse_axes(path_block, result)
+    recommended_match = RECOMMENDED_PATH_RE.search(path_block)
+    recommended_path = recommended_match.group(1) if recommended_match else None
+    if not recommended_path:
+        result.error("§3 missing 推荐路径 id")
+    elif recommended_path not in PATH_IDS:
+        result.error(
+            f"§3 unknown 推荐路径 id {recommended_path!r}; allowed={sorted(PATH_IDS)}"
+        )
+    else:
+        validate_path_axis_consistency(recommended_path, axes, result)
 
     gap_block = sections.get("未决问题与证据缺口", "")
-    if MANUAL_GAP_CHECKLIST_MARKER not in gap_block:
-        result.error(f"§10 missing required checklist marker: {MANUAL_GAP_CHECKLIST_MARKER}")
+    validate_manual_gap_checklist(gap_block, result)
 
     subsystems = parse_subsystems(sections.get("子系统影响清单", ""), result)
     queue = parse_queue(sections.get("确认队列", ""), result)
     queue_by_unit = {row["unit"]: row for row in queue}
     path_rows = [row for row in queue if row["type"] == "path"]
     path_row = path_rows[0] if len(path_rows) == 1 else None
+    if path_row and recommended_path and path_row["id"] != recommended_path:
+        result.error(
+            f"§7 path id {path_row['id']!r} does not match §3 推荐路径 id "
+            f"{recommended_path!r}"
+        )
+    elif (
+        path_row
+        and path_row["id"] in PATH_IDS
+        and path_row["id"] != recommended_path
+    ):
+        validate_path_axis_consistency(path_row["id"], axes, result)
 
     mandatory_ids = {
-        row["id"] for row in subsystems
-        if row["scope_status"] != "not_applicable" and row["risk"] in HIGH_BLOCKER_RISKS
+        row["id"]
+        for row in subsystems
+        if row["scope_status"] != "not_applicable"
+        and (
+            row["risk"] in HIGH_BLOCKER_RISKS
+            or row.get("required_for_path") == "yes"
+        )
     }
     for sid in sorted(mandatory_ids):
         if f"subsystem:{sid}" not in queue_by_unit:
-            result.error(f"high/blocker subsystem {sid!r} missing from confirmation queue")
+            result.error(
+                f"high/blocker or required_for_path subsystem {sid!r} missing from confirmation queue"
+            )
 
     path_decided = bool(path_row and path_row["status"] == "decided")
     for row in queue:
@@ -380,8 +668,11 @@ def validate_report(path: Path) -> ReportResult:
     analysis = status.get("analysis_status")
     decision = status.get("decision_status")
     gate = status.get("batch_implementation_gate")
+    impl_ready = status.get("implementation_readiness")
     askable = [row for row in queue if row["status"] in {"ready", "pending"}]
     blocked_or_deferred = [row for row in queue if row["status"] in {"blocked", "deferred"}]
+    if impl_ready and impl_ready != "not_assessed":
+        result.error("implementation_readiness must be not_assessed in this skill")
     if analysis == "complete" and askable:
         result.error("analysis_status=complete while ready/pending queue rows remain")
     if analysis == "complete" and decision != "decided":
@@ -394,11 +685,18 @@ def validate_report(path: Path) -> ReportResult:
         result.error("batch_implementation_gate=ready requires complete/decided")
     if gate == "ready" and blocked_or_deferred:
         result.error("batch_implementation_gate=ready forbidden while blocked/deferred rows remain")
+    if gate == "ready" and lock_status != "present":
+        result.error(
+            "batch_implementation_gate=ready requires lockfile_status=present"
+        )
     if gate == "ready" and (not path_decided or any(
         queue_by_unit.get(f"subsystem:{sid}", {}).get("status") != "decided"
         for sid in mandatory_ids
     )):
-        result.error("batch_implementation_gate=ready requires path and every High/blocker subsystem decided")
+        result.error(
+            "batch_implementation_gate=ready requires path and every "
+            "High/blocker/required_for_path subsystem decided"
+        )
 
     records_dir = path.parent / DECISION_RECORDS_DIR
     if analysis == "complete":
@@ -419,8 +717,14 @@ def validate_report(path: Path) -> ReportResult:
     elif analysis == "partial" and not records_dir.is_dir():
         result.warn("partial report missing decision-records/ (recommended)")
 
-    if gate == "ready" and not any("实施需另授权" in line or "不改代码" in line for line in text.splitlines()):
-        result.error("ready report must state that implementation needs separate authorization / this skill does not edit code")
+    if gate == "ready" and not any(
+        "实施需另授权" in line or "不改代码" in line or "handoff only" in line.lower()
+        for line in text.splitlines()
+    ):
+        result.error(
+            "ready report must state that implementation needs separate authorization / "
+            "this skill does not edit code / handoff only"
+        )
     return result
 
 

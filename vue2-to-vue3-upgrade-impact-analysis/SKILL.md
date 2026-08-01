@@ -60,13 +60,10 @@ batch = **one frontend workspace × one build variant × one bounded scope**.
 
 ## Default recommended path
 
-Unless evidence rules it out, recommend:
-
-**单仓大爆炸切流 + 仓内 `@vue/compat` 分步清 warning + 构建必须同升（偏 Vite）**
-
-Path id: `compat-big-bang`. Alternatives and when to switch:
-`references/migration-path-ladder.md`. Confirmation still requires a human
-`proceed:path:…` (or `other`).
+Unless evidence rules it out, recommend path id `compat-big-bang` with axes
+`runtime_axis: compat`, `build_axis: vite`, `topology_axis: single-cutover`
+(see `references/migration-path-ladder.md`). Wave 1 still confirms one path id;
+§3 must state all three axes. Human `proceed:path:…` / `other` required.
 
 ## Workflow
 
@@ -74,27 +71,32 @@ Path id: `compat-big-bang`. Alternatives and when to switch:
    (ask if multiple). Exit `5` → stop (`blocked`). State assumptions.
 2. Run light inventory (`scripts/profile_inventory.py` or equivalent read-only
    scan). Cover all default subsystems in
-   `references/subsystem-inventory.md`. Record lockfile presence/absence.
-3. Classify each subsystem: `in_scope` / `not_applicable` / `blocker` /
-   `high` / `medium` / `low`. List Vue-related packages with Vue3 readiness
+   `references/subsystem-inventory.md`. Record `lockfile_status` as `present`,
+   `absent`, or `unparsed`; keep the handoff gate frozen unless it is `present`.
+3. Classify each subsystem (`risk`, readiness, `required_for_path`). List
+   Vue-related and candidate plugin packages (including non-`vue-*` names found
+   through peer metadata, name heuristics, imports, or `Vue.use`) with Vue3 readiness
    (`ready` / `needs-major` / `replace` / `unknown` / `unused`).
-4. Pick `recommended_path` from `references/migration-path-ladder.md`. Name
-   applicable recipes; never execute them.
+4. Pick `recommended_path` + three axes; name recipes; never execute them.
 5. Map impact (`references/impact-and-validation.md`): breaking API surfaces,
-   UI/library jumps, router/store/build/test, smoke/E2E needs. Mark fact vs
-   inference. Composition rewrite = out of scope note only. Complete §10
-   人工补搜检查 even when profile signals look complete.
-6. Draft packet + Decision Records (path unit + each High/blocker subsystem).
+   UI/library jumps, router/store/build/test, smoke/E2E needs. Cite URLs from
+   `references/official-docs-index.md` (fetch pages; do not invent breaks).
+   Mark fact vs inference. Composition rewrite = out of scope note only.
+   Complete §10 人工补搜检查 even when profile signals look complete. Register
+   every `Vue.prototype.$*` definition/consumer and its `globalProperties` or
+   `provide/inject` migration target.
+6. Draft packet + Decision Records (path + each High/blocker /
+   `required_for_path=yes` subsystem).
 7. Work confirmation queue (`references/human-confirmation-gates.md`):
    - Wave 1: migration **path** (`ready`) — ask now.
-   - After path `decided`: Wave 2+ every High/blocker **subsystem** currently
-     `ready`, same wave, each with its own answer.
+   - After path `decided`: Wave 2+ every High/blocker /
+     `required_for_path=yes` **subsystem** currently `ready`, same wave.
    Never ask `blocked`. No blanket proceed. Record → regenerate → Agent review
    → `analysis_status=complete`.
 8. Stop. Do not open implementation plans from this skill.
 
-「继续 / 全部放行 / 别再问了」**≠** proceed token. Do **not** infer
-`decided`. Re-prompt with verbatim `proceed:path:…` /
+「继续 / 全部放行 / 别再问了 / 全部纳入」**≠** proceed token. Do **not**
+infer `decided`. Re-prompt with verbatim `proceed:path:…` /
 `proceed:subsystem:…` menus. Natural language never writes `人工答复`.
 
 ## Output
@@ -142,22 +144,26 @@ well-formed, never that evidence is sufficient. Fixtures:
 |---|---|
 | `analysis_status` | `partial` / `blocked` / `complete` |
 | `decision_status` | `needs_choice` / `not_needed` / `decided` |
-| `batch_implementation_gate` | `frozen` / `ready` (informational; never implements) |
-| also required | `behavior_parity_required`, `network_mode`, `report_path` |
+| `batch_implementation_gate` | `frozen` / `ready` (**handoff only**; never implements) |
+| `implementation_readiness` | always `not_assessed` in this skill |
+| also required | `behavior_parity_required`, `network_mode`, `report_path`, `evidence_as_of` |
 
 Never set `analysis_status=complete` while `decision_status=needs_choice` or any
 queue `ready`/`pending`. Uncleared askable rows ⇒ **ask now**, not “继续/放行”.
-`batch_implementation_gate=ready` is informational only — never start install,
-codemod, or source edits from this skill.
+`batch_implementation_gate=ready` requires `lockfile_status=present` in §1 and every
+High/blocker / `required_for_path=yes` row `decided` — still never start
+install, codemod, or source edits from this skill. Validator also enforces:
+concrete `report_path` (not bare `.`), default subsystem full set, path id ∈
+ladder matching §3/§7, and path preset ↔ axis consistency.
 
 ## Completion gate
 
 - Preflight passed (Node probe + package manager detect + Python)
-- Workspace profiled; subsystems classified; path recommended; recipes named
-  not run; fact/inference split; Composition rewrite scoped out; every
-  High/blocker subsystem queued + recorded; queue zero `ready`/`pending`;
-  `decision-records/` complete; validator exit `0`; Agent review →
-  `analysis_status=complete`
+- Workspace profiled; subsystems + `required_for_path` classified; path + axes
+  stated; recipes named not run; fact/inference split; Composition rewrite
+  scoped out; every High/blocker / `required_for_path=yes` queued + recorded;
+  queue zero `ready`/`pending`; `decision-records/` complete; validator exit
+  `0`; Agent review → `analysis_status=complete`
 
 ## References
 
@@ -166,7 +172,8 @@ codemod, or source edits from this skill.
 
 **On demand:** `references/dual-entry-and-batching.md`,
 `references/migration-path-ladder.md`, `references/impact-and-validation.md`,
-`references/named-migration-recipes.md`, `references/common-upgrade-patterns.md`,
+`references/official-docs-index.md`, `references/named-migration-recipes.md`,
+`references/common-upgrade-patterns.md`,
 `references/next-action-choice-menus.md`, `references/report-contract.md`,
 `references/decision-record-schema.md`,
 `references/sibling-skill-drift-checklist.md` (maintainer only; no runtime

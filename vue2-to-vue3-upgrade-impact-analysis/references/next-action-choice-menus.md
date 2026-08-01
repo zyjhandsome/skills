@@ -3,10 +3,12 @@
 ## §A — Path menu (Wave 1)
 
 Always show the recommended path first, then alternatives with one-line why.
+Also restate the three axes from §3 (`runtime_axis` / `build_axis` /
+`topology_axis`). If the human wants a non-default axis mix, use `other`.
 
 Example question:
 
-> 推荐路径 `compat-big-bang`（单仓大爆炸切流 + 仓内 `@vue/compat` + 构建同升偏 Vite）。是否确认？
+> 推荐路径 `compat-big-bang`（默认轴：`runtime_axis: compat`，`build_axis: vite`，`topology_axis: single-cutover`）。是否确认？
 
 Options (verbatim tokens):
 
@@ -18,8 +20,8 @@ Options (verbatim tokens):
 
 Do not offer `proceed:path:deferred-inventory-only` unless entry is inventory-only.
 
-Reject「继续 / 全部放行」as answers; re-show this menu until a verbatim token
-arrives.
+Reject「继续 / 全部放行 / 全部纳入」as answers; re-show this menu until a
+verbatim token arrives.
 
 ## §B — Subsystem menu (Wave 2+)
 

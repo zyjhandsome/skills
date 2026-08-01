@@ -18,7 +18,7 @@ Files live beside the report under `decision-records/`.
 | 当前结论 | recommended path or subsystem action summary |
 | 风险 | `blocker` / `high` / `medium` / `low` / `n/a` |
 | 命名配方 | recipe ids or `—`；never executed |
-| 兼容性证据（URL） | |
+| 兼容性证据（URL） | 须含至少一处 `http://` 或 `https://` URL（优先 official-docs-index） |
 | 已命名验证项 | |
 | 回滚触发条件 + 恢复目标 | |
 | 责任人 | |

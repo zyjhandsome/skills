@@ -54,6 +54,15 @@ SOURCE_PATTERNS = {
     "router_add_routes": re.compile(r"\.addRoutes\s*\("),
     "router_wildcard": re.compile(r"path\s*:\s*['\"]\*['\"]"),
     "event_bus": re.compile(r"\.\$(?:on|off|once)\s*\("),
+    "vue_prototype_assignment": re.compile(
+        r"\bVue\.prototype(?:\.\$[A-Za-z_$][\w$]*|\[\s*['\"]\$[A-Za-z_$][\w$]*['\"]\s*\])\s*="
+    ),
+    "vue_prototype_define_property": re.compile(
+        r"\bObject\.defineProperty\s*\(\s*Vue\.prototype\s*,\s*['\"]\$[A-Za-z_$][\w$]*['\"]"
+    ),
+    "global_properties_assignment": re.compile(
+        r"\b[A-Za-z_$][\w$]*\.config\.globalProperties(?:\.\$[A-Za-z_$][\w$]*|\[\s*['\"]\$[A-Za-z_$][\w$]*['\"]\s*\])\s*="
+    ),
 }
 SCRIPT_SETUP_ATTR = re.compile(r"<script\b[^>]*\bsetup\b", re.I)
 # Vue Options/Composition setup(props|context) — not editor callbacks like setup(editor)
@@ -62,6 +71,26 @@ VUE_SETUP_FN = re.compile(
     re.M,
 )
 EDITOR_SETUP_FN = re.compile(r"\bsetup\s*\(\s*editor\b", re.I)
+PACKAGE_HINT = re.compile(
+    r"(?:^|[-_/])(vue2?|plugin|editor|grid|tree|table|widget|component|ui)(?:$|[-_/])",
+    re.I,
+)
+IMPORT_DEFAULT = re.compile(
+    r"\bimport\s+(?:type\s+)?([A-Za-z_$][\w$]*)\s+from\s+['\"]([^'\"]+)['\"]"
+)
+IMPORT_NAMESPACE = re.compile(
+    r"\bimport\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+['\"]([^'\"]+)['\"]"
+)
+REQUIRE_BINDING = re.compile(
+    r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\(\s*['\"]([^'\"]+)['\"]\s*\)"
+)
+GLOBAL_MOUNT_CONSUMER = re.compile(r"\bthis\.(\$[A-Za-z_$][\w$]*)\b")
+VUE_BUILTIN_INSTANCE_PROPERTIES = {
+    "$attrs", "$children", "$data", "$delete", "$destroy", "$el", "$emit",
+    "$forceUpdate", "$listeners", "$mount", "$nextTick", "$off", "$on", "$once",
+    "$options", "$parent", "$refs", "$root", "$scopedSlots", "$set", "$slots",
+    "$watch",
+}
 
 
 def is_related(name: str) -> bool:
@@ -184,6 +213,72 @@ def package_lock_versions(lockfiles: list[str], package_names: set[str]) -> dict
     return versions
 
 
+def assess_lockfiles(lockfiles: list[str]) -> dict:
+    """Return a conservative, machine-readable lockfile state."""
+    if not lockfiles:
+        return {"status": "absent", "errors": []}
+    errors: list[str] = []
+    for item in lockfiles:
+        path = Path(item)
+        try:
+            if path.stat().st_size == 0:
+                errors.append(f"empty:{path}")
+                continue
+            if path.name == "package-lock.json":
+                data = json.loads(path.read_text(encoding="utf-8"))
+                if not isinstance(data, dict):
+                    errors.append(f"invalid-root:{path}")
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            errors.append(f"unparsed:{path}:{type(exc).__name__}")
+    return {"status": "unparsed" if errors else "present", "errors": errors}
+
+
+def package_peer_vue_specs(
+    root: Path, lockfiles: list[str], package_names: set[str]
+) -> dict[str, str]:
+    """Read Vue peer ranges from package-lock metadata or installed packages."""
+    specs: dict[str, str] = {}
+    lock = next((Path(item) for item in lockfiles if Path(item).name == "package-lock.json"), None)
+    if lock:
+        try:
+            data = json.loads(lock.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            data = {}
+        packages = data.get("packages") if isinstance(data, dict) else None
+        if isinstance(packages, dict):
+            for name in package_names:
+                meta = packages.get(f"node_modules/{name}")
+                peers = meta.get("peerDependencies") if isinstance(meta, dict) else None
+                if isinstance(peers, dict) and peers.get("vue"):
+                    specs[name] = str(peers["vue"])
+    modules_root = root / "node_modules"
+    for name in package_names - specs.keys():
+        manifest = modules_root.joinpath(*name.split("/"), "package.json")
+        try:
+            meta = json.loads(manifest.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            continue
+        peers = meta.get("peerDependencies") if isinstance(meta, dict) else None
+        if isinstance(peers, dict) and peers.get("vue"):
+            specs[name] = str(peers["vue"])
+    return specs
+
+
+def package_name_from_specifier(specifier: str) -> str | None:
+    if not specifier or specifier.startswith((".", "/", "#")):
+        return None
+    parts = specifier.split("/")
+    if specifier.startswith("@"):
+        return "/".join(parts[:2]) if len(parts) >= 2 else None
+    return parts[0]
+
+
+def _append_sample(target: dict[str, list[str]], key: str, relative: str) -> None:
+    bucket = target.setdefault(key, [])
+    if relative not in bucket and len(bucket) < 5:
+        bucket.append(relative)
+
+
 def scan_source(root: Path, max_files: int = 5000, max_bytes: int = 1_000_000) -> dict:
     signal_keys = list(SOURCE_PATTERNS) + ["composition_setup"]
     counts: Counter[str] = Counter()
@@ -191,10 +286,15 @@ def scan_source(root: Path, max_files: int = 5000, max_bytes: int = 1_000_000) -
     scanned_files = 0
     skipped_large = 0
     truncated = False
+    plugin_packages: dict[str, list[str]] = {}
+    legacy_definitions: dict[str, list[str]] = {}
+    vue3_definitions: dict[str, list[str]] = {}
+    consumers: dict[str, list[str]] = {}
     source_root = root / "src"
     if not source_root.is_dir():
         return {"scanned_files": 0, "skipped_large_files": 0, "truncated": False,
-                "signals": {}, "samples": {}}
+                "signals": {}, "samples": {}, "vue_plugin_packages": {},
+                "global_mounts": {}}
     for path in source_root.rglob("*"):
         if any(part in SKIP_DIRS for part in path.parts) or not path.is_file() or path.suffix.lower() not in SOURCE_SUFFIXES:
             continue
@@ -210,6 +310,45 @@ def scan_source(root: Path, max_files: int = 5000, max_bytes: int = 1_000_000) -
             continue
         scanned_files += 1
         relative = path.relative_to(root).as_posix()
+        bindings: dict[str, str] = {}
+        for pattern in (IMPORT_DEFAULT, IMPORT_NAMESPACE, REQUIRE_BINDING):
+            for match in pattern.finditer(text):
+                package = package_name_from_specifier(match.group(2))
+                if package:
+                    bindings[match.group(1)] = package
+        vue_bindings = {"Vue"}
+        vue_bindings.update(binding for binding, package in bindings.items() if package == "vue")
+        for vue_binding in vue_bindings:
+            for match in re.finditer(
+                rf"\b{re.escape(vue_binding)}\.use\s*\(\s*([A-Za-z_$][\w$]*)",
+                text,
+            ):
+                package = bindings.get(match.group(1))
+                if package and package != "vue":
+                    _append_sample(plugin_packages, package, relative)
+            definition_patterns = (
+                re.compile(
+                    rf"\b{re.escape(vue_binding)}\.prototype\.(\$[A-Za-z_$][\w$]*)\s*="
+                ),
+                re.compile(
+                    rf"\b{re.escape(vue_binding)}\.prototype\[\s*['\"](\$[A-Za-z_$][\w$]*)['\"]\s*\]\s*="
+                ),
+                re.compile(
+                    rf"\bObject\.defineProperty\s*\(\s*{re.escape(vue_binding)}\.prototype\s*,\s*['\"](\$[A-Za-z_$][\w$]*)['\"]"
+                ),
+            )
+            for pattern in definition_patterns:
+                for match in pattern.finditer(text):
+                    _append_sample(legacy_definitions, match.group(1), relative)
+        for match in re.finditer(
+            r"\b[A-Za-z_$][\w$]*\.config\.globalProperties\.(\$[A-Za-z_$][\w$]*)\s*=",
+            text,
+        ):
+            _append_sample(vue3_definitions, match.group(1), relative)
+        for match in GLOBAL_MOUNT_CONSUMER.finditer(text):
+            name = match.group(1)
+            if name not in VUE_BUILTIN_INSTANCE_PROPERTIES:
+                _append_sample(consumers, name, relative)
         for key, pattern in SOURCE_PATTERNS.items():
             matches = list(pattern.finditer(text))
             if matches:
@@ -221,12 +360,25 @@ def scan_source(root: Path, max_files: int = 5000, max_bytes: int = 1_000_000) -
             counts["composition_setup"] += setup_hits
             if len(samples["composition_setup"]) < 5:
                 samples["composition_setup"].append(relative)
+    mount_names = sorted(set(legacy_definitions) | set(vue3_definitions) | set(consumers))
+    global_mounts = {
+        name: {
+            "legacy_definition_samples": legacy_definitions.get(name, []),
+            "vue3_definition_samples": vue3_definitions.get(name, []),
+            "consumer_samples": consumers.get(name, []),
+            "unresolved_consumer": bool(consumers.get(name))
+            and not bool(legacy_definitions.get(name) or vue3_definitions.get(name)),
+        }
+        for name in mount_names
+    }
     return {
         "scanned_files": scanned_files,
         "skipped_large_files": skipped_large,
         "truncated": truncated,
         "signals": dict(sorted(counts.items())),
         "samples": {key: value for key, value in samples.items() if value},
+        "vue_plugin_packages": dict(sorted(plugin_packages.items())),
+        "global_mounts": global_mounts,
     }
 
 
@@ -234,17 +386,34 @@ def profile(root: Path) -> dict:
     pkg = load_package_json(root)
     deps = deps_map(pkg)
     lockfiles = find_lockfiles(root)
+    lockfile_state = assess_lockfiles(lockfiles)
     resolved = package_lock_versions(lockfiles, set(deps))
+    peer_vue_specs = package_peer_vue_specs(root, lockfiles, set(deps))
+    source_impact = scan_source(root)
     related = {}
     for name, spec in sorted(deps.items()):
-        if not is_related(name):
+        candidate_reasons: list[str] = []
+        if is_related(name):
+            candidate_reasons.append("known-vue-package")
+        if PACKAGE_HINT.search(name):
+            candidate_reasons.append("package-name-heuristic")
+        if name in peer_vue_specs:
+            candidate_reasons.append(f"peerDependencies.vue={peer_vue_specs[name]}")
+        if name in source_impact["vue_plugin_packages"]:
+            candidate_reasons.append("registered-via-Vue.use")
+        if not candidate_reasons:
             continue
         effective = resolved.get(name, spec)
         related[name] = {
             "declared_version": spec,
             "resolved_version": resolved.get(name),
             "readiness": classify_vue3_readiness(name, effective),
-            "classification_basis": "minimum-compatible-major; verify selected target version from official sources",
+            "candidate_reasons": candidate_reasons,
+            "classification_basis": (
+                "minimum-compatible-major; verify selected target version from official sources"
+                if is_related(name)
+                else "candidate-only; verify Vue3 support, maintenance status, and replacement"
+            ),
         }
     vue_spec = deps.get("vue", "")
     scripts = json.dumps(pkg.get("scripts") or {})
@@ -280,8 +449,10 @@ def profile(root: Path) -> dict:
         "ui_stack": "element-ui" if "element-ui" in deps else "element-plus" if "element-plus" in deps else "ant-design-vue" if "ant-design-vue" in deps else "vuetify" if "vuetify" in deps else "none",
         "composition_bridge": "@vue/composition-api" in deps,
         "lockfiles": lockfiles,
+        "lockfile_status": lockfile_state["status"],
+        "lockfile_errors": lockfile_state["errors"],
         "related_packages": related,
-        "source_impact_signals": scan_source(root),
+        "source_impact_signals": source_impact,
     }
 
 
@@ -305,7 +476,10 @@ def main() -> int:
         print(f"workspace: {data['package_name']} @ {data['project_root']}")
         print(f"vue: {data['vue_version_spec']} (major={data['vue_major']})")
         print(f"builder: {data['builder']} store: {data['store']} ui: {data['ui_stack']}")
-        print(f"locks: {len(data['lockfiles'])} source files: {data['source_impact_signals']['scanned_files']}")
+        print(
+            f"locks: {len(data['lockfiles'])} ({data['lockfile_status']}) "
+            f"source files: {data['source_impact_signals']['scanned_files']}"
+        )
         for name, meta in data["related_packages"].items():
             shown = meta["resolved_version"] or meta["declared_version"]
             print(f"  - {name}@{shown} [{meta['readiness']}]")

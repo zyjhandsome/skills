@@ -10,11 +10,12 @@
 
 | 层 | 职责 |
 |---|---|
-| 本 Skill | 只读分析 → 确认队列 → `analysis_status=complete` + `batch_implementation_gate` |
+| 本 Skill | 只读分析 → 确认队列 → `analysis_status=complete` + `batch_implementation_gate`（handoff only）+ `implementation_readiness=not_assessed` |
 | delivery-* | 定框 / 计划 / 实施 / 验证（另授权） |
 | OpenSpec change | 生命周期与状态真相（若团队使用） |
 
-Skill 终点 **不等于** delivery 实现闸门，更不等于可以改仓库。
+Skill 终点 **不等于** delivery 实现闸门，更不等于可以改仓库。  
+`batch_implementation_gate=ready` 还要求 §1 有 lockfile，且 High/blocker / `required_for_path=yes` 均为 `decided`。
 
 ---
 
@@ -38,10 +39,12 @@ Skill 终点 **不等于** delivery 实现闸门，更不等于可以改仓库�
 
 ## 2. 交接时建议携带的事实（由调用方复制，非强制 schema）
 
-- `report_path`
+- `report_path`、`evidence_as_of`
 - `analysis_status=complete`
-- `batch_implementation_gate`
-- 已确认的 `proceed:path:…` 与 `proceed:subsystem:…`
+- `batch_implementation_gate`（`ready` = handoff only，≠实施授权）
+- `implementation_readiness=not_assessed`
+- §1 `lockfile_status` 与已确认的 `proceed:path:…` / `proceed:subsystem:…`
+- 三轴（`runtime_axis` / `build_axis` / `topology_axis`）
 - 命名配方列表（仍由实施阶段执行，分析阶段未跑）
 - Composition API 全仓重写：不在范围内
 

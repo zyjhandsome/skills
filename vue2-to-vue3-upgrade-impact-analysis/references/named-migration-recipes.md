@@ -2,6 +2,8 @@
 
 Stage A **must name** applicable recipes with official/source URLs. Stage A
 **never runs** them (no codemod write, no install, no temp-dir transform).
+Prefer compatibility / migration URLs from `official-docs-index.md` when
+citing Vue core, Router, Vuex/Pinia, test-utils, or Element Plus.
 
 | Recipe id | Tool | When to name | Notes |
 |---|---|---|---|

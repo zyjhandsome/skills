@@ -10,11 +10,13 @@
 | analysis_status | partial / blocked / complete |
 | decision_status | needs_choice / not_needed / decided |
 | batch_implementation_gate | frozen / ready |
+| implementation_readiness | not_assessed |
 | behavior_parity_required | yes / no |
 | network_mode | online / offline / partial |
-| report_path | 待填 |
+| report_path | 实际报告目录（禁止单独 `.`） |
+| evidence_as_of | YYYY-MM-DD |
 
-**横幅：** （待补证据 / 待人工确认·下一动作=提问 / 无）
+**横幅：** （待补证据 / 待人工确认·下一动作=提问 / 分析完成·handoff only·实施需另授权）
 
 ## 1. 基线与假设
 
@@ -22,7 +24,9 @@
 - 前端 workspace：
 - 环境前置：Node / package manager / Python（PASS 摘要）
 - 主机 Node vs `engines`：
-- lockfile：`<path>` / 无 lockfile（无 lock 时注明复现性风险升高）
+- lockfile：`<path>` / 无 lockfile（无 lock 时 handoff gate 保持 frozen）
+- lockfile_status: present / absent / unparsed
+- evidence_as_of: YYYY-MM-DD（可与状态表一致复述）
 - 构建变体 / 批次范围：
 - 入口：workspace / inventory
 - 报告路径（解析结果）：
@@ -36,6 +40,9 @@
 ## 3. 推荐迁移路径
 
 - 推荐路径 id：`compat-big-bang` / `direct-vue3` / `microfrontend-coexist` / …
+- runtime_axis: compat / direct-vue3
+- build_axis: vite / cli5-webpack5 / existing-vite
+- topology_axis: single-cutover / coexist
 - 理由：
 - 备选路径：
 - Composition API 全仓重写：另立项，本次不评估工作量
@@ -43,8 +50,8 @@
 
 ## 4. 子系统影响清单
 
-| 子系统 | scope_status | 风险 | 就绪度 | 命名配方 | 说明 |
-|---|---|---|---|---|---|
+| 子系统 | scope_status | 风险 | 就绪度 | required_for_path | 命名配方 | 说明 |
+|---|---|---|---|---|---|---|
 
 ## 5. 分层影响分析
 
@@ -81,6 +88,7 @@
 | `slot-scope` / 旧 `slot=` | |
 | 全局 `Vue.filter` | |
 | 非 `vue-*` Vue2-only / 编辑器包 | |
+| `Vue.prototype.$*` 定义/`this.$*` 消费与 `globalProperties` / `provide/inject` 迁移目标 | |
 | lockfile 缺失或未解析 | |
 
 其他未决：
