@@ -1,0 +1,8 @@
+interface:
+  display_name: "Delivery Explore"
+  short_description: "Align direction and surface upgrade quality signals"
+  default_prompt: >
+    Use $delivery-explore for the informal direction-alignment stage. Preserve
+    one delivery chain, load the family contract, and when upgrade or UI-stack
+    work is detected pass quality_signals as non-authoritative hints for Frame
+    to recompute. Do not create OpenSpec state or implementation approval.

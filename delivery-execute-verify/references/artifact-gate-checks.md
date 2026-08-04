@@ -20,10 +20,21 @@
 | G6 | 未在 Execute 内把 delta sync 进 canonical specs 或移动 change 到 archive | 停止并报告精确 diff；未经用户授权不得自动回滚，修复后改走已解析的 `archive_change` 操作 |
 | G7 | Medium/High 声称 verified 时：`code_review.mode=independent` 且 `independent_review` 为 `required_pass` 或 `required_warn_accepted`；禁止用 `self_fresh_context` 关闭 | 不得 `verified`；补独立审查或保持 blocked |
 | G8 | Plan/Execute 前：列出其他 active OpenSpec changes；若与本 change 任务允许路径/符号重叠，记为就绪 **阻塞项**（除非用户显式接受并写入闸门摘要） | 关实现闸门或停止并行实施 |
+| G9 | 当 `quality_profiles.visual=required`：Delivery 自有 `delivery-visual-evidence/v1` 存在且 validator 通过；state owner 与已批准 source artifact revision 匹配；baseline 或批准 substitute 合法；required states/rows 全 pass（允许差异必须先归类后以 pass 收口）；`final_visual_result=pass` | 不得 `verified`；缺 acceptance 回 Frame，缺 strategy/task 回 Plan，缺执行证据留在 Execute |
 
 ## 可脚本化断言（试点）
 
 优先运行 `../scripts/validate_delivery_change.mjs`。它按完整任务块检查字段，而不是要求路径必须写在 checkbox 标题行；自定义 OpenSpec schema 可通过 `--tasks` / `--verification` 传入实际槽位。
+
+Visual required 时使用：
+
+```text
+node ../scripts/validate_delivery_change.mjs <change-dir> --claim-verified \
+  --visual-required --visual-report <report.md> \
+  --expected-visual-revision <approved-64-hex-revision>
+```
+
+该 evidence 按 `delivery-visual-evidence-template.md` 由本 family 生成。外部分析/视觉报告只能作为 `external_artifacts` 路径+digest 引用；不得要求其 Skill、schema 或完整正文进入上下文。
 
 剩余规则伪代码：
 
@@ -34,7 +45,7 @@ FAIL if claiming verified AND (verification missing OR no command+timestamp fiel
 FAIL if openspec/specs/ mtime newer than verification without archive record  # 可选，防静默 sync
 ```
 
-Agent 最小执行方式（无 CI 时）：按上表 G1–G6 逐项打勾写入就绪审查或 verification；任一项 FAIL → 不得放行实现闸门或 `verified`。
+Agent 最小执行方式（无 CI 时）：按上表 G1–G9 的适用项逐项打勾写入就绪审查或 verification；任一项 FAIL → 不得放行实现闸门或 `verified`。
 
 ## 与 Skill 的关系
 

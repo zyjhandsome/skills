@@ -15,7 +15,7 @@
 ## 1. Family 版本
 
 ```text
-family_version: delivery-family/1.4
+family_version: delivery-family/1.5
 handoff_schema: delivery-handoff/v1
 presentation_schema: delivery-presentation/v1
 structured_ui_schema: delivery-ui/v1

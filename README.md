@@ -73,6 +73,22 @@ delivery-explore  →  delivery-frame-spec  →  delivery-plan-tasks  →  deliv
 - [`docs/java-dependency-upgrade-delivery-usage.md`](./docs/java-dependency-upgrade-delivery-usage.md)（与 delivery-* 可选挂载）
 - [`docs/vue2-to-vue3-upgrade-impact-analysis-usage.md`](./docs/vue2-to-vue3-upgrade-impact-analysis-usage.md)
 - [`docs/vue2-to-vue3-upgrade-delivery-usage.md`](./docs/vue2-to-vue3-upgrade-delivery-usage.md)（与 delivery-* 可选挂载）
+- [`docs/vue-upgrade-orchestration-prompts.md`](./docs/vue-upgrade-orchestration-prompts.md)（显式点名 Skill：单仓原地升 / A→B 并入短提示词）
+
+## UI 栈视觉 parity（升级后样式）
+
+独立 skill：针对「功能基本可用、搜索/表格/表单样式仍乱」做定界；**默认不改代码**，仅在用户对当前定界包明确 go 后允许改 CSS/配置（不装包、不升依赖、不重开 Vue2→3 路径选择）。
+
+| 技能 | 说明 |
+|------|------|
+| [frontend-ui-stack-visual-parity](./frontend-ui-stack-visual-parity/SKILL.md) | UI 栈视觉 parity：Tailwind Preflight×Element 等共存定界；go 后最小 CSS/配置修复 |
+
+```text
+/frontend-ui-stack-visual-parity
+项目：<前端 workspace>
+# 可选：最差的 1～2 个列表页路由或文件
+# Phase A 只定界；回复「开始修复」等明确 go 后再改 CSS/配置
+```
 
 ## 内容整理与发布
 

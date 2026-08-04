@@ -37,6 +37,11 @@ const REQUIRED_SHARED = [
 const PATH_RE = /`((?:\.\.\/)?(?:delivery-[a-z-]+\/)?(?:references|scripts|tests)\/[A-Za-z0-9_./-]+)`/g;
 const VERSION_RE = /delivery-family\/(\d+\.\d+)/g;
 const AUTHORITY = join(SKILLS_ROOT, "delivery-frame-spec", "references", "family-contract.md");
+const FORBIDDEN_EXTERNAL_CONTRACTS = [
+  "frontend-ui-stack-visual-parity",
+  "vue2-to-vue3-upgrade-impact-analysis",
+  "upgrade-evidence/v1",
+];
 
 /** @param {string} p */
 function isFile(p) {
@@ -117,6 +122,18 @@ function main() {
       }
       if (!existsSync(target)) {
         errors.push(`broken reference in ${relative(SKILLS_ROOT, doc)}: \`${ref}\``);
+      }
+    }
+  }
+
+  for (const skill of FAMILY) {
+    for (const path of walk(join(SKILLS_ROOT, skill))) {
+      const relPath = relative(SKILLS_ROOT, path);
+      if (relPath.split(/[\\/]/).includes("tests") || relPath.split(/[\\/]/).includes("fixtures")) continue;
+      if (![".md", ".mjs", ".yaml", ".json"].includes(extname(path))) continue;
+      const text = readFileSync(path, "utf-8");
+      for (const token of FORBIDDEN_EXTERNAL_CONTRACTS) {
+        if (text.includes(token)) errors.push(`external Skill coupling in ${relPath}: ${token}`);
       }
     }
   }

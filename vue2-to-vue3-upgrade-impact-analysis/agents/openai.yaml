@@ -1,6 +1,6 @@
 interface:
   display_name: "Vue 2 → Vue 3 Upgrade Impact Analysis"
-  short_description: "Vue2→Vue3 framework upgrade impact analysis with human gates"
+  short_description: "Independent Vue2→Vue3 impact analysis and compact outputs"
   default_prompt: >
     Use $vue2-to-vue3-upgrade-impact-analysis when the user names this skill
     or asks for Vue 2 to Vue 3 upgrade impact analysis / inventory. Short
@@ -10,3 +10,7 @@ interface:
     codemod, or source edits. Name migration recipes, never run them. Confirm
     migration path first, then High/blocker subsystems. Default report dir is
     <project>/.vue2-to-vue3-upgrade-analysis after explicit path confirmation.
+    When UI/CSS packages trigger risk, emit structured ui_visual_risk and set
+    visual_acceptance_required. Produce an independent full report, decision
+    records, inventory evidence, and compact upgrade-summary.json. Return the
+    summary path by default; never implement or require another Skill.

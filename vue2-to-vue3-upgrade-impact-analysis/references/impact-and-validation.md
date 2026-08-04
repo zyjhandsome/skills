@@ -40,6 +40,24 @@ Prefer naming:
 - Visual regression for UI library majors
 - Rollback = redeploy previous workspace release / revert upgrade branch
 
+## Structured UI visual risk
+
+Set `visual_acceptance_required: yes` when any of these is evidenced: UI-kit
+major/replacement, Tailwind/reset/Preflight change, global theme variables,
+scoped-style or class/style fallthrough changes, mixed table stacks, or heavy
+editor/tree/DAG CSS. Inventory at least:
+
+- legacy `/deep/`, `>>>`, `::v-deep`, structural and Element-internal selectors;
+- actual global CSS entry/cascade order and theme variable roots;
+- Tailwind prefix/Preflight/important/content/safelist and dynamic classes;
+- primary search + table page and secondary table when mixed;
+- Teleport/append target, overflow/z-index and theme inheritance;
+- baseline status and required visual states.
+
+Write these as the §5 `ui_visual_risk` block defined by `report-contract.md`.
+Keep it self-contained: record required visual states and a generic next action;
+do not require, invoke, or name another Skill.
+
 ## Out of scope work
 
 Full Composition API rewrite, design-system restyle unrelated to Vue3, backend

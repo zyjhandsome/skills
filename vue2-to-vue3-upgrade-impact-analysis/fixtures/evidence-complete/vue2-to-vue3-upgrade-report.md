@@ -11,6 +11,10 @@
 | batch_implementation_gate | ready |
 | implementation_readiness | not_assessed |
 | behavior_parity_required | yes |
+| schema | vue3-upgrade-report/v1 |
+| producer | vue2-to-vue3-upgrade-impact-analysis |
+| summary_path | fixtures/evidence-complete/upgrade-summary.json |
+| visual_acceptance_required | yes |
 | network_mode | online |
 | report_path | fixtures/evidence-complete |
 | evidence_as_of | 2026-08-01 |
@@ -75,6 +79,19 @@
 | 路由 | `src/router` | 事实 | Router 4 | 高 |
 | UI | Element 页面 | 事实 | Element Plus | 阻塞 |
 | 构建 | CLI | 事实 | Vite | 高 |
+
+### ui_visual_risk
+
+- triggers: element-ui-to-element-plus
+- legacy_selectors: 待实施阶段按 `.el-*` 与 deep selector 清单逐项迁移
+- css_entry_order: 需记录最终 Element/theme/app CSS cascade
+- theme_and_teleport: 检查 `--el-*` 与 Select/DatePicker popper 容器
+- tailwind_reset: not_applicable（仓画像未发现 Tailwind）
+- primary_sample: 登录后主列表的搜索区 + Element 表格
+- secondary_sample: not_applicable（未发现第二表格栈）
+- baseline_status: required-before-implementation
+- required_visual_states: search-default, table-empty, table-data, cell-popper
+- recommended_next_action: run_visual_review
 
 ## 6. 风险分级
 

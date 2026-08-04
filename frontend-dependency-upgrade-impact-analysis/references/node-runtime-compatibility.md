@@ -47,6 +47,7 @@
 - 需要切换但没有受支持版本管理器：`manager-missing`。
 - 无法解析关键范围：`unknown`，不得声称兼容。
 - 无权威项目约束导致 `unknown`：`selected_project_node` 必须为空/`未建立`，禁止把本机当前 Node 回填为项目 Node；`compatible_installed_versions` 在无约束时不用于项目选型。已有 `observed` 证据（CI/容器/非白名单依赖）也不改变该结论，只在报告中列出待人工确认。
+- **过宽 engines + 脆弱工具链实跑推断：** 当 `engines.node` 同时接受很旧与很新的主机（例如 `>=8.9` 同时满足 Node 12 与 26），且 manifest 声明 `@vue/cli-service@4/5` 时，生成器额外写入 `observed` 的 practical Node 范围（CLI4：`>=12 <18`；CLI5：`>=12 <20`）。主机满足 engines 但不满足该推断时，**不得**保持 `compatible-current`；应降为 `runtime-switch-required` / `runtime-missing`，并警告勿把当前主机当可执行运行时。该推断不是权威 pin，不能单独制造 `constraint-conflict`。
 
 选择精确版本时，优先一致的项目 pin；否则选择已安装且满足全部项目约束的最高稳定版本。优先 LTS 只是同等候选下的策略，不能覆盖项目 pin。
 

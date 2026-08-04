@@ -28,9 +28,9 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve, basename, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import process from "node:process";
 
 import { hashChange } from "./hash_change_artifacts.mjs";
@@ -55,6 +55,7 @@ const STAGE_PAYLOAD_SKELETONS = {
     non_goals: [],
     code_anchors: [],
     risk_signal: "none",
+    quality_signals: [],
     unknowns: [],
   },
   "delivery-frame-spec": {
@@ -63,6 +64,8 @@ const STAGE_PAYLOAD_SKELETONS = {
     confirmed_artifacts: [],
     forbidden_scope: [],
     open_questions: [],
+    quality_profiles: {},
+    external_artifacts: [],
   },
   "delivery-plan-tasks": {
     plan_tasks: [],
@@ -75,6 +78,8 @@ const STAGE_PAYLOAD_SKELETONS = {
     traceability: [],
     readiness_result: { blockers: [], warnings: [], suggestions: [] },
     validation_plan: [],
+    quality_profiles: {},
+    visual_validation_plan: [],
     risk_gates: [],
     parallel_ownership: [],
   },
@@ -85,6 +90,12 @@ const STAGE_PAYLOAD_SKELETONS = {
     artifact_backflow: "none",
     alignment_backflow: null,
     fresh_verification_evidence: [],
+    visual_evidence: {
+      required: false,
+      report: null,
+      source_artifact_revision: null,
+      g9: "not_required",
+    },
     spec_coherence: "pass",
     code_review: {
       status: "pass",
@@ -180,7 +191,7 @@ export function buildHandoff(stage, changeDir, previous) {
   const stamp = ts.replaceAll(":", "").replaceAll("-", "").slice(0, 15);
   return {
     schema_version: "delivery-handoff/v1",
-    family_version: "delivery-family/1.4",
+    family_version: "delivery-family/1.5",
     type: "delivery-handoff",
     handoff_id: `${changeId}-${stage.replace(/^delivery-/, "")}-${stamp}`,
     previous_handoff_id: previous,
@@ -393,7 +404,8 @@ function cmdQuickPack(args) {
 /**
  * @param {{changeDir: string, reviewStatus: string, reviewer: string | null, evidence: string[],
  *          specCoherence: string, approvedBy: string | null, previous: string | null,
- *          nextAction: string | null, out: string | null}} args
+ *          nextAction: string | null, out: string | null, visualRequired: boolean,
+ *          visualReport: string | null, expectedVisualRevision: string | null}} args
  */
 function cmdCloseOut(args) {
   const changeDir = resolve(args.changeDir);
@@ -403,11 +415,17 @@ function cmdCloseOut(args) {
   }
 
   // 1. Machine checks on tasks/verification (the R3 rework hotspot).
-  const claim = spawnSync(
-    process.execPath,
-    [VALIDATE_DELIVERY_CHANGE, changeDir, "--claim-verified"],
-    { encoding: "utf-8" }
-  );
+  const claimArgs = [VALIDATE_DELIVERY_CHANGE, changeDir, "--claim-verified"];
+  if (args.visualRequired) {
+    claimArgs.push(
+      "--visual-required",
+      "--visual-report",
+      /** @type {string} */ (args.visualReport),
+      "--expected-visual-revision",
+      /** @type {string} */ (args.expectedVisualRevision)
+    );
+  }
+  const claim = spawnSync(process.execPath, claimArgs, { encoding: "utf-8" });
   process.stderr.write(claim.stderr ?? "");
   console.log((claim.stdout ?? "").trim());
   if (claim.status !== 0) {
@@ -421,6 +439,14 @@ function cmdCloseOut(args) {
   const payload = handoff.stage_payload;
   payload.overall_status = "verified";
   payload.fresh_verification_evidence = args.evidence;
+  payload.visual_evidence = args.visualRequired
+    ? {
+        required: true,
+        report: resolve(/** @type {string} */ (args.visualReport)),
+        source_artifact_revision: args.expectedVisualRevision,
+        g9: "pass",
+      }
+    : { required: false, report: null, source_artifact_revision: null, g9: "not_required" };
   payload.spec_coherence = args.specCoherence;
   Object.assign(payload.code_review, {
     status: args.reviewStatus,
@@ -497,7 +523,8 @@ commands:
       scaffold a Quick/Debug-Low lightweight change
   close-out --change-dir <dir> --review-status <pass|warn> [--reviewer <id>] [--evidence <line>]...
             [--spec-coherence <pass|warn>] [--approved-by <who>] [--previous <id>]
-            [--next-action <op>] [--out <file>]
+            [--visual-required <yes|no>] [--visual-report <path>]
+            [--expected-visual-revision <64-hex>] [--next-action <op>] [--out <file>]
       verified close-out wizard for execute`;
 
 function main() {
@@ -569,6 +596,9 @@ function main() {
         "--previous": "previous",
         "--next-action": "nextAction",
         "--out": "out",
+        "--visual-required": "visualRequired",
+        "--visual-report": "visualReport",
+        "--expected-visual-revision": "expectedVisualRevision",
       },
       new Set(["evidence"])
     );
@@ -588,6 +618,17 @@ function main() {
       console.error("ERROR: --spec-coherence must be pass or warn");
       return 2;
     }
+    if (opts.visualRequired !== undefined && !["yes", "no"].includes(opts.visualRequired)) {
+      console.error("ERROR: --visual-required must be yes or no");
+      return 2;
+    }
+    const visualRequired = opts.visualRequired === "yes";
+    if (visualRequired && (!opts.visualReport || !/^[0-9a-f]{64}$/i.test(opts.expectedVisualRevision ?? ""))) {
+      console.error(
+        "ERROR: visual close-out requires --visual-report and --expected-visual-revision <64-hex>"
+      );
+      return 2;
+    }
     return cmdCloseOut({
       changeDir: opts.changeDir,
       reviewStatus: opts.reviewStatus,
@@ -598,6 +639,9 @@ function main() {
       previous: opts.previous ?? null,
       nextAction: opts.nextAction ?? null,
       out: opts.out ?? null,
+      visualRequired,
+      visualReport: opts.visualReport ?? null,
+      expectedVisualRevision: opts.expectedVisualRevision ?? null,
     });
   }
 
@@ -605,6 +649,10 @@ function main() {
   return 2;
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (
+  process.argv[1] &&
+  pathToFileURL(realpathSync(resolve(process.argv[1]))).href.toLowerCase() ===
+    pathToFileURL(realpathSync(fileURLToPath(import.meta.url))).href.toLowerCase()
+) {
   process.exit(main());
 }

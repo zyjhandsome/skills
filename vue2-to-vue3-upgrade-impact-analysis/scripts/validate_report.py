@@ -29,6 +29,12 @@ STATUS_ENUMS = {
     "behavior_parity_required": {"yes", "no"},
     "network_mode": {"online", "offline", "partial"},
 }
+OPTIONAL_STATUS_ENUMS = {
+    "schema": {"vue3-upgrade-report/v1"},
+    "producer": {"vue2-to-vue3-upgrade-impact-analysis"},
+    "visual_acceptance_required": {"yes", "no"},
+}
+OPTIONAL_STATUS_TEXT = {"summary_path"}
 STATUS_HEADERS = ("字段", "取值")
 INVENTORY_HEADERS = ("包名", "当前版本", "Vue3 就绪度", "建议", "证据")
 SUBSYSTEM_HEADERS = (
@@ -146,6 +152,27 @@ CHECKLIST_PLACEHOLDERS = {"", "-", "—", "todo", "待填", "待填写"}
 UNIT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 FENCE = re.compile(r"(?ms)^[ \t]*(```|~~~).*?^[ \t]*\1[ \t]*$")
 HTML_COMMENT = re.compile(r"(?s)<!--.*?-->")
+VISUAL_PACKAGE_TRIGGERS = (
+    "element-ui",
+    "element-plus",
+    "tailwindcss",
+    "vxe-table",
+    "wangeditor",
+    "vue3-tree-org",
+    "butterfly-dag",
+)
+VISUAL_RISK_MARKERS = (
+    "triggers:",
+    "legacy_selectors:",
+    "css_entry_order:",
+    "theme_and_teleport:",
+    "tailwind_reset:",
+    "primary_sample:",
+    "secondary_sample:",
+    "baseline_status:",
+    "required_visual_states:",
+    "recommended_next_action:",
+)
 
 
 @dataclass
@@ -247,7 +274,7 @@ def parse_status(text: str) -> tuple[dict[str, str], list[str]]:
     end = start + next_heading.start() if next_heading else len(text)
     rows, errors = parse_table(text[start:end], STATUS_HEADERS)
     values: dict[str, str] = {}
-    allowed_keys = set(STATUS_ENUMS) | {"report_path", "evidence_as_of"}
+    allowed_keys = set(STATUS_ENUMS) | set(OPTIONAL_STATUS_ENUMS) | OPTIONAL_STATUS_TEXT | {"report_path", "evidence_as_of"}
     for row in rows:
         key, value = row
         if key in values:
@@ -262,6 +289,17 @@ def parse_status(text: str) -> tuple[dict[str, str], list[str]]:
             errors.append(f"missing status field: {key}")
         elif value not in allowed:
             errors.append(f"invalid {key}={value!r}; allowed={sorted(allowed)}")
+    for key, allowed in OPTIONAL_STATUS_ENUMS.items():
+        value = values.get(key)
+        if not value:
+            errors.append(f"missing status field: {key}")
+        elif value not in allowed:
+            errors.append(f"invalid {key}={value!r}; allowed={sorted(allowed)}")
+    summary_path = values.get("summary_path", "").strip().strip("`")
+    if not summary_path or summary_path.lower() in {"tbd", "todo", "null", "none"}:
+        errors.append("missing concrete summary_path")
+    elif not summary_path.replace("\\", "/").endswith("/upgrade-summary.json"):
+        errors.append("summary_path must end with /upgrade-summary.json")
     if not values.get("report_path"):
         errors.append("missing status field: report_path")
     as_of = values.get("evidence_as_of")
@@ -272,6 +310,25 @@ def parse_status(text: str) -> tuple[dict[str, str], list[str]]:
             f"invalid evidence_as_of={as_of!r}; expected YYYY-MM-DD"
         )
     return values, errors
+
+
+def validate_ui_visual_risk(
+    inventory_rows: list[list[str]], status: dict[str, str], impact_block: str, result: "ReportResult"
+) -> None:
+    packages = {row[0].strip("`").lower() for row in inventory_rows if row}
+    triggered = any(any(trigger in package for trigger in VISUAL_PACKAGE_TRIGGERS) for package in packages)
+    visual_required = status.get("visual_acceptance_required")
+    if triggered and visual_required != "yes":
+        result.error("UI/CSS package trigger requires visual_acceptance_required=yes")
+    if not triggered:
+        return
+    if not re.search(r"(?m)^###\s+ui_visual_risk\s*$", impact_block):
+        result.error("§5 UI/CSS package trigger requires ### ui_visual_risk")
+        return
+    for marker in VISUAL_RISK_MARKERS:
+        match = re.search(rf"(?im)^\s*[-*]?\s*{re.escape(marker)}\s*(.+)$", impact_block)
+        if not match or match.group(1).strip().lower() in {"", "-", "tbd", "todo", "待补"}:
+            result.error(f"§5 ui_visual_risk missing substantive {marker}")
 
 
 def path_matches_report(value: str, report: Path) -> bool:
@@ -598,6 +655,13 @@ def validate_report(path: Path) -> ReportResult:
                 result.error(f"§2 invalid Vue3 readiness for {row[0]}: {row[2]!r}")
             if any(not cell for cell in row):
                 result.error(f"§2 inventory row contains blank cells: {row[0]!r}")
+
+    validate_ui_visual_risk(
+        inventory_rows,
+        status,
+        sections.get("分层影响分析", ""),
+        result,
+    )
 
     baseline = sections.get("基线与假设", "")
     if "lockfile" not in baseline.lower():

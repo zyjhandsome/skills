@@ -1,0 +1,9 @@
+interface:
+  display_name: "Delivery Execute Verify"
+  short_description: "Implement approved tasks and enforce G1–G9 evidence"
+  default_prompt: >
+    Use $delivery-execute-verify for approved implementation and verification.
+    Follow tasks.md, preserve backflow semantics, and enforce conditional G9
+    whenever visual_acceptance_required=yes. Functional smoke tests cannot
+    replace baseline-bound visual evidence. Never archive or mutate git without
+    the separate authority required by the family contract.

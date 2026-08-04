@@ -1,0 +1,10 @@
+interface:
+  display_name: "Frontend UI Stack Visual Parity"
+  short_description: "Diagnose and verify visual regressions after UI-stack upgrades"
+  default_prompt: >
+    Use $frontend-ui-stack-visual-parity for post-upgrade search, form, table,
+    theme, Preflight, Teleport, and mixed el-table/vxe-table visual regressions.
+    Load SKILL.md and its four always references. Strict parity requires a
+    traceable baseline and stable capture context. Produce an independent full
+    report, capture manifest, and compact visual-summary.json. Return the summary
+    path by default and load full prose/images only for named findings or states.

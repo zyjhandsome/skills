@@ -79,6 +79,10 @@ def _status_block(
 | batch_implementation_gate | {gate} |
 | implementation_readiness | not_assessed |
 | behavior_parity_required | yes |
+| schema | vue3-upgrade-report/v1 |
+| producer | vue2-to-vue3-upgrade-impact-analysis |
+| summary_path | {report_path}/upgrade-summary.json |
+| visual_acceptance_required | yes |
 | network_mode | online |
 | report_path | {report_path} |
 | evidence_as_of | 2026-08-01 |
@@ -133,6 +137,32 @@ class ValidateReportTests(unittest.TestCase):
     def test_complete_fixture_passes(self) -> None:
         result = self._run(str(FIXTURES / "valid-report-complete.md"))
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_rejects_ui_trigger_without_visual_risk_block(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            text = (FIXTURES / "valid-report.md").read_text(encoding="utf-8")
+            start = text.index("### ui_visual_risk")
+            end = text.index("## 6. 风险分级", start)
+            text = text[:start] + text[end:]
+            text = text.replace("| report_path | fixtures |", f"| report_path | {root.resolve()} |")
+            report = root / "report.md"
+            report.write_text(text, encoding="utf-8")
+            result = self._run(str(report))
+            self.assertEqual(result.returncode, 3)
+            self.assertIn("ui_visual_risk", result.stdout + result.stderr)
+
+    def test_rejects_missing_compact_summary_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            text = (FIXTURES / "valid-report.md").read_text(encoding="utf-8")
+            text = text.replace("| summary_path | fixtures/upgrade-summary.json |", "| summary_path | TBD |")
+            text = text.replace("| report_path | fixtures |", f"| report_path | {root.resolve()} |")
+            report = root / "report.md"
+            report.write_text(text, encoding="utf-8")
+            result = self._run(str(report))
+            self.assertEqual(result.returncode, 3)
+            self.assertIn("summary_path", result.stdout + result.stderr)
 
     def test_evidence_dir_complete_passes(self) -> None:
         result = self._run("--evidence-dir", str(FIXTURES / "evidence-complete"))

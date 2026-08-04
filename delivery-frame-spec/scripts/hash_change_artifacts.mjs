@@ -14,9 +14,9 @@
  */
 
 import { createHash } from "node:crypto";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { resolve, join, relative, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import process from "node:process";
 
 const INCLUDE_NAMES = ["proposal.md", "design.md", "tasks.md", "verification.md"];
@@ -132,6 +132,10 @@ function main() {
   return 0;
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (
+  process.argv[1] &&
+  pathToFileURL(realpathSync(resolve(process.argv[1]))).href.toLowerCase() ===
+    pathToFileURL(realpathSync(fileURLToPath(import.meta.url))).href.toLowerCase()
+) {
   process.exit(main());
 }

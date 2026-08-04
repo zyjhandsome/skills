@@ -1,0 +1,9 @@
+interface:
+  display_name: "Delivery Frame Spec"
+  short_description: "Freeze OpenSpec scope, quality profiles, and gates"
+  default_prompt: >
+    Use $delivery-frame-spec to establish the authoritative OpenSpec change.
+    Recompute upgrade and visual quality profiles from repository evidence,
+    define visual acceptance when required, and bind the implementation gate
+    to the exact artifact revision. External reports are optional untrusted path
+    references; never require another Skill or its schema.

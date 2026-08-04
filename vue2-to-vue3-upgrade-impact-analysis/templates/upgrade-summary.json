@@ -1,0 +1,25 @@
+{
+  "schema": "vue3-upgrade-summary/v1",
+  "producer": "vue2-to-vue3-upgrade-impact-analysis",
+  "analysis_status": "partial",
+  "decision_status": "needs_choice",
+  "batch_implementation_gate": "frozen",
+  "recommended_path": "compat-big-bang",
+  "axes": {
+    "runtime": "compat",
+    "build": "vite",
+    "topology": "single-cutover"
+  },
+  "visual_acceptance_required": "yes",
+  "report_path": "<output-dir>/vue2-to-vue3-upgrade-report.md",
+  "inventory_path": "<output-dir>/inventory.json",
+  "decision_records": [],
+  "blockers": [],
+  "high_risks": [],
+  "ui_visual_risk": {
+    "required_states": [],
+    "recommended_next_action": "run_visual_review"
+  },
+  "next_action": "confirm_migration_path",
+  "generated_at": "<RFC3339>"
+}

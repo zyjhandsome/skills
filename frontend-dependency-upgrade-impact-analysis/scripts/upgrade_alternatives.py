@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import NamedTuple
 
-REPLACEMENT_MAP_REVIEWED = "2026-07-25"
+REPLACEMENT_MAP_REVIEWED = "2026-08-04"
 
 
 class ReplacementHint(NamedTuple):
@@ -102,6 +102,37 @@ REPLACEMENT_FAMILIES: dict[str, tuple[ReplacementHint, ...]] = {
     "vuex": (
         npm("pinia", "Pinia 是 Vue 官方推荐的状态管理方案。",
             "模块命名空间、mutation 概念被移除，store 需重写。"),
+    ),
+    "element-ui": (
+        npm(
+            "element-plus",
+            "Element Plus 是 Element UI 官方 Vue 3 后继；Element UI 仅维护 Vue 2 线。",
+            "组件 API、表单校验、图标（el-icon→@element-plus/icons）、主题变量与 Teleport 浮层需逐项回归。",
+        ),
+    ),
+    "vuedraggable": (
+        npm(
+            "vue-draggable-next",
+            "社区维护的 Vue 3 兼容拖拽封装，承接原 vuedraggable + SortableJS 用法。",
+            "事件名、v-model/list 绑定与插槽写法可能不同，需按调用点核对。",
+        ),
+        npm(
+            "vuedraggable",
+            "同名包的 Vue 3 大版本线（需解析到 Vue3-ready 精确版本后再选）。",
+            "须确认所选 major 的 peer 为 Vue 3；旧 2.x 线不可用。",
+        ),
+    ),
+    "tui-editor": (
+        npm(
+            "@toast-ui/editor",
+            "TOAST UI Editor 官方后继核心包（原 tui-editor 品牌迁移）。",
+            "需搭配 Vue 3 包装（如 @toast-ui/vue-editor）并迁移初始化 API。",
+        ),
+        npm(
+            "@toast-ui/vue-editor",
+            "官方 Vue 包装层，对接 @toast-ui/editor。",
+            "与旧 tui-editor Vue2 组件 props/事件不完全兼容。",
+        ),
     ),
     "lodash": (
         npm("es-toolkit", "API 高度对齐且体积显著更小的现代实现。",

@@ -14,15 +14,36 @@ class SkillStructureTests(unittest.TestCase):
         self.assertIn("name: vue2-to-vue3-upgrade-impact-analysis", content)
         self.assertIn("Analyze, never implement", content)
         self.assertLess(len(content.splitlines()), 200)
-        self.assertNotIn("delivery-explore", content)
-        self.assertNotIn("delivery-frame-spec", content)
-        self.assertNotIn("delivery-plan-tasks", content)
-        self.assertNotIn("delivery-execute-verify", content)
+        self.assertNotIn("delivery-", content.lower())
+        self.assertNotIn("frontend-ui-stack-visual-parity", content)
+        self.assertNotIn("upgrade-evidence/v1", content)
+        self.assertIn("upgrade-summary.json", content)
+        self.assertIn("when every other Skill folder is absent", content)
         self.assertIn("Name, never run, migration recipes", content)
         self.assertIn("Composition API", content)
         self.assertIn(".vue2-to-vue3-upgrade-analysis", content)
         self.assertIn("Minimum load (every run)", content)
         self.assertIn("python -m unittest discover -s tests", content)
+
+    def test_runtime_resources_have_no_sibling_contract_dependency(self) -> None:
+        files = [ROOT / "SKILL.md", ROOT / "agents" / "openai.yaml"]
+        for folder in ["references", "templates", "scripts"]:
+            files.extend(
+                path
+                for path in (ROOT / folder).rglob("*")
+                if path.is_file() and path.suffix in {".md", ".yaml", ".json", ".py"}
+            )
+        forbidden = [
+            "delivery-frame-spec",
+            "delivery-execute-verify",
+            "upgrade-evidence/v1",
+            "frontend-ui-stack-visual-parity",
+            "openspec/changes",
+        ]
+        for path in files:
+            text = path.read_text(encoding="utf-8")
+            for token in forbidden:
+                self.assertNotIn(token, text, f"{path.relative_to(ROOT)} couples to {token}")
 
     def test_referenced_markdown_files_exist(self) -> None:
         content = (ROOT / "SKILL.md").read_text(encoding="utf-8")
@@ -99,7 +120,7 @@ class SkillStructureTests(unittest.TestCase):
             "vue2-to-vue3-upgrade-report.md",
             "确认队列",
             "Composition API 全仓重写：另立项，本次不评估工作量",
-            "evidence/vue2-to-vue3-upgrade",
+            "upgrade-summary.json",
             "路径未 `decided` 前",
             "人工补搜检查",
             "lockfile",

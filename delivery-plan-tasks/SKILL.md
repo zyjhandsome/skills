@@ -108,7 +108,7 @@ Before any user-required ask, show the complete current inventory; batch all ind
 
 **Task minimum fields:** behavior-oriented title; mapped Requirement/Scenario; dependencies; exact files and symbols; allowed and forbidden scope; implementation steps; test-first or approved alternative validation; exact command/action and expected result; rollback/migration note when relevant; completion definition; ownership/conflict note for parallel work. No "implement backend", guessed paths, or unbounded cleanup. Templates: `references/plan-template.md`, `references/tasks-template.md`.
 
-**Validation matrix:** for each Requirement/Scenario record verification layer, test file/fixture, exact command, expected success, what a failure proves, and any approved coverage gap. Validation must be capable of failing for the missing behavior.
+**Validation matrix:** for each Requirement/Scenario record verification layer, test file/fixture, exact command, expected success, what a failure proves, and any approved coverage gap. Validation must be capable of failing for the missing behavior. When `quality_profiles.visual=required`, each visual row also records baseline/substitute, route, state, browser/viewport, diff policy, evidence path, and whether it is required for verified; functional E2E cannot satisfy it.
 
 **Parallel planning:** parallelize only tasks with no shared mutable state, no overlapping files (or explicit ownership), stable prerequisite contracts, and independently runnable validation. Define integration order and post-merge validation. Do not parallelize merely to keep agents busy.
 
@@ -123,6 +123,12 @@ First run `../delivery-execute-verify/references/artifact-gate-checks.md` items 
 Findings use Chinese labels (`references/readiness-review.md`): **阻塞项** / **警告项** / **建议项** (machine mapping CRITICAL/WARNING/SUGGESTION when a backend requires enums).
 
 Check: approved spec coverage; current paths/symbols and blast radius; no scope creep; no unresolved user-required decision (agent-owned decisions have rationale, spec-affecting ones completed frame backflow); sweep recorded with no material blocker; failure/edge behavior; compatibility/migration/rollback/security/performance/observability as applicable; vertical task size and ordering; executable falsifiable validation; parallel ownership and integration conflicts; no unresolved overlap with other active changes; artifact backend structural validation.
+
+If visual is required, readiness also checks that baseline capture precedes the
+upgrade when still possible, every required sample/state maps to a task, global
+CSS/reset changes include a non-table collateral check, and G9 has a concrete
+visual report path. Missing visual acceptance returns to Frame; missing visual
+task/strategy remains in Plan.
 
 ## Implementation Gate
 

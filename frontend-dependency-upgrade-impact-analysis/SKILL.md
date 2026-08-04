@@ -139,6 +139,13 @@ python scripts/generate_upgrade_report.py . \
   --change-dir openspec/changes/<id> \
   --offline
 
+# Large cross-major exact upgrades soft-cap the version interval by default;
+# pass --full-interval only when the caller needs every intermediate release.
+python scripts/generate_upgrade_report.py . \
+  --upgrade vue:2.6.10:3.5.13 \
+  --output-dir <dir> \
+  --full-interval
+
 # After decisions + Agent review (online evidence): finalize Stage A
 python scripts/generate_upgrade_report.py . \
   --upgrade axios::1.7.9 \

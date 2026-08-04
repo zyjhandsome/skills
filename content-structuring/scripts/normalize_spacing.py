@@ -67,21 +67,31 @@ def check(text: str) -> list[str]:
         if blanks != 1:
             issues.append(f"L{i + 1} ## {title[:40]}: {blanks} blank line(s) before next content (want 1)")
 
-    # body --- between sections (after 目录, before 延伸术语表)
+    # body --- between body sections only (after 目录's structural --- is allowed)
     past_toc = False
+    seen_body = False
     for i, line in enumerate(lines):
         title = _section_title(line)
         if title == "目录":
             past_toc = True
+            seen_body = False
             continue
         if not past_toc:
             continue
         if title and (title.startswith("延伸术语表") or title.startswith("自检报告")):
             break
+        if title and _is_body_section(title):
+            seen_body = True
+            continue
         if line.strip() != "---":
             continue
-        nxt_title = _section_title(lines[i + 1]) if i + 1 < len(lines) else None
-        if nxt_title and _is_body_section(nxt_title):
+        # Skip blank lines after --- (common authoring pattern); otherwise 4d-1 false-passes
+        j = i + 1
+        while j < len(lines) and lines[j].strip() == "":
+            j += 1
+        nxt_title = _section_title(lines[j]) if j < len(lines) else None
+        # Flag only when a body section was already seen (skip structural --- after 目录)
+        if seen_body and nxt_title and _is_body_section(nxt_title):
             issues.append(f"L{i + 1}: --- between body sections (before ## {nxt_title[:40]})")
 
     return issues

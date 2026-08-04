@@ -45,6 +45,20 @@
 ### 波及线索
 （改动波及预判：调用方、共享识别器/状态、持久化、打包依赖、相关测试）
 
+### 质量画像与验收
+
+| profile | required / not_required | 证据与验收 |
+|---|---|---|
+| functional | required | |
+| visual | | |
+| accessibility | | |
+| performance | | |
+| compatibility | | |
+
+当 `visual=required` 时必须填写：baseline 或批准的 substitute、primary/secondary
+route、必测 state、浏览器/viewport、允许差异、禁止差异和 G9 visual report 路径。
+分析 Skill 的 `quality_signals` 只是输入；本节按代码/config 事实重算。
+
 ### 证据表
 （支撑「代码事实」各小节；决策行仅作只读索引，权威决策在「开放问题清单」）
 
@@ -109,5 +123,6 @@
 - 「开放问题清单」：已对用户展示；阻塞项不得在未决定时标为 `decided`；产品决策只落在此表
 - 「澄清完整性扫描」：已覆盖实际适用维度；缺失事实已定点调查；新增阻塞决策已进入「开放问题清单」并处理
 - 「风险定级与闸门建议」：写清命中 / 未命中 / 不确定 / 闸门建议
+- 「质量画像与验收」：每个 profile 有 required/not_required 与证据；visual required 时基线、样本、状态与差异规则完整
 - 「Explore 交接消费」：有 explore handoff 时五条均已勾选；无则整节为 `N/A — 无 explore handoff`；仅聊天摘要或空节 = 验收失败
 - 「状态源与工件位置」：指向唯一状态源；批准记录只落在此处，无并行竞争副本

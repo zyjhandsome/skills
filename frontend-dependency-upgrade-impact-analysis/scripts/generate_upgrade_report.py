@@ -1538,7 +1538,12 @@ def collect_exact_upgrade_from_local_evidence(
     if not isinstance(metadata, dict):
         return None
     normalized = report.upgrade
-    selected, warnings, _interval_complete = versions_in_range(metadata, normalized, args.max_versions)
+    selected, warnings, _interval_complete = versions_in_range(
+        metadata,
+        normalized,
+        args.max_versions,
+        full_interval=bool(getattr(args, "full_interval", False)),
+    )
     if not selected:
         return None
     report.warnings.extend(warnings)
@@ -2252,7 +2257,18 @@ def truncate(text: str, max_chars: int) -> str:
     return text[: max(0, max_chars - 20)].rstrip() + "\n...[truncated]"
 
 
-def versions_in_range(metadata: dict[str, Any], upgrade: Upgrade, max_versions: int) -> tuple[list[str], list[str], bool]:
+# Soft-cap large major-jump intervals so orchestration does not hang fetching every
+# intermediate release. Opt out with --full-interval (max_versions stays 0).
+INTERVAL_SOFT_CAP = 40
+
+
+def versions_in_range(
+    metadata: dict[str, Any],
+    upgrade: Upgrade,
+    max_versions: int,
+    *,
+    full_interval: bool = False,
+) -> tuple[list[str], list[str], bool]:
     warnings: list[str] = []
     versions = [version for version in (metadata.get("versions") or {}) if semver_key(version) is not None]
     versions.sort(key=lambda value: semver_key(value) or (0, 0, 0, 0, ""))
@@ -2272,6 +2288,20 @@ def versions_in_range(metadata: dict[str, Any], upgrade: Upgrade, max_versions: 
     if max_versions > 0 and len(selected) > max_versions:
         warnings.append(f"版本区间包含 {len(selected)} 个版本；输出已截断为最新 {max_versions} 个，不能视为完整证据。")
         selected = selected[-max_versions:]
+        complete = False
+    elif (
+        max_versions == 0
+        and not full_interval
+        and before_key
+        and after_key
+        and before_key[0] != after_key[0]
+        and len(selected) > INTERVAL_SOFT_CAP
+    ):
+        warnings.append(
+            f"跨 major 版本区间包含 {len(selected)} 个版本；默认软截断为最新 "
+            f"{INTERVAL_SOFT_CAP} 个以避免编排超时。完整区间请传 --full-interval。"
+        )
+        selected = selected[-INTERVAL_SOFT_CAP:]
         complete = False
     return selected, warnings, complete
 
@@ -3079,6 +3109,10 @@ def assign_primary_track(report: PackageReport) -> None:
         )
         report.alternate_tracks = ["replace"] if routes else []
         return
+    has_curated_package = any(
+        candidate.origin == "curated-map" and candidate.package
+        for candidate in report.alternative_candidates
+    )
     if removal == "safe_removal_candidate":
         report.primary_track = "remove"
         report.primary_track_basis = "删除证据已达安全候选门槛，删除是成本最低的收敛方式。"
@@ -3091,12 +3125,20 @@ def assign_primary_track(report: PackageReport) -> None:
     elif routes:
         report.primary_track = "replace"
         report.primary_track_basis = f"已确认存在使用点且本轮有 {len(routes)} 个可选的包@版本。"
+    elif has_curated_package:
+        # Curated leads are not clickable, but they must not collapse the primary track
+        # into native-refactor (e.g. element-ui → element-plus).
+        report.primary_track = "replace"
+        report.primary_track_basis = (
+            "已确认存在使用点，且知识表有官方/上游指向的后继包线索；"
+            "须回填 analysis-evidence 精确版本后才能点选 replace:<包>@<版本>。"
+        )
     else:
         report.primary_track = "native-refactor"
         report.primary_track_basis = "已确认存在使用点，且本轮无可选替代包，只剩原生改造。"
     available = {
         "remove": removable,
-        "replace": bool(routes),
+        "replace": bool(routes) or has_curated_package,
         "native-refactor": refactorable,
         "handle-parent": provenance == "both" and bool(report.provenance.parents),
     }
@@ -4106,6 +4148,36 @@ def load_node_runtime_evidence(path: Path | None) -> dict[str, Any]:
     return runtime
 
 
+def engines_range_overly_broad(requirement: str) -> bool:
+    """True when a loose engines.node accepts both legacy and very new hosts."""
+    if not requirement.strip():
+        return True
+    return (
+        semver_satisfies("12.22.12", requirement) is True
+        and semver_satisfies("26.0.0", requirement) is True
+    )
+
+
+def practical_toolchain_node_requirement(manifest: ManifestSnapshot) -> tuple[str, str] | None:
+    """Infer a practical Node range from fragile toolchains when engines are too loose.
+
+    Returns ``(requirement, source)``. Used only to avoid false ``compatible-current``;
+    never invents an authoritative engines pin by itself.
+    """
+    pkg = manifest.packages.get("@vue/cli-service")
+    if pkg is None or not str(pkg.spec or "").strip():
+        return None
+    match = re.search(r"(?<!\d)(\d+)", str(pkg.spec))
+    if match is None:
+        return None
+    major = int(match.group(1))
+    if major <= 4:
+        return (">=12 <18", f"inferred:@vue/cli-service@{pkg.spec} practical Node")
+    if major == 5:
+        return (">=12 <20", f"inferred:@vue/cli-service@{pkg.spec} practical Node")
+    return None
+
+
 def assess_node_runtime(
     project_root: Path,
     manifest: ManifestSnapshot,
@@ -4305,6 +4377,55 @@ def assess_node_runtime(
             assessment.selected_project_node = assessment.current_host_node
             assessment.selected_manager = "current"
             assessment.recommended_strategy = "current-runtime"
+            engine_req = str(manifest.engines.get("node") or "")
+            practical = (
+                practical_toolchain_node_requirement(manifest)
+                if engines_range_overly_broad(engine_req)
+                else None
+            )
+            if practical and assessment.current_host_node:
+                practical_req, practical_source = practical
+                add_node_constraint(
+                    assessment.observed_runtime_evidence,
+                    NodeConstraint(
+                        practical_source,
+                        practical_req,
+                        "toolchain-engine",
+                        "observed",
+                        manifest.path,
+                    ),
+                )
+                if semver_satisfies(assessment.current_host_node, practical_req) is False:
+                    assessment.warnings.append(
+                        f"主机 Node {assessment.current_host_node} 满足声明 engines.node"
+                        f"={engine_req or '（空）'}，但不满足工具链实跑推断 "
+                        f"{practical_source}={practical_req}；勿把当前主机当作可执行运行时。"
+                    )
+                    practical_installed = sorted(
+                        [
+                            version
+                            for version in candidate_versions
+                            if version != assessment.current_host_node
+                            and semver_satisfies(version, practical_req) is True
+                            and version_satisfies_all(version, assessment.project_constraints) is True
+                        ],
+                        key=lambda value: semver_key(value) or (0, 0, 0, 0, ""),
+                    )
+                    if practical_installed:
+                        assessment.status = "runtime-switch-required"
+                        assessment.selected_project_node = preferred_node_version(practical_installed)
+                        assessment.selected_manager = installed_to_manager.get(
+                            assessment.selected_project_node, ""
+                        )
+                        assessment.recommended_strategy = "isolated-child-process"
+                    else:
+                        assessment.status = "runtime-missing"
+                        assessment.selected_project_node = ""
+                        assessment.selected_manager = ""
+                        assessment.recommended_strategy = "install-project-node"
+                        assessment.blockers.append(
+                            f"未安装满足工具链实跑推断 {practical_req} 的项目 Node（{practical_source}）"
+                        )
         elif selected_installed:
             assessment.status = "runtime-switch-required"
             assessment.recommended_strategy = "isolated-child-process"
@@ -4907,7 +5028,12 @@ def collect_package_report(upgrade: Upgrade, args: argparse.Namespace) -> Packag
     if not normalized.to_version:
         report.alternative_candidates = build_alternative_candidates(upgrade.package, args, report.warnings)
     if normalized.to_version:
-        selected, warnings, interval_complete = versions_in_range(metadata, normalized, args.max_versions)
+        selected, warnings, interval_complete = versions_in_range(
+            metadata,
+            normalized,
+            args.max_versions,
+            full_interval=bool(getattr(args, "full_interval", False)),
+        )
     else:
         selected = [normalized.from_version] if normalized.from_version else []
         warnings = ["未形成可分析的精确目标区间；需要继续研究候选版本、替代库或删除方案。"]
@@ -6877,7 +7003,17 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--http-cache-ttl", type=int, default=21_600, help="Public HTTP response and stable-miss cache TTL in seconds.")
     parser.add_argument("--no-http-cache", action="store_true", help="Disable the persistent HTTP cache for this run.")
     parser.add_argument("--max-github-pages", type=int, default=5)
-    parser.add_argument("--max-versions", type=int, default=0, help="0 keeps the complete interval; positive values mark evidence truncated.")
+    parser.add_argument(
+        "--max-versions",
+        type=int,
+        default=0,
+        help="0 keeps the complete interval unless a major jump exceeds the soft cap; positive values hard-truncate.",
+    )
+    parser.add_argument(
+        "--full-interval",
+        action="store_true",
+        help="Disable the soft cap on large cross-major version intervals (fetch every version in from→to).",
+    )
     parser.add_argument("--max-note-chars", type=int, default=1800)
     parser.add_argument("--max-code-points", type=int, default=200)
     parser.add_argument("--max-scan-files", type=int, default=8000)

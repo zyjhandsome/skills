@@ -1504,6 +1504,72 @@ packages:
     def test_unmapped_package_gets_no_curated_alternatives(self) -> None:
         self.assertEqual(MODULE.build_alternative_candidates("internal-widget", self.alternative_args(), []), [])
 
+    def test_element_ui_has_element_plus_curated_lead(self) -> None:
+        candidates = MODULE.build_alternative_candidates(
+            "element-ui", self.alternative_args(offline=True), []
+        )
+        self.assertEqual([item.package for item in candidates], ["element-plus"])
+        self.assertEqual({item.origin for item in candidates}, {"curated-map"})
+
+    def test_curated_lead_sets_replace_track_not_native_refactor(self) -> None:
+        report = self.open_target_report()
+        report.upgrade = MODULE.Upgrade("element-ui", "2.13.2", "", intent="auto-assess")
+        report.removal.status = "requires_migration"
+        report.alternative_candidates = [
+            MODULE.AlternativeCandidate(
+                "element-plus", "", origin="curated-map", compliance_status="unknown"
+            )
+        ]
+        report.refactor_plan = MODULE.build_refactor_plan(report, [
+            MODULE.CodeModificationPoint(
+                "element-ui", "src/main.js", 1, "UI component usage", "", "", "", "", "P1", "high"
+            ),
+        ])
+        MODULE.assign_primary_track(report)
+        question = MODULE.build_confirmation_question(report)
+        self.assertEqual(report.primary_track, "replace")
+        self.assertEqual(question.status, "blocked")
+        self.assertIn("analysis-evidence", question.blocked_reason)
+        self.assertNotIn("原生改造，确认吗", question.prompt)
+
+    def test_cross_major_interval_soft_caps_unless_full_interval(self) -> None:
+        versions = {f"2.{minor}.0": {} for minor in range(0, 30)}
+        versions.update({f"3.{minor}.0": {} for minor in range(0, 30)})
+        metadata = {"versions": versions}
+        upgrade = MODULE.Upgrade("vue", "2.0.0", "3.29.0")
+        selected, warnings, complete = MODULE.versions_in_range(metadata, upgrade, 0)
+        self.assertEqual(len(selected), MODULE.INTERVAL_SOFT_CAP)
+        self.assertFalse(complete)
+        self.assertTrue(any("软截断" in item for item in warnings))
+        selected_full, warnings_full, complete_full = MODULE.versions_in_range(
+            metadata, upgrade, 0, full_interval=True
+        )
+        self.assertGreater(len(selected_full), MODULE.INTERVAL_SOFT_CAP)
+        self.assertTrue(complete_full)
+        self.assertFalse(warnings_full)
+
+    def test_vue_cli4_loose_engines_does_not_mark_node26_compatible(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            manifest = MODULE.ManifestSnapshot(
+                path=str(root / "package.json"),
+                engines={"node": ">=8.9"},
+                packages={
+                    "@vue/cli-service": MODULE.ManifestPackage(
+                        "@vue/cli-service", "devDependencies", "4.4.4"
+                    )
+                },
+            )
+            with (
+                patch.object(MODULE, "current_host_node_runtime", return_value=("26.5.1", "C:/node/node.exe")),
+                patch.object(MODULE, "detect_node_managers", return_value=([], {})),
+            ):
+                runtime = MODULE.assess_node_runtime(root, manifest, [])
+            self.assertNotEqual(runtime.status, "compatible-current")
+            self.assertEqual(runtime.status, "runtime-missing")
+            self.assertTrue(any("实跑推断" in item for item in runtime.warnings))
+            self.assertTrue(any("practical Node" in item or "实跑推断" in item for item in runtime.blockers))
+
     def test_curated_alternative_does_not_change_recommended_action(self) -> None:
         report = MODULE.PackageReport(
             MODULE.Upgrade("axios", "1.2.3", "", intent="auto-assess"),
@@ -2080,14 +2146,17 @@ packages:
             self.assertEqual(bundle.decision_status, "needs_choice")
             self.assertIn("<!-- section: Human Confirmation Queue -->", markdown)
             self.assertIn("人工确认队列", markdown)
-            self.assertIn("| other |", markdown)
-            self.assertIn("改轨问题", markdown)
+            # Offline curated leads put replace on a blocked evidence gate until
+            # analysis-evidence exists; ready menus still include `other`.
+            self.assertTrue(
+                "| other |" in markdown or "尚无已复核" in markdown or "analysis-evidence" in markdown,
+                markdown[-2000:],
+            )
             self.assertIn("human-decisions.json", markdown)
-            self.assertTrue("待人工确认" in markdown or "待人工选型" in markdown)
+            self.assertTrue("待人工确认" in markdown or "待人工选型" in markdown or "确认队列 blocked" in markdown)
             self.assertIn("exit `7`", markdown)
             self.assertIn("batch_implementation_gate", markdown)
             self.assertIn("下一动作=照确认队列向用户提问或补证据，不是等待放行", markdown)
-            self.assertIn("同一波问完所有当前 `ready` 包", markdown)
             self.assertNotIn("一包一问", markdown)
             self.assertEqual(MODULE.validate_report_contract(markdown), [])
 

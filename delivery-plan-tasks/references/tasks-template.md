@@ -21,6 +21,7 @@
   - 失败测试或已批准替代验证：
   - 验证命令/动作：
   - 预期结果：
+  - 质量层/证据：<functional|visual|...；visual 时写 baseline/route/state/browser/viewport/diff/evidence path>
   - 迁移/回滚：
   - 完成定义：
   - 负责人/冲突说明：

@@ -7,7 +7,9 @@ description: >
   Vue Router 4, Vuex/Pinia, Element UI→Element Plus (or other UI), test-utils,
   or blocking Vue plugins. Writes a Simplified Chinese decision packet with
   confirmation queue and batch_implementation_gate. Ends at analysis_status
-  complete — never at implementation or codemod execution.
+  complete — never at implementation or codemod execution. Produces an
+  independent full report, decision records, inventory evidence, and a compact
+  JSON summary with structured UI visual-risk evidence.
 ---
 
 # Vue 2 → Vue 3 Upgrade Impact Analysis
@@ -85,6 +87,10 @@ Unless evidence rules it out, recommend path id `compat-big-bang` with axes
    Complete §10 人工补搜检查 even when profile signals look complete. Register
    every `Vue.prototype.$*` definition/consumer and its `globalProperties` or
    `provide/inject` migration target.
+   When UI/CSS triggers are present, also complete the structured
+   `ui_visual_risk` block; a one-line “run visual regression” note is
+   insufficient. Name affected surfaces, CSS anchors, baseline needs, required
+   states, and a generic next action without requiring another Skill.
 6. Draft packet + Decision Records (path + each High/blocker /
    `required_for_path=yes` subsystem).
 7. Work confirmation queue (`references/human-confirmation-gates.md`):
@@ -104,19 +110,23 @@ infer `decided`. Re-prompt with verbatim `proceed:path:…` /
 Resolve the report directory in this order:
 
 1. Explicit `--output-dir` override.
-2. Existing `--change-dir` → `<change-dir>/evidence/vue2-to-vue3-upgrade/`
-3. Else under the analyzed project root, match an existing
-   `openspec/changes/<id>/` (one → use; many → ask).
-4. Else default candidate:
+2. Else default candidate:
    `<project-root>/.vue2-to-vue3-upgrade-analysis`
 
-Do **not** create OpenSpec changes. Prefer (2)/(3) when a change dir applies;
-otherwise use (4) after restating the absolute path and getting explicit
+Use (2) after restating the absolute path and getting explicit
 confirmation (`--output-dir <that-path>` or `confirm:output-dir`). Until
 confirmed: read-only analysis only; **do not write**. Preflight failure →
 stop. Oral「写到仓库」alone is not enough.
 
-Write at least `vue2-to-vue3-upgrade-report.md`. Multi-batch layout:
+Write the independent output bundle:
+
+- `vue2-to-vue3-upgrade-report.md`: full decision packet.
+- `upgrade-summary.json`: compact consumer view, ≤12 KiB; paths and bounded
+  arrays only, no copied report sections.
+- `inventory.json`: raw profiler output when profiling ran.
+- `decision-records/*.md`: only for path and High/blocker decisions.
+
+Multi-batch layout:
 `<entry-kind>/<workspace-slug>__variant-<build-variant>__scope-<batch-scope>/`
 plus root `BATCH-INDEX.md` (`entry-kind` = `workspace` / `inventory`).
 Prose defaults to Simplified Chinese; keep package names, versions, paths,
@@ -129,6 +139,7 @@ commands, enums, and URLs verbatim. Required sections:
 python -m unittest discover -s tests -v
 python scripts/validate_report.py <report.md>
 python scripts/validate_report.py --evidence-dir <evidence-dir> [--json]
+python scripts/validate_upgrade_summary.py <upgrade-summary.json>
 python scripts/preflight.py --project-root <dir> [--json]
 python scripts/profile_inventory.py --project-root <dir> [--json]
 ```
@@ -148,6 +159,10 @@ well-formed, never that evidence is sufficient. Fixtures:
 | `implementation_readiness` | always `not_assessed` in this skill |
 | also required | `behavior_parity_required`, `network_mode`, `report_path`, `evidence_as_of` |
 
+Reports that inventory a UI-kit major, Tailwind/reset change, mixed table stack,
+scoped-style/fallthrough risk, or heavy visual library also require
+`visual_acceptance_required=yes` and the §5 `ui_visual_risk` block.
+
 Never set `analysis_status=complete` while `decision_status=needs_choice` or any
 queue `ready`/`pending`. Uncleared askable rows ⇒ **ask now**, not “继续/放行”.
 `batch_implementation_gate=ready` requires `lockfile_status=present` in §1 and every
@@ -165,6 +180,13 @@ ladder matching §3/§7, and path preset ↔ axis consistency.
   queue zero `ready`/`pending`; `decision-records/` complete; validator exit
   `0`; Agent review → `analysis_status=complete`
 
+## Context budget and portability
+
+Return the path to `upgrade-summary.json` by default. Load the full report only
+for a named section, one decision record for a named decision, and inventory
+only for a named evidence question. The output bundle must validate and remain
+useful when every other Skill folder is absent.
+
 ## References
 
 **Minimum load (every run):** `references/environment-preflight.md`,
@@ -172,10 +194,6 @@ ladder matching §3/§7, and path preset ↔ axis consistency.
 
 **On demand:** `references/dual-entry-and-batching.md`,
 `references/migration-path-ladder.md`, `references/impact-and-validation.md`,
-`references/official-docs-index.md`, `references/named-migration-recipes.md`,
-`references/common-upgrade-patterns.md`,
+`references/official-docs-index.md`, `references/named-migration-recipes.md`, `references/common-upgrade-patterns.md`,
 `references/next-action-choice-menus.md`, `references/report-contract.md`,
-`references/decision-record-schema.md`,
-`references/sibling-skill-drift-checklist.md` (maintainer only; no runtime
-coupling), `templates/decision-packet.md`, `templates/decision-record.md`,
-`scripts/`, `fixtures/`.
+`references/decision-record-schema.md`, `templates/decision-packet.md`, `templates/decision-record.md`, `scripts/`, `fixtures/`.

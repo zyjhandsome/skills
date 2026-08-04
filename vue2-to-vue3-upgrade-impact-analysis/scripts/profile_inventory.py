@@ -23,9 +23,12 @@ RELATED_NAMES = {
     "@vitejs/plugin-vue", "vite-plugin-vue2", "eslint-plugin-vue",
     "vuedraggable", "vue-draggable-next", "vue-class-component",
     "vue-property-decorator", "sass", "sass-loader", "webpack",
-    # Non vue-* packages that commonly block Vue3 cutover
+    # Non vue-* packages that commonly block Vue3 cutover or visual parity
     "tui-editor", "@toast-ui/editor", "@toast-ui/vue-editor",
     "vue2-editor", "quill", "mavon-editor", "wangeditor",
+    # High-impact non-vue-* deps often missed by name heuristics
+    "echarts", "xlsx", "normalize.css", "sortablejs", "file-saver",
+    "jszip", "codemirror", "dropzone", "driver.js", "nprogress",
 }
 
 # Always surface these as replace/unknown even when not matching vue-* prefix rules.
@@ -130,8 +133,12 @@ def classify_vue3_readiness(name: str, spec: str) -> str:
     major = major_from_spec(spec)
     if name in REPLACE_ON_SIGHT:
         return "replace"
-    if name in {"@toast-ui/editor", "quill", "wangeditor"}:
-        # Not Vue-bound by name; still flag for residual/blocker review.
+    if name in {
+        "@toast-ui/editor", "quill", "wangeditor",
+        "echarts", "xlsx", "normalize.css", "sortablejs", "file-saver",
+        "jszip", "codemirror", "dropzone", "driver.js", "nprogress",
+    }:
+        # Framework-agnostic or CSS/reset utilities: still surface for regression.
         return "unknown"
     minimum_majors = {
         "vue": 3,

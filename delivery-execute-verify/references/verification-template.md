@@ -22,6 +22,17 @@
 | 需求/场景 | 实现证据 | 验证方式 | 结果 |
 |---|---|---|---|
 
+## 视觉证据（`quality_profiles.visual=required` 时）
+- Visual report：<path>
+- Source artifact revision：<64-hex revision>
+- Assessment mode：<strict_parity|consistency_review>
+- Baseline / substitute：<path/revision/approved standard>
+- Capture context：<browser + viewport + locale + timezone + theme>
+- Required states：<baseline/current/diff paths + results>
+- Visual validator：<command + exit/result>
+- G9 Visual Evidence：pass / fail / not_required
+- Accepted differences / coverage gaps：
+
 ## 规格一致性
 - 工具/审查：
 - 完整性：
@@ -42,6 +53,7 @@
 - 运行/静态检查：通过 / 失败
 - 规格核对：通过 / 失败
 - 代码审查：通过 / 失败
+- G9 视觉证据：通过 / 失败 / 不适用
 - 是否达到已验证：是 / 否
 - OpenSpec 归档：deferred_to_openspec（本技能不执行）/ not_applicable / blocked(<原因>)
 

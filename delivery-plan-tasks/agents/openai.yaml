@@ -1,0 +1,8 @@
+interface:
+  display_name: "Delivery Plan Tasks"
+  short_description: "Turn approved scope into executable evidence tasks"
+  default_prompt: >
+    Use $delivery-plan-tasks after Frame approval. Preserve the approved scope,
+    add task-level targets, commands, expected results, and when visual quality
+    is required include baseline, capture context, state matrix, report path,
+    and G9 evidence ownership. Return scope gaps to Frame rather than inventing.

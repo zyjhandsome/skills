@@ -9,16 +9,16 @@
  *   node validate_handoff.mjs <file> --profile legacy
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import process from "node:process";
 
 // Compatibility is major-based: any delivery-family/<SUPPORTED_FAMILY_MAJOR>.x is accepted
 // so additive minor bumps do not require editing this validator. CURRENT_FAMILY_VERSION is
 // the version the templates currently emit; it is informational only.
 export const SUPPORTED_FAMILY_MAJOR = 1;
-export const CURRENT_FAMILY_VERSION = "delivery-family/1.4";
+export const CURRENT_FAMILY_VERSION = "delivery-family/1.5";
 const SCHEMA_VERSION = "delivery-handoff/v1";
 const STAGES = new Set([
   "delivery-explore",
@@ -49,7 +49,7 @@ const TOP_LEVEL = new Set([
 ]);
 // Optional additive keys (delivery-family/1.3+): accepted when present, never required.
 const OPTIONAL_TOP_LEVEL = new Set(["previous_handoff_id"]);
-// Hard-prerequisite profile (delivery-family/1.4 default): only OpenSpec + Codebase Memory MCP
+// Hard-prerequisite profile (delivery-family/1.5 default): only OpenSpec + Codebase Memory MCP
 // must be nominal to carry a stage transition. Superpowers is soft (loaded|missing|inline|
 // partial(...)) and never alone blocks transition. Degraded evidence does not exist.
 // Use --profile legacy to validate pre-1.2 handoffs.
@@ -481,6 +481,10 @@ function main() {
   return 0;
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (
+  process.argv[1] &&
+  pathToFileURL(realpathSync(resolve(process.argv[1]))).href.toLowerCase() ===
+    pathToFileURL(realpathSync(fileURLToPath(import.meta.url))).href.toLowerCase()
+) {
   process.exit(main());
 }

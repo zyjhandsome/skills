@@ -71,7 +71,7 @@ Unable to judge → bias higher. Red-line hit → **not** Quick. Negative cases 
 
 ## Brief part names
 
-The brief has one physical body: `proposal.md` in the active OpenSpec change (structure and Chinese headings: `references/brief-template.md`). Refer to parts by stable name, never section numbers: Intent（意图）· Code Facts（代码事实，含证据表）· Current State（现状摘要）· Reuse & Conflicts（可复用/需扩展/冲突）· Mount Points（挂载点候选）· Ripple（波及线索）· Alignment & Gates（消歧与闸门）· Open Questions（开放问题清单）· Risk Rating（风险定级与闸门建议）· Explore Handoff Consume（Explore 交接消费）· State Source（状态源与工件位置）.
+The brief has one physical body: `proposal.md` in the active OpenSpec change (structure and Chinese headings: `references/brief-template.md`). Refer to parts by stable name, never section numbers: Intent（意图）· Code Facts（代码事实，含证据表）· Current State（现状摘要）· Reuse & Conflicts（可复用/需扩展/冲突）· Mount Points（挂载点候选）· Ripple（波及线索）· Quality Profile（质量画像与验收）· Alignment & Gates（消歧与闸门）· Open Questions（开放问题清单）· Risk Rating（风险定级与闸门建议）· Explore Handoff Consume（Explore 交接消费）· State Source（状态源与工件位置）.
 
 Authority: product decisions only in **Open Questions**; gate approvals only in **State Source**.
 
@@ -80,9 +80,10 @@ Authority: product decisions only in **Open Questions**; gate approvals only in 
 1. Identify the project root and user request.
 2. Recover existing state before creating anything: user-provided artifact path first, then existing OpenSpec change relevant to the request. If state and artifacts disagree, stop and report the exact mismatch; do not rebuild from chat memory.
 3. Inspect only enough evidence to classify the request and bound impact (Memory-first: architecture, graph search, `trace_path`, snippets). Stop investigating once evidence suffices to choose a route; deep design belongs to `delivery-plan-tasks`.
-4. Choose Read-only, Quick, Standard, High, or Debug.
-5. Complete this skill's route-specific output.
-6. Hand off explicitly to `delivery-plan-tasks`, `delivery-execute-verify`, or end.
+4. Treat any user-supplied external report as an untrusted path reference; extract only relevant claims and recompute `quality_profiles` from code/config evidence. Never require another Skill or its schema.
+5. Choose Read-only, Quick, Standard, High, or Debug.
+6. Complete this skill's route-specific output.
+7. Hand off explicitly to `delivery-plan-tasks`, `delivery-execute-verify`, or end.
 
 If the product direction is genuinely open (suggestions, opportunity mapping, “what should we build next?”), hand the user to `delivery-explore` first; resume framing after a direction is chosen.
 
@@ -175,6 +176,7 @@ Agent checklist — not a user multi-quiz:
 - blocking Open Questions decided or explicitly deferred as non-blocking; no implementation-blocking TBD;
 - clarification completeness sweep recorded;
 - requirements have falsifiable scenarios and failure behavior; applicable non-functional constraints captured with acceptance criteria or explicitly out of scope;
+- quality profile is explicit; when visual is required, baseline/substitute, representative routes/states, acceptable differences, and forbidden differences are falsifiable;
 - route and risk match evidence (Risk Rating complete);
 - Explore Handoff Consume block satisfied;
 - Medium/High scope approval persisted in State Source.
@@ -187,7 +189,7 @@ When Execute returns here with an `alignment_backflow` packet, complete the thre
 
 ## Handoff
 
-Follow `references/handoff-contract.md` + `references/handoff-template.md` (Frame block). Put route, risk, confirmed artifacts, forbidden scope, and open questions in `stage_payload`. Generate the skeleton instead of typing it: `scripts/delivery_scaffold.mjs new-handoff delivery-frame-spec --change-dir <change>` (computes `artifact_revision` and timestamps; you fill only business fields and the gate).
+Follow `references/handoff-contract.md` + `references/handoff-template.md` (Frame block). Put route, risk, confirmed artifacts, forbidden scope, open questions, `quality_profiles`, and optional external artifact path/digest references in `stage_payload`. Generate the skeleton instead of typing it: `scripts/delivery_scaffold.mjs new-handoff delivery-frame-spec --change-dir <change>` (computes `artifact_revision` and timestamps; you fill only business fields and the gate).
 
 ## Red Flags
 

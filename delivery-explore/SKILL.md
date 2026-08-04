@@ -93,6 +93,7 @@ Before handing a selected direction to `delivery-frame-spec`, verify:
 - `non_goals` captures known boundaries, or says which boundaries remain for framing;
 - evidence-findable gaps were investigated; remaining uncertainty is listed under `unknowns` without inventing decisions;
 - `direction_alignment` is `selected`. If a direction-changing fork remains → `needs_choice`, stay in explore and open the next wave; if the user only wanted advice → end without framing.
+- upgrade/UI directions pass evidence-backed `quality_signals` as hints; Explore never sets the final quality profile.
 
 This is candidate-direction alignment, not specification approval. Do not ask frame-owned scope/acceptance/irreversible questions merely to look complete; pass them as `unknowns`.
 
@@ -105,6 +106,7 @@ Rules:
 - Directions without a code or product-doc anchor are labeled **Inference** and ranked below evidence-backed ones.
 - Do not invent persistence/privacy/public-API work as “easy wins.”
 - Risk signals are hints for the frame route (`none` → likely Quick/Standard, `standard-likely` → Standard/Medium, `high-likely` → High); the frame stage re-derives route/risk from evidence. Never claim “规格已批准” or “可以开始实现.”
+- Quality signals are plain hints in this family handoff; Frame re-derives `quality_profiles.visual` from repository evidence.
 - If the user explicitly asks to keep notes, offer a disposable note path they choose; default is inline only.
 
 ## Boundary vs `delivery-frame-spec`

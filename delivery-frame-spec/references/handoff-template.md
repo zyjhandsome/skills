@@ -7,7 +7,7 @@
 ```delivery-handoff
 {
   "schema_version": "delivery-handoff/v1",
-  "family_version": "delivery-family/1.4",
+  "family_version": "delivery-family/1.5",
   "type": "delivery-handoff",
   "handoff_id": "<change-id>-<stage>-<序号>",
   "previous_handoff_id": null,
@@ -85,6 +85,7 @@
   "non_goals": [],
   "code_anchors": [],
   "risk_signal": "<none|standard-likely|high-likely>",
+  "quality_signals": [],
   "unknowns": []
 },
 "presentation": { "from_task": "探索·方向对齐", "to_task": "定框·路由与需求边界", "continue_prompt": "请使用 delivery-frame-spec", "...": "..." }
@@ -104,7 +105,11 @@
   "risk": "<none|low|medium|high>",
   "confirmed_artifacts": [],
   "forbidden_scope": [],
-  "open_questions": []
+  "open_questions": [],
+  "quality_profiles": {},
+  "external_artifacts": [
+    { "path": "<optional-artifact>", "digest": "sha256:<hex>", "claims_used": [] }
+  ]
 },
 "presentation": { "from_task": "<定框·规格闸门通过|定框·轻量契约已批准|只读结束>", "to_task": "<技术设计与任务拆解|按轻量任务实施|结束>", "...": "..." }
 ```
@@ -129,6 +134,8 @@
   "traceability": [],
   "readiness_result": { "blockers": [], "warnings": [], "suggestions": [] },
   "validation_plan": [],
+  "quality_profiles": {},
+  "visual_validation_plan": [],
   "risk_gates": [],
   "parallel_ownership": []
 },
@@ -153,6 +160,12 @@
   "artifact_backflow": "none",
   "alignment_backflow": null,
   "fresh_verification_evidence": [],
+  "visual_evidence": {
+    "required": false,
+    "report": null,
+    "source_artifact_revision": null,
+    "g9": "not_required"
+  },
   "spec_coherence": "<pass|warn|block>",
   "code_review": {
     "status": "<pass|warn|block>",

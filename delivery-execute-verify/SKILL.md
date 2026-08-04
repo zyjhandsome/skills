@@ -28,7 +28,7 @@ Shared family protocol: `../delivery-frame-spec/references/family-contract.md`. 
 | Before mutation | Preflight below; confirm go bound to current revision |
 | Task loop / TDD | `references/implementation-loop.md` |
 | Parallel / SubAgent | `references/subagent-orchestration.md` (only when not default-inline) |
-| Before verified | `references/artifact-gate-checks.md` (G1–G7) + `references/verification-template.md` |
+| Before verified | `references/artifact-gate-checks.md` (G1–G9 as applicable) + `references/verification-template.md`; visual-required also loads `references/delivery-visual-evidence-template.md` |
 | Close-out | Prefer `../delivery-frame-spec/scripts/delivery_scaffold.mjs close-out` |
 | Superpowers missing | `../delivery-frame-spec/references/method-discipline-inline.md` |
 | Skip by default | explore/frame deep templates already consumed; `tests/legacy/*` prompt docs |
@@ -140,9 +140,10 @@ The re-entering stage runs the three-item consume check in `handoff-contract.md`
 
 ## Fresh Verification Gate
 
-Immediately before any completion claim, run `references/artifact-gate-checks.md` items G1–G6 as applicable. Then: identify the commands proving current requirements → run the full current set → read complete output/exit codes/failure counts → verify each Requirement/Scenario against implementation → check diff/impact against plan and forbidden scope → run risk-appropriate code review → resolve CRITICAL, fix or explicitly accept WARNING → record commands, time, outputs, residual risk.
+Immediately before any completion claim, run `references/artifact-gate-checks.md` items G1–G9 as applicable. G9 is mandatory when `quality_profiles.visual=required`: create and validate this family’s own `delivery-visual-evidence/v1` record, including revision, baseline/substitute, required states/rows, difference disposition, and final result. An external report may be cited by path/digest, but its Skill/schema is never required and it is never validated as Delivery state. Then: identify the commands proving current requirements → run the full current set → read complete output/exit codes/failure counts → verify each Requirement/Scenario against implementation → check diff/impact against plan and forbidden scope → run risk-appropriate code review → resolve CRITICAL, fix or explicitly accept WARNING → record commands, time, outputs, residual risk.
 
 Runtime tests prove current runtime/static state; OpenSpec verify proves spec completeness/coherence. Neither substitutes for the other.
+Functional smoke and code review do not substitute for required visual evidence.
 
 ## Verified close-out protocol
 

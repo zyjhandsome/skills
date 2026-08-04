@@ -3,20 +3,19 @@
 ## 文件名
 
 - `vue2-to-vue3-upgrade-report.md`（必填）
+- `upgrade-summary.json`（必填，≤12 KiB）
+- `inventory.json`（执行 profile 时必填）
 - `decision-records/migration-path__<path-id>.md`（路径单元必填）
 - `decision-records/subsystem__<subsystem-id>.md`（每个 High/blocker 或 `required_for_path=yes` 子系统必填；其余可选）
-- `vue2-to-vue3-upgrade-report.json`（可选）
 
 语言：可见正文默认简体中文；枚举、包名、版本、路径、命令、URL 保持英文原文。
 
 ## 报告目录解析
 
 1. 显式 `--output-dir`
-2. 既有 `--change-dir` → `<change-dir>/evidence/vue2-to-vue3-upgrade/`
-3. 目标仓已有唯一 `openspec/changes/<id>/` → 当作 change-dir；多个询问
-4. 否则默认候选：`<project-root>/.vue2-to-vue3-upgrade-analysis`
+2. 否则默认候选：`<project-root>/.vue2-to-vue3-upgrade-analysis`
 
-硬规则：不得创建 OpenSpec change；优先使用既有 change 的 evidence 子目录；无 change 时可用默认候选目录，但须复述绝对路径并得到显式确认（`--output-dir <path>` 或 `confirm:output-dir`）后再写。路径未确认前只读分析、禁止写入。口语「写到仓库」无效。
+硬规则：输出目录只属于本 Skill；须复述绝对路径并得到显式确认（`--output-dir <path>` 或 `confirm:output-dir`）后再写。路径未确认前只读分析、禁止写入。口语「写到仓库」无效。
 
 ## 多批次布局
 
@@ -39,6 +38,15 @@
 | `network_mode` | `online` / `offline` / `partial` |
 | `report_path` | 实际报告目录（禁止单独 `.` / `./`；须与校验时目录 resolve 等价；相对路径相对进程 cwd） |
 | `evidence_as_of` | 证据采集日，`YYYY-MM-DD`（registry/官方页/仓画像读取日；非“永远正确”证明） |
+
+以下为独立输出字段；不表示任何外部流程的状态或实施授权：
+
+| 字段 | 取值 |
+|---|---|
+| `schema` | `vue3-upgrade-report/v1` |
+| `producer` | `vue2-to-vue3-upgrade-impact-analysis` |
+| `summary_path` | 同一输出目录内的 `upgrade-summary.json` |
+| `visual_acceptance_required` | `yes` / `no` |
 
 `batch_implementation_gate=ready` 额外要求：§1 的结构化字段必须为
 `lockfile_status: present`；`absent` / `unparsed` 一律保持 `frozen`。每个
@@ -79,6 +87,24 @@ High/blocker 与每个 `required_for_path=yes` 均为 `decided`（`deferred` 只
 非默认轴组合须改选匹配的 path id，或 Wave 1 走 `other` 后把最终 path id /
 轴写进 Decision Record——校验器拒绝 preset 与轴互相矛盾的报告。
 §7 唯一 path 行的 id 必须与 §3 `推荐路径 id` 相同。
+
+当 §2 出现 UI-kit、Tailwind/reset、表格/editor/tree/DAG 等视觉触发包，或
+源码证据命中 scoped-style/fallthrough/theme/Teleport 风险时，状态表必须写
+`visual_acceptance_required: yes`，§5 必须含 `### ui_visual_risk` 与以下非空标记：
+
+- `triggers:`
+- `legacy_selectors:`
+- `css_entry_order:`
+- `theme_and_teleport:`
+- `tailwind_reset:`
+- `primary_sample:`
+- `secondary_sample:`（不适用时写有依据的 `not_applicable`）
+- `baseline_status:`
+- `required_visual_states:`
+- `recommended_next_action:`（通用动作，不得填写其他 Skill 名称）
+
+仅写“做视觉回归”不合规。无触发器时可写
+`visual_acceptance_required: no`，但须保留可审计的证据理由。
 
 章节「3」或「7」附近必须出现：`Name, never run`，**或**同时出现「命名配方」与「不执行」（二者缺一不可；仅有「命名配方」表头不算）。
 章节「10」必须出现字面：`人工补搜检查`，并勾选/回答下列项（即使 profile 已扫描）：

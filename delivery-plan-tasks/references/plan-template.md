@@ -45,6 +45,16 @@
 
 ## 验证策略
 
+### 质量画像
+
+| profile | requirement/acceptance | task | validation |
+|---|---|---|---|
+
+### Visual validation matrix（visual=required 时）
+
+| ID | baseline/substitute | route | state | browser/viewport | diff policy | evidence path | required_for_verified | failure proves |
+|---|---|---|---|---|---|---|---|---|
+
 ## 需求追溯
 | 需求/场景 | 设计要素 | 任务 | 验证 |
 |---|---|---|---|

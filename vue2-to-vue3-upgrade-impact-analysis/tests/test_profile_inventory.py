@@ -37,6 +37,9 @@ class ProfileInventoryTests(unittest.TestCase):
                 "vuex": "^3.6.2",
                 "element-ui": "^2.15.14",
                 "tui-editor": "1.3.3",
+                "echarts": "4.2.1",
+                "xlsx": "0.14.1",
+                "normalize.css": "7.0.0",
             },
             "devDependencies": {
                 "@vue/cli-service": "^5.0.8",
@@ -60,6 +63,15 @@ class ProfileInventoryTests(unittest.TestCase):
             )
             self.assertEqual(
                 data["related_packages"]["tui-editor"]["readiness"], "replace"
+            )
+            self.assertEqual(
+                data["related_packages"]["echarts"]["readiness"], "unknown"
+            )
+            self.assertEqual(
+                data["related_packages"]["xlsx"]["readiness"], "unknown"
+            )
+            self.assertEqual(
+                data["related_packages"]["normalize.css"]["readiness"], "unknown"
             )
 
     def test_source_signals_slot_scope_and_filter(self) -> None:

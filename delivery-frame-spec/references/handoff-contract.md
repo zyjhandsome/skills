@@ -28,7 +28,7 @@
 ```json
 {
   "schema_version": "delivery-handoff/v1",
-  "family_version": "delivery-family/1.4",
+  "family_version": "delivery-family/1.5",
   "type": "delivery-handoff",
   "handoff_id": "<唯一 id>",
   "previous_handoff_id": null,
@@ -126,10 +126,19 @@ handoff 只存在于聊天时无法跨会话续跑。规则：
 
 | 阶段 | `stage_payload` 必需内容 |
 |---|---|
-| Explore | `direction_alignment`、`chosen_direction`、`non_goals`、`code_anchors`、`risk_signal`、`unknowns` |
-| Frame | `route`、`risk`、`confirmed_artifacts`、`forbidden_scope`、`open_questions` |
-| Plan | `plan_tasks`、`plan_decisions`、`traceability`、`readiness_result`、`validation_plan`、`risk_gates`、`parallel_ownership` |
-| Execute | `overall_status`、`task_status`、`current_failures_or_blocks`、`artifact_backflow`、`alignment_backflow`、`fresh_verification_evidence`、`spec_coherence`、`code_review`、`archive`、`asset_writeback` |
+| Explore | `direction_alignment`、`chosen_direction`、`non_goals`、`code_anchors`、`risk_signal`、`quality_signals`、`unknowns` |
+| Frame | `route`、`risk`、`confirmed_artifacts`、`forbidden_scope`、`open_questions`、`quality_profiles`、`external_artifacts` |
+| Plan | `plan_tasks`、`plan_decisions`、`traceability`、`readiness_result`、`validation_plan`、`quality_profiles`、`visual_validation_plan`、`risk_gates`、`parallel_ownership` |
+| Execute | `overall_status`、`task_status`、`current_failures_or_blocks`、`artifact_backflow`、`alignment_backflow`、`fresh_verification_evidence`、`visual_evidence`、`spec_coherence`、`code_review`、`archive`、`asset_writeback` |
+
+`quality_signals` 只是 Explore 侧线索；Frame 的 `quality_profiles` 是需求权威，Plan/Execute
+必须逐阶段消费。Visual required 时 Execute 的 `visual_evidence.g9` 不得为
+`not_required`。
+
+`external_artifacts` 只是可选的紧凑引用，最多 10 项；每项只保留
+`path`、`digest`、`claims_used`，不得复制完整报告、截图/base64，也不得声明
+`required_skill`/`consumer_skill`。接收阶段必须用本 family 的代码与 OpenSpec
+事实重算结论。
 
 具体形状见共享 `handoff-template.md`。不得把含斜线的旧展示标签（`route/risk` 等）直接作为 JSON 键。
 

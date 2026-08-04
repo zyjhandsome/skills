@@ -15,6 +15,10 @@
 | network_mode | online / offline / partial |
 | report_path | 实际报告目录（禁止单独 `.`） |
 | evidence_as_of | YYYY-MM-DD |
+| schema | vue3-upgrade-report/v1 |
+| producer | vue2-to-vue3-upgrade-impact-analysis |
+| summary_path | 实际输出目录/upgrade-summary.json |
+| visual_acceptance_required | yes / no |
 
 **横幅：** （待补证据 / 待人工确认·下一动作=提问 / 分析完成·handoff only·实施需另授权）
 
@@ -36,6 +40,19 @@
 
 | 包名 | 当前版本 | Vue3 就绪度 | 建议 | 证据 |
 |---|---|---|---|---|
+
+### ui_visual_risk（有视觉触发器时必填）
+
+- triggers:
+- legacy_selectors:
+- css_entry_order:
+- theme_and_teleport:
+- tailwind_reset:
+- primary_sample:
+- secondary_sample:
+- baseline_status:
+- required_visual_states:
+- recommended_next_action: run_visual_review / include_in_implementation_validation / no_action
 
 ## 3. 推荐迁移路径
 

@@ -81,8 +81,9 @@
 15. **受众可读性内化（可选）**：用户指定跨文化受众（如赴美留学生）时，首次出现处补文化/人物/语境背景，**客观第三人称**，**禁元叙述、禁「你们」说教、禁国内场景硬类比**，照跑 4c 并加「可读性内化」自检行。见「可读性内化适配」。
 16. **对谈三层节结构（播客/访谈默认）**：多人 Q&A 素材每节固定 **核心洞察 → 深度解析 → 对谈实录**；篇末省略独立「关键语录」节（金句沉入实录）。见「对谈三层节结构」。
 17. **核心导读论点合成【v5.26】**：导读首块 `> **全文论点**：…` 合成中心主张；主体 2–4 段以 `**{实质性标签}。**` 分层展开，须覆盖目录末 2–3 节收束线；禁止话题串烧式议程回顾。见「核心导读写法（全文论点）」。
-18. **AI/DevTools 行话 + 专名判定【v5.27】**：整理技术/开发者素材时，4c 须额外跑「AI/DevTools 行话簇」（dogfood/oneshot/flaky/ration/tally/spawn/subprocess/RAG/wrapper 等）；**产品/命令/协议/模型名保留英文，行为与口语一律中文化**。行业缩写（IC/ASL/MTS/RAG/GTM）首现须注中文全称。见「英文源素材高频夹写词」与「三层语言分区」。
-19. **多源合并稿 + 多源一致性【v5.27】**：合并 ≥2 来源时走「多源合并稿」模式——**源口径标注**（@Scale 口径/Platformer 口径）+ **多源一致性核对**（同一指标/枚举跨源冲突须 `[编者注]` 并存或点明「互补非互证」，禁默认取一或自称「互证」）；可在对谈来源节内嵌实录。见「多源合并稿」与「防幻觉 第 8 条」。
+18. **AI/DevTools 行话 + 专名判定【v5.27/v5.28】**：整理技术/开发者素材时，4c 须额外跑「AI/DevTools 行话簇」；**产品/命令/协议/模型名保留英文，行为与口语中文化**；**禁止过译**（Skill≠技能、Skill Creator≠技能创建者）。行业缩写（IC/ASL/MTS/RAG/GTM）首现须注中文全称。见「专名 vs 行话」与 `over-translation-guard.md`。
+19. **多源合并稿 + 多源一致性【v5.27】**：合并 ≥2 来源时走「多源合并稿」模式——**源口径标注** + **多源一致性核对**（冲突须 `[编者注]` 并存或点明「互补非互证」，禁自称「互证」）。见「多源合并稿」与「防幻觉 第 8 条」。
+20. **4c 括注不计失败【v5.28】**：首现 `中文（English）` 内的词库词、以及过译护栏白名单专名，**不计入** 4c-1 裸词失败；可跑 `scripts/check_4c.py`。
 
 ---
 
@@ -175,13 +176,13 @@
 
 | 步骤 | 动作 | 通过标准 |
 | :--- | :--- | :--- |
-| **4c-1 词库 grep** | 对「英文源素材高频夹写词」+ 播客扩展词表 grep 全文（排除元数据原标题、术语表专名列） | 叙述层+关键语录中**通用夹写词命中为 0**（专名层除外） |
-| **4c-2 连续英文扫描** | 通读导读/正文/核心洞察/关键语录，找 **≥2 连续英文单词** 的非专名短语 | 命中须改中文或写入「专名层误判清单」允许项；**不得**留 `refine`、`builder`、`holistic` 等通用词 |
+| **4c-1 词库 grep** | 对「英文源素材高频夹写词」+ 播客扩展词表 grep 全文（排除元数据原标题、术语表专名列） | 叙述层+关键语录中**裸露通用夹写词为 0**（专名层除外）。**不计入失败**：① 首现合法括注 `中文（English）` / `（English）` 内的词库词；② `references/over-translation-guard.md` 白名单专名（如 **Skill** / **Skill Creator** / **Claude Code**） |
+| **4c-2 连续英文扫描** | 通读导读/正文/核心洞察/关键语录，找 **≥2 连续英文单词** 的非专名短语 | 命中须改中文或确认为专名层；**不得**留 `refine`、`builder`、`holistic` 等通用词；**同时检查过译**（勿把 Skill/Creator 等专名译没） |
 | **4c-3 关键语录 / 对谈实录独立扫** | 启用**对谈三层**时逐节扫 `### 对谈实录`；否则扫 `## 关键语录` | 无英文半句/整句（专名、产品型号除外） |
 
-**可选自动化**：新建稿或存量优化后，若项目内存在 4c 审计脚本（如 `.cursor/tmp/output_full_audit.py`，**不存在则跳过、勿假设其存在**），可运行以辅助发现遗漏；**脚本结果为 0 不能替代 4c-2 通读**，但脚本 >0 时**不得标 ✅**。
+**可选自动化**：成稿后可运行本技能内 `scripts/check_4c.py {文件路径}`（排除括注与专名白名单）；**脚本 0 命中不能替代 4c-2 通读与过译护栏**，但脚本仍报裸词命中时**不得标 ✅**。勿依赖已移除的 `.cursor/tmp/output_full_audit.py`。
 
-**自检备注格式（新建稿）**：`✅ 4c 闸门通过；grep 命中 {X}→修正后 {Y}；关键语录已译中文；专名/原标题英文保留`
+**自检备注格式（新建稿）**：`✅ 4c 闸门通过；裸词 grep 命中 {X}→修正后 {Y}；括注/专名白名单已排除；过译护栏已核；金句/实录已译中文`
 
 ### 步骤 4d：节间空白验收闸门【v5.25】
 
@@ -193,7 +194,7 @@
 | **4d-2 三连空行** | grep 连续 `\n\n\n+` 或脚本 `--check` | **0 处**三连及以上空行（`##`→`### 核心洞察` 之间亦禁止） |
 | **4d-3 `##`→`###` 间距** | 逐节核对每个正文 `##` 标题与首个 `###` 之间 | **恰好 1 个空行**（对谈三层：首个 `###` 应为 `核心洞察`） |
 
-**可选自动化**：成稿或存量优化后，运行 `.agents/skills/content-structuring/scripts/normalize_spacing.py {文件路径}` 自动修正；`--check` 仅报告不写入。**脚本通过不能替代 4d-3 目视**，但 `--check` 失败时**不得标 ✅**。
+**可选自动化**：成稿或存量优化后，运行本技能内 `scripts/normalize_spacing.py {文件路径}` 自动修正；`--check` 仅报告不写入。**脚本通过不能替代 4d-3 目视**，但 `--check` 失败时**不得标 ✅**。
 
 **自检备注格式（新建稿）**：`✅ 4d 闸门通过；--- 共 {N} 处（≤5）；正文节间 --- 0；三连空行 0`
 
@@ -213,7 +214,7 @@ deprecate|crutch|unsustainable|incredible|painkiller|addict|junk food|lizard bra
 double-edged|unintended consequence|learning|Absolutely|freak out|hit\b|die\b|ship\b
 ```
 
-**允许保留英文的典型专名层**（非穷举）：**OpenAI**、**Claude Code**、**iPhone**、**Tony Fadell**、**B2B**/**B2C**、**Wi-Fi**、**LLM**、书名《Build》、元数据「原标题」。
+**允许保留英文的典型专名层**（非穷举）：**OpenAI**、**Claude Code**、**Skill** / **Agent Skill** / **Skill Creator**、**Hooks**、**Computer Use**、**Composer**、**Canvas**、**iPhone**、**Tony Fadell**、**B2B**/**B2C**、**Wi-Fi**、**LLM**、书名《Build》、元数据「原标题」。完整过译黑名单见 `references/over-translation-guard.md`。
 
 ### 存量 output 稿件增量中文化【v5.17】
 
@@ -297,11 +298,11 @@ RAG|chassis|wrapper|bare-bones|launch review|latent demand|roadmap|standup|moder
 primitive|craze|type-ahead|dead test|allow.?list|block.?list|conservative|secret sauce|source available
 ```
 
-> **播客/创投/企业销售扩展词**（与上表一并 grep）：`COGS`→销货成本、`down-rev`→向下修订、`term sheet`→投资条款清单、`offer letter`→录用通知书、`outbound/inbound`→外呼/入站线索、`PIP`→绩效改进计划、`T&E`→差旅与招待报销、`containment`→隔离边界、`pitch`→推销陈述（非体育）、`rep`→销售代表、`onboarding`→新用户引导、`refinement`→微调、`rollout`→采样轨迹（**禁止**误译为「推广」）、`demo`→演示、`live demo`→现场演示、`one-shot prompt`→单次提示词。
+> **播客/创投/企业销售扩展词**（与上表一并 grep）：`COGS`→销货成本、`down-rev`→向下修订、`term sheet`→投资条款清单、`offer letter`→录用通知书、`outbound/inbound`→外呼/入站线索、`PIP`→绩效改进计划、`T&E`→差旅与招待报销、`containment`→隔离边界、`pitch`→推销陈述（非体育）、`rep`→销售代表、`onboarding`→新用户引导（**产品模块正式名可保留 onboarding**）、`refinement`→微调、`rollout`→**按语境**：产品发布/灰度推进；仅在训练/推理采样语境才用「采样轨迹」；（**禁止**无脑译「推广」）、`demo`→演示（**Demo Day** 等专名保留）、`live demo`→现场演示、`one-shot prompt`→单次提示词。
 
-> **AI / DevTools 行话簇【v5.27，整理技术/开发者素材必跑】**：`dogfood/dogfooding`→内部试用、`oneshot/one-shot`→一次成功、`flaky`→不稳定（测试）、`ration`→限额/配给、`tally`→记一笔/统计、`spawn`→启动/拉起、`checkout`→检出、`hook`→钩子、`subprocess`→子进程、`RAG`→检索增强生成、`chassis`→底盘、`wrapper`→封装层、`bare-bones`→极简、`launch review`→上线评审、`latent demand`→潜在需求、`roadmap`→路线图、`standup`→每日站会、`moderation`→人工审核、`primitive`→原语、`craze`→狂热、`secret sauce`→独门秘方、`source available`→源码可见。
+> **AI / DevTools 行话簇【v5.27，整理技术/开发者素材必跑】**：`dogfood/dogfooding`→内部试用、`oneshot/one-shot`→一次成功、`flaky`→不稳定（测试）、`ration`→限额/配给、`tally`→记一笔/统计、`spawn`→启动/拉起（**API 名讨论可保留**）、`checkout`→检出（**`git checkout` 保留**）、`hook`→钩子（**Cursor Hooks 产品名保留 Hooks**）、`subprocess`→子进程、`RAG`→检索增强生成（缩写可留，须首现全称）、`chassis`→底盘、`wrapper`→封装层/套壳、`bare-bones`→极简、`launch review`→上线评审、`latent demand`→潜在需求、`roadmap`→路线图、`standup`→每日站会、`moderation`→人工审核、`primitive`→原语、`craze`→狂热、`secret sauce`→独门秘方、`source available`→源码可见。
 >
-> **专名 vs 行话判定原则【v5.27】**：**保留英文**——产品/工具/协议/模型/命令名与技术对象名（`Claude Code`、`MCP`、`Opus 4.5`、`/loop`、`worktree`、`tmux`、`bash`、`PR`、`CI`）；**一律中文化**——行为、状态、口语形容词与通用名词短语（上列行话簇）。拿不准时问：「这是一个**能被官方写进文档的专有名字**，还是一个**普通英文词**？」后者必译；首现可「中文（English）」括注一次，后文中文为主。
+> **专名 vs 行话判定原则【v5.27/v5.28】**：**保留英文**——产品/工具/协议/模型/命令名与技术对象名（`Claude Code`、`MCP`、`Opus 4.5`、`/loop`、`worktree`、`tmux`、`bash`、`PR`、`CI`、**`Skill` / `Agent Skill` / `Skill Creator`**、**`Hooks`**、**`Computer Use`**、**`Composer`**、**`Canvas`**、**`Subagent`**）；**中文化**——行为、状态、口语形容词与**非专名**通用名词短语（上列行话簇）。拿不准时问：「这是一个**能被官方写进文档的专有名字**，还是一个**普通英文词**？」后者必译；前者**禁止过译**（❌ Skill→技能、Skill Creator→技能创建者）。首现可「中文说明（English）」括注一次，后文中文为主、**专名本身仍保留英文**。详见 `references/over-translation-guard.md`。
 
 #### 4c 检索范围（强制）
 
@@ -316,8 +317,8 @@ primitive|craze|type-ahead|dead test|allow.?list|block.?list|conservative|secret
 
 | 场景 | 「正文中文叙事」行 |
 | :--- | :--- |
-| 新建稿 | `✅ 4c 闸门通过；grep 命中 X→修正后 Y；关键语录已译中文；专名/原标题英文保留` |
-| 增量中文化 | `✅ 增量中文化 {范围}；grep 命中 X→修正后 Y；关键语录中文化 M 条` |
+| 新建稿 | `✅ 4c 闸门通过；裸词 grep 命中 X→修正后 Y；括注/专名白名单已排除；过译护栏已核；关键语录已译中文` |
+| 增量中文化 | `✅ 增量中文化 {范围}；裸词 grep 命中 X→修正后 Y；关键语录中文化 M 条；无过译专名` |
 | 用户要求保留英文金句 | `✅ 叙述层中文；关键语录保留英文（用户覆盖）` |
 | 用户要求双语金句 | `✅ 叙述层中文；关键语录中英双语（用户覆盖）` |
 | 仍有夹写 | `⚠️ 存量夹写 M 处待补丁（列出典型词）；4c 闸门未通过` |
@@ -354,7 +355,8 @@ primitive|craze|type-ahead|dead test|allow.?list|block.?list|conservative|secret
 | **毕业典礼 / Class Day** | **Commencement** vs **Class Day**、**residential college**、**summa/magna/cum laude**、**final club**、**legacy** |
 | **论坛 / 主题演讲** | 活动正式名称、主办机构、行业展会语境（如 **Computex**、**Cisco Live**） |
 | **播客** | 节目定位（**20VC**、**Decoder**、**Hard Fork**、**MAD**、**All-In**） |
-| **AI Engineer / 技术工作坊** | **harness**→编排层、**rollout**→采样轨迹、**eval**→评测 |
+| **AI Engineer / 技术工作坊** | **harness**→编排层（产品/框架专名可保留）、**rollout**→按语境（发布/灰度 vs 采样轨迹）、**eval**→评测（evals 套件名可保留） |
+| **Agent / Cursor / Claude 工具** | **Skill / Skill Creator / Hooks / Computer Use** 等**禁止过译**；见 `over-translation-guard.md` |
 
 ---
 
@@ -383,14 +385,14 @@ primitive|craze|type-ahead|dead test|allow.?list|block.?list|conservative|secret
 2. **关键语录**：`## 关键语录` 区块**独立**逐条中文化（4c-3）；引语内专名保留英文。
 3. **嵌套修复**：检查重复括注（如 `氛围编程（…氛围编程…）`、`凭感觉编码` 双层嵌套）。
 4. **可读性内化**：将自检「播客/访谈体裁：首次补行业专名…」替换为**本篇具体实体**（节目名、高校传统、展会名等）。
-5. **误译专项**：`rollout`≠推广、`pitch` 按语境、产品专名 **Code Review/PR/CI** 可保留或首次括注。
+5. **误译/过译专项**：`rollout`≠推广（发布/灰度 vs 采样轨迹按语境）；`pitch` 按语境；**Code Review/PR/CI** 可保留；**Skill / Skill Creator / Hooks / Computer Use** 禁止译成「技能/技能创建者/钩子/电脑使用」等（见过译护栏）。
 6. **自检更新**：`叙述层已修正 N 处`、可读性内化 ✅ 备注、`*文档生成时间*`（勿改文件名日期前缀）。
 7. **节间空白【v5.24/v5.25】**：删除正文各 `##` 节之间的 `---`；`##` 与 `### 核心洞察` 之间仅保留**一行空行**；对谈三层稿删除节标题下过渡段；过 **4d 节间空白验收闸门** 后更新自检。
 
 ### 自动化辅助
 
-- **节间空白**：`.agents/skills/content-structuring/scripts/normalize_spacing.py {path}`（`--check` 仅检测）
-- 全库扫描（4c 夹写，若存在）：`.cursor/tmp/output_full_audit.py` → `scan_result.txt`
+- **节间空白**：`scripts/normalize_spacing.py {path}`（`--check` 仅检测；相对本技能根目录）
+- **4c 辅助**：`scripts/check_4c.py {path}`（裸词命中；已排除首现括注与专名白名单；不能替代 4c-2）
 - 基础批量替换（若存在）：`.cursor/tmp/output_batch_v520b.py`（含 pitch/term sheet/rollout 等）
 
 ---
@@ -903,6 +905,6 @@ primitive|craze|type-ahead|dead test|allow.?list|block.?list|conservative|secret
 7. **用户追补转写（增量修订）**：若用户在初稿后粘贴更长字幕/转写，**仅做补洞**：全文检索产品代际、主持侧数字、下载量等易漏项，**最小 diff** 合并进对应小节；**禁止**为补丁而重写无关段落。补丁后复检自检表中「引子 / 附着型 / 数字 vs 转写」三行。
 
 ---
-*Skill Version: v5.27*
-*Optimization Focus: v5.27 AI/DevTools 行话簇 + 专名 vs 行话判定原则；多源合并稿模式 + 源口径标注；防幻觉「多源一致性核对」(第 8 条)；首现缩写注释升为可检项；词库去重交叉引用 + 失效脚本引用收敛。v5.26 核心导读论点合成（全文论点块 + 分层展开 + 收束覆盖闸门）；v5.25 4d 节间空白验收闸门 + normalize_spacing.py；v5.23 对谈三层 + 4c-3；成稿即中文；Browser-first.*
+*Skill Version: v5.28*
+*Optimization Focus: v5.28 过译护栏（Skill/Skill Creator/Hooks 等专名勿译）+ 4c 括注/白名单不计失败 + check_4c.py；4d 脚本修复「---后空行」漏检；脚本路径收敛到本技能 `scripts/`；维护拓扑改为 spec 单一真相。v5.27 AI/DevTools 行话簇 + 多源合并；v5.26 核心导读论点；v5.25 4d；v5.23 对谈三层；成稿即中文；Browser-first.*
 
