@@ -130,8 +130,13 @@ The converter assumes the content-structuring 对谈三层 format:
 ```
 
 Section titles `文章元数据 / 核心导读 / 目录 / 延伸术语表 / 自检报告` are matched
-by exact name. Any other `## ` section is treated as a content section and must
-contain the `核心洞察 / 深度解析 / 对谈实录` subsections.
+by exact name. Any other `## ` section is treated as a content section.
+
+Expected subsections for 对谈三层 notes: `核心洞察` / `深度解析` / `对谈实录`.
+**`对谈实录` is optional** — content-structuring omits the whole block when there is
+no dialogue worth quoting; the converter simply skips a missing layer (do not invent
+an empty timeline). Generic-template notes may use `## 关键语录与交锋时刻` instead
+of per-section 实录; that section renders as a normal content block if present.
 
 ### Placement of 人物背景 / 讲者背景
 
