@@ -72,7 +72,7 @@ def validate_html(path: Path) -> list[str]:
         if "不代表" in footer or "非官方中文完整整理" in footer:
             errors.append("FORBIDDEN: long disclaimer in source footer")
 
-    # count layer labels roughly balanced
+    # Layer labels: insight/analysis must pair; dialogue may be anthology-only (keynotes)
     n_insight = len(re.findall(r">核心洞察<", article))
     n_analysis = len(re.findall(r">深度解析<", article))
     n_dialogue = len(re.findall(r">对谈实录<", article))
@@ -80,8 +80,7 @@ def validate_html(path: Path) -> list[str]:
         errors.append(
             f"WEAK structure: 核心洞察={n_insight} 深度解析={n_analysis} 对谈实录={n_dialogue}"
         )
-    elif min(n_insight, n_analysis, n_dialogue) != max(n_insight, n_analysis, n_dialogue):
-        # warn only via stderr-style error soft? treat as warn-error for skill strictness
+    elif n_insight != n_analysis:
         errors.append(
             f"UNBALANCED layers: 核心洞察={n_insight} 深度解析={n_analysis} 对谈实录={n_dialogue}"
         )

@@ -1,5 +1,10 @@
 # Vue2 → Vue3 升级影响分析 × Delivery — 使用说明（可选）
 
+> **状态：历史软挂载。** `vue2-to-vue3-upgrade-impact-analysis` 已退役；  
+> A→B 跨仓迁入请改用 [`migrate-vue2-pages-to-vue3-host-delivery-usage.md`](./migrate-vue2-pages-to-vue3-host-delivery-usage.md)  
+> 与 [`vue-upgrade-orchestration-prompts.md`](./vue-upgrade-orchestration-prompts.md) §2 / §2.5。  
+> 下文保留供对照旧报告字段，勿再点名已删除 Skill。
+
 > 受众：希望把本分析 Skill 挂到 `delivery-*` 脊柱上的维护者。  
 > **本文件是可选软挂载说明。**  
 > `vue2-to-vue3-upgrade-impact-analysis` Skill **正文不依赖、不引用** `delivery-*`。

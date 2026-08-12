@@ -1,0 +1,26 @@
+{
+  "schema": "visual-parity-evidence/v1",
+  "source_revision": "source-123",
+  "host_revision": "host-456",
+  "baseline": { "digest": "baseline-digest" },
+  "comparison_boundary": {
+    "host_shell": "host_native",
+    "migrated_content": "strict_parity",
+    "content_root_selector": "[data-visual-unit='orders']"
+  },
+  "contains_table": true,
+  "required_states": [
+    { "id": "loaded", "identity_assertions": { "url": true, "route": false, "marker": false, "fixture": true }, "artifacts": {}, "checks": {}, "result": "pass" }
+  ],
+  "table_contract": { "metrics": [], "result": "pass" },
+  "legacy_boundary": {
+    "detected": true,
+    "detection_method": "migration registry entry",
+    "evidence_path": "artifacts/legacy-boundary.ppm",
+    "evidence_digest": "064ea70c5ca111e4e9b50fb256594110f669a1339c4ccf067aa6f3970a827976"
+  },
+  "rollback": { "applicable": true, "tested": true, "nested_shell": true, "deterministic_fixture": false, "result": "pass" },
+  "global_style_changed": false,
+  "review": { "mode": "independent", "reviewer": "review-agent-2" },
+  "final_visual_result": "pass"
+}

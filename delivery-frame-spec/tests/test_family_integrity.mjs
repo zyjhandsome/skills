@@ -144,6 +144,7 @@ function main() {
     errors.push("family-contract.md declares no family_version");
   } else {
     const current = authoritative[1];
+    const currentClaim = /当前\s+`delivery-family\/(\d+\.\d+)`/g;
     for (const skill of FAMILY) {
       for (const path of walk(join(SKILLS_ROOT, skill))) {
         if (![".md", ".mjs", ".json"].includes(extname(path))) continue;
@@ -152,6 +153,11 @@ function main() {
           continue; // tests may pin historical versions with banners
         }
         const text = readFileSync(path, "utf-8");
+        for (const claim of text.matchAll(currentClaim)) {
+          if (claim[1] !== current) {
+            errors.push(`stale current family_version claim in ${relPath}: ${claim[1]} vs authoritative ${current}`);
+          }
+        }
         for (const versionMatch of text.matchAll(VERSION_RE)) {
           const version = versionMatch[1];
           if (version.split(".")[0] !== current.split(".")[0]) {

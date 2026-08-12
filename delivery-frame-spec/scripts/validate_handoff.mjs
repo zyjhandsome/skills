@@ -9,8 +9,9 @@
  *   node validate_handoff.mjs <file> --profile legacy
  */
 
-import { readFileSync, realpathSync } from "node:fs";
-import { resolve } from "node:path";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import process from "node:process";
 
@@ -20,6 +21,7 @@ import process from "node:process";
 export const SUPPORTED_FAMILY_MAJOR = 1;
 export const CURRENT_FAMILY_VERSION = "delivery-family/1.5";
 const SCHEMA_VERSION = "delivery-handoff/v1";
+const SHA256 = /^sha256:[0-9a-f]{64}$/i;
 const STAGES = new Set([
   "delivery-explore",
   "delivery-frame-spec",
@@ -163,7 +165,7 @@ function reprish(value) {
  * @param {"hard" | "legacy"} [profile]
  * @returns {string[]}
  */
-export function validate(data, profile = "hard") {
+export function validate(data, profile = "hard", options = {}) {
   /** @type {string[]} */
   const errors = [];
   const root = requireObject(data, "$", errors);
@@ -368,6 +370,36 @@ export function validate(data, profile = "hard") {
       errors.push("needs_choice Explore state cannot transition");
     }
   } else if (stage === "delivery-frame-spec") {
+    if ("external_artifacts" in payload) {
+      if (!Array.isArray(payload.external_artifacts)) {
+        errors.push("stage_payload.external_artifacts must be an array");
+      } else {
+        if (payload.external_artifacts.length > 10) errors.push("stage_payload.external_artifacts may contain at most 10 items");
+        for (const [index, artifact] of payload.external_artifacts.entries()) {
+          const label = `stage_payload.external_artifacts[${index}]`;
+          if (!isPlainObject(artifact)) {
+            errors.push(`${label} must be an object`);
+            continue;
+          }
+          const keys = Object.keys(artifact);
+          const extraKeys = keys.filter((key) => !["path", "digest", "claims_used"].includes(key));
+          if (extraKeys.length) errors.push(`${label} has unsupported keys: ${extraKeys.join(", ")}`);
+          if (typeof artifact.path !== "string" || !artifact.path.trim()) errors.push(`${label}.path is required`);
+          if (typeof artifact.digest !== "string" || !SHA256.test(artifact.digest)) errors.push(`${label}.digest must use sha256:<64-hex>`);
+          if (!Array.isArray(artifact.claims_used) || artifact.claims_used.length === 0 || artifact.claims_used.some((claim) => typeof claim !== "string" || !claim.trim())) {
+            errors.push(`${label}.claims_used must be a non-empty string array`);
+          }
+          if (options.baseDir && typeof artifact.path === "string" && artifact.path.trim()) {
+            const absolute = isAbsolute(artifact.path) ? artifact.path : resolve(options.baseDir, artifact.path);
+            if (!existsSync(absolute)) errors.push(`${label}.path does not exist: ${absolute}`);
+            else if (typeof artifact.digest === "string" && SHA256.test(artifact.digest)) {
+              const actual = `sha256:${createHash("sha256").update(readFileSync(absolute)).digest("hex")}`;
+              if (actual !== artifact.digest.toLowerCase()) errors.push(`${label}.digest does not match file contents`);
+            }
+          }
+        }
+      }
+    }
     if (![null, "delivery-explore", "delivery-plan-tasks", "delivery-execute-verify"].includes(nextSkill)) {
       errors.push("Frame next_skill is invalid");
     }
@@ -472,7 +504,9 @@ function main() {
     return 2;
   }
 
-  const errors = validate(data, profile);
+  const errors = validate(data, profile, {
+    baseDir: positional[0] === "-" ? process.cwd() : dirname(resolve(positional[0])),
+  });
   if (errors.length) {
     for (const error of errors) console.error(`ERROR: ${error}`);
     return 1;
@@ -482,7 +516,7 @@ function main() {
 }
 
 if (
-  process.argv[1] &&
+  process.argv[1] && process.argv[1] !== "-" && existsSync(resolve(process.argv[1])) &&
   pathToFileURL(realpathSync(resolve(process.argv[1]))).href.toLowerCase() ===
     pathToFileURL(realpathSync(fileURLToPath(import.meta.url))).href.toLowerCase()
 ) {

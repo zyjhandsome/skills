@@ -1,0 +1,14 @@
+{
+  "schema": "visual-migration-contract/v1",
+  "source_revision": "source-123",
+  "host_revision": "host-456",
+  "unit_id": "orders",
+  "native_identity": {
+    "url": "http://a.test/#/orders",
+    "route": "#/orders",
+    "marker": "orders"
+  },
+  "fixture_id": "orders-v1",
+  "required_state_classes": ["loading", "loaded", "empty", "editing", "narrow"],
+  "legacy_boundary_required": true
+}

@@ -11,8 +11,9 @@
  *                                      --expected-visual-revision <64-hex>]
  */
 
+import { createHash } from "node:crypto";
 import { readFileSync, statSync, existsSync, realpathSync } from "node:fs";
-import { resolve, join } from "node:path";
+import { resolve, join, dirname, isAbsolute, normalize } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import process from "node:process";
 
@@ -40,6 +41,7 @@ export const VERIFICATION_PATTERNS = {
 };
 const PLACEHOLDER = /^(?:<[^>]+>|tbd|todo|n\/?a|none|null|待定|待补)$/i;
 const REVISION = /^[0-9a-f]{64}$/i;
+const IMAGE_EXTENSION = /\.(png|jpe?g|webp|ppm)$/i;
 const VISUAL_CHECKS = ["V0", "V1", "V2", "V3", "V4", "P1", "P2", "P3", "P4", "P5", "P6", "P7"];
 
 /** @param {string} value */
@@ -126,30 +128,43 @@ function visualChecklist(text) {
 }
 
 /** @param {string} text */
-function requiredStateResults(text) {
+function requiredStateRows(text) {
   const heading = /^###\s+Required state evidence\s*$/im.exec(text);
   if (!heading) return [];
   const tail = text.slice((heading.index ?? 0) + heading[0].length);
   const nextHeading = tail.search(/^#{2,3}\s/m);
   const section = nextHeading >= 0 ? tail.slice(0, nextHeading) : tail;
-  /** @type {string[]} */
-  const results = [];
+  /** @type {string[] | null} */
+  let headers = null;
+  /** @type {Array<Record<string, string>>} */
+  const rows = [];
   for (const line of section.split(/\r?\n/)) {
     if (!line.trim().startsWith("|")) continue;
     const cells = line.split("|").slice(1, -1).map(cleanVisualValue);
-    if (cells.length < 2 || ["id", "---"].includes(cells[0]) || /^[-:]+$/.test(cells[0])) continue;
-    if (/^(pass|fail|pending|skip)$/i.test(cells.at(-1) ?? "")) results.push((cells.at(-1) ?? "").toLowerCase());
+    if (cells.length < 2 || cells.every((cell) => /^[-:]+$/.test(cell))) continue;
+    if (headers === null) {
+      headers = cells.map((cell) => cell.toLowerCase());
+      continue;
+    }
+    if (cells.length !== headers.length) continue;
+    rows.push(Object.fromEntries(headers.map((header, index) => [header, cells[index]])));
   }
-  return results;
+  return rows;
+}
+
+/** @param {string} path */
+function sha256(path) {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
 /**
  * Validate the delivery-owned visual acceptance evidence used by G9.
  * @param {string} text
  * @param {string} expectedRevision
+ * @param {{baseDir?: string, expectedChangeDir?: string}} [options]
  * @returns {string[]}
  */
-export function validateVisualEvidence(text, expectedRevision) {
+export function validateVisualEvidence(text, expectedRevision, options = {}) {
   /** @type {string[]} */
   const errors = [];
   const fields = visualTableMap(text);
@@ -171,6 +186,11 @@ export function validateVisualEvidence(text, expectedRevision) {
   const changeDir = fields.change_dir ?? "";
   if (!changeDir || isPlaceholder(changeDir)) {
     errors.push("G9 visual report requires a concrete change_dir");
+  } else if (options.expectedChangeDir) {
+    const actual = normalize(isAbsolute(changeDir) ? changeDir : resolve(options.baseDir ?? process.cwd(), changeDir));
+    if (actual.toLowerCase() !== normalize(resolve(options.expectedChangeDir)).toLowerCase()) {
+      errors.push("G9 visual report change_dir does not match the validated OpenSpec change");
+    }
   }
   if (!REVISION.test(expectedRevision)) {
     errors.push("G9 expected visual revision must be 64-hex");
@@ -194,22 +214,76 @@ export function validateVisualEvidence(text, expectedRevision) {
   const gateReference = visualSectionValue(text, "Implementation gate reference");
   if (gateReference === null || !gateReference || isPlaceholder(gateReference)) {
     errors.push("G9 visual report requires an implementation gate reference");
+  } else {
+    const match = gateReference.match(/^([^/]+?)\s*\/\s*([^/]+?)\s*\/\s*([0-9a-f]{64})$/i);
+    if (!match || !match[1].trim() || !isRfc3339(match[2].trim()) || match[3].toLowerCase() !== expectedRevision.toLowerCase()) {
+      errors.push("G9 implementation gate reference must be approver / RFC3339 / approved revision");
+    }
   }
   const baseline = visualSectionValue(text, "baseline_source / substitute_standard");
   if (baseline === null || isPlaceholder(baseline)) {
     errors.push("G9 visual report requires a traceable baseline or approved substitute standard");
+  } else if (!baseline.startsWith("approved-substitute:")) {
+    const parts = baseline.split("|").map((part) => part.trim());
+    const pathValue = parts[0] ?? "";
+    const digestValue = parts[1] ?? "";
+    const absolute = isAbsolute(pathValue) ? pathValue : resolve(options.baseDir ?? process.cwd(), pathValue);
+    if (!pathValue || !REVISION.test(digestValue) || !existsSync(absolute) || !IMAGE_EXTENSION.test(pathValue) || (existsSync(absolute) && sha256(absolute) !== digestValue.toLowerCase())) {
+      errors.push("G9 baseline must be image-path | sha256-digest, or an approved-substitute reference");
+    }
+  } else {
+    const parts = baseline.split("|").map((part) => part.trim());
+    if (!nonEmptyVisual(parts[0]?.slice("approved-substitute:".length)) || !nonEmptyVisual(parts[1]) || parts[2]?.toLowerCase() !== expectedRevision.toLowerCase()) {
+      errors.push("G9 approved substitute must be approved-substitute:<reference> | approver | approved revision");
+    }
   }
   const checks = visualChecklist(text);
   for (const check of VISUAL_CHECKS) {
     if (checks[check] !== "pass") errors.push(`G9 visual report requires ${check}=pass`);
   }
-  const stateResults = requiredStateResults(text);
-  if (stateResults.length < 5) {
+  const stateRows = requiredStateRows(text);
+  if (stateRows.length < 5) {
     errors.push("G9 visual report requires at least five required-state evidence rows");
-  } else if (stateResults.some((result) => result !== "pass")) {
-    errors.push("G9 visual report requires every required-state evidence row to pass");
+  } else {
+    const requiredColumns = ["id", "route", "state", "baseline_path", "baseline_digest", "current_path", "current_digest", "diff_path", "diff_digest", "policy", "result"];
+    const ids = [];
+    const stateKeys = [];
+    const currentDigests = [];
+    const diffDigests = [];
+    for (const [index, row] of stateRows.entries()) {
+      const label = `G9 required-state row ${index + 1}`;
+      for (const column of requiredColumns) {
+        if (!nonEmptyVisual(row[column]) || isPlaceholder(row[column])) errors.push(`${label} requires ${column}`);
+      }
+      ids.push(row.id);
+      stateKeys.push(`${row.route}::${row.state}`);
+      currentDigests.push(row.current_digest);
+      diffDigests.push(row.diff_digest);
+      if (!new Set(["strict", "tolerance_bound", "explicitly_accepted"]).has((row.policy ?? "").toLowerCase())) {
+        errors.push(`${label} policy must be strict, tolerance_bound, or explicitly_accepted`);
+      }
+      if ((row.result ?? "").toLowerCase() !== "pass") errors.push(`${label} result must be pass`);
+      for (const [pathColumn, digestColumn] of [["baseline_path", "baseline_digest"], ["current_path", "current_digest"], ["diff_path", "diff_digest"]]) {
+        const pathValue = row[pathColumn] ?? "";
+        const digestValue = row[digestColumn] ?? "";
+        const absolute = isAbsolute(pathValue) ? pathValue : resolve(options.baseDir ?? process.cwd(), pathValue);
+        if (!IMAGE_EXTENSION.test(pathValue)) errors.push(`${label} ${pathColumn} must be an image artifact`);
+        if (!REVISION.test(digestValue)) errors.push(`${label} ${digestColumn} must be SHA-256`);
+        if (!existsSync(absolute)) errors.push(`${label} ${pathColumn} does not exist`);
+        else if (REVISION.test(digestValue) && sha256(absolute) !== digestValue.toLowerCase()) errors.push(`${label} ${digestColumn} does not match file contents`);
+      }
+    }
+    if (new Set(ids).size !== ids.length) errors.push("G9 required-state ids must be unique");
+    if (new Set(stateKeys).size !== stateKeys.length) errors.push("G9 required-state route/state pairs must be unique");
+    if (new Set(currentDigests).size !== currentDigests.length) errors.push("G9 required-state current artifacts must be distinct");
+    if (new Set(diffDigests).size !== diffDigests.length) errors.push("G9 required-state diff artifacts must be distinct");
   }
   return errors;
+}
+
+/** @param {unknown} value */
+function nonEmptyVisual(value) {
+  return typeof value === "string" && value.trim().length > 0;
 }
 
 /** @param {string} p */
@@ -374,7 +448,8 @@ function main() {
         errors.push(
           ...validateVisualEvidence(
             readFileSync(visualReportPath, "utf-8"),
-            opts.expectedVisualRevision ?? ""
+            opts.expectedVisualRevision ?? "",
+            { baseDir: dirname(visualReportPath), expectedChangeDir: changeDir }
           )
         );
       }
@@ -390,7 +465,7 @@ function main() {
 }
 
 if (
-  process.argv[1] &&
+  process.argv[1] && process.argv[1] !== "-" && existsSync(resolve(process.argv[1])) &&
   pathToFileURL(realpathSync(resolve(process.argv[1]))).href.toLowerCase() ===
     pathToFileURL(realpathSync(fileURLToPath(import.meta.url))).href.toLowerCase()
 ) {

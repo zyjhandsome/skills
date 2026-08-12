@@ -1,0 +1,333 @@
+{
+  "schema": "visual-parity-evidence/v1",
+  "producer": "migrate-vue2-pages-to-vue3-host",
+  "authority": "domain_evidence_only",
+  "source_revision": "source-123",
+  "host_revision": "host-456",
+  "assessment_mode": "strict_parity",
+  "migration_contract": {
+    "path": "visual-migration-contract.json",
+    "digest": "c6f6306c5e59b905ea458ade53158a279d235999fdc7f4f326e3ebe26e4e69aa"
+  },
+  "baseline": {
+    "source": "running-a",
+    "digest": "064ea70c5ca111e4e9b50fb256594110f669a1339c4ccf067aa6f3970a827976"
+  },
+  "comparison_boundary": {
+    "host_shell": "host_native",
+    "migrated_content": "strict_parity",
+    "content_root_selector": "[data-visual-unit='orders']"
+  },
+  "capture": {
+    "browser": "Chromium 151",
+    "viewport": "1440x900",
+    "device_scale_factor": 1,
+    "locale": "en-US",
+    "timezone": "Asia/Shanghai",
+    "font_ready_condition": "document.fonts.ready",
+    "animation_policy": "reduced",
+    "fixture_id": "orders-v1"
+  },
+  "difference_policy": {
+    "forbidden": [],
+    "tolerance_bound": [],
+    "explicitly_accepted": []
+  },
+  "contains_table": true,
+  "required_states": [
+    {
+      "id": "loading",
+      "state_class": "loading",
+      "identity_assertions": {
+        "url": {
+          "expected": "http://a.test/#/orders",
+          "actual": "http://a.test/#/orders",
+          "result": "pass"
+        },
+        "route": {
+          "expected": "#/orders",
+          "actual": "#/orders",
+          "result": "pass"
+        },
+        "marker": {
+          "expected": "orders",
+          "actual": "orders",
+          "result": "pass"
+        },
+        "fixture": {
+          "expected": "orders-v1",
+          "actual": "orders-v1",
+          "result": "pass"
+        },
+        "migration_mode": {
+          "expected": "native",
+          "actual": "native",
+          "result": "pass"
+        }
+      },
+      "artifacts": {
+        "baseline_path": "artifacts/baseline.ppm",
+        "baseline_digest": "064ea70c5ca111e4e9b50fb256594110f669a1339c4ccf067aa6f3970a827976",
+        "candidate_path": "artifacts/candidate-loading.ppm",
+        "candidate_digest": "b28104e0bf4f5c53d57202427bd586d7387870a7297590e2ccebf19f85685c6d",
+        "diff_path": "artifacts/diff-loading.ppm",
+        "diff_digest": "d62723213857f1e7fccc9423af92f312d6398592b26af50a80d133d4ccc78b11"
+      },
+      "checks": {
+        "screenshot": "pass",
+        "computed_style": "pass",
+        "semantic": "pass",
+        "interaction": "pass"
+      },
+      "result": "pass"
+    },
+    {
+      "id": "loaded",
+      "state_class": "loaded",
+      "identity_assertions": {
+        "url": {
+          "expected": "http://a.test/#/orders",
+          "actual": "http://a.test/#/orders",
+          "result": "pass"
+        },
+        "route": {
+          "expected": "#/orders",
+          "actual": "#/orders",
+          "result": "pass"
+        },
+        "marker": {
+          "expected": "orders",
+          "actual": "orders",
+          "result": "pass"
+        },
+        "fixture": {
+          "expected": "orders-v1",
+          "actual": "orders-v1",
+          "result": "pass"
+        },
+        "migration_mode": {
+          "expected": "native",
+          "actual": "native",
+          "result": "pass"
+        }
+      },
+      "artifacts": {
+        "baseline_path": "artifacts/baseline.ppm",
+        "baseline_digest": "064ea70c5ca111e4e9b50fb256594110f669a1339c4ccf067aa6f3970a827976",
+        "candidate_path": "artifacts/candidate-loaded.ppm",
+        "candidate_digest": "2e002fa4e7e63fbe15aabca924e5b49a0b32467ac444ced8959d9f69e0281538",
+        "diff_path": "artifacts/diff-loaded.ppm",
+        "diff_digest": "6d90b99284e62ab9b65e800cb207052b91cdb49fbe20640b9e3e09fb9bf6473c"
+      },
+      "checks": {
+        "screenshot": "pass",
+        "computed_style": "pass",
+        "semantic": "pass",
+        "interaction": "pass"
+      },
+      "result": "pass"
+    },
+    {
+      "id": "empty",
+      "state_class": "empty",
+      "identity_assertions": {
+        "url": {
+          "expected": "http://a.test/#/orders",
+          "actual": "http://a.test/#/orders",
+          "result": "pass"
+        },
+        "route": {
+          "expected": "#/orders",
+          "actual": "#/orders",
+          "result": "pass"
+        },
+        "marker": {
+          "expected": "orders",
+          "actual": "orders",
+          "result": "pass"
+        },
+        "fixture": {
+          "expected": "orders-v1",
+          "actual": "orders-v1",
+          "result": "pass"
+        },
+        "migration_mode": {
+          "expected": "native",
+          "actual": "native",
+          "result": "pass"
+        }
+      },
+      "artifacts": {
+        "baseline_path": "artifacts/baseline.ppm",
+        "baseline_digest": "064ea70c5ca111e4e9b50fb256594110f669a1339c4ccf067aa6f3970a827976",
+        "candidate_path": "artifacts/candidate-empty.ppm",
+        "candidate_digest": "da52cf06e5876b987f1f7d6fcf43f991e67910ef659d46d4b29f08518aa29286",
+        "diff_path": "artifacts/diff-empty.ppm",
+        "diff_digest": "8b748a5f5ffca4edc662e804bebe95b2b1fcd8ac0a91c4f3ec6920b85369cf1d"
+      },
+      "checks": {
+        "screenshot": "pass",
+        "computed_style": "pass",
+        "semantic": "pass",
+        "interaction": "pass"
+      },
+      "result": "pass"
+    },
+    {
+      "id": "editing",
+      "state_class": "editing",
+      "identity_assertions": {
+        "url": {
+          "expected": "http://a.test/#/orders",
+          "actual": "http://a.test/#/orders",
+          "result": "pass"
+        },
+        "route": {
+          "expected": "#/orders",
+          "actual": "#/orders",
+          "result": "pass"
+        },
+        "marker": {
+          "expected": "orders",
+          "actual": "orders",
+          "result": "pass"
+        },
+        "fixture": {
+          "expected": "orders-v1",
+          "actual": "orders-v1",
+          "result": "pass"
+        },
+        "migration_mode": {
+          "expected": "native",
+          "actual": "native",
+          "result": "pass"
+        }
+      },
+      "artifacts": {
+        "baseline_path": "artifacts/baseline.ppm",
+        "baseline_digest": "064ea70c5ca111e4e9b50fb256594110f669a1339c4ccf067aa6f3970a827976",
+        "candidate_path": "artifacts/candidate-editing.ppm",
+        "candidate_digest": "36b635514f5efa9e6da9b5876e9517cb9542a7272673079cb733b71c1bafa29c",
+        "diff_path": "artifacts/diff-editing.ppm",
+        "diff_digest": "be756d43197e1a76c083d405e90398b906dfe923f495bc7391366d3232c51d82"
+      },
+      "checks": {
+        "screenshot": "pass",
+        "computed_style": "pass",
+        "semantic": "pass",
+        "interaction": "pass"
+      },
+      "result": "pass"
+    },
+    {
+      "id": "narrow",
+      "state_class": "narrow",
+      "identity_assertions": {
+        "url": {
+          "expected": "http://a.test/#/orders",
+          "actual": "http://a.test/#/orders",
+          "result": "pass"
+        },
+        "route": {
+          "expected": "#/orders",
+          "actual": "#/orders",
+          "result": "pass"
+        },
+        "marker": {
+          "expected": "orders",
+          "actual": "orders",
+          "result": "pass"
+        },
+        "fixture": {
+          "expected": "orders-v1",
+          "actual": "orders-v1",
+          "result": "pass"
+        },
+        "migration_mode": {
+          "expected": "native",
+          "actual": "native",
+          "result": "pass"
+        }
+      },
+      "artifacts": {
+        "baseline_path": "artifacts/baseline.ppm",
+        "baseline_digest": "064ea70c5ca111e4e9b50fb256594110f669a1339c4ccf067aa6f3970a827976",
+        "candidate_path": "artifacts/candidate-narrow.ppm",
+        "candidate_digest": "186df5062460ac760c712984cab1740f42055bf7b29277f26f8cf7de4fe63368",
+        "diff_path": "artifacts/diff-narrow.ppm",
+        "diff_digest": "bfb31922c404aaa123a7b110ce81a17d8f93b233827e6e86aa65101c8026557e"
+      },
+      "checks": {
+        "screenshot": "pass",
+        "computed_style": "pass",
+        "semantic": "pass",
+        "interaction": "pass"
+      },
+      "result": "pass"
+    }
+  ],
+  "table_contract": {
+    "metrics": [
+      {
+        "surface": "container",
+        "id": "table-border",
+        "baseline": "#dfe6ec",
+        "candidate": "#dfe6ec",
+        "tolerance": "exact",
+        "result": "pass"
+      },
+      {
+        "surface": "header",
+        "id": "header-height",
+        "baseline": 44,
+        "candidate": 44,
+        "tolerance": 2,
+        "result": "pass"
+      },
+      {
+        "surface": "rows_cells",
+        "id": "row-height",
+        "baseline": 54,
+        "candidate": 54,
+        "tolerance": 2,
+        "result": "pass"
+      },
+      {
+        "surface": "content",
+        "id": "importance-wrap",
+        "baseline": "nowrap",
+        "candidate": "nowrap",
+        "tolerance": "exact",
+        "result": "pass"
+      },
+      {
+        "surface": "controls",
+        "id": "edit-button-height",
+        "baseline": 33,
+        "candidate": 33,
+        "tolerance": 2,
+        "result": "pass"
+      }
+    ],
+    "result": "pass"
+  },
+  "legacy_boundary": {
+    "detected": true,
+    "detection_method": "migration registry entry",
+    "evidence_path": "artifacts/legacy-boundary.ppm",
+    "evidence_digest": "064ea70c5ca111e4e9b50fb256594110f669a1339c4ccf067aa6f3970a827976"
+  },
+  "rollback": {
+    "applicable": true,
+    "tested": true,
+    "nested_shell": false,
+    "deterministic_fixture": true,
+    "result": "pass"
+  },
+  "global_style_changed": false,
+  "review": {
+    "mode": "independent",
+    "reviewer": "review-agent-2"
+  },
+  "final_visual_result": "pass"
+}

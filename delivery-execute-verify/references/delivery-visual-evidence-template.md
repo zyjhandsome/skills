@@ -8,7 +8,7 @@
 | producer | delivery-execute-verify |
 | state_owner | openspec_change |
 | implementation_authority | delivery |
-| change_dir | openspec/changes/<id> |
+| change_dir | <absolute OpenSpec change directory> |
 | source_artifact_revision | <approved-64-hex> |
 | analysis_status | complete |
 | remediation_status | done |
@@ -22,14 +22,16 @@
 | animation_policy | |
 | data_fixture / dynamic_masks | |
 
-- baseline_source / substitute_standard：
-- Implementation gate reference：approver / RFC3339 / approved revision
+- baseline_source / substitute_standard：<image-path> | <sha256-64-hex>
+- Implementation gate reference：approver / RFC3339 / approved-64-hex-revision
 - External artifacts（optional）：path / digest / claims used
 
 ### Required state evidence
 
-| id | route | state | baseline | current | diff/policy | result |
-|---|---|---|---|---|---|---|
+| id | route | state | baseline_path | baseline_digest | current_path | current_digest | diff_path | diff_digest | policy | result |
+|---|---|---|---|---|---|---|---|---|---|---|
+
+`policy` 只能为 `strict`、`tolerance_bound` 或 `explicitly_accepted`。
 
 ## Verification
 

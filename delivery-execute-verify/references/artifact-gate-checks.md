@@ -20,7 +20,7 @@
 | G6 | 未在 Execute 内把 delta sync 进 canonical specs 或移动 change 到 archive | 停止并报告精确 diff；未经用户授权不得自动回滚，修复后改走已解析的 `archive_change` 操作 |
 | G7 | Medium/High 声称 verified 时：`code_review.mode=independent` 且 `independent_review` 为 `required_pass` 或 `required_warn_accepted`；禁止用 `self_fresh_context` 关闭 | 不得 `verified`；补独立审查或保持 blocked |
 | G8 | Plan/Execute 前：列出其他 active OpenSpec changes；若与本 change 任务允许路径/符号重叠，记为就绪 **阻塞项**（除非用户显式接受并写入闸门摘要） | 关实现闸门或停止并行实施 |
-| G9 | 当 `quality_profiles.visual=required`：Delivery 自有 `delivery-visual-evidence/v1` 存在且 validator 通过；state owner 与已批准 source artifact revision 匹配；baseline 或批准 substitute 合法；required states/rows 全 pass（允许差异必须先归类后以 pass 收口）；`final_visual_result=pass` | 不得 `verified`；缺 acceptance 回 Frame，缺 strategy/task 回 Plan，缺执行证据留在 Execute |
+| G9 | 当 `quality_profiles.visual=required`：Delivery 自有 `delivery-visual-evidence/v1` 存在且 validator 通过；state owner、真实 change 目录与已批准 source artifact revision 匹配；baseline 或批准 substitute 合法；至少五个唯一 route/state 行均绑定 baseline/current/diff 图片与 SHA-256，且全 pass（允许差异必须先归类后以 pass 收口）；`final_visual_result=pass` | 不得 `verified`；缺 acceptance 回 Frame，缺 strategy/task 回 Plan，缺执行证据留在 Execute |
 
 ## 可脚本化断言（试点）
 

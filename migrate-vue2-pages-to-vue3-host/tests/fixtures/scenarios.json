@@ -1,0 +1,120 @@
+[
+  {
+    "id": "iframe-mpa-happy-path",
+    "prompt": "Migrate a Vue 2 MPA page embedded by iframe into a Vue 3 MPA host while preserving UI and rollback.",
+    "revision_fresh": true,
+    "visual_baseline": "available",
+    "runtime": "ready",
+    "dependency": "ready",
+    "authorization": true,
+    "verification": "pass",
+    "expected_terminal": "verified",
+    "required_files": {
+      "SKILL.md": ["vue-migration-domain/v1", "implementation_authorization", "visual-parity-evidence/v1", "visual-migration-contract/v1"],
+      "references/visual-parity-validation.md": ["migration_contract", "visual-migration-contract/v1", "distinct"],
+      "references/host-integration-slicing-and-iframe-exit.md": ["postmessage", "event.origin", "legacy-iframe", "rollback"],
+      "references/vue2-to-vue3-transformations.md": ["element ui", "router 4", "pinia", "typescript"]
+    }
+  },
+  {
+    "id": "missing-visual-baseline",
+    "prompt": "The Vue 2 page has already disappeared and no baseline or approved substitute exists.",
+    "revision_fresh": true,
+    "visual_baseline": "missing",
+    "runtime": "ready",
+    "dependency": "ready",
+    "authorization": true,
+    "verification": "not_run",
+    "expected_terminal": "blocked:visual-baseline",
+    "required_files": {
+      "references/visual-parity-validation.md": ["stop strict-parity verification", "approved substitute", "never claim exact parity", "blocker"]
+    }
+  },
+  {
+    "id": "approved-visual-substitute",
+    "prompt": "The live Vue 2 page is unavailable, but production screenshots and owner review are approved as the substitute.",
+    "revision_fresh": true,
+    "visual_baseline": "approved_substitute",
+    "runtime": "ready",
+    "dependency": "ready",
+    "authorization": true,
+    "verification": "pass",
+    "expected_terminal": "verified",
+    "required_files": {
+      "references/visual-parity-validation.md": ["substitute_approved_by", "residual risk", "approved_redesign", "current revision pair"]
+    }
+  },
+  {
+    "id": "node-and-lock-conflict",
+    "prompt": "Source A needs legacy Node while host B needs Node 18, and the active package manager may rewrite B's lockfile.",
+    "revision_fresh": true,
+    "visual_baseline": "available",
+    "runtime": "conflict",
+    "dependency": "ready",
+    "authorization": true,
+    "verification": "not_run",
+    "expected_terminal": "blocked:runtime",
+    "required_files": {
+      "references/runtime-and-dependency-compatibility.md": ["independent runtime environments", "command_readiness", "lockfile format", "selected runtime", "restore"]
+    }
+  },
+  {
+    "id": "licensed-spreadsheet-dependency",
+    "prompt": "A spreadsheet page requires a Vue 3 wrapper but license entitlement and the exact target package are unknown.",
+    "revision_fresh": true,
+    "visual_baseline": "available",
+    "runtime": "ready",
+    "dependency": "unknown",
+    "authorization": true,
+    "verification": "not_run",
+    "expected_terminal": "blocked:dependency",
+    "required_files": {
+      "references/runtime-and-dependency-compatibility.md": ["license entitlement", "official documentation", "disposition `unknown`", "block implementation"],
+      "references/vue2-to-vue3-transformations.md": ["spreadjs", "formula", "file fidelity"]
+    }
+  },
+  {
+    "id": "missing-implementation-authorization",
+    "prompt": "Assessment and design are complete, but the user has not authorized code or lockfile mutation.",
+    "revision_fresh": true,
+    "visual_baseline": "available",
+    "runtime": "ready",
+    "dependency": "ready",
+    "authorization": false,
+    "verification": "not_run",
+    "expected_terminal": "ready-for-authorization",
+    "required_files": {
+      "SKILL.md": ["a plan, recommendation, or completed assessment is not authorization", "allowed scope", "forbidden scope"]
+    }
+  },
+  {
+    "id": "verification-failure-rolls-back",
+    "prompt": "The native page builds, but permission and visual checks fail after a bounded rollout.",
+    "revision_fresh": true,
+    "visual_baseline": "available",
+    "runtime": "ready",
+    "dependency": "ready",
+    "authorization": true,
+    "verification": "fail",
+    "expected_terminal": "rollback-required",
+    "required_files": {
+      "references/host-integration-slicing-and-iframe-exit.md": ["verify fallback", "rollback contract", "permission", "observation window"],
+      "references/visual-parity-validation.md": ["final_visual_result=pass", "failed migration"]
+    }
+  },
+  {
+    "id": "stale-multi-round-resume",
+    "prompt": "The migration resumes in a later round after both source and host received commits.",
+    "revision_fresh": false,
+    "visual_baseline": "available",
+    "runtime": "ready",
+    "dependency": "ready",
+    "authorization": true,
+    "verification": "pass",
+    "expected_terminal": "stale:refresh-required",
+    "required_files": {
+      "references/domain-packet-and-lifecycle-interoperability.md": ["compare current a/b revisions", "mark affected sections stale", "invalidation rules", "never merge stale and current evidence"]
+    }
+  }
+]
+

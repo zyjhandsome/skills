@@ -1,0 +1,4 @@
+interface:
+  display_name: "Vue 2 to Vue 3 Host Migration"
+  short_description: "Migrate Vue 2 pages with parity and runtime gates"
+  default_prompt: "Use $migrate-vue2-pages-to-vue3-host to assess, design, execute, and verify a Vue 2 page migration into an existing Vue 3 host."

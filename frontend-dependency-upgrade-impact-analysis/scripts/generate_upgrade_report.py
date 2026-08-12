@@ -225,6 +225,7 @@ ANALYSIS_MODES = {
     "removal-assessment",
     "compliance-assessment",
     "replacement-discovery",
+    "migration-demand-diff",  # A→B: use generate_migration_demand_diff.py
 }
 COMPLIANCE_STATUSES = {"eligible", "ineligible", "unknown"}
 REQUIRED_ALTERNATIVE_CRITERIA = {

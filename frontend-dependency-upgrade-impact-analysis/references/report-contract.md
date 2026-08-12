@@ -9,6 +9,25 @@
 5. 完成状态
 6. 输出路径
 
+## 0. 模式分支：`migration-demand-diff`
+
+当 `analysis_mode=migration-demand-diff`（A→B 迁入依赖差分）时，**不**套用下方
+「精确升级/开放目标」完整章节表。改用 `scripts/generate_migration_demand_diff.py`
+产出的精简包，必需内容：
+
+| 章节 | 要求 |
+|---|---|
+| 状态表 | `schema=migration-demand-diff-report/v1`，`source_root`，`implementation_target`，`forbid_source_mutation=yes`，`batch_implementation_gate`，`lockfile_status` |
+| Upgrade Summary | mode、A/B 路径、demand 计数、disposition 计数 |
+| Demand Diff | 表列：包名 / A 声明 / B 状态 / disposition / 说明 |
+| Human Confirmation Queue | 每个非 `reuse-B` 行一条 `demand:<pkg>` |
+| Conclusion | 只改 B；交接 `dependency-summary.json` |
+
+disposition ∈ `reuse-B` / `reuse-B-major-review` / `add-to-B` /
+`replace-as-B-stack` / `copy-local` / `unknown`。
+摘要须含 `host_lockfile_status`、`source_lockfile_status`、`visual_strategy_hint`。
+队列未清 → 生成器 exit `7`。细则见 `references/migration-demand-diff.md`。
+
 ## 1. 必需章节
 
 Markdown 必须按以下顺序包含中文可见标题，并保留对应的英文机器锚点：

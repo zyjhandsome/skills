@@ -1,9 +1,11 @@
 ---
 name: frontend-dependency-upgrade-impact-analysis
 description: >
-  Analyze, never implement, a frontend dependency upgrade, removal, replacement, or
-  compliance concern. Use when asked to assess an exact package upgrade, decide what
-  to do about an unmaintained or vulnerable package, or check whether the project Node
+  Analyze, never implement, a frontend dependency upgrade, removal, replacement,
+  compliance concern, or A→B migration-demand-diff (source Vue2 closure deps vs
+  Vue3 host lock). Use when asked to assess an exact package upgrade, decide what
+  to do about an unmaintained or vulnerable package, compare packages needed by a
+  page closure on source A against host B, or check whether the project Node
   runtime can run the upgrade commands at all. Resolves the frontend workspace and
   authoritative lock baseline, collects version-specific upstream and code-impact
   evidence, detects host/project Node conflicts, scores seven-factor risk, and writes a
@@ -67,8 +69,9 @@ Modes:
 - **Provenance:** classify every package as `direct` / `both` / `phantom` / `transitive` / `unknown` from the manifest, the lock's dependency edges, and real call sites. Provenance decides which routes exist at all: an undeclared package has no declaration to drop, and one nobody calls cannot be rewritten. Transitive packages get parent chains, per-parent ranges, whether each parent's newest stable already dropped the dependency, and the lowest override version that satisfies every parent.
 - **Removal:** inspect direct, indirect, dynamic, tooling, peer, and transitive use. Zero static hits do not prove safe removal.
 - **Compliance/replacement:** verify the stated concern, then compare bounded exact candidates.
+- **Migration demand diff (A→B):** when the caller says 并入/迁入/host-port / iframe 收编, use mode `migration-demand-diff`. Implementation target = host **B**; source **A** is read-only. Compare A page-closure demand to B lock. Dispositions: `reuse-B` / `reuse-B-major-review` / `add-to-B` / `replace-as-B-stack` / `copy-local` / `unknown`. Script: `generate_migration_demand_diff.py` (`--decision-file`; exit `7` while queue open; gate uses B lock; emits `visual_strategy_hint`). Never Vue2/`@vue/compat` on B.
 
-Read `references/target-discovery-and-removal.md` whenever `to` is absent or removal/replacement is in scope.
+Read `references/target-discovery-and-removal.md` whenever `to` is absent or removal/replacement is in scope. For A→B demand diff also read `references/migration-demand-diff.md`.
 
 ## Workflow
 
