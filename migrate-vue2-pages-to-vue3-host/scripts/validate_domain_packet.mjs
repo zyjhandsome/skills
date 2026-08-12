@@ -24,7 +24,10 @@ function object(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-/** @param {unknown} value */
+/**
+ * @param {unknown} value
+ * @returns {unknown}
+ */
 function canonical(value) {
   if (Array.isArray(value)) return value.map(canonical);
   if (!object(value)) return value;
@@ -50,6 +53,10 @@ export function canonicalPacketDigest(packet) {
 export function validateDomainPacket(packet, options = {}) {
   /** @type {string[]} */
   const errors = [];
+  /**
+   * @param {unknown} condition
+   * @param {string} message
+   */
   const require = (condition, message) => { if (!condition) errors.push(message); };
 
   require(packet?.schema_version === "vue-migration-domain/v1", "schema_version must be vue-migration-domain/v1");
@@ -120,6 +127,10 @@ export function validateDomainPacket(packet, options = {}) {
     require(["tested", "retired"].includes(packet?.rollback?.status), "verification pass requires tested or retired rollback");
     require(packet?.runtime_evidence?.path_or_inline !== null, "verification pass requires runtime evidence");
     require(packet?.visual_evidence?.path_or_inline !== null, "verification pass requires visual evidence");
+    /**
+     * @param {any} value
+     * @param {string} label
+     */
     const loadEvidence = (value, label) => {
       if (!object(value)) {
         errors.push(`${label} must be an inline object or {path,digest} reference`);

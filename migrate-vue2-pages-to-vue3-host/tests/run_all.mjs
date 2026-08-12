@@ -36,7 +36,9 @@ const DOC_FILES = [
   ...REQUIRED_REFERENCES.map((name) => join(REFERENCES, name)),
 ];
 
+/** @param {string} path */
 const read = (path) => readFileSync(path, "utf8");
+/** @param {string} value */
 const lower = (value) => value.toLowerCase().replace(/\s+/g, " ").trim();
 
 function checkStructure() {
@@ -127,24 +129,40 @@ function checkOrchestrationRouting() {
  */
 function simulate(scenario) {
   const trace = ["recover"];
+  if (scenario.unit_complete === false) {
+    return { terminal: "blocked:inputs", trace };
+  }
   if (!scenario.revision_fresh) return { terminal: "stale:refresh-required", trace };
   trace.push("discover", "contract");
   if (scenario.visual_baseline === "missing") {
     return { terminal: "blocked:visual-baseline", trace };
+  }
+  if (scenario.visual_baseline === "approved_substitute" && scenario.claims_exact_parity) {
+    return { terminal: "blocked:visual-policy", trace };
   }
   trace.push("runtime-dependency");
   if (scenario.runtime !== "ready") return { terminal: "blocked:runtime", trace };
   if (scenario.dependency !== "ready") return { terminal: "blocked:dependency", trace };
   trace.push("design", "authorization");
   if (!scenario.authorization) return { terminal: "ready-for-authorization", trace };
-  trace.push("execute", "verify");
+  if (scenario.authorization === "narrow") {
+    return { terminal: "blocked:authorization-scope", trace };
+  }
+  if (scenario.lifecycle_owns_mutation && scenario.requested_mode === "execute") {
+    return { terminal: "blocked:lifecycle-mutation-owner", trace };
+  }
+  if (scenario.lifecycle_owns_mutation) {
+    trace.push("verify");
+  } else {
+    trace.push("execute", "verify");
+  }
   if (scenario.verification === "fail") return { terminal: "rollback-required", trace };
   if (scenario.verification === "pass") return { terminal: "verified", trace };
   return { terminal: "verification-pending", trace };
 }
 
 function checkScenarios() {
-  assert.ok(SCENARIOS.length >= 8, "stress suite must contain at least eight scenarios");
+  assert.ok(SCENARIOS.length >= 11, "stress suite must contain at least eleven scenarios");
   for (const scenario of SCENARIOS) {
     const actual = simulate(scenario);
     assert.equal(
@@ -170,7 +188,9 @@ function checkScenarios() {
 
 function checkVisualEvidenceValidator() {
   const fixtureDir = dirname(VALID_VISUAL_EVIDENCE);
+  /** @type {any} */
   const valid = JSON.parse(read(VALID_VISUAL_EVIDENCE));
+  /** @param {any} evidence */
   const validate = (evidence) => validateVisualEvidence(evidence, { baseDir: fixtureDir });
   const validErrors = validate(valid);
   assert.deepEqual(validErrors, [], `valid visual evidence rejected: ${validErrors.join("; ")}`);
@@ -191,6 +211,7 @@ function checkVisualEvidenceValidator() {
   }
   console.log(`[PASS] visual evidence validator rejected wrong-page and incomplete table evidence (${invalidErrors.length} errors)`);
 
+  /** @type {{ id: string, mutate: (evidence: any) => void, error: string }[]} */
   const cases = [
     {
       id: "wrong-page-actual",
@@ -296,6 +317,7 @@ function checkVisualEvidenceValidator() {
 }
 
 function checkDomainPacketValidator() {
+  /** @param {string} repository */
   const command = (repository) => ({
     repository, command: "test", working_directory: repository, runtime: "node", timestamp: "2026-08-12T00:00:00Z",
     exit_code: 0, output_digest: "a".repeat(64),
@@ -308,6 +330,7 @@ function checkDomainPacketValidator() {
     dependency_demands: [], approved_runtime_actions: [], restoration_plan: [],
     verification_commands: [command("source"), command("host")], final_runtime_result: "pass",
   };
+  /** @type {any} */
   const packet = {
     schema_version: "vue-migration-domain/v1", type: "vue-migration-domain", authority: "domain_evidence_only",
     packet_id: "orders-source-1-host-1", generated_at: "2026-08-12T00:00:00Z", mode: "verify",
@@ -373,10 +396,12 @@ function checkDomainPacketValidator() {
 }
 
 function checkRuntimeEvidenceValidator() {
+  /** @param {string} repository */
   const command = (repository) => ({
     repository, command: "test", working_directory: repository, runtime: "node", timestamp: "2026-08-12T00:00:00Z",
     exit_code: 0, output_digest: "a".repeat(64),
   });
+  /** @type {any} */
   const runtime = {
     schema: "runtime-compatibility-evidence/v1", producer: "migrate-vue2-pages-to-vue3-host", authority: "domain_evidence_only",
     source_revision: "source-1", host_revision: "host-1",

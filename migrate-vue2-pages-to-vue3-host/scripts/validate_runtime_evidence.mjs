@@ -20,6 +20,10 @@ function nonEmpty(value) {
 export function validateRuntimeEvidence(evidence, options = {}) {
   /** @type {string[]} */
   const errors = [];
+  /**
+   * @param {unknown} condition
+   * @param {string} message
+   */
   const require = (condition, message) => { if (!condition) errors.push(message); };
 
   require(evidence?.schema === "runtime-compatibility-evidence/v1", "schema must be runtime-compatibility-evidence/v1");
@@ -60,10 +64,16 @@ export function validateRuntimeEvidence(evidence, options = {}) {
         require(!["unknown", "none", "conflict", "blocked"].includes(String(runtime?.[key]).toLowerCase()), `runtime pass requires resolved ${name}.${key}`);
       }
     }
-    require(!(evidence?.dependency_demands || []).some((row) => row?.disposition === "unknown" || row?.decision_status !== "approved"), "runtime pass cannot contain unresolved dependency demands");
+    require(
+      !(evidence?.dependency_demands || []).some(
+        /** @param {any} row */ (row) => row?.disposition === "unknown" || row?.decision_status !== "approved"
+      ),
+      "runtime pass cannot contain unresolved dependency demands"
+    );
     if ((evidence?.approved_runtime_actions || []).length > 0) {
       require((evidence?.restoration_plan || []).length > 0, "approved runtime actions require a restoration_plan");
     }
+    /** @type {any[]} */
     const commands = evidence?.verification_commands || [];
     require(commands.some((row) => row?.repository === "source"), "runtime pass requires source verification command evidence");
     require(commands.some((row) => row?.repository === "host"), "runtime pass requires host verification command evidence");

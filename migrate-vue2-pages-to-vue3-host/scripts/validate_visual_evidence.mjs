@@ -48,18 +48,29 @@ export function validateVisualEvidence(evidence, options = {}) {
   /** @type {string[]} */
   const errors = [];
   const baseDir = options.baseDir || process.cwd();
+  /**
+   * @param {unknown} condition
+   * @param {string} message
+   */
   const require = (condition, message) => {
     if (!condition) errors.push(message);
   };
+  /**
+   * @param {unknown} pathValue
+   * @param {unknown} digestValue
+   * @param {string} label
+   */
   const validateArtifact = (pathValue, digestValue, label) => {
     require(nonEmpty(pathValue), `${label}.path is required`);
     require(nonEmpty(digestValue), `${label}.digest is required`);
     if (!nonEmpty(pathValue)) return;
-    require(IMAGE_EXTENSIONS.test(pathValue), `${label}.path must be an image artifact`);
-    const absolute = isAbsolute(pathValue) ? pathValue : resolve(baseDir, pathValue);
+    const pathText = String(pathValue);
+    const digestText = String(digestValue);
+    require(IMAGE_EXTENSIONS.test(pathText), `${label}.path must be an image artifact`);
+    const absolute = isAbsolute(pathText) ? pathText : resolve(baseDir, pathText);
     require(existsSync(absolute), `${label}.path does not exist: ${absolute}`);
     if (existsSync(absolute) && nonEmpty(digestValue)) {
-      require(sha256(absolute) === digestValue.toLowerCase(), `${label}.digest does not match file contents`);
+      require(sha256(absolute) === digestText.toLowerCase(), `${label}.digest does not match file contents`);
     }
   };
 
@@ -137,6 +148,7 @@ export function validateVisualEvidence(evidence, options = {}) {
     require(Array.isArray(accepted?.affected_states) && accepted.affected_states.length > 0, `${label}.affected_states is required`);
   }
 
+  /** @type {any[]} */
   const states = Array.isArray(evidence?.required_states) ? evidence.required_states : [];
   require(states.length >= 5, "at least five required_states are required");
   const stateIds = states.map((state) => state?.id).filter(nonEmpty);
@@ -182,7 +194,8 @@ export function validateVisualEvidence(evidence, options = {}) {
   require(new Set(candidateDigests).size === candidateDigests.length, "required_states candidate artifacts must be distinct");
   require(new Set(diffDigests).size === diffDigests.length, "required_states diff artifacts must be distinct");
   require(
-    baselineDigests.length === states.length && baselineDigests.every((digest) => digest === evidence?.baseline?.digest),
+    baselineDigests.length === states.length &&
+      baselineDigests.every(/** @param {unknown} digest */ (digest) => digest === evidence?.baseline?.digest),
     "baseline.digest must match every required state baseline artifact"
   );
   for (const [index, tolerance] of (differencePolicy?.tolerance_bound || []).entries()) {
@@ -200,6 +213,7 @@ export function validateVisualEvidence(evidence, options = {}) {
     const table = evidence?.table_contract;
     require(table && typeof table === "object", "table_contract is required when contains_table=true");
     require(table?.result === PASS, "table_contract.result must be pass");
+    /** @type {any[]} */
     const metrics = Array.isArray(table?.metrics) ? table.metrics : [];
     const surfaces = new Set(metrics.map((metric) => metric?.surface));
     for (const surface of TABLE_SURFACES) require(surfaces.has(surface), `table_contract.metrics must cover ${surface}`);
@@ -239,6 +253,7 @@ export function validateVisualEvidence(evidence, options = {}) {
 
   require(typeof evidence?.global_style_changed === "boolean", "global_style_changed must be explicit");
   if (evidence?.global_style_changed === true) {
+    /** @type {any[]} */
     const collateral = Array.isArray(evidence?.global_collateral) ? evidence.global_collateral : [];
     require(collateral.length >= 3, "global_collateral must contain migrated page and two existing B pages");
     require(collateral.filter((row) => row?.kind === "migrated").length >= 1, "global_collateral must include a migrated page row");

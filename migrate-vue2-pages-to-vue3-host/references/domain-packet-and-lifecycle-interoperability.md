@@ -128,6 +128,10 @@ Never merge stale and current evidence into one pass claim.
 When no lifecycle system exists, direct user authorization may populate the
 authorization reference. It must still bind exact revisions and scope.
 
+When an external lifecycle is the active mutation owner for the approved scope,
+do not re-execute the same slices inside this Skill; use `verify` to refresh
+domain evidence against the current revision pair.
+
 ## External lifecycle interoperability
 
 Accept a lifecycle-agnostic input envelope:

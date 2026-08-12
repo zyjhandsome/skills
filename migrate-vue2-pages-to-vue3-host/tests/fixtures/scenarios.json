@@ -115,6 +115,53 @@
     "required_files": {
       "references/domain-packet-and-lifecycle-interoperability.md": ["compare current a/b revisions", "mark affected sections stale", "invalidation rules", "never merge stale and current evidence"]
     }
+  },
+  {
+    "id": "incomplete-migration-unit",
+    "prompt": "A and B roots are known, but the page path and host HTML entry are still placeholders.",
+    "unit_complete": false,
+    "revision_fresh": true,
+    "visual_baseline": "available",
+    "runtime": "ready",
+    "dependency": "ready",
+    "authorization": false,
+    "verification": "not_run",
+    "expected_terminal": "blocked:inputs",
+    "required_files": {
+      "SKILL.md": ["source_entry", "host entry", "incomplete", "stop"]
+    }
+  },
+  {
+    "id": "lifecycle-owns-mutation-blocks-execute",
+    "prompt": "An external lifecycle already implemented the approved slices; the agent tries migrate execute again.",
+    "revision_fresh": true,
+    "visual_baseline": "available",
+    "runtime": "ready",
+    "dependency": "ready",
+    "authorization": true,
+    "lifecycle_owns_mutation": true,
+    "requested_mode": "execute",
+    "verification": "not_run",
+    "expected_terminal": "blocked:lifecycle-mutation-owner",
+    "required_files": {
+      "SKILL.md": ["external lifecycle", "do not enter `execute`", "verify` only"],
+      "references/domain-packet-and-lifecycle-interoperability.md": ["external lifecycle", "do not re-execute", "use `verify`"]
+    }
+  },
+  {
+    "id": "approved-substitute-exact-claim-forbidden",
+    "prompt": "Only an approved visual substitute exists, but the packet claims exact strict parity.",
+    "revision_fresh": true,
+    "visual_baseline": "approved_substitute",
+    "claims_exact_parity": true,
+    "runtime": "ready",
+    "dependency": "ready",
+    "authorization": true,
+    "verification": "not_run",
+    "expected_terminal": "blocked:visual-policy",
+    "required_files": {
+      "references/visual-parity-validation.md": ["never claim exact parity", "approved substitute", "approved_redesign"]
+    }
   }
 ]
 

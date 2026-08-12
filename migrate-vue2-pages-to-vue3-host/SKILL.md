@@ -52,9 +52,15 @@ defect fixes and temporary compatibility.
 | `execute` | Apply an authorized vertical slice and collect task evidence | Requires current authorization |
 | `verify` | Re-run current functional, visual, runtime, build and rollback checks | No new scope |
 
+When an external lifecycle already owns code mutation for the approved slices, do
+not enter `execute`; refresh evidence with `verify` only. Use `execute` for
+standalone authorized mutation when no such lifecycle mutation owner is active.
+
 Recover the latest domain packet before every round. If source revision, host
 revision, approved scope, dependency baseline, or visual baseline changed, mark
-affected evidence stale and refresh it before continuing.
+affected evidence stale and refresh it before continuing. If the migration unit,
+`source_entry`, or host entry (route or HTML entry) is missing or still a
+placeholder, stop and obtain the concrete values before discovery.
 
 ## Load references progressively
 
@@ -69,9 +75,11 @@ affected evidence stale and refresh it before continuing.
 
 ## Core workflow
 
-1. **Recover context.** Identify A, B, requested migration units, current revisions,
+1. **Recover context.** Identify A, B, requested migration units with concrete
+   `source_entry` and host entry (route or HTML entry), current revisions,
    previous domain evidence, approved scope, authorization status, deployment
-   boundary, and whether the round is assess, design, execute, or verify.
+   boundary, and whether the round is assess, design, execute, or verify. Stop
+   when unit or entry inputs are incomplete; do not invent them.
 2. **Discover both architectures.** Establish entry points, layouts, routers,
    state, HTTP/auth, permissions, i18n, styles, runtime, build, deployment, tests,
    and active iframe or micro-frontend protocols.
