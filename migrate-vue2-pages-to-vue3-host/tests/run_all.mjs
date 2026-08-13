@@ -108,7 +108,7 @@ function checkIndependence() {
 function checkOrchestrationRouting() {
   const docs = [
     resolve(ROOT, "..", "docs", "migrate-vue2-pages-to-vue3-host-delivery-usage.md"),
-    resolve(ROOT, "..", "docs", "vue-upgrade-orchestration-prompts.md"),
+    resolve(ROOT, "..", "docs", "vue2-page-migration-orchestration-latest.md"),
   ];
   const frameSkill = resolve(ROOT, "..", "delivery-frame-spec", "SKILL.md");
   for (const path of [...docs, frameSkill]) assert.ok(existsSync(path), `missing orchestration contract: ${path}`);
