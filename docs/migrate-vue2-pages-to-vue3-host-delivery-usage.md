@@ -82,4 +82,5 @@ Delivery 侧：
 
 ## 4. 编排提示词
 
-版 B / B-轻量短触发见 [`vue-upgrade-orchestration-prompts.md`](./vue-upgrade-orchestration-prompts.md) §2 / §2.5。
+最新四波完整编排见
+[`vue2-page-migration-orchestration-latest.md`](./vue2-page-migration-orchestration-latest.md)。

@@ -21,6 +21,8 @@ Outputs:
 
 **Omit:** 元数据表 rows, 目录, 延伸术语表, 自检报告, 「完整整理版｜微信排版」eyebrow, long legal footer.
 
+**Body tables:** GFM `| col |` in 深度解析 etc. → inline-styled `<table>` (≤4 cols) or stacked cards (≥5 cols). Do not paste raw pipes.
+
 ## Cover prompt skeleton
 
 ```

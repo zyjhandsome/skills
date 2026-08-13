@@ -1,0 +1,167 @@
+---
+name: vue2-to-vue3-upgrade-impact-analysis
+description: >
+  Analyze, never implement, a Vue 2.x to Vue 3.x framework upgrade for one
+  frontend workspace, a multi-repo inventory, or an A→B host-port (read Vue2
+  source A, adapt into existing Vue3 host B). Use when assessing Vue2→Vue3
+  migration impact, @vue/compat vs direct Vue3 cutover, host-port-direct page
+  closure porting, Vue CLI/Webpack→Vite, Vue Router 4, Vuex/Pinia, Element
+  UI→Element Plus (or other UI), test-utils, or blocking Vue plugins. Writes a
+  Simplified Chinese decision packet with confirmation queue and
+  batch_implementation_gate. Ends at analysis_status complete — never at
+  implementation or codemod execution. Produces an independent full report,
+  decision records, inventory evidence, and a compact JSON summary with
+  structured UI visual-risk evidence.
+---
+
+# Vue 2 → Vue 3 Upgrade Impact Analysis
+
+Produce an evidence-backed decision packet — analysis only. Do not change
+manifests, run install/upgrade, apply migration codemods, or edit application
+code.
+
+## Minimal caller input
+
+A **short prompt** is enough: invoke the skill, give the project root (or accept
+the stated cwd), and either analyze one frontend workspace, ask for「多仓巡检」,
+or name A→B (`source_root` + `implementation_target`). Resolve the report
+directory under Output unless overridden.
+
+## Environment preflight
+
+Before analysis (including manifest-only reads), run
+`references/environment-preflight.md` / `scripts/preflight.py`. Missing Node
+(or project pin probe), package manager detection, or Python → batch-wide
+`analysis_status=blocked`; list gaps in chat; **do not write** reports. Host
+Node vs `engines` mismatch is recorded, not a hard block. Network probe runs in
+the same wave; dual registry+docs failure follows the offline confirm gate.
+
+## Boundaries
+
+- **Allowed:** read `package.json` / lockfiles / config / source / tests; run
+  read-only inventory (`scripts/profile_inventory.py`); fetch official migration
+  docs; write reports under the resolved Output directory.
+- **Forbidden:** `npm/pnpm/yarn/bun install` or upgrade; edit source or config;
+  run migration codemods; treat build/start success as release proof.
+- **Name, never run, migration recipes** for `@vue/compat`, gogocode,
+  `vue-upgrade-tool`, `webpack-to-vite`, etc. See
+  `references/named-migration-recipes.md`.
+- **Default posture:** preserve observable behavior unless the user explicitly
+  allows behavior change.
+- **Composition API:** full Options→Composition rewrite is **out of scope**
+  (mark「另立项」). Only assess **existing** `@vue/composition-api` / `setup`
+  compatibility.
+- **Independence:** this skill does not import or require any other skill.
+- **Host-port:** never edit A; implement-on B only; see ladder host-port rules.
+
+## Dual entry (+ host-port)
+
+| Entry | Input | First action |
+|---|---|---|
+| Single workspace | project root | Preflight → profile → packet |
+| Multi-repo inventory | roots / parent | Candidate table → ask batch |
+| Host-port A→B | `source_root=A` + `implementation_target=B` | Preflight/profile A; contrast B; packet for B |
+
+Normalize per `references/dual-entry-and-batching.md`. One batch = **workspace ×
+build variant × scope** (A→B: workspace=A; scope often `page-closure`).
+
+## Default recommended path
+
+- **In-place:** `compat-big-bang` (`compat` + `vite` + `single-cutover`) unless
+  evidence favors `direct-vue3` or coexistence.
+- **A→B / 并入 / iframe 收编:** `host-port-direct` (`direct-vue3` +
+  `existing-vite` + `host-port`). §1 needs `source_root`,
+  `implementation_target`, `forbid_source_mutation: yes`. Compat is **not**
+  primary. Axes + Wave 1 `proceed:path:…` still required — details in
+  `references/migration-path-ladder.md`.
+
+## Workflow
+
+1. Preflight; resolve workspace (ask if multiple). Exit `5` → `blocked`.
+2. Light inventory (`scripts/profile_inventory.py`). Cover
+   `references/subsystem-inventory.md`. Record `lockfile_status`
+   `present|absent|unparsed`; gate stays `frozen` unless `present`.
+3. Classify subsystems (`risk`, readiness, `required_for_path`) and Vue-related
+   packages (`ready` / `needs-major` / `replace` / `unknown` / `unused`).
+4. Pick `recommended_path` + three axes; name recipes; never execute.
+5. Map impact (`references/impact-and-validation.md`); cite
+   `references/official-docs-index.md`. Fact vs inference. Composition rewrite
+   out of scope. Complete §10 人工补搜检查. Register every `Vue.prototype.$*`
+   and `globalProperties` / `provide/inject` target. UI/CSS triggers → full
+   `ui_visual_risk` block (not a one-liner).
+6. Draft packet + Decision Records (path + High/blocker /
+   `required_for_path=yes`).
+7. Confirmation queue (`references/human-confirmation-gates.md`): Wave 1 path;
+   after path decided, Wave 2+ ready High/blocker / required subsystems.
+   Record → regenerate → Agent review → `analysis_status=complete`.
+8. Stop. Do not open implementation plans.
+
+「继续 / 全部放行 / 别再问了 / 全部纳入」**≠** proceed token. Re-prompt
+verbatim `proceed:path:…` / `proceed:subsystem:…` menus.
+
+## Output
+
+1. Explicit `--output-dir`, else candidate
+   `<project-root>/.vue2-to-vue3-upgrade-analysis` after
+   `confirm:output-dir` / `--output-dir <path>`. Until confirmed: read-only.
+2. Bundle: `vue2-to-vue3-upgrade-report.md`, `upgrade-summary.json` (≤12 KiB),
+   `inventory.json` when profiled, `decision-records/*.md`.
+3. Multi-batch:
+   `<entry-kind>/<slug>__variant-<v>__scope-<s>/` + `BATCH-INDEX.md`.
+4. Prose ZH; enums/paths/URLs verbatim. Contract:
+   `references/report-contract.md`.
+
+## Validator
+
+```shell
+python -m unittest discover -s tests -v
+python scripts/validate_report.py <report.md>
+python scripts/validate_report.py --evidence-dir <evidence-dir> [--json]
+python scripts/validate_upgrade_summary.py <upgrade-summary.json>
+python scripts/preflight.py --project-root <dir> [--json]
+python scripts/profile_inventory.py --project-root <dir> [--json]
+```
+
+Exit `0` pass / `3` errors / `4` missing. Pass = shape only. Fixtures:
+`fixtures/valid-report*.md`, `decision-records/`, `evidence-complete/`.
+
+## Status axes
+
+| Axis | Meaning |
+|---|---|
+| `analysis_status` | `partial` / `blocked` / `complete` |
+| `decision_status` | `needs_choice` / `not_needed` / `decided` |
+| `batch_implementation_gate` | `frozen` / `ready` (handoff only) |
+| `implementation_readiness` | always `not_assessed` |
+| also required | `behavior_parity_required`, `network_mode`, `report_path`, `evidence_as_of` |
+
+UI-kit / Tailwind / mixed tables / scoped-style risk →
+`visual_acceptance_required=yes` + §5 `ui_visual_risk`. Never `complete` while
+queue has `ready`/`pending`. Gate `ready` needs lockfile `present` + all High /
+blocker / required rows `decided` — still never install/codemod from this skill.
+
+## Completion gate
+
+Preflight OK; profiled; path+axes; recipes named not run; Composition scoped
+out; High/blocker/required queued+recorded; queue clear; DRs complete;
+validator `0`; Agent review → `analysis_status=complete`.
+
+## Context budget and portability
+
+Return `upgrade-summary.json` by default. Load the full report only for a named
+section, one decision record for a named decision, and inventory only for a
+named evidence question. The output bundle must validate and remain useful
+when every other Skill folder is absent.
+
+## References
+
+**Minimum load (every run):** `references/environment-preflight.md`,
+`references/subsystem-inventory.md`, `references/human-confirmation-gates.md`.
+
+**On demand:** `references/dual-entry-and-batching.md`,
+`references/migration-path-ladder.md`, `references/impact-and-validation.md`,
+`references/official-docs-index.md`, `references/named-migration-recipes.md`,
+`references/common-upgrade-patterns.md`,
+`references/next-action-choice-menus.md`, `references/report-contract.md`,
+`references/decision-record-schema.md`, `templates/decision-packet.md`,
+`templates/decision-record.md`, `scripts/`, `fixtures/`.

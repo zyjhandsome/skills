@@ -1,0 +1,25 @@
+{
+  "schema": "vue3-upgrade-summary/v1",
+  "producer": "vue2-to-vue3-upgrade-impact-analysis",
+  "analysis_status": "partial",
+  "decision_status": "needs_choice",
+  "batch_implementation_gate": "frozen",
+  "recommended_path": "host-port-direct",
+  "axes": {
+    "runtime": "direct-vue3",
+    "build": "existing-vite",
+    "topology": "host-port"
+  },
+  "visual_acceptance_required": "yes",
+  "report_path": "fixtures/valid-report-host-port.md",
+  "inventory_path": "fixtures/inventory.json",
+  "decision_records": [],
+  "blockers": ["ui"],
+  "high_risks": ["core-vue", "router"],
+  "ui_visual_risk": {
+    "required_states": ["search-default", "table-empty", "table-data", "cell-popper"],
+    "recommended_next_action": "run_visual_review"
+  },
+  "next_action": "confirm_migration_path",
+  "generated_at": "2026-08-10T12:00:00+08:00"
+}

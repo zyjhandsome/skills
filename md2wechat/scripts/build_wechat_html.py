@@ -156,6 +156,113 @@ def bare(s: str) -> str:
     return re.sub(r"\*\*(.+?)\*\*", r"\1", s).strip()
 
 
+_SEP_ROW = re.compile(r"^\|[\s\-:|]+\|$")
+
+
+def is_pipe_row(line: str) -> bool:
+    s = line.strip()
+    return s.startswith("|") and s.endswith("|") and s.count("|") >= 2
+
+
+def is_sep_row(line: str) -> bool:
+    return bool(_SEP_ROW.match(line.strip()))
+
+
+def split_cells(row: str) -> list[str]:
+    return [c.strip() for c in row.strip().strip("|").split("|")]
+
+
+def _td(text: str, *, header: bool = False, first_col: bool = False) -> str:
+    """WeChat paste keeps td+inline styles more reliably than th / CSS classes."""
+    bg = C["accent_soft"] if header else C["surface"]
+    color = C["accent_strong"] if header else C["text"]
+    weight = "700" if header or first_col else "400"
+    size = "13px" if header else "14px"
+    border = C["accent_border"] if header else C["border"]
+    return (
+        f'<td style="padding:8px 10px;background:{bg};color:{color};'
+        f'font-size:{size};font-weight:{weight};line-height:1.55;'
+        f'text-align:left;vertical-align:top;border:1px solid {border};'
+        f'word-break:break-word;">{inline_md_raw(text)}</td>'
+    )
+
+
+def render_table_cards(header: list[str], rows: list[list[str]]) -> str:
+    """Wide tables (≥5 cols) → stacked cards; native tables overflow on phone."""
+    parts: list[str] = []
+    for row in rows:
+        inner: list[str] = []
+        for j, cell in enumerate(row):
+            label = header[j] if j < len(header) else ""
+            if j == 0:
+                inner.append(
+                    f'<p style="margin:0 0 6px;padding:0;font-size:15px;'
+                    f'font-weight:700;color:{C["text"]};">{inline_md_raw(cell)}</p>'
+                )
+            else:
+                inner.append(
+                    f'<p style="margin:0 0 4px;padding:0;font-size:13px;'
+                    f'line-height:1.65;color:{C["muted"]};">'
+                    f'<span style="color:{C["accent_strong"]};font-weight:600;">'
+                    f"{inline_md_raw(label)}</span>　{inline_md_raw(cell)}</p>"
+                )
+        parts.append(
+            f'<section style="margin:0 0 10px;padding:12px 14px;'
+            f'background:{C["surface"]};border:1px solid {C["border"]};'
+            f'border-radius:8px;">{"".join(inner)}</section>'
+        )
+    return "".join(parts)
+
+
+def render_wechat_table(header: list[str], rows: list[list[str]]) -> str:
+    ncols = max(len(header), 1)
+    if ncols >= 5:
+        return render_table_cards(header, rows)
+    trs = ["<tr>" + "".join(_td(h, header=True) for h in header) + "</tr>"]
+    for row in rows:
+        padded = row + [""] * (ncols - len(row))
+        cells = "".join(
+            _td(c, first_col=(j == 0)) for j, c in enumerate(padded[:ncols])
+        )
+        trs.append(f"<tr>{cells}</tr>")
+    return (
+        f'<section style="margin:0 0 16px;padding:0;overflow:hidden;'
+        f'border-radius:8px;">'
+        f'<table cellspacing="0" cellpadding="0" style="border-collapse:collapse;'
+        f'width:100%;margin:0;font-size:14px;font-family:{FONT};">'
+        f"{''.join(trs)}</table></section>"
+    )
+
+
+def try_parse_gfm_table(lines: list[str], start: int) -> tuple[str | None, int]:
+    """Consume a GFM table. Returns (html, next_index) or (None, start)."""
+    if start >= len(lines) or not is_pipe_row(lines[start]):
+        return None, start
+    raw: list[str] = []
+    i = start
+    while i < len(lines) and is_pipe_row(lines[i]):
+        raw.append(lines[i])
+        i += 1
+    if len(raw) < 2:
+        return None, start
+    cells_list: list[list[str]] = []
+    for row in raw:
+        if is_sep_row(row):
+            continue
+        cells_list.append(split_cells(row))
+    if not cells_list:
+        return None, start
+    header = cells_list[0]
+    body = cells_list[1:]
+    ncols = len(header)
+    norm = []
+    for r in body:
+        if len(r) < ncols:
+            r = r + [""] * (ncols - len(r))
+        norm.append(r[:ncols])
+    return render_wechat_table(header, norm), i
+
+
 def parse_meta_table(lines: list[str], start: int) -> tuple[dict[str, str], int]:
     meta: dict[str, str] = {}
     i = start
@@ -278,6 +385,11 @@ def parse_md(md: str) -> tuple[str, list[str]]:
                     if lines[i].strip() == "":
                         i += 1
                         continue
+                    tbl, ni = try_parse_gfm_table(lines, i)
+                    if tbl is not None:
+                        out.append(tbl)
+                        i = ni
+                        continue
                     out.append(p(lines[i].strip()))
                     i += 1
                 skip_blank()
@@ -317,6 +429,11 @@ def parse_md(md: str) -> tuple[str, list[str]]:
                                 out.append(dialogue_card(m.group(1), m.group(2)))
                                 i += 1
                                 continue
+                            tbl, ni = try_parse_gfm_table(lines, i)
+                            if tbl is not None:
+                                out.append(tbl)
+                                i = ni
+                                continue
                             out.append(p(lines[i].strip(), size="14px", color=C["muted"]))
                             i += 1
                         skip_blank()
@@ -328,6 +445,11 @@ def parse_md(md: str) -> tuple[str, list[str]]:
                                 if lines[i].strip() == "---":
                                     break
                                 i += 1
+                                continue
+                            tbl, ni = try_parse_gfm_table(lines, i)
+                            if tbl is not None:
+                                out.append(tbl)
+                                i = ni
                                 continue
                             mnum = re.match(r"^(\d+)\.\s+(.+)$", lines[i].strip())
                             if mnum:
@@ -343,12 +465,22 @@ def parse_md(md: str) -> tuple[str, list[str]]:
                         if lines[i].strip() == "":
                             i += 1
                             continue
+                        tbl, ni = try_parse_gfm_table(lines, i)
+                        if tbl is not None:
+                            out.append(tbl)
+                            i = ni
+                            continue
                         out.append(p(lines[i].strip()))
                         i += 1
                     continue
 
                 if lines[i].strip() == "":
                     i += 1
+                    continue
+                tbl, ni = try_parse_gfm_table(lines, i)
+                if tbl is not None:
+                    out.append(tbl)
+                    i = ni
                     continue
                 out.append(p(lines[i].strip()))
                 i += 1

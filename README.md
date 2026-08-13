@@ -4,7 +4,7 @@ Cursor Agent Skills 集合。按用途分类如下。
 
 ## 交付流水线
 
-四个 skill 按阶段串联（探索可选）；共享契约与脚本集中在 `delivery-frame-spec/`（四 skill 原子安装）。家族版本见 `delivery-frame-spec/references/family-contract.md`（当前 `delivery-family/1.4`）。
+四个 skill 按阶段串联（探索可选）；共享契约与脚本集中在 `delivery-frame-spec/`（四 skill 原子安装）。家族版本见 `delivery-frame-spec/references/family-contract.md`（当前 `delivery-family/1.5`）。
 
 ```
 delivery-explore  →  delivery-frame-spec  →  delivery-plan-tasks  →  delivery-execute-verify
@@ -27,9 +27,11 @@ delivery-explore  →  delivery-frame-spec  →  delivery-plan-tasks  →  deliv
 
 | 技能 | 说明 |
 |------|------|
-| [frontend-dependency-upgrade-impact-analysis](./frontend-dependency-upgrade-impact-analysis/SKILL.md) | 前端依赖升级影响分析：证据驱动的升级/移除/替换决策报告 |
+| [frontend-dependency-upgrade-impact-analysis](./frontend-dependency-upgrade-impact-analysis/SKILL.md) | 前端依赖升级影响分析：证据驱动的升级/移除/替换决策报告；A→B 迁入时可用 `migration-demand-diff` |
 | [java-dependency-upgrade-impact-analysis](./java-dependency-upgrade-impact-analysis/SKILL.md) | Java/Maven/Gradle 依赖升级影响分析：处置阶梯、owner-first、确认队列决策包 |
-| [vue2-to-vue3-upgrade-impact-analysis](./vue2-to-vue3-upgrade-impact-analysis/SKILL.md) | Vue 2→Vue 3 框架升级影响分析：迁移路径、子系统风险、确认队列决策包 |
+| [vue2-to-vue3-upgrade-impact-analysis](./vue2-to-vue3-upgrade-impact-analysis/SKILL.md) | Vue 2→Vue 3 框架升级影响分析：迁移路径、子系统风险、确认队列；单仓原地升默认 `compat-big-bang`，A→B 分析默认 `host-port-direct` |
+
+`vue2-to-vue3-upgrade-impact-analysis` 覆盖框架切仓决策（路径三维 + 子系统耦合 + Vue2 API 盘点），不是把 `vue` 当成又一个包来升。包级 from→to 仍走 frontend-dependency。A→B **实施**（改 B、视觉证据、iframe 退出）走下方 `migrate-vue2-pages-to-vue3-host`，不要用本 skill 改代码。
 
 ### 与 delivery-* 联用（短提示词）
 
@@ -57,7 +59,7 @@ delivery-explore  →  delivery-frame-spec  →  delivery-plan-tasks  →  deliv
 # 或写：整仓巡检，先候选再问我选批
 ```
 
-**Vue2→Vue3**
+**Vue2→Vue3（单仓原地升）**
 
 ```text
 /delivery-frame-spec 结合 /vue2-to-vue3-upgrade-impact-analysis
@@ -66,18 +68,68 @@ delivery-explore  →  delivery-frame-spec  →  delivery-plan-tasks  →  deliv
 # 或多仓：多仓巡检，先候选再问我选批
 ```
 
+**Vue2→Vue3（A→B 只分析）**
+
+```text
+/vue2-to-vue3-upgrade-impact-analysis
+做 A→B host-port 影响分析（只出决策包）。
+source_root：<Vue2 仓 A>
+implementation_target：<Vue3 host B>
+forbid_source_mutation: yes
+# 默认路径 host-port-direct；compat 非主路径
+```
+
 配套说明：
 
 - [`docs/frontend-dependency-upgrade-impact-analysis-usage.md`](./docs/frontend-dependency-upgrade-impact-analysis-usage.md)
 - [`docs/java-dependency-upgrade-impact-analysis-usage.md`](./docs/java-dependency-upgrade-impact-analysis-usage.md)
 - [`docs/java-dependency-upgrade-delivery-usage.md`](./docs/java-dependency-upgrade-delivery-usage.md)（与 delivery-* 可选挂载）
-- [`docs/vue2-to-vue3-upgrade-impact-analysis-usage.md`](./docs/vue2-to-vue3-upgrade-impact-analysis-usage.md)
-- [`docs/vue2-to-vue3-upgrade-delivery-usage.md`](./docs/vue2-to-vue3-upgrade-delivery-usage.md)（与 delivery-* 可选挂载）
-- [`docs/vue-upgrade-orchestration-prompts.md`](./docs/vue-upgrade-orchestration-prompts.md)（显式点名 Skill：单仓原地升 / A→B 并入短提示词）
+
+## Vue2 页面迁入 Vue3 Host
+
+独立领域 skill：把 Vue2 源仓 A 的可切换用户行为（通常是一页）迁入已有 Vue3 宿主仓 B。默认 A 只读、B 壳保持 host-native、迁入内容 strict parity、视觉证据必做；可 `assess` / `design` / `execute` / `verify`。不依赖、不调用 `delivery-*`；需要生命周期时由编排者软挂载。
+
+| 技能 | 说明 |
+|------|------|
+| [migrate-vue2-pages-to-vue3-host](./migrate-vue2-pages-to-vue3-host/SKILL.md) | 跨仓页面迁移：页面闭包、Vuex→Pinia / Element UI→Plus 适配、iframe 退出、视觉与 runtime 证据 |
+
+**不要**用它做「单仓把 Vue2 原地升到 Vue3」。单仓原地升的决策包走 `/vue2-to-vue3-upgrade-impact-analysis`（只分析）；需要改代码时再显式 go 进 `delivery-*`。
+
+A→B 不要混用职责：host-port **决策包**可用 vue 分析 skill；**页面迁入、iframe 退出**用本 skill。升级后「功能可用但搜索/表格/表单样式仍乱」走 `/frontend-ui-stack-visual-parity`（默认只定界，明确 go 后再改 CSS/配置）。
+
+```text
+/migrate-vue2-pages-to-vue3-host
+依次执行 assess 和 design（本阶段不改应用代码）。
+源仓 A：<Vue2 仓库>
+宿主仓 B：<已有 Vue3 仓库>
+migration_unit：
+- source_entry：<A 的页面/入口文件>
+- host entry：<B 的 route 或 HTML 入口>
+# 缺具体入口就停，不要编占位
+A 只读；B 壳 host-native；内容区 strict parity；visual=required
+```
+
+### 与 delivery-* 联用（短提示词）
+
+```text
+/delivery-frame-spec 结合 /migrate-vue2-pages-to-vue3-host
+把 A 的指定页迁入已有 Vue3 host B（只修缺陷，不开发新功能）。
+源仓 A：<Vue2 仓库>（禁改）
+宿主仓 B：<Vue3 仓库>（唯一代码修改目标）
+visual=required；保留可演练的 iframe/legacy fallback
+# 先吃 domain packet 的 path + digest，不要把整份报告贴进 Frame
+```
+
+集成路线下，代码修改由 `delivery-execute-verify` 唯一拥有；migrate skill 事后只跑 `verify` 刷新领域证据。
+
+配套说明：
+
+- [`docs/migrate-vue2-pages-to-vue3-host-delivery-usage.md`](./docs/migrate-vue2-pages-to-vue3-host-delivery-usage.md)（与 delivery-* 可选挂载）
+- [`docs/vue2-page-migration-orchestration-latest.md`](./docs/vue2-page-migration-orchestration-latest.md)（A→B 分波编排提示词）
 
 ## UI 栈视觉 parity（升级后样式）
 
-独立 skill：针对「功能基本可用、搜索/表格/表单样式仍乱」做定界；**默认不改代码**，仅在用户对当前定界包明确 go 后允许改 CSS/配置（不装包、不升依赖、不重开 Vue2→3 路径选择）。
+独立 skill：针对「功能基本可用、搜索/表格/表单样式仍乱」做定界；也用于 A→B 迁入后与源仓 A 的样式对齐。**默认不改代码**，仅在用户对当前定界包明确 go 后允许改 CSS/配置（不装包、不升依赖、不重开 Vue2→3 路径选择；跨仓时只改 candidate/host）。
 
 | 技能 | 说明 |
 |------|------|
@@ -87,6 +139,7 @@ delivery-explore  →  delivery-frame-spec  →  delivery-plan-tasks  →  deliv
 /frontend-ui-stack-visual-parity
 项目：<前端 workspace>
 # 可选：最差的 1～2 个列表页路由或文件
+# 跨仓：baseline=源仓 A，candidate=Vue3 host B
 # Phase A 只定界；回复「开始修复」等明确 go 后再改 CSS/配置
 ```
 
@@ -185,8 +238,8 @@ frontend-dependency-upgrade-impact-analysis/
 ├── agents/
 │   └── openai.yaml
 ├── fixtures/             # 合成前端 fixture（测试用）
-├── references/           # 证据 schema、风险模型、报告契约等
-├── scripts/              # 报告生成与 Node 兼容探测
+├── references/           # 证据 schema、风险模型、迁入差分、报告契约等
+├── scripts/              # 报告生成、Node 兼容探测、migration-demand-diff
 └── tests/
 
 java-dependency-upgrade-impact-analysis/
@@ -200,13 +253,31 @@ java-dependency-upgrade-impact-analysis/
 └── tests/
 
 vue2-to-vue3-upgrade-impact-analysis/
-├── SKILL.md              # 技能加载器（边界、环境前置、工作流、报告闸门）
+├── SKILL.md              # 技能加载器（原地升 / host-port、工作流、报告闸门）
 ├── agents/
 │   └── openai.yaml
-├── fixtures/             # 决策包样例（partial / complete）
+├── fixtures/             # 决策包样例（partial / complete / host-port）
 ├── references/           # 迁移路径、子系统清单、确认闸门、报告契约等
 ├── scripts/              # preflight / profile_inventory / validate_report
 ├── templates/            # 决策包 / 决策记录中文模板
+└── tests/
+
+migrate-vue2-pages-to-vue3-host/
+├── SKILL.md              # 技能加载器（模式、闭包、授权、视觉/runtime 闸门）
+├── agents/
+│   └── openai.yaml
+├── references/           # 页面闭包、Vue 变换、host 切片、视觉/runtime、领域包
+├── scripts/              # validate_domain_packet / visual / runtime
+└── tests/
+
+frontend-ui-stack-visual-parity/
+├── SKILL.md              # 技能加载器（Phase A 定界 / Phase B CSS 闸门）
+├── agents/
+│   └── openai.yaml
+├── fixtures/             # 报告与 summary 样例（含 cross-repo）
+├── references/           # 配置盘点、诊断流程、捕获契约、验证清单
+├── scripts/              # validate_visual_report / validate_visual_summary
+├── templates/
 └── tests/
 
 content-structuring/

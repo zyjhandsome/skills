@@ -1,0 +1,24 @@
+{
+  "schema": "visual-parity-summary/v1",
+  "producer": "frontend-ui-stack-visual-parity",
+  "analysis_status": "partial",
+  "strategy_status": "needs_choice",
+  "remediation_status": "not_started",
+  "assessment_mode": "strict_parity",
+  "parity_topology": "cross-repo",
+  "final_visual_result": "pending",
+  "source_snapshot": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+  "baseline_source": "A capture dir /repo/vue2-source/.ui-stack-visual-parity/baseline",
+  "baseline_root": "/repo/vue2-source",
+  "candidate_root": "/repo/vue3-host",
+  "forbid_baseline_mutation": "yes",
+  "report_path": ".ui-stack-visual-parity/ui-stack-visual-parity-report.md",
+  "primary_routes": ["/users"],
+  "top_findings": ["cross-repo baseline captured on A; candidate pending on B"],
+  "change_candidates": [],
+  "required_states": ["search-default", "search-wrap", "table-empty", "table-data", "cell-popper"],
+  "artifact_index": {
+    "capture_manifest": ".ui-stack-visual-parity/capture-manifest.json"
+  },
+  "generated_at": "2026-08-10T12:00:00+08:00"
+}

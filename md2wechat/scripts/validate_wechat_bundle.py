@@ -26,9 +26,14 @@ REQUIRED_IN_ARTICLE = [
     (r'id="wechat-article"', "wechat-article container"),
     (r">核心洞察<", "核心洞察 labels"),
     (r">深度解析<", "深度解析 labels"),
-    (r">对谈实录<", "对谈实录 labels"),
     (r">来源与说明<", "source footer"),
     (r"style=", "inline styles"),
+]
+
+# 对谈实录 required unless keynote/anthology mode (关键语录 section present)
+REQUIRED_DIALOGUE_OR_ANTHOLOGY = [
+    (r">对谈实录<", "对谈实录 labels"),
+    (r">关键语录", "关键语录（单人主题演讲可替代对谈实录）"),
 ]
 
 
@@ -54,9 +59,22 @@ def validate_html(path: Path) -> list[str]:
             if not re.search(pat, text):
                 errors.append(f"MISSING: {msg}")
 
+    has_dialogue = bool(re.search(r">对谈实录<", article))
+    has_anthology = bool(re.search(r">关键语录", article))
+    if not has_dialogue and not has_anthology:
+        errors.append(
+            "MISSING: 对谈实录 labels（或单人主题演讲的关键语录节）"
+        )
+
     for pat, msg in FORBIDDEN_IN_ARTICLE:
         if re.search(pat, article, flags=re.I):
             errors.append(f"FORBIDDEN: {msg}")
+
+    # leftover GFM table pipes dumped as paragraphs (body tables must be converted)
+    if re.search(r"<p[^>]*>\s*\|[^<]*\|", article):
+        errors.append("FORBIDDEN: leftover Markdown table pipes in paragraphs")
+    if re.search(r"<p[^>]*>\|[\s\-:|]+\|", article):
+        errors.append("FORBIDDEN: leftover Markdown table separator row")
 
     # metadata table smell: 原标题 row as meta_row pattern densely
     if article.count("元数据抓取时间") or article.count(">文章元数据<"):
@@ -72,17 +90,21 @@ def validate_html(path: Path) -> list[str]:
         if "不代表" in footer or "非官方中文完整整理" in footer:
             errors.append("FORBIDDEN: long disclaimer in source footer")
 
-    # Layer labels: insight/analysis must pair; dialogue may be anthology-only (keynotes)
+    # Layer labels: insight/analysis must pair; dialogue optional for keynotes with 关键语录
     n_insight = len(re.findall(r">核心洞察<", article))
     n_analysis = len(re.findall(r">深度解析<", article))
     n_dialogue = len(re.findall(r">对谈实录<", article))
-    if n_insight < 1 or n_analysis < 1 or n_dialogue < 1:
+    if n_insight < 1 or n_analysis < 1:
         errors.append(
             f"WEAK structure: 核心洞察={n_insight} 深度解析={n_analysis} 对谈实录={n_dialogue}"
         )
     elif n_insight != n_analysis:
         errors.append(
             f"UNBALANCED layers: 核心洞察={n_insight} 深度解析={n_analysis} 对谈实录={n_dialogue}"
+        )
+    elif n_dialogue == 0 and not has_anthology:
+        errors.append(
+            f"WEAK structure: 核心洞察={n_insight} 深度解析={n_analysis} 对谈实录={n_dialogue}"
         )
 
     return errors
