@@ -51,7 +51,7 @@ Wave 1  Delivery Frame
 <B> = Vue3 仓库绝对路径
 <PAGE> = Vue2 待迁移页面的文件路径或路由
 <HTML> = Vue3 入口 HTML 文件绝对路径
-<A_PAGE_REF> = 可选；A 页面参考截图文件或截图目录；没有则留空
+<A_PAGE_REF> = 可选；A 页面 PNG/JPEG/WebP 截图文件或截图目录；没有则留空
 
 自动派生并保持稳定：
 - <SLUG>：由 <PAGE> 规范化得到；过长时追加短 SHA-256 摘要。
@@ -66,10 +66,17 @@ Wave 1  Delivery Frame
 <CONFIG> 存在后，以其中记录为准；本次输入与配置不一致时停止。
 
 <A_PAGE_REF> 为空不阻塞；优先从当前运行中的 A 捕获正式视觉基线。非空时验证
-路径和图片类型，计算 digest，并在 Wave 2 复制到 <A_PAGE_REF_ROOT>。它仅用于
-确认页面身份、布局、颜色、字体、图标和应覆盖的状态，不替代当前 revision 的
-多状态基线、computed-style、交互或响应式证据。若与当前 A 冲突，停止并报告
-页面身份或版本不一致。A 无法运行时，单张参考图不足以支持 strict parity 结论。
+路径和图片类型，计算 digest，并在 Wave 2 复制到 <A_PAGE_REF_ROOT>。WebP 保留
+原文件并另建无损编码的 PNG 工作副本，不得覆盖原件；转换不能恢复源文件已经
+损失的细节。两者都记录 path+digest，源 WebP 标为 lossy/lossless/unknown。
+它仅用于确认页面身份、布局、颜色、字体、图标和应覆盖的
+状态，不替代当前 revision 的多状态基线、computed-style、交互或响应式证据。
+
+若当前模型只支持文本输入（例如 GLM-5.2），不得声称模型直接看过图片。必须由
+可验证的图片读取、OCR、颜色提取、像素/感知差异工具，或独立多模态模型生成
+可追溯的分析证据；没有这些能力时，参考图只能归档和供人工查看，不能产生视觉
+事实。若参考图与当前 A 冲突，停止并报告页面身份或版本不一致。A 无法运行时，
+单张参考图不足以支持 strict parity 结论。
 
 固定边界：
 - <A> 严格只读，<B> 是唯一应用代码修改目标。
@@ -165,10 +172,17 @@ handoff path/revision。说明下一步为 Wave 2，然后停止，不读取 Pla
 
 artifact_directory 固定为 <DOMAIN_ROOT>，不得在 <CHANGE_DIR> 外创建报告目录。
 
-若 <A_PAGE_REF> 非空：验证文件或目录存在，只接收常见图片；复制到
-<A_PAGE_REF_ROOT> 并记录原路径、文件 digest 和用途。目录中的截图建议按
-loaded/loading/empty/editing/error/narrow 等状态命名。用它辅助确认页面身份、
-布局、颜色、字体、图标和状态清单，但不得把它当作完整视觉基线。
+若 <A_PAGE_REF> 非空：验证文件或目录存在，只接收 PNG/JPG/JPEG/WebP；复制到
+<A_PAGE_REF_ROOT> 并记录原路径、文件 digest 和用途。WebP 原样保留，同时生成
+无损编码的 PNG 工作副本，记录转换工具/命令、原件与派生件 digest，并把源件
+标为 lossy/lossless/unknown；不得声称转换恢复了源件细节，也不得用转换件冒充
+原始证据。目录中的截图建议按 loaded/loading/empty/editing/error/narrow 等
+状态命名。
+
+先证明本会话存在可用的视觉处理链。纯文本模型必须通过图片读取、OCR、颜色
+提取、像素/感知差异工具或独立多模态模型得到可追溯结果；否则仅归档参考图，
+并将 reference_semantic_analysis 标为 unavailable，不得推断页面身份、布局、
+颜色、字体或图标。即使可分析，也不得把参考图当作完整视觉基线。
 
 按当前 Skill 契约完成：
 - 解析 <PAGE> 的真实 source_entry 和 <HTML> 对应的 B 挂载链路；
