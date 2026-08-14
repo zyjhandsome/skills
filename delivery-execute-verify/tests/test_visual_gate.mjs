@@ -12,6 +12,17 @@ import { validateVisualEvidence } from "../scripts/validate_delivery_change.mjs"
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REVISION = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+const VISUAL_TEMPLATE = readFileSync(resolve(HERE, "..", "references", "delivery-visual-evidence-template.md"), "utf8");
+const GATE_CHECKS = readFileSync(resolve(HERE, "..", "references", "artifact-gate-checks.md"), "utf8");
+for (const claim of [
+  "baseline_state_ids", "identity_route", "identity_marker", "comparison_boundary",
+  "style_closure_status", "color_metrics", "typography_metrics", "icon_identity",
+  "table_metrics", "rollback_fixture",
+]) {
+  assert.ok(VISUAL_TEMPLATE.includes(claim), `G9 template missing external claim ${claim}`);
+  assert.ok(GATE_CHECKS.includes(claim), `G9 gate missing external claim ${claim}`);
+}
+assert.ok(VISUAL_TEMPLATE.includes("不能让 G9") || GATE_CHECKS.includes("不能替代 G9"), "external claims must not satisfy G9");
 
 /** @param {string} path */
 function digest(path) {

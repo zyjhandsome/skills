@@ -15,7 +15,7 @@
 ## 1. Family 版本
 
 ```text
-family_version: delivery-family/1.5
+family_version: delivery-family/1.6
 handoff_schema: delivery-handoff/v1
 presentation_schema: delivery-presentation/v1
 structured_ui_schema: delivery-ui/v1
@@ -28,7 +28,11 @@ visible_skills:
 
 四个 Skill 和共享 references 必须原子安装/升级。发现缺失阶段或共享文件时停止跨阶段转换并报告缺失项；不要临时复制规则或创建替代 Router。
 
-**链式接力（宿主无关，按能力判定）：** handoff 校验通过且允许转换时，判定标准只有一条——**当前宿主能否让 Agent 直接读取下一技能的 `SKILL.md`**（多数本地技能目录宿主均可，如 Claude Code / Cursor）。能读取则在**同一会话**读取并继续执行，不停下等用户复述；仅当宿主确实无法加载下一技能、或转换本身被闸门/阻塞项挡住时，才停止并提示「请使用 <next_skill>」。不为任何具体宿主写定制适配；换宿主时本规则无需修改。跨会话恢复走 `handoff-contract.md` 的持久化槽位（change 目录内 `handoff.json`）。
+**链式接力（宿主无关，按能力判定）：** handoff 校验通过且允许转换时，默认判定标准是——**当前宿主能否让 Agent 直接读取下一技能的 `SKILL.md`**（多数本地技能目录宿主均可，如 Claude Code / Cursor）。能读取则在**同一会话**读取并继续执行，不停下等用户复述；仅当宿主确实无法加载下一技能、或转换本身被闸门/阻塞项挡住时，才停止并提示「请使用 <next_skill>」。不为任何具体宿主写定制适配；换宿主时本规则无需修改。跨会话恢复走 `handoff-contract.md` 的持久化槽位（change 目录内 `handoff.json`）。
+
+**会话停点覆盖：** 当调用方在本会话明确要求阶段结束即停（固定信号：`会话停点覆盖`，或「本会话只执行一个 Wave / 不要加载下一个 Skill」），即使宿主能读取下一技能，也必须在 handoff 校验并落盘后停止，不得同会话打开或执行下一技能。这是调用方覆盖，不是降级模式，也不改 `delivery-handoff/v1`。未出现这些信号时，仍走上方默认链式接力。
+
+**建档停点覆盖（仅 Frame）：** 当调用方要求本会话只创建或恢复 change、禁止规格闸门（固定信号：`建档停点覆盖`，或「本波禁止规格闸门 / 只建 change」），Frame 可以创建 change、意图草稿和 evidence 目录，但不得询问范围批准、不得写入规格批准、不得把 `next_skill` 设为 plan 或 execute。handoff 的 `gate_status` 保持 `pending` 或 `n/a`，`next_skill: null`。这不是降级模式，也不改 schema。未出现这些信号时，Frame 仍走完整规格闸门。
 
 **版本权威源与兼容口径：** 本文件是 `family_version` 的唯一权威声明；其他文件中的版本字符串只是当前值的复制。兼容性按 **major** 判定：同 major 的 minor 递增是向后兼容的加法式变更（新增可选字段、`x_` 扩展键、软依赖放宽），不触发停机。`validate_handoff.mjs` 只校验 major（接受 `delivery-family/1.x`）。
 

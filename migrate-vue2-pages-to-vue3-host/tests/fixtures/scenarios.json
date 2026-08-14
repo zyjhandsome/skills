@@ -82,9 +82,9 @@
     "dependency": "ready",
     "authorization": false,
     "verification": "not_run",
-    "expected_terminal": "ready-for-authorization",
+    "expected_terminal": "verification-pending",
     "required_files": {
-      "SKILL.md": ["a plan, recommendation, or completed assessment is not authorization", "allowed scope", "forbidden scope"]
+      "SKILL.md": ["a plan, recommendation, or completed assessment is not authorization", "Never mutate", "no `execute` mode"]
     }
   },
   {
@@ -132,20 +132,19 @@
     }
   },
   {
-    "id": "lifecycle-owns-mutation-blocks-execute",
-    "prompt": "An external lifecycle already implemented the approved slices; the agent tries migrate execute again.",
+    "id": "requested-execute-is-rejected",
+    "prompt": "Assessment and design are complete, but the agent tries to enter migrate execute and edit host B.",
     "revision_fresh": true,
     "visual_baseline": "available",
     "runtime": "ready",
     "dependency": "ready",
     "authorization": true,
-    "lifecycle_owns_mutation": true,
     "requested_mode": "execute",
     "verification": "not_run",
-    "expected_terminal": "blocked:lifecycle-mutation-owner",
+    "expected_terminal": "blocked:no-execute-mode",
     "required_files": {
-      "SKILL.md": ["external lifecycle", "do not enter `execute`", "verify` only"],
-      "references/domain-packet-and-lifecycle-interoperability.md": ["external lifecycle", "do not re-execute", "use `verify`"]
+      "SKILL.md": ["no `execute` mode", "Never mutate", "verify"],
+      "references/domain-packet-and-lifecycle-interoperability.md": ["no execute mode", "Never mutate", "use `verify`"]
     }
   },
   {

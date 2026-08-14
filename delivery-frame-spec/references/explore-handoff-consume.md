@@ -2,7 +2,7 @@
 
 `delivery-frame-spec` 在收到 `delivery-explore` handoff 时按本表消费字段。不要从 explore 输出发明第二状态源；OpenSpec change 仍由本阶段创建/恢复。
 
-硬前提 profile（`delivery-family/1.5`）：`evidence_mode` 必须为 `full`；不存在 degraded 续跑。Explore 若遇 Memory/OpenSpec 硬前提故障应已停止；`superpowers: missing|inline` 允许进入 Frame（用 `method-discipline-inline.md`）。不得带着硬前提非标称快照（`memory`/`openspec`）进入 Frame 转换。
+硬前提 profile（`delivery-family/1.6`）：`evidence_mode` 必须为 `full`；不存在 degraded 续跑。Explore 若遇 Memory/OpenSpec 硬前提故障应已停止；`superpowers: missing|inline` 允许进入 Frame（用 `method-discipline-inline.md`）。不得带着硬前提非标称快照（`memory`/`openspec`）进入 Frame 转换。
 
 ## Incoming field → how consumed
 

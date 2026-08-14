@@ -9,7 +9,7 @@ import { validateRuntimeEvidence } from "./validate_runtime_evidence.mjs";
 import { validateVisualEvidence } from "./validate_visual_evidence.mjs";
 
 const SHA256 = /^sha256:[0-9a-f]{64}$/i;
-const MODES = new Set(["assess", "design", "execute", "verify"]);
+const MODES = new Set(["assess", "design", "verify"]);
 const AUTH_STATUSES = new Set(["missing", "stale", "approved"]);
 const ROLLBACK_STATUSES = new Set(["missing", "designed", "tested", "retired"]);
 const VERIFY_STATUSES = new Set(["not_run", "fail", "pass"]);
@@ -99,7 +99,7 @@ export function validateDomainPacket(packet, options = {}) {
       require(nonEmpty(entry?.[key]), `${label}.${key} is required`);
     }
   }
-  if (["design", "execute", "verify"].includes(packet?.mode)) {
+  if (["design", "verify"].includes(packet?.mode)) {
     require(styleClosure?.status === "complete", `${packet.mode} requires style_closure.status=complete`);
     require((styleClosure?.entries || []).length > 0, `${packet.mode} requires evidenced style_closure.entries`);
     require((styleClosure?.unresolved || []).length === 0, `${packet.mode} requires style_closure.unresolved to be empty`);
@@ -129,10 +129,6 @@ export function validateDomainPacket(packet, options = {}) {
     require(authorization.validation_obligations.length > 0, "approved authorization requires validation_obligations");
     require(authorization.rollback_conditions.length > 0, "approved authorization requires rollback_conditions");
   }
-  if (packet?.mode === "execute") {
-    require(authorization?.status === "approved", "execute mode requires approved implementation_authorization");
-  }
-
   require(VERIFY_STATUSES.has(packet?.verification?.status), "verification.status is invalid");
   require(Array.isArray(packet?.verification?.evidence), "verification.evidence must be an array");
   require(Array.isArray(packet?.blockers), "blockers must be an array");

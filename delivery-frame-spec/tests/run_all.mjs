@@ -21,6 +21,7 @@ import process from "node:process";
 const TESTS_DIR = dirname(fileURLToPath(import.meta.url));
 const SUITES = [
   join(TESTS_DIR, "test_family_integrity.mjs"),
+  join(TESTS_DIR, "test_routing_and_session_overlay.mjs"),
   join(TESTS_DIR, "test_cli_entrypoints.mjs"),
   join(TESTS_DIR, "test_external_artifacts.mjs"),
   resolve(TESTS_DIR, "..", "..", "delivery-execute-verify", "tests", "test_template_anchor_consistency.mjs"),

@@ -191,7 +191,7 @@ export function buildHandoff(stage, changeDir, previous) {
   const stamp = ts.replaceAll(":", "").replaceAll("-", "").slice(0, 15);
   return {
     schema_version: "delivery-handoff/v1",
-    family_version: "delivery-family/1.5",
+    family_version: "delivery-family/1.6",
     type: "delivery-handoff",
     handoff_id: `${changeId}-${stage.replace(/^delivery-/, "")}-${stamp}`,
     previous_handoff_id: previous,

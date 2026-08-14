@@ -1,70 +1,57 @@
-# Migrate Vue2 Pages → Vue3 Host × Delivery — 使用说明（可选软挂载）
+# Migrate Vue2 Pages → Vue3 Host × Delivery — 使用说明
 
-> 受众：希望把 `migrate-vue2-pages-to-vue3-host` 挂到 `delivery-*` 脊柱上的编排者。  
-> **本文件是可选软挂载说明。**  
+> 受众：要把 `migrate-vue2-pages-to-vue3-host` 和 `delivery-*` 组合使用的人。  
+> **唯一顺序以粘贴剧本为准：** [`vue2-page-migration-playbook.md`](./vue2-page-migration-playbook.md)。  
+> 本文件只解释解耦原则和交接字段。  
 > `migrate-vue2-pages-to-vue3-host` Skill **正文不依赖、不引用** `delivery-*` / OpenSpec。
 
 ---
 
-## 0. 解耦原则
+## 0. 已作废（不要再用）
+
+下列旧顺序和旁路已经作废，与当前剧本冲突：
+
+- assess + design 先于建 change / Frame
+- Frame 在摸底前做规格批准
+- 主路径插入 `frontend-dependency-upgrade-impact-analysis`
+- 主路径插入 `frontend-ui-stack-visual-parity` 做人眼残差修复
+- migrate `execute` 或「不使用 Delivery 时由 migrate 改 B」
+- `docs/vue2-page-migration-orchestration-latest.md`（已改名为剧本，不要再引用 latest）
+
+---
+
+## 1. 解耦原则
 
 | 层 | 职责 |
 |---|---|
-| `migrate-vue2-pages-to-vue3-host` | 跨仓页面迁移领域：assess / design / execute / verify；产出 `vue-migration-domain/v1`、`visual-parity-evidence/v1`、`runtime-compatibility-evidence/v1` |
-| `delivery-*` | 定框 / 计划 / 实施闸门 / Fresh Verification / G9 自有视觉记录 |
+| `migrate-vue2-pages-to-vue3-host` | 跨仓页面迁移领域：assess / design / verify；产出 `vue-migration-domain/v1`、`visual-parity-evidence/v1`、`runtime-compatibility-evidence/v1`。没有 execute mode，不改应用代码 |
+| `delivery-*` | 定框 / 计划 / 实施闸门 / Fresh Verification / G9 自有视觉记录。`delivery-execute-verify` 是唯一代码 mutation owner |
 | OpenSpec change | 生命周期与状态真相（若团队使用） |
+| 粘贴剧本 | 按名组合上述 Skill；不改任何 Skill 内部 schema |
 
-- 领域 Skill 与 Delivery family **互不调用**；Delivery family 内部按 handoff 链式接力。编排者只传摘要路径 + digest。  
-- 最新编排文档把「每步一个新会话」覆盖在链式接力之上：阶段结束必须停窗口，下一步只从 `handoff.json` / artifact 恢复。这是编排覆盖，不是改 Skill。  
-- Domain `verification=pass` **不等于** Delivery `verified`，更不等于生产切流或关停源仓 A。  
-- `implementation_authorization` 只是对外部批准的引用；批准权威在用户 / Delivery 闸门。Delivery 的单一
-  `artifact_revision` 或 `repo_head` 不能自动映射成该授权：implementation go 必须显式携带并绑定
-  `source_revision`、`host_revision`、批准人、时间、范围、验证义务与回退条件，编排者再逐字段复制。
+- 领域 Skill 与 Delivery family **互不调用**；剧本可以按名排序。剧本启用 Delivery 的**会话停点覆盖**，每步一个新会话。
+- Domain `verification=pass` **不等于** Delivery `verified`，更不等于生产切流或关停源仓 A。
+- `implementation_authorization` 只是对外部批准的引用；批准权威在用户 / Delivery 闸门。implementation go 必须显式携带并绑定 `source_revision` + `host_revision`、批准人、时间、范围、验证义务与回退条件。
 
 ---
 
-## 1. 建议挂载顺序（版 B / B-轻量）
+## 2. 唯一挂载顺序
 
 ```text
-migrate-vue2… assess + design（只读；产出 revision-bound domain packet）
-        │
-        ├─ frontend-dependency-upgrade-impact-analysis（可选；migration-demand-diff）
-        ▼
-delivery-frame-spec（High：migration 红线；实施仓=B；禁改 A；visual=required）
-        │
-        ▼
-delivery-plan-tasks（吃 packet/digest；纵向切片 + 视觉/表格/回退验证行）
-        │ 用户 implementation go（绑定 revision）
-        ▼
-delivery-execute-verify（集成路线唯一代码 mutation owner，只改 B）
-        │
-        ├─ Delivery：tasks + G9 `delivery-visual-evidence/v1`
-        ▼
-migrate-vue2… verify（不重复实施；按新 revision 刷新领域证据）
-        │
-        ├─ 人眼仍有功能残差 → 交还 delivery-frame-spec（缺陷切片，只改 B）
-        ├─ 人眼仍有样式残差 → frontend-ui-stack-visual-parity
-        │     （Phase A 定界；明确 go 后只改 B 的 CSS/配置）
-        ▼
-migrate-vue2… verify（按新 host_revision 刷新；不得沿用旧 pass）
+Wave 1  建 change（无规格闸门）
+  → Wave 2  migrate assess
+  → Wave 3  migrate design
+  → Wave 4  Frame 规格批准
+  → Wave 5  Delivery Plan go
+  → Wave 6  Delivery Execute
+  → Wave 7  migrate verify
 ```
 
-上图每一条竖线都是**新会话窗口**。即使 Delivery Family 允许同会话接力，本编排也要求阶段结束即停。
-
-G9 `final_visual_result=pass` 与 Domain visual pass 都不等于迁入内容已肉眼对齐 A。
-功能残差不得交给视觉 skill；视觉 skill 不得改业务 JS。两闸门 pass 后只要人眼仍偏，就还不是完成态。
-
-Delivery 实施后 `host_revision` 会变化：先将旧 implementation authorization 标为 stale，
-再以当前 A/B revision 执行纯只读 verify。只读 verify 不需要新的实施授权；若验证过程需要改代码、
-依赖、fixture、runtime 或 feature switch，则必须退出 verify，另取绑定当前双 revision 的实施授权。
-
-跨仓页面迁移命中 Delivery 的 migration 红线，Frame 固定走 High + plan；
-单页闭包只用于收窄工件与任务深度，不降低闸门强度。若未来仅把“数据迁移”
-定义为红线，必须先同步修改 `delivery-frame-spec` 的权威路由规则与负例测试。
+跨仓页面迁移固定 High；单页闭包只用于收窄工件与任务深度，不降低闸门强度。
 
 ---
 
-## 2. 交接时建议携带的事实（由调用方复制）
+## 3. 交接时建议携带的事实（由调用方复制）
 
 从 migrate domain packet / 视觉证据中摘：
 
@@ -74,25 +61,17 @@ Delivery 实施后 `host_revision` 会变化：先将旧 implementation authoriz
 - `runtime_evidence` / `visual_evidence` 路径与 digest（含 `visual-migration-contract/v1`）
 - `implementation_authorization` 引用（若已有）
 - `rollback` 状态与 iframe 回退开关位置
-- blockers / decisions / non_goals（Options API 允许、禁 Composition 全量重写、禁改 A 壳等）
+- blockers / decisions / non_goals
 
 Delivery 侧：
 
-- 自行重算 `quality_profiles`（不得要求 migrate schema 进入 Delivery 状态）  
-- G9 用 `delivery-visual-evidence/v1`；migrate 视觉 JSON 仅作 `external_artifacts` path/digest  
-- 禁改 A；保留 iframe 回退直至 observation / release-owner 条件满足  
-- 集成路线由 `delivery-execute-verify` 唯一拥有代码修改；后续 migrate 只用 `verify` 刷新领域证据。
+- 自行重算 `quality_profiles`（不得要求 migrate schema 进入 Delivery 状态）
+- G9 用 `delivery-visual-evidence/v1`；migrate 视觉 JSON 仅作 `external_artifacts` path/digest
+- 禁改 A；保留 iframe 回退直至 observation / release-owner 条件满足
+- 只由 `delivery-execute-verify` 修改 B；migrate 只用 `verify` 刷新领域证据
 
 ---
 
-## 3. 独立使用
+## 4. 不使用 Delivery 时
 
-不使用 Delivery 时：直接调用 migrate Skill → assess → design → 用户给出 revision 绑定的 `implementation_authorization` → execute → verify。  
-细则见 Skill 正文与 `references/domain-packet-and-lifecycle-interoperability.md`。
-
----
-
-## 4. 编排提示词
-
-最新分波完整编排（每步独立会话；含 Wave 5 人眼残差修复）见
-[`vue2-page-migration-orchestration-latest.md`](./vue2-page-migration-orchestration-latest.md)。
+仍只用 migrate 的 assess → design → verify。改代码不在本 Skill 内；调用方自行实施后再跑 verify。

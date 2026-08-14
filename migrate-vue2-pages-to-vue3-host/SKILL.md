@@ -1,15 +1,14 @@
 ---
 name: migrate-vue2-pages-to-vue3-host
 description: >
-  Assess, design, execute, and verify page-level migration from a Vue 2 source
-  repository into an existing Vue 3 host repository, especially when the host
-  currently embeds the source through iframes or micro-frontend boundaries. Use
-  for cross-repository Vue migration, iframe retirement, page-closure discovery,
-  Vuex-to-Pinia and Element-UI-to-Element-Plus adaptation, MPA or router
-  integration, behavior and visual parity, Node and lockfile compatibility,
-  phased rollout, rollback, and final source-repository decommissioning. Operates
-  standalone and emits neutral evidence that an external lifecycle may consume;
-  does not depend on any other skill.
+  Use when a Vue 2 page or independently switchable user behavior must be
+  natively hosted in an existing Vue 3 repository, especially when the host
+  currently embeds the source through an iframe or micro-frontend boundary. Use
+  when the caller needs revision-bound evidence for behavior, visual appearance,
+  permissions, data semantics, runtime compatibility, or rollback of that
+  cross-repository host-port. Do not use for in-place Vue 2→3 workspace upgrades,
+  path/axes decision packets, or open-ended product exploration — those belong
+  to vue2-to-vue3-upgrade-impact-analysis.
 ---
 
 # Migrate Vue 2 Pages to a Vue 3 Host
@@ -31,8 +30,9 @@ defect fixes and temporary compatibility.
 3. When an external lifecycle exists, consume its approved scope and authorization
    as inputs, return neutral evidence, and leave lifecycle state ownership to the
    caller.
-4. Without an explicit, revision-bound `implementation_authorization`, remain
-   read-only. A plan, recommendation, or completed assessment is not authorization.
+4. Remain read-only. There is no `execute` mode. Never mutate application code,
+   lockfiles, feature switches, or runtimes. A plan, recommendation, or completed
+   assessment is not authorization.
 5. Follow repository-local instructions for code discovery. Prefer configured
    code graphs and targeted symbol tracing; use bounded static search for config,
    styles, strings, templates, or verified graph gaps.
@@ -49,12 +49,11 @@ defect fixes and temporary compatibility.
 |---|---|---|
 | `assess` | Compare A/B, discover closures, capture risks and recommend direction/batches | Read-only |
 | `design` | Define B-native landing, vertical slices, parity, runtime, rollback and verification | Evidence only |
-| `execute` | Apply an authorized vertical slice and collect task evidence | Requires current authorization |
 | `verify` | Re-run current functional, visual, runtime, build and rollback checks | No new scope |
 
-When an external lifecycle already owns code mutation for the approved slices, do
-not enter `execute`; refresh evidence with `verify` only. Use `execute` for
-standalone authorized mutation when no such lifecycle mutation owner is active.
+This Skill never applies slices. An external implementer owns code mutation.
+Record any caller-supplied `implementation_authorization` as a reference only;
+it does not grant this Skill permission to edit A or B.
 
 Recover the latest domain packet before every round. If source revision, host
 revision, approved scope, dependency baseline, or visual baseline changed, mark
@@ -78,8 +77,8 @@ placeholder, stop and obtain the concrete values before discovery.
 1. **Recover context.** Identify A, B, requested migration units with concrete
    `source_entry` and host entry (route or HTML entry), current revisions,
    previous domain evidence, approved scope, authorization status, deployment
-   boundary, and whether the round is assess, design, execute, or verify. Stop
-   when unit or entry inputs are incomplete; do not invent them.
+   boundary, and whether the round is assess, design, or verify. Stop when unit
+   or entry inputs are incomplete; do not invent them.
 2. **Discover both architectures.** Establish entry points, layouts, routers,
    state, HTTP/auth, permissions, i18n, styles, runtime, build, deployment, tests,
    and active iframe or micro-frontend protocols.
@@ -101,19 +100,22 @@ placeholder, stop and obtain the concrete values before discovery.
    state conventions, observability, and MPA/router pattern. Do not copy A's shell.
 8. **Plan vertical slices.** Include behavior, types, integration, tests, visual
    rows, feature switch, rollback, and falsifiable completion in every slice.
-9. **Check authorization.** Compare authorization scope and revision pair with the
-   current packet. Stop before mutation when it is missing, stale, or narrower.
-10. **Execute one slice.** Establish a failing check when appropriate, implement
-    minimally, validate, inspect the real diff, and update neutral evidence.
-11. **Verify freshly.** Before every visual capture, assert URL/hash, page marker,
+   Hand the slices to the caller; do not implement them here.
+9. **Record authorization only as a reference.** Copy allowed scope, forbidden
+   scope, validation obligations, and rollback conditions when the caller supplied
+   them. Stop and return discovery backflow if verify would need to mutate code,
+   dependencies, fixtures, runtime, or feature switches.
+10. **Verify freshly.** Before every visual capture, assert URL/hash, page marker,
     and deterministic fixture identity. Re-run screenshot diff, computed-style,
     semantic, interaction, permission, runtime, build, performance, rollback, and
-    independent review checks. Repair failures and repeat the complete affected
-    state set; do not convert UI-library defaults into accepted differences.
-    Validate JSON artifacts with `scripts/validate_runtime_evidence.mjs`,
+    independent review checks. Return discovery backflow for implementation
+    defects; do not edit application code. Repeat the complete affected state set;
+    do not convert UI-library defaults into accepted differences. Validate JSON
+    artifacts with `scripts/validate_runtime_evidence.mjs`,
     `scripts/validate_visual_evidence.mjs`, and `scripts/validate_domain_packet.mjs`.
-12. **Exit safely.** Remove fallback, listeners, legacy URLs/config, and A only
-    after observation, rollback retirement, and release-owner criteria pass.
+11. **Exit safely.** Recommend removing fallback, listeners, legacy URLs/config,
+    and A only after observation, rollback retirement, and release-owner criteria
+    pass. The caller performs those mutations.
 
 ## Default architecture decisions
 
@@ -169,10 +171,11 @@ Validate completed JSON evidence with `scripts/validate_runtime_evidence.mjs`.
 
 ### Authorization
 
-Require `implementation_authorization.status=approved`, current revision binding,
-allowed scope, forbidden scope, validation obligations, and rollback conditions
-before mutation. Runtime installation, dependency installation, lock mutation,
-feature switching, and production operations require explicit coverage.
+`implementation_authorization` is a copied reference to an observed approval. It
+must record current revision binding, allowed scope, forbidden scope, validation
+obligations, and rollback conditions when status is `approved`. This Skill still
+does not mutate. Runtime installation, dependency installation, lock mutation,
+feature switching, and production operations stay with the caller.
 
 ### Rollback
 

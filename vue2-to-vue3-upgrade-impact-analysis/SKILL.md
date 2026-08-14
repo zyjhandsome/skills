@@ -2,16 +2,13 @@
 name: vue2-to-vue3-upgrade-impact-analysis
 description: >
   Analyze, never implement, a Vue 2.x to Vue 3.x framework upgrade for one
-  frontend workspace, a multi-repo inventory, or an A→B host-port (read Vue2
-  source A, adapt into existing Vue3 host B). Use when assessing Vue2→Vue3
-  migration impact, @vue/compat vs direct Vue3 cutover, host-port-direct page
-  closure porting, Vue CLI/Webpack→Vite, Vue Router 4, Vuex/Pinia, Element
-  UI→Element Plus (or other UI), test-utils, or blocking Vue plugins. Writes a
-  Simplified Chinese decision packet with confirmation queue and
-  batch_implementation_gate. Ends at analysis_status complete — never at
-  implementation or codemod execution. Produces an independent full report,
-  decision records, inventory evidence, and a compact JSON summary with
-  structured UI visual-risk evidence.
+  frontend workspace, a multi-repo inventory, or an A→B path/axes decision.
+  Use when assessing Vue2→Vue3 impact, @vue/compat vs direct Vue3, Vue
+  CLI/Webpack→Vite, Router 4, Vuex/Pinia, Element UI→Plus, or blocking plugins.
+  Do not use when one page is already chosen for native hosting and the caller
+  needs revision-bound behavior, visual, permission, or rollback evidence —
+  that belongs to migrate-vue2-pages-to-vue3-host. Ends at analysis_status
+  complete; never implements or runs codemods.
 ---
 
 # Vue 2 → Vue 3 Upgrade Impact Analysis

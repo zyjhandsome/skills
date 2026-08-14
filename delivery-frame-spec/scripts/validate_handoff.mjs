@@ -19,7 +19,7 @@ import process from "node:process";
 // so additive minor bumps do not require editing this validator. CURRENT_FAMILY_VERSION is
 // the version the templates currently emit; it is informational only.
 export const SUPPORTED_FAMILY_MAJOR = 1;
-export const CURRENT_FAMILY_VERSION = "delivery-family/1.5";
+export const CURRENT_FAMILY_VERSION = "delivery-family/1.6";
 const SCHEMA_VERSION = "delivery-handoff/v1";
 const SHA256 = /^sha256:[0-9a-f]{64}$/i;
 const STAGES = new Set([
@@ -51,7 +51,7 @@ const TOP_LEVEL = new Set([
 ]);
 // Optional additive keys (delivery-family/1.3+): accepted when present, never required.
 const OPTIONAL_TOP_LEVEL = new Set(["previous_handoff_id"]);
-// Hard-prerequisite profile (delivery-family/1.5 default): only OpenSpec + Codebase Memory MCP
+// Hard-prerequisite profile (delivery-family/1.6 default): only OpenSpec + Codebase Memory MCP
 // must be nominal to carry a stage transition. Superpowers is soft (loaded|missing|inline|
 // partial(...)) and never alone blocks transition. Degraded evidence does not exist.
 // Use --profile legacy to validate pre-1.2 handoffs.

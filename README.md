@@ -4,7 +4,7 @@ Cursor Agent Skills 集合。按用途分类如下。
 
 ## 交付流水线
 
-四个 skill 按阶段串联（探索可选）；共享契约与脚本集中在 `delivery-frame-spec/`（四 skill 原子安装）。家族版本见 `delivery-frame-spec/references/family-contract.md`（当前 `delivery-family/1.5`）。
+四个 skill 按阶段串联（探索可选）；共享契约与脚本集中在 `delivery-frame-spec/`（四 skill 原子安装）。家族版本见 `delivery-frame-spec/references/family-contract.md`（当前 `delivery-family/1.6`）。
 
 ```
 delivery-explore  →  delivery-frame-spec  →  delivery-plan-tasks  →  delivery-execute-verify
@@ -87,7 +87,7 @@ forbid_source_mutation: yes
 
 ## Vue2 页面迁入 Vue3 Host
 
-独立领域 skill：把 Vue2 源仓 A 的可切换用户行为（通常是一页）迁入已有 Vue3 宿主仓 B。默认 A 只读、B 壳保持 host-native、迁入内容 strict parity、视觉证据必做；可 `assess` / `design` / `execute` / `verify`。不依赖、不调用 `delivery-*`；需要生命周期时由编排者软挂载。
+独立领域 skill：把 Vue2 源仓 A 的可切换用户行为（通常是一页）迁入已有 Vue3 宿主仓 B。默认 A 只读、B 壳保持 host-native、迁入内容 strict parity、视觉证据必做；只有 `assess` / `design` / `verify`，不改应用代码。不依赖、不调用 `delivery-*`；需要生命周期时按粘贴剧本组合 delivery。
 
 | 技能 | 说明 |
 |------|------|
@@ -109,23 +109,19 @@ migration_unit：
 A 只读；B 壳 host-native；内容区 strict parity；visual=required
 ```
 
-### 与 delivery-* 联用（短提示词）
+### 与 delivery-* 联用
 
-```text
-/delivery-frame-spec 结合 /migrate-vue2-pages-to-vue3-host
-把 A 的指定页迁入已有 Vue3 host B（只修缺陷，不开发新功能）。
-源仓 A：<Vue2 仓库>（禁改）
-宿主仓 B：<Vue3 仓库>（唯一代码修改目标）
-visual=required；保留可演练的 iframe/legacy fallback
-# 先吃 domain packet 的 path + digest，不要把整份报告贴进 Frame
-```
+不要在同一会话里把 Frame 和 migrate 焊在一起。按
+[`docs/vue2-page-migration-playbook.md`](./docs/vue2-page-migration-playbook.md)
+分波粘贴：先建 change（无规格闸门），再 assess / design，然后 Frame 规格批准、
+Plan go、Execute，最后 migrate `verify`。
 
-集成路线下，代码修改由 `delivery-execute-verify` 唯一拥有；migrate skill 事后只跑 `verify` 刷新领域证据。
+集成路线下，代码修改由 `delivery-execute-verify` 唯一拥有；migrate skill 只跑 `verify` 刷新领域证据。
 
 配套说明：
 
-- [`docs/migrate-vue2-pages-to-vue3-host-delivery-usage.md`](./docs/migrate-vue2-pages-to-vue3-host-delivery-usage.md)（与 delivery-* 可选挂载）
-- [`docs/vue2-page-migration-orchestration-latest.md`](./docs/vue2-page-migration-orchestration-latest.md)（A→B 分波编排；每步独立会话；含人眼残差修复）
+- [`docs/vue2-page-migration-playbook.md`](./docs/vue2-page-migration-playbook.md)（A→B 用户粘贴剧本；每步独立会话）
+- [`docs/migrate-vue2-pages-to-vue3-host-delivery-usage.md`](./docs/migrate-vue2-pages-to-vue3-host-delivery-usage.md)（解耦原则与交接字段；顺序以剧本为准）
 
 ## UI 栈视觉 parity（升级后样式）
 

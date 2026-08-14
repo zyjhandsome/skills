@@ -100,27 +100,17 @@ function checkIndependence() {
     "source_revision",
     "host_revision",
     "packet_digest",
+    "no `execute` mode",
+    "Never mutate",
   ]) {
     assert.ok(corpus.includes(required), `standalone contract is missing: ${required}`);
   }
-}
 
-function checkOrchestrationRouting() {
-  const docs = [
-    resolve(ROOT, "..", "docs", "migrate-vue2-pages-to-vue3-host-delivery-usage.md"),
-    resolve(ROOT, "..", "docs", "vue2-page-migration-orchestration-latest.md"),
-  ];
-  const frameSkill = resolve(ROOT, "..", "delivery-frame-spec", "SKILL.md");
-  for (const path of [...docs, frameSkill]) assert.ok(existsSync(path), `missing orchestration contract: ${path}`);
-  const corpus = docs.map(read).join("\n");
-  assert.ok(!/可(?:偏|走)?\s*Quick|否则可\s*Quick|Quick\s*直接\s*execute/i.test(corpus), "cross-repo migration docs must not offer a Quick bypass");
-  assert.ok(corpus.includes("固定使用 High") || corpus.includes("固定 High"), "orchestration docs must state the High route");
-  assert.ok(corpus.includes("唯一代码 mutation owner"), "integrated route must name Delivery as the sole code mutation owner");
-  assert.ok(corpus.includes("source_revision + host_revision") || (corpus.includes("source_revision") && corpus.includes("host_revision")), "implementation go must bind both repository revisions");
-  assert.ok(!/delivery-execute-verify\s*(?:↔|→).*migrate[^\n]*execute/i.test(corpus), "integrated route must not assign execution to both Delivery and migrate");
-  const usage = read(docs[0]);
-  assert.ok(usage.indexOf("migrate-vue2… assess + design") < usage.indexOf("delivery-frame-spec（High"), "domain assess/design must precede Frame");
-  assert.ok(read(frameSkill).includes("migration") && /never\W+Quick/i.test(read(frameSkill)), "Frame authority must keep migration out of Quick");
+  assert.ok(!/^\|\s*`execute`\s*\|/m.test(corpus), "execute mode row must be removed from Skill docs");
+  assert.ok(
+    !corpus.includes("mode: assess | design | execute | verify"),
+    "domain packet schema must not list execute as a mode"
+  );
 }
 
 /**
@@ -143,19 +133,11 @@ function simulate(scenario) {
   trace.push("runtime-dependency");
   if (scenario.runtime !== "ready") return { terminal: "blocked:runtime", trace };
   if (scenario.dependency !== "ready") return { terminal: "blocked:dependency", trace };
-  trace.push("design", "authorization");
-  if (!scenario.authorization) return { terminal: "ready-for-authorization", trace };
-  if (scenario.authorization === "narrow") {
-    return { terminal: "blocked:authorization-scope", trace };
+  trace.push("design");
+  if (scenario.requested_mode === "execute" || scenario.requested_mutation === true) {
+    return { terminal: "blocked:no-execute-mode", trace };
   }
-  if (scenario.lifecycle_owns_mutation && scenario.requested_mode === "execute") {
-    return { terminal: "blocked:lifecycle-mutation-owner", trace };
-  }
-  if (scenario.lifecycle_owns_mutation) {
-    trace.push("verify");
-  } else {
-    trace.push("execute", "verify");
-  }
+  trace.push("verify");
   if (scenario.verification === "fail") return { terminal: "rollback-required", trace };
   if (scenario.verification === "pass") return { terminal: "verified", trace };
   return { terminal: "verification-pending", trace };
@@ -408,12 +390,11 @@ function checkDomainPacketValidator() {
   const tampered = structuredClone(packet);
   tampered.intent.goal = "changed after approval";
   assert.ok(validateDomainPacket(tampered).some((error) => error.includes("packet_digest does not match")));
-  const unapproved = structuredClone(packet);
-  unapproved.mode = "execute";
-  unapproved.verification = { status: "not_run", evidence: [] };
-  unapproved.implementation_authorization.status = "stale";
-  unapproved.packet_digest = canonicalPacketDigest(unapproved);
-  assert.ok(validateDomainPacket(unapproved).some((error) => error.includes("requires approved implementation_authorization")));
+  const executeMode = structuredClone(packet);
+  executeMode.mode = "execute";
+  executeMode.verification = { status: "not_run", evidence: [] };
+  executeMode.packet_digest = canonicalPacketDigest(executeMode);
+  assert.ok(validateDomainPacket(executeMode).some((error) => error.includes("mode is invalid")));
   const readOnlyVerify = structuredClone(packet);
   readOnlyVerify.implementation_authorization.status = "stale";
   readOnlyVerify.packet_digest = canonicalPacketDigest(readOnlyVerify);
@@ -443,7 +424,7 @@ function checkDomainPacketValidator() {
   barePaths.packet_digest = canonicalPacketDigest(barePaths);
   const barePathErrors = validateDomainPacket(barePaths);
   assert.ok(barePathErrors.filter((error) => error.includes("inline object or {path,digest}")).length >= 2);
-  console.log("[PASS] domain packet validator rejected stale, tampered, unapproved, malformed, and fake-inline packets");
+  console.log("[PASS] domain packet validator rejected stale, tampered, execute-mode, malformed, and fake-inline packets");
 }
 
 function checkRuntimeEvidenceValidator() {
@@ -473,7 +454,6 @@ function checkRuntimeEvidenceValidator() {
 
 checkStructure();
 checkIndependence();
-checkOrchestrationRouting();
 checkScenarios();
 checkVisualEvidenceValidator();
 checkDomainPacketValidator();

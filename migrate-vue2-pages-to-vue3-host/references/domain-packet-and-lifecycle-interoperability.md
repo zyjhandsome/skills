@@ -2,7 +2,7 @@
 
 ## Neutral evidence contract
 
-Use one revision-bound evidence packet across assessment, design, execution, and
+Use one revision-bound evidence packet across assessment, design, and
 verification rounds:
 
 ```yaml
@@ -11,7 +11,7 @@ type: vue-migration-domain
 authority: domain_evidence_only
 packet_id: <stable unit id plus revision>
 generated_at: <RFC3339>
-mode: assess | design | execute | verify
+mode: assess | design | verify
 source:
   root: <absolute or caller-relative path>
   revision: <commit or content digest>
@@ -64,7 +64,7 @@ blockers: []
 packet_digest: <digest of canonical packet content>
 ```
 
-For a user-visible unit, `design`, `execute`, and `verify` packets require
+For a user-visible unit, `design` and `verify` packets require
 `style_closure.status: complete`, at least one evidenced entry, and no unresolved
 items. Entries use `id / kind / source / evidence / disposition / target` and
 cover the page-owned and inherited style/assets described in
@@ -126,22 +126,22 @@ Never merge stale and current evidence into one pass claim.
 
 ## Standalone operation
 
+This Skill has no execute mode. Never mutate A or B.
+
 - `assess`: return the packet inline unless the user provides an output directory.
 - `design`: update target, slices, validation and rollback without mutation.
-- `execute`: require a current `implementation_authorization`; update only domain
-  evidence after each authorized slice.
 - `verify`: run fresh read-only checks against the current revision pair and record
   evidence. A host revision change invalidates the earlier implementation authorization
-  reference, but does not require a new implementation authorization unless verification
-  itself would mutate code, dependencies, fixtures, runtime, or feature switches; request
-  separate authorization for that mutation instead of hiding it inside `verify`.
+  reference. If verification itself would mutate code, dependencies, fixtures,
+  runtime, or feature switches, stop and return discovery backflow instead of
+  hiding mutation inside `verify`.
 
 When no lifecycle system exists, direct user authorization may populate the
-authorization reference. It must still bind exact revisions and scope.
+authorization reference. It must still bind exact revisions and scope. The
+reference still does not authorize this Skill to edit code.
 
-When an external lifecycle is the active mutation owner for the approved scope,
-do not re-execute the same slices inside this Skill; use `verify` to refresh
-domain evidence against the current revision pair.
+After an external implementer changes the approved host slices, use `verify` to
+refresh domain evidence against the current revision pair.
 
 ## External lifecycle interoperability
 

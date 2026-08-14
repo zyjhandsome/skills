@@ -39,8 +39,8 @@ Shared family protocol (versioning, hard/soft prerequisites, language rules, nam
 1. No implementation until an explicit user go is recorded for this route (Quick/Debug-Low: contract go here; Standard/High: implementation gate in `delivery-plan-tasks`).
 2. OpenSpec is the only artifact/state backend — never invent parallel Markdown state beside a change.
 3. If direction is still open, hand to `delivery-explore`; do not invent a locked goal.
-4. Specification gate = **one** user ask. High's five facets stay Agent-internal — never a user multi-quiz.
-5. Stage end: emit one complete `delivery-handoff/v1` object (including read-only, blocked, and end states), validate, persist per the handoff contract. When a transition is allowed, follow the chain relay rule (`family-contract.md` section 1): if the host can load skill files directly (e.g. Claude Code / Cursor), read the next skill's `SKILL.md` and continue in the same session; only when the host cannot, tell the user「请使用 <next_skill>」.
+4. Specification gate = **one** user ask, except under 建档停点覆盖 (`family-contract.md` section 1): create or recover the change only; do not ask scope approval. High's five facets stay Agent-internal — never a user multi-quiz.
+5. Stage end: emit one complete `delivery-handoff/v1` object (including read-only, blocked, and end states), validate, persist per the handoff contract. When a transition is allowed, follow the chain relay rule (`family-contract.md` section 1), including 会话停点覆盖: if the caller required this session to end after the current stage, persist the handoff and stop; otherwise, if the host can load skill files directly (e.g. Claude Code / Cursor), read the next skill's `SKILL.md` and continue in the same session; only when the host cannot, tell the user「请使用 <next_skill>」.
 6. Hard prerequisites: **OpenSpec** + **Codebase Memory MCP**. Superpowers is soft (prefer when loaded; else `method-discipline-inline.md` and `superpowers: missing|inline`). SubAgent is optional here. On hard-prerequisite runtime failure stop and report per `family-contract.md` — no degraded modes, no substitute backends.
 
 ### Runtime failure report (Chinese, fixed 3 lines)
@@ -64,7 +64,7 @@ Default entry point for development requests. Route internally, establish the mi
 | Read-only | Explain/investigate; no change requested | end |
 | Quick | Bounded impact; **no** red-line domain; reversible | contract go → `delivery-execute-verify` |
 | Standard | Feature/cross-file/unclear fit; default risk Medium | spec gate → `delivery-plan-tasks` |
-| High | Auth/payment/privacy/migration/public API/core path, or multiple escalation signals | spec gate → `delivery-plan-tasks` (stronger gates) |
+| High | Auth/payment/privacy/migration (including cross-repo page host-port)/public API/core path, or multiple escalation signals | spec gate → `delivery-plan-tasks` (stronger gates) |
 | Debug | Failure/regression/flake — then apply **actual** Low/Medium/High risk for mutation | Low fix → execute; Med/High mutation → Standard/High path |
 
 Unable to judge → bias higher. Red-line hit → **not** Quick. Negative cases and gate details: `references/routing-and-gates.md`.
@@ -181,7 +181,9 @@ Agent checklist — not a user multi-quiz:
 - Explore Handoff Consume block satisfied;
 - Medium/High scope approval persisted in State Source.
 
-If any check fails, remain in this skill. When it passes, ask **one** scope-approval question (Gate ask shape in `batch-clarification.md`); persist answer, approver, time, artifact revision, and accepted warning IDs in State Source; then hand off.
+If 建档停点覆盖 is active, stop after the change, intent draft, and evidence directories exist. Do not run this ask, do not persist a specification approval, and emit a handoff with `gate_status` `pending` or `n/a` and `next_skill: null`.
+
+If any check fails, remain in this skill. When it passes and 建档停点覆盖 is not active, ask **one** scope-approval question (Gate ask shape in `batch-clarification.md`); persist answer, approver, time, artifact revision, and accepted warning IDs in State Source; then hand off.
 
 ## Backflow re-entry
 

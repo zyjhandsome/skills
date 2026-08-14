@@ -24,7 +24,11 @@
 
 - baseline_source / substitute_standard：<image-path> | <sha256-64-hex>
 - Implementation gate reference：approver / RFC3339 / approved-64-hex-revision
-- External artifacts（optional）：path / digest / claims used
+- External artifacts（optional）：path / digest / `claims_used`
+  白名单（仅这些）：`baseline_state_ids` · `identity_route` · `identity_marker` ·
+  `comparison_boundary` · `style_closure_status` · `color_metrics` ·
+  `typography_metrics` · `icon_identity` · `table_metrics` · `rollback_fixture`
+  引用外部字段不能让 G9 `final_visual_result` 自动 pass。
 
 ### Required state evidence
 

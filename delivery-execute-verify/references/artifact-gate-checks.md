@@ -34,7 +34,7 @@ node ../scripts/validate_delivery_change.mjs <change-dir> --claim-verified \
   --expected-visual-revision <approved-64-hex-revision>
 ```
 
-该 evidence 按 `delivery-visual-evidence-template.md` 由本 family 生成。外部分析/视觉报告只能作为 `external_artifacts` 路径+digest 引用；不得要求其 Skill、schema 或完整正文进入上下文。
+该 evidence 按 `delivery-visual-evidence-template.md` 由本 family 生成。外部分析/视觉报告只能作为 `external_artifacts` 路径+digest 引用；不得要求其 Skill、schema 或完整正文进入上下文。`claims_used` 只允许引用白名单字段：`baseline_state_ids`、`identity_route`、`identity_marker`、`comparison_boundary`、`style_closure_status`、`color_metrics`、`typography_metrics`、`icon_identity`、`table_metrics`、`rollback_fixture`。引用这些字段不能替代 G9 自己的五态行或 `final_visual_result`。
 
 剩余规则伪代码：
 

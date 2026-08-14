@@ -17,6 +17,7 @@ semantics here, manually compare (do not couple) with the sibling analysis skill
 | Analysis endpoint | complete only after queue cleared + report regenerated + Agent review |
 | Output confirmation | Writes still need explicit path confirmation |
 | Independence | Neither skill's `SKILL.md` imports or requires the other |
+| Page host-port vs this packet | Description still sends single-page parity/rollback evidence to `migrate-vue2-pages-to-vue3-host`; this skill stays path/axes analysis only |
 
 If a semantic deliberately diverges, document the divergence in the PR/commit
 message. Do **not** share code or load the sibling skill at runtime.
