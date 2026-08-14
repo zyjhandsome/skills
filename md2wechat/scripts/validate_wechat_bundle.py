@@ -20,6 +20,14 @@ FORBIDDEN_IN_ARTICLE = [
     (r">延伸术语表<", "glossary heading should be omitted"),
     (r">自检报告<", "self-check section should be omitted"),
     (r"完整整理版｜微信排版", "redundant subtitle"),
+    (r"用户提供完整字幕", "pipeline note leaked (字幕来源)"),
+    (r"次要核对", "pipeline note leaked (次要核对)"),
+    (r"浏览器 MCP", "pipeline note leaked (MCP)"),
+    (r"已降级", "pipeline note leaked (抓取降级)"),
+    (r"页面口径", "pipeline note leaked (日期口径对照)"),
+    (r"元数据抓取", "pipeline note leaked (抓取时间)"),
+    (r"\[编者注", "editor note leaked into reader copy"),
+    (r">&gt;\s", "leftover Markdown blockquote marker"),
 ]
 
 REQUIRED_IN_ARTICLE = [

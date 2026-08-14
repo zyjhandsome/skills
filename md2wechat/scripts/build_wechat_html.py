@@ -30,6 +30,33 @@ FONT = (
 
 OMIT_H2 = {"延伸术语表", "目录", "自检报告"}
 
+# 整理文档「内容来源」常把抓取流水账写进同一格；公众号只留读者能看懂的场次/平台。
+_PROCESS_MARKERS = (
+    "用户提供",
+    "次要核对",
+    "字幕转写",
+    "逐字稿",
+    "WebFetch",
+    "WebSearch",
+    "浏览器 MCP",
+    "MCP 不可用",
+    "已降级",
+    "页面抓取",
+    "页面口径",
+    "自动生成字幕",
+    "YouTube 描述",
+    "元数据抓取",
+    "自检",
+    "主源",
+    "次要：",
+    "核对：",
+)
+
+_PROCESS_PAREN = re.compile(
+    r"[（(][^）)]*(?:口径|标注|抓取|用户提供|推算|WebFetch|MCP|次要|字幕|快照)[^）)]*[）)]"
+)
+_EDITOR_NOTE = re.compile(r"\[编者注：[^\]]*\]|（编者注：[^）]*）")
+
 
 def esc(s: str) -> str:
     return html.escape(s, quote=False)
@@ -74,6 +101,11 @@ def inline_md_raw(text: str) -> str:
 
 def p(text: str, size: str = "15px", color: str | None = None, mb: str = "12px") -> str:
     color = color or C["text"]
+    text = strip_editor_notes(text)
+    if text.startswith(">"):
+        text = strip_bq(text)
+    if not text:
+        return ""
     return (
         f'<p style="margin:0 0 {mb};padding:0;font-size:{size};'
         f'line-height:1.75;color:{color};">{inline_md_raw(text)}</p>'
@@ -150,6 +182,19 @@ def dialogue_card(speaker: str, quote: str) -> str:
 
 def strip_bq(line: str) -> str:
     return re.sub(r"^>\s?", "", line).strip()
+
+
+_SPEAKER_QUOTE = re.compile(
+    r"^\*\*([^*]+)\*\*[：:]\s*[「\"](.+)[」\"]\s*$"
+)
+
+
+def render_body_line(line: str, *, size: str = "15px", color: str | None = None) -> str:
+    raw = strip_bq(line.strip()) if line.strip().startswith(">") else line.strip()
+    m = _SPEAKER_QUOTE.match(raw)
+    if m:
+        return dialogue_card(m.group(1), m.group(2))
+    return p(raw, size=size, color=color)
 
 
 def bare(s: str) -> str:
@@ -277,10 +322,43 @@ def parse_meta_table(lines: list[str], start: int) -> tuple[dict[str, str], int]
     return meta, i
 
 
+def public_source_line(src: str) -> str:
+    """Keep venue/platform; drop pipeline notes (字幕核对 / MCP 降级 etc.)."""
+    if not src:
+        return ""
+    src = _EDITOR_NOTE.sub("", src)
+    parts = re.split(r"[；;]", src)
+    keep: list[str] = []
+    for part in parts:
+        chunk = part.strip().strip("。")
+        if not chunk:
+            continue
+        if any(m in chunk for m in _PROCESS_MARKERS):
+            continue
+        keep.append(chunk)
+    line = "；".join(keep)
+    line = re.sub(r"\s+", " ", line).strip(" ；;、")
+    return line[:80]
+
+
+def public_date(date: str) -> str:
+    """ISO/public date only; drop 页面口径 vs 文稿标注 parentheticals."""
+    if not date:
+        return ""
+    s = _PROCESS_PAREN.sub("", date)
+    s = re.sub(r"\s+", " ", s).strip(" ；;、")
+    return s
+
+
+def strip_editor_notes(text: str) -> str:
+    s = _EDITOR_NOTE.sub("", text)
+    return re.sub(r"[ \t]{2,}", " ", s).strip()
+
+
 def source_footer(meta: dict[str, str]) -> str:
     """Keep only first two source lines: 原文 + 视频/内容链接."""
     title = bare(meta.get("原标题", "") or meta.get("标题", ""))
-    date = bare(meta.get("发布时间", ""))
+    date = public_date(bare(meta.get("发布时间", "")))
     link = bare(meta.get("内容链接", "") or meta.get("视频链接", "") or meta.get("链接", ""))
     line1 = "原文：" + (title if title else "（见正文来源）")
     if date:
@@ -299,13 +377,22 @@ def source_footer(meta: dict[str, str]) -> str:
 
 
 def subtitle_from_meta(meta: dict[str, str]) -> str:
-    people = bare(meta.get("对谈人物", "") or meta.get("人物", ""))
-    if people:
-        # strip markdown leftovers already bare; shorten HTML tags noise
-        people = re.sub(r"<[^>]+>", "", people)
+    people = bare(
+        meta.get("对谈人物", "")
+        or meta.get("人物", "")
+        or meta.get("讲者", "")
+    )
+    people = re.sub(r"<[^>]+>", "", people).strip()
+    venue = public_source_line(bare(meta.get("内容来源", "") or meta.get("来源", "")))
+
+    if people and ("×" in people or "、" in people or len(people) > 48):
         return people
-    src = bare(meta.get("内容来源", "") or meta.get("来源", ""))
-    return src[:80] if src else ""
+    if people:
+        name = re.split(r"[（(]", people)[0].strip()
+        if venue:
+            return f"{name} · {venue}" if name else venue
+        return people
+    return venue
 
 
 def parse_md(md: str) -> tuple[str, list[str]]:
@@ -470,7 +557,7 @@ def parse_md(md: str) -> tuple[str, list[str]]:
                             out.append(tbl)
                             i = ni
                             continue
-                        out.append(p(lines[i].strip()))
+                        out.append(render_body_line(lines[i]))
                         i += 1
                     continue
 
@@ -482,7 +569,7 @@ def parse_md(md: str) -> tuple[str, list[str]]:
                     out.append(tbl)
                     i = ni
                     continue
-                out.append(p(lines[i].strip()))
+                out.append(render_body_line(lines[i]))
                 i += 1
             continue
 
@@ -499,7 +586,7 @@ def parse_md(md: str) -> tuple[str, list[str]]:
         else ""
     )
     out.append(source_footer(meta))
-    return title, [x for x in out if x is not None]
+    return title, [x for x in out if x]
 
 
 def wrap(title: str, body_parts: list[str]) -> str:
@@ -521,7 +608,6 @@ def wrap(title: str, body_parts: list[str]) -> str:
 <body>
   <div class="howto">
     <p><strong>使用方法：</strong>浏览器打开 → 选中下方米色卡片内<strong>全部正文</strong> → 复制 → 粘贴到微信公众号编辑器 → 手机预览。</p>
-    <p>完整正文微信内联版：保留洞察 / 深度解析 / 对谈实录；去掉元数据表、目录、术语表、自检报告。Mermaid 需另导出图片后嵌入。</p>
   </div>
   <p class="copy-hint">↓ 从这里开始复制到微信 ↓</p>
   <div class="stage">
@@ -546,11 +632,43 @@ def default_out_path(src: Path) -> Path:
     return src.with_name(f"{stem}_公众号完整版.html")
 
 
+def _self_test() -> None:
+    dirty = (
+        "Y Combinator · Startup School 2026；用户提供完整字幕转写 + YouTube 描述；"
+        "次要核对：YC Root Access 官方逐字稿（WebFetch）。浏览器 MCP 不可用，已降级 WebFetch/WebSearch。"
+    )
+    assert public_source_line(dirty) == "Y Combinator · Startup School 2026", public_source_line(dirty)
+    assert public_date("2026-08-07（YouTube 页面口径；YC Root Access 文稿页标注 Aug 06, 2026）") == "2026-08-07"
+    sub = subtitle_from_meta(
+        {
+            "讲者": "**Garry Tan**（Y Combinator 总裁兼 CEO）",
+            "内容来源": dirty,
+        }
+    )
+    assert "用户提供" not in sub and "次要核对" not in sub
+    assert "Garry Tan" in sub and "Startup School" in sub
+    foot = source_footer(
+        {
+            "原标题": "Garry Tan: Own Your Intelligence",
+            "发布时间": "2026-08-07（YouTube 页面口径；YC Root Access 文稿页标注 Aug 06, 2026）",
+            "内容链接": "https://www.youtube.com/watch?v=eRrc1pUY5oU",
+        }
+    )
+    assert "页面口径" not in foot and "用户提供" not in foot
+    print("self-test OK")
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("markdown", type=Path, help="Path to *_整理文档.md")
+    ap.add_argument("markdown", type=Path, nargs="?", help="Path to *_整理文档.md")
     ap.add_argument("--out", type=Path, default=None, help="Output HTML path")
+    ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args(argv)
+    if args.self_test:
+        _self_test()
+        return 0
+    if args.markdown is None:
+        ap.error("markdown path required (unless --self-test)")
 
     src = args.markdown
     if not src.is_file():

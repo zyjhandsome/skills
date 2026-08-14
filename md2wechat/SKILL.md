@@ -46,8 +46,10 @@ description: >-
 | 目录 | **去掉** |
 | 延伸术语表 | **去掉** |
 | 自检报告 | **去掉** |
-| 文末「来源与说明」 | **只留前两项**（原文标题/场次 + 视频或内容链接） |
-| 页眉副标题如「完整整理版｜微信排版」 | **不要** |
+| 过程说明 / 流水账 | **去掉**。副标题、人物卡、来源脚注、粘贴正文都不要出现：用户提供字幕/逐字稿、次要核对、浏览器 MCP、WebFetch 降级、页面口径 vs 文稿标注、元数据抓取时间、`[编者注]`。这些只属于整理文档元数据，不是给读者看的 |
+| 文末「来源与说明」 | **只留前两项读者向信息**：原文标题 + **干净日期**（`2026-08-07`，不要括注口径对照）+ 视频或内容链接 |
+| 页眉副标题 | 只用 **讲者/对谈人物 + 公开场次**（如 `Garry Tan · Y Combinator · Startup School 2026`）。不要「完整整理版｜微信排版」；**禁止**把「内容来源」整格（含转写/核对流水）截断后当副标题 |
+| 预览页 howto | **只留粘贴步骤**（选中米色卡片 → 复制 → 粘贴编辑器）。不要把本表 keep/omit 政策写进 HTML |
 | Mermaid / 流程图 | 微信不能原生跑。**默认不嵌入**；仅当用户明确要求「保留流程图/Mermaid」时，从 sibling `*_整理文档.html` 导出 PNG 再 `<img>` 嵌入 |
 
 用户另有指示时覆盖上表。
@@ -87,7 +89,7 @@ Or implement the same rules by hand if the script cannot run:
 2. Theme tokens (md2html terracotta): bg `#FAFAF7`, accent `#D97757`, accent-strong `#A85533`, soft `#FBEEE6`, border `#E5E4DC`.
 3. Structure each section: `h2` → `h3 核心洞察` + insight card → `h3 深度解析` + paragraphs → `h3 对谈实录` + speaker cards.
 4. Font stack: system + PingFang SC / Microsoft YaHei (no Google Fonts in paste body).
-5. Add short howto above the fold: select beige card → copy → paste into 公众号编辑器 → mobile preview.
+5. Add short howto **above** the fold (outside `#wechat-article`): select beige card → copy → paste into 公众号编辑器 → mobile preview. **Do not** put keep/omit policy, Mermaid notes, or pipeline status into howto or the paste body.
 
 Details: [reference-wechat-constraints.md](reference-wechat-constraints.md).
 
@@ -131,6 +133,8 @@ Fix until exit 0. Do not deliver a failing bundle.
 - 去掉「核心洞察 / 深度解析」分层却声称更易读
 - 封面只给 16:9 / 1:1 却标成 2.35:1
 - 文末堆免责声明与术语表拖垮完读率
+- 把整理流水账写进公众号：`用户提供完整字幕转写`、`次要核对`、`浏览器 MCP 不可用`、`YouTube 页面口径`、`内容来源` 整格当副标题
+- 预览 HTML 的 howto 第二段复述 skill 取舍政策（读者/粘贴时不需要）
 
 ## Related skills
 
