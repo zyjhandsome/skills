@@ -1,439 +1,356 @@
-# Vue2 页面迁入 Vue3 Host：精简编排方案
+# Vue2 单页面迁入 Vue3 Host：完整精简编排
 
-> 适用前提：保持当前所有 Skill 不改动。  
-> **会话边界：** 每个步骤使用一个新会话窗口。步骤之间只通过磁盘交接，禁止同一窗口自动接力下一 Skill。  
-> 这是编排覆盖，不是改 Skill：即使 Delivery Family 允许同会话读取下一 `SKILL.md`，本编排也要求阶段结束即停，由用户在新窗口粘贴下一节提示词。
+> 将 Vue2 仓库的一个页面原生迁入 Vue3 Host：Vue3 外壳保持原生，迁入
+> 内容区域保持功能和样式不变。
+>
+> 只使用：`migrate-vue2-pages-to-vue3-host`、`delivery-frame-spec`、
+> `delivery-plan-tasks`、`delivery-execute-verify`。
+>
+> 每个 Wave 使用全新会话，只通过磁盘工件恢复；不在同一会话自动接力。
 
-## 0. 会话清单
+## 0. 编排结论
 
-| 会话 | 步骤 | 停在 |
+```text
+Wave 1  Delivery Frame
+  → Wave 2  migrate assess
+  → Wave 3  migrate design
+  → Wave 4  Delivery Plan
+  → Wave 5  Delivery Execute
+  → Wave 6  migrate verify
+```
+
+职责边界：
+
+- 迁移 Skill：A/B 事实、页面闭包、运行时与依赖、CSS/SCSS、颜色、字体、
+  图标、视觉基线、迁移设计、回滚和最终领域复核。
+- Delivery Family：OpenSpec、范围批准、技术计划、实施批准、B 代码修改、
+  Delivery G9、独立审查和交付状态。
+- `delivery-explore` 不适用，因为迁移目标已经确定。
+- 不再插入独立依赖分析或视觉修复 Skill，避免重复状态源和重复验证责任。
+
+## 1. 通用输入与自动恢复协议
+
+### 1.1 用户怎么使用
+
+1. 在下面的“会话通用头”填写四个值，并保存这份工作副本。
+2. 每个 Wave 开一个全新会话。
+3. 每次将“会话通用头 + 当前 Wave 代码块”连续粘贴为一条消息。
+4. 当前 Wave 完成后，根据输出打开下一个会话。
+
+用户只需要填写四个值，以及回答真正阻塞的问题、规格批准和实施批准。
+用户不需要寻找 JSON、复制 digest、维护工件路径或手工更新任务状态。
+
+### 1.2 会话通用头——四个值只填一次
+
+```text
+这是一个全新独立会话，不得使用其他会话的聊天记忆补结论。
+
+用户输入：
+<A> = Vue2 仓库绝对路径
+<B> = Vue3 仓库绝对路径
+<PAGE> = Vue2 待迁移页面的文件路径或路由
+<HTML> = Vue3 入口 HTML 文件绝对路径
+
+自动派生并保持稳定：
+- <SLUG>：由 <PAGE> 规范化得到；过长时追加短 SHA-256 摘要。
+- <CHANGE_ID>：migrate-<SLUG>-to-vue3。
+- <CHANGE_DIR>：<B>\openspec\changes\<CHANGE_ID>。
+- <EVIDENCE_ROOT>：<CHANGE_DIR>\evidence。
+- <DOMAIN_ROOT>：<EVIDENCE_ROOT>\vue-cross-repo-migration。
+- <G9_ROOT>：<EVIDENCE_ROOT>\delivery-visual。
+- <CONFIG>：<DOMAIN_ROOT>\migration-run-config.json。
+
+<CONFIG> 存在后，以其中记录为准；本次输入与配置不一致时停止。
+
+固定边界：
+- <A> 严格只读，<B> 是唯一应用代码修改目标。
+- B 的导航、侧栏和布局壳保持 host-native。
+- 迁入内容根节点相对 A strict parity，visual=required。
+- 禁止新功能、无关重构、Vue2、@vue/compat 和 A 专属全局对象进入 B。
+- 保留可实际演练的 legacy/iframe fallback。
+- 保护 A/B 中已有 staged、unstaged、untracked 用户改动。
+- 部署、流量切换、删除 iframe 和 A 下线不属于本轮范围。
+
+自动恢复当前 Wave 已由上游产生且应当存在的工件，并校验路径、digest、
+A/B revision、OpenSpec artifact_revision、批准绑定和用户改动碰撞。
+
+尚未进入其生产 Wave 的工件不存在属于正常情况；已完成生产 Wave但工件
+缺失、损坏或 stale 时，停止并指出需要重跑的 Wave。不要要求用户手工提供
+工件路径、digest 或 JSON 内容。
+
+本会话只执行随后指定的一个 Wave。完成、写盘并校验后立即停止；不要加载
+或执行下一个 Skill。
+```
+
+### 1.3 工件是给 Agent 用的
+
+| 工件组 | Agent 用途 | 用户操作 |
 |---|---|---|
-| 1a | migrate `assess` | assessment 完成，packet 已写盘 |
-| 1b | migrate `design` | design ready，packet 已写盘 |
-| 2 | 依赖差分 | `analysis_status=complete`，或停在当前人闸 |
-| 3a | `delivery-frame-spec` | 规格闸门通过，handoff 已写盘 |
-| 3b | `delivery-plan-tasks` | 计划就绪；若本窗给出实施 go，写入 handoff 后仍停 |
-| 3c | `delivery-execute-verify` | `overall_status=verified` |
-| 4 | migrate `verify` | domain verification 结果已写盘 |
-| 5b-a / 5b-b / 5b-c | 功能残差 Frame / Plan / Execute | 同 3a / 3b / 3c |
-| 5a-A | visual-parity Phase A | 定界包已写盘，等待 go |
-| 5a-B | visual-parity Phase B | CSS/配置修复完成 |
-| 5c | migrate `verify` | 新 revision 上的领域复核 |
+| `<CONFIG>` | 在同一 change 中定位迁移任务及派生路径 | 不操作 |
+| `<DOMAIN_ROOT>` | 保存 Domain/runtime/visual 事实、基线、设计和复核 | 最终看摘要 |
+| OpenSpec 工件与 `handoff.json` | 保存 Delivery 规格、批准、计划、任务和状态 | 批准时看摘要 |
+| `<G9_ROOT>` | 保存 Delivery 自己的 G9 视觉验收证据 | 最终看摘要 |
 
-同时有样式和功能残差时：先跑完 5b-a→5b-b→5b-c，再 5a-A→5a-B，最后 5c。不要并行改同一批 B 文件。
+默认不得在 `<CHANGE_DIR>` 外另建 migration-artifacts/report 目录。`evidence/`
+只保存 path+digest 可校验的外部证据，不是第二状态源；OpenSpec 的 proposal、
+specs、design、tasks、verification 和 handoff 仍是 Delivery 权威工件。
+当前 Delivery `artifact_revision` 只覆盖这些权威工件及 `specs/**`；新增或更新
+`evidence/` 不会使 Frame 批准失效，但修改 proposal/spec 等权威工件仍会失效。
 
-## 1. 一次性配置
+按阶段恢复：
 
-先保存配置文件：
+| Wave | 应当存在的主要上游工件 |
+|---|---|
+| 1 Frame | 无；通过 OpenSpec 创建 change、Config 和 evidence 子目录 |
+| 2 Assess | Config、已批准 Frame 规格和 change 目录 |
+| 3 Design | Config、assess packet、runtime、visual contract、baseline |
+| 4 Plan | Domain evidence、proposal/spec、Frame handoff |
+| 5 Execute | design/tasks、Plan handoff、领域基线与运行时证据 |
+| 6 Verify | Delivery verification、G9、完整领域证据和当前代码 |
 
-```text
-D:\Hzhao\AI_Test\migration-artifacts\table-inline-edit\migration-run-config.json
-```
+## 2. Wave 1：Delivery Frame
 
-```json
-{
-  "source_root": "D:\\Hzhao\\AI_Test\\Vue2_Test",
-  "host_root": "D:\\Hzhao\\AI_Test\\Vue3_Test",
-  "migration_unit": {
-    "id": "table-inline-edit",
-    "source_route": "/table/inline-edit-table",
-    "source_entry": "src/views/table/inline-edit-table.vue",
-    "host_route": "/function/inline-edit-table",
-    "host_html": "D:\\Hzhao\\AI_Test\\Vue3_Test\\index.html",
-    "host_mount_hint": "由 Agent 根据 B 的真实结构提案"
-  },
-  "artifact_root": "D:\\Hzhao\\AI_Test\\migration-artifacts\\table-inline-edit",
-  "openspec_change_id": "migrate-table-inline-edit-to-vue3",
-  "constraints": {
-    "source_mutation": "forbidden",
-    "host_shell": "host-native",
-    "content_parity": "strict",
-    "visual": "required",
-    "typescript": "required",
-    "options_api": "allowed",
-    "vue2_and_compat_in_host": "forbidden",
-    "new_features": "forbidden",
-    "keep_legacy_fallback": true
-  }
-}
-```
-
-该文件只保存用户输入。动态 revision、digest、批准和任务状态由相应 Skill 生成并持久化，不需要手工回填。
-
-### 1.1 每个新窗口的恢复协议
-
-任何新会话都先做这一段（可与当步提示词一起粘贴）：
+新会话粘贴“会话通用头”，再粘贴：
 
 ```text
-读取：
-D:\Hzhao\AI_Test\migration-artifacts\table-inline-edit\migration-run-config.json
+显式使用 delivery-frame-spec Skill。
 
-只从磁盘恢复状态：
-- artifact_root 中当前有效 domain packet（path + digest）
-- 依赖 summary/report（若已有）
-- visual-summary.json（若已有）
-- <host_root>\openspec\changes\<openspec_change_id>\handoff.json（若已有）
+这是迁移类变更，固定 High、quality_profiles.visual=required。
+不要使用 delivery-explore，不要进入 Plan/Execute。
 
-校验 path、digest 与当前 A/B revision。
-stale 时停止，要求重跑产生该工件的步骤。
-不从上一窗口聊天记忆补结论。
-未写入磁盘的批准视为不存在。
-仍有效且条件未变化的已记录决定不重复询问。
+硬前提是 B 的 OpenSpec 已初始化且 A/B Codebase Memory 索引可用。
 
-本会话只做用户粘贴的那一个步骤。
-完成后停止：不要读取、加载或执行下一 Skill。
-结束时给出本步产物路径/digest，以及清单一里的下一步编号。
+通过 OpenSpec 正式创建或恢复唯一 <CHANGE_DIR>。创建：
+- <DOMAIN_ROOT>；
+- <G9_ROOT>；
+- <CONFIG>，仅记录四项输入和派生路径，不保存批准或任务状态。
+
+基于当前代码事实完成 proposal.md 和增量规格，明确：
+- A 只读、B 单一 mutation target；
+- B shell host-native、迁入内容 strict parity；
+- 功能/权限/数据/URL/错误/视觉/回滚验收；
+- 颜色、字体、图标及禁止差异；
+- 保留 fallback；部署、切流和 A 下线为非目标。
+
+按 Skill 契约完成澄清和规格闸门，只询问一次范围批准。批准必须绑定当前
+artifact_revision 并写入 State Source 和 handoff.json。
+
+handoff 的最终目标仍为 delivery-plan-tasks，但在进入 Plan 前，本文编排要求
+先完成 Wave 2/3 的迁移领域证据。evidence/ 下新增 JSON、截图和摘要不得冒充
+OpenSpec 权威工件。
+
+结束时输出 change id/dir、Config、route/risk、proposal/spec、规格闸门、
+handoff path/revision。说明下一步为 Wave 2，然后停止，不读取 Plan Skill。
 ```
 
-中断后的恢复也用同一协议：以 OpenSpec / 已写盘 artifact 为准，按 `handoff.stage`、`next_skill` 或 `next_action` 打开对应步骤的新窗口，不要在旧窗口里接力。
+## 3. Wave 2：迁移领域摸底
 
-## 2. Wave 1a：摸底（assess）
-
-新会话。先贴 1.1，再贴：
+新会话粘贴“会话通用头”，再粘贴：
 
 ```text
-本会话只做 /migrate-vue2-pages-to-vue3-host mode=assess。
-不要进入 design、不要改应用代码。
+显式使用 migrate-vue2-pages-to-vue3-host Skill，mode=assess。
 
-A 只读；证据写入 artifact_root。
-B 壳 host-native，迁入内容 strict parity，visual=required，
-保留可演练的 legacy/iframe fallback；只修缺陷，不开发新功能。
+恢复已批准 Frame 范围，只做只读摸底和证据采集；不要进入 design/execute，
+不要修改 A/B 应用代码。
 
-B 的既有未提交内容属于用户改动，只检查碰撞，不覆盖、不丢弃。
-页面闭包、双仓 revision、运行时、依赖、视觉、回滚和证据校验
-全部按 Skill 当前契约执行。
+artifact_directory 固定为 <DOMAIN_ROOT>，不得在 <CHANGE_DIR> 外创建报告目录。
 
-结束时给出：
-- domain packet path 与 canonical digest；
-- source_revision 与 host_revision；
-- 页面闭包包名单；
-- blockers。
-然后停止。下一步是新窗口的 1b。
+按当前 Skill 契约完成：
+- 解析 <PAGE> 的真实 source_entry 和 <HTML> 对应的 B 挂载链路；
+- 发现页面功能闭包和完整 style_closure；
+- 分析 A/B runtime、依赖、构建和 fallback；
+- 在 A 仍可运行时冻结 strict-parity 视觉契约和独立状态基线；
+- 颜色使用 A 计算样式，字体与图标保留 A 的实际内容身份。
+
+生成并校验 assess domain packet、runtime evidence、visual contract 和 baseline
+manifest，全部写入 <DOMAIN_ROOT>。
+
+若发现 Frame 的目标、验收或风险边界不成立，输出 discovery backflow 并停止；
+不得自行改 OpenSpec 规格。
+
+结束时输出 packet path/digest、A/B revision、source/host entry、closure/runtime/
+baseline 状态和 blockers。说明下一步为 Wave 3，然后停止。
 ```
 
-## 3. Wave 1b：迁移图纸（design）
+若 A 无法运行且没有可信截图、设计稿或获批替代基线，必须阻塞“样式不变”
+结论。
 
-等 1a 写盘后，新会话。先贴 1.1，再贴：
+## 4. Wave 3：迁移领域设计
+
+新会话粘贴“会话通用头”，再粘贴：
 
 ```text
-本会话只做 /migrate-vue2-pages-to-vue3-host mode=design。
-不要重做完整 assess，除非 packet 相对当前 A/B revision 已 stale。
-不要改应用代码，不要进入 execute。
+显式使用 migrate-vue2-pages-to-vue3-host Skill，mode=design。
 
-约束与 1a 相同：A 只读，B 壳 host-native，内容 strict parity，
-visual=required，保留 legacy fallback，只修缺陷。
+恢复当前 assess packet 和已批准 Frame 范围；仅在 stale 时刷新受影响事实。
+不要修改 A/B 应用代码，不要进入 execute。
 
-结束时给出：
-- 更新后的 packet path 与 digest；
-- design readiness；
-- blockers。
-然后停止。下一步是新窗口的 2（或 packet 证明可跳过依赖差分时直接 3a）。
+artifact_directory 固定为 <DOMAIN_ROOT>。
+
+按当前 Skill 契约完成 B-native 落点、依赖 disposition、page-scoped 样式适配、
+状态/路由/权限/视觉契约、纵向切片、fallback 和 rollback 设计。
+
+design ready 必须满足：
+- style_closure complete 且 unresolved 为空；
+- 每项依赖、CSS/SCSS、颜色、字体和图标都有 disposition/target；
+- 每个验收状态映射到纵向切片和验证行；
+- fallback 可测试且没有 implementation-blocking TBD。
+
+更新并校验 domain packet，全部领域工件保留在 <DOMAIN_ROOT>。不得生成实施授权。
+
+若领域事实使 Frame 规格失效，输出 discovery backflow 并返回 Wave 1；否则输出
+packet path/digest、target design、vertical slices、visual/style、rollback、
+readiness 和 blockers。说明下一步为 Wave 4，然后停止。
 ```
 
-## 4. Wave 2：页面闭包依赖差分
+## 5. Wave 4：Delivery Plan
 
-等 1b 完成，新会话。先贴 1.1，再贴：
+新会话粘贴“会话通用头”，再粘贴：
 
 ```text
-本会话只做 /frontend-dependency-upgrade-impact-analysis，
-mode=migration-demand-diff。
-不要安装、不要修改应用代码、不要进入 Delivery。
+显式使用 delivery-plan-tasks Skill。
 
-source A 只读，implementation target 为 B。
-自动使用 domain packet 的页面闭包包名单，不扫描 A 整个 package.json。
-output-dir 使用：
-<artifact_root>\evidence\frontend-dependency-upgrade\
+只消费当前有效 Frame handoff；不要修改应用代码，不要进入 Execute。
 
-禁止把 Vue2 或 @vue/compat 引入 B。
-依赖确认、decision file、报告重生成和 finalize review
-全部按 Skill 当前契约执行。
+确认规格批准有效；从 <DOMAIN_ROOT> 读取并校验 domain packet、runtime、visual
+contract/baseline 的 path+digest 和 A/B revision；检查其他 active change 路径重叠。
 
-本窗口做到 analysis_status=complete 再停。
-若在人闸处关闭窗口：新会话从已写盘的 report/decision file 继续，
-禁止重新全量扫描。
+按当前 Skill 契约写唯一权威 design.md/tasks.md、traceability、readiness、
+visual validation plan、rollback 和 ownership。任务必须是可独立验证的纵向
+切片，含精确路径/符号、验证命令、视觉状态、样式/颜色/字体/图标处置和回滚。
 
-结束时给出：
-- dependency summary path 与 digest；
-- demand diff report path 与 digest；
-- decision file（若有）；
-- batch_implementation_gate 状态及 frozen 的解除条件。
-然后停止。下一步是新窗口的 3a。
+visual=required：A baseline 必须已经冻结；所有状态映射到 task；全局 CSS/reset
+默认禁止；Delivery G9 的明确产物目录为 <G9_ROOT>。
+
+运行适用的 G-check 和 readiness。存在阻塞项时不得询问实施授权；就绪后只
+询问一次实施 go，并将批准绑定当前 artifact_revision 写入 handoff.json。
+
+结束时输出 design/tasks、任务数量、readiness、visual plan、实施闸门、handoff
+path/revision。说明下一步为 Wave 5，然后停止，不读取 Execute Skill。
 ```
 
-只有 1b packet 明确证明页面闭包无需独立依赖决策时，才可跳过本会话。
+## 6. Wave 5：Delivery Execute
 
-## 5. Wave 3a：Delivery Frame
-
-等 1b（及适用的 2）完成，新会话。先贴 1.1，再贴：
+新会话粘贴“会话通用头”，再粘贴：
 
 ```text
-本会话只做 /delivery-frame-spec。
-规格闸门通过并写入 handoff.json 后立即停止。
-不要读取或执行 delivery-plan-tasks / delivery-execute-verify。
+显式使用 delivery-execute-verify Skill。
 
-本任务固定 High，visual=required；A 只读，B 是唯一代码 mutation target。
-B 壳 host-native，迁入内容 strict parity，保留 legacy fallback，只修缺陷。
+Delivery 是唯一代码 mutation owner；不要调用迁移 Skill 的 execute mode。
 
-领域与依赖证据只作为 path+digest external_artifacts 引入。
-把当前双仓 revision 纳入规格闸门。
+Preflight 确认实施 go 绑定当前 revision、A 只读、B 用户改动受保护、任务路径
+无未接受冲突、baseline/runtime evidence 有效。
 
-B 中既有 staged、unstaged、untracked 内容全部属于用户改动，
-必须保护并检查碰撞，不得覆盖、丢弃、stash 或冒充本轮成果。
+严格按 tasks.md 执行：适用时 RED→GREEN→REFACTOR，一次处理一个 ready task，
+只改 B 获批范围；任务验证通过后才勾选。范围问题回 Frame，设计/兼容/回滚/
+任务问题回 Plan。
 
-如果 OpenSpec 尚未初始化，按 Delivery 硬前提协议请求初始化授权，
-不得创建替代状态源。
+视觉实现遵循 domain contract：B shell 原生、内容 strict parity、page-scoped
+样式、A 的计算颜色/字体/图标身份；不得用 B 全局主题或 UI 库默认差异掩盖问题。
 
-结束时给出：
-- OpenSpec change 路径；
-- handoff.json 路径；
-- 规格闸门状态与绑定的双仓 revision。
-然后停止。下一步是新窗口的 3b。
+完成后运行 Fresh Verification Gate：构建/测试、Requirement/Scenario、页面身份、
+功能/权限/错误/交互、写入 <G9_ROOT> 的 Delivery G9、rollback、OpenSpec
+coherence 和 High 独立审查。
+领域 visual evidence 可引用，但不能替代 Delivery G9。
+
+全部通过后写 verification.md 和 verified handoff：
+overall_status=verified，archive.status=deferred_to_openspec。
+不 archive、commit、push、PR、部署或切流。
+
+结束时输出任务/修改摘要、测试构建、G9、独立审查、rollback、verification 和
+handoff path/revision。说明下一步为 Wave 6，然后停止。
 ```
 
-## 6. Wave 3b：Delivery Plan
+Delivery `verified` 只表示交付变更通过，不能单独宣布整次迁移完成。
 
-等 3a 规格批准且 handoff 已写盘，新会话。先贴 1.1，再贴：
+## 7. Wave 6：迁移领域最终复核
+
+新会话粘贴“会话通用头”，再粘贴：
 
 ```text
-本会话只做 /delivery-plan-tasks。
-计划就绪后停止。不要读取或执行 delivery-execute-verify。
+显式使用 migrate-vue2-pages-to-vue3-host Skill，mode=verify。
 
-从 handoff.json 恢复，校验 artifact revision 与当前 A/B revision。
-计划覆盖挂载、页面闭包适配、feature switch、行为测试、
-视觉/表格验证、legacy fallback 演练和回滚，并使用纵向切片。
+Delivery 已拥有代码 mutation；禁止进入 migrate execute，不修改 A/B 应用代码。
 
-G9 `final_visual_result=pass` 只证明 Delivery 自有视觉记录合格，
-不等于迁入内容已肉眼对齐 A。计划里必须留下人眼残差可回流到 Wave 5 的口子。
+针对当前 A/B revision 刷新 stale 的领域证据，不混用旧 pass。按当前 Skill
+契约完整复核功能、API/权限/错误、URL/页面身份、runtime/build、style_closure、
+CSS/SCSS、颜色、字体、图标、独立状态基线、computed-style 绑定、表格、fallback、
+rollback 和独立审查证据。
 
-若用户在本窗口给出实施 go：写入 handoff，绑定当前 artifact revision
-与当前双仓 revision，然后仍必须结束本会话。
-未持久化的 go 带到下一窗口视为不存在。
+artifact_directory 固定为 <DOMAIN_ROOT>；不得在 change 外创建最终复核报告。
 
-结束时给出：
-- 更新后的 handoff.json 路径；
-- 计划就绪状态；
-- 实施 go 是否已落盘。
-然后停止。下一步是新窗口的 3c。
+更新并校验 runtime evidence、visual evidence 和 verify domain packet，运行迁移
+Skill 自带的三个验证器。
+
+只有当前 revision 上 functional、visual、runtime/build、permission、rollback
+全部通过，style_closure complete 且无 blocking residual，domain verification
+才能为 pass。
+
+结束时输出最终 packet path/digest、functional/visual/runtime/rollback 结果、
+blockers/residuals 和 migration_completion_candidate。
+
+pass：说明达到本文完成条件，然后停止。
+fail：不要直接改代码；输出 discovery backflow 和应返回的 Wave，然后停止。
 ```
 
-## 7. Wave 3c：Delivery Execute
+## 8. 失败回流
 
-等 3b 计划就绪，新会话。先贴 1.1，再贴：
+Wave 6 失败时继续使用原 `<CHANGE_ID>`，不创建第二个 OpenSpec change。
+
+| 发现 | 返回 |
+|---|---|
+| 目标、验收、边界或允许差异错误 | Wave 1 Frame |
+| 领域闭包、基线或迁移设计错误 | Wave 2 Assess / Wave 3 Design |
+| Delivery 设计、兼容、回滚或任务拆分错误 | Wave 4 Plan |
+| 已批准范围内的实现缺陷 | Wave 5 Execute |
+| A/B revision 或基线 stale | 产生该证据的 Wave 2/3 |
+
+回流必须携带：
 
 ```text
-本会话只做 /delivery-execute-verify。
-它是本轮唯一代码修改 owner，只修改 B 的批准范围。
-
-从 handoff.json 恢复。
-若绑定当前 artifact revision 与当前双仓 revision 的实施 go 未落盘，停止；
-回到 3b 或在本提示词末尾显式补写该 go。禁止用聊天记忆补批准。
-
-OpenSpec、handoff、Node/lock、TDD、G1–G9、视觉证据、
-独立审查和 Fresh Verification 全部按各 Skill 当前契约执行。
-
-G9 pass 不等于肉眼对齐 A。人眼仍偏时不得宣告迁移完成。
-
-达到 overall_status=verified 后停止：不 archive、不执行 Git 操作，
-不部署、不切流、不移除 fallback、不关闭 A。
-不要读取 migrate verify。
-
-结束时给出：
-- 最新 handoff.json 路径；
-- artifact revision 与实施绑定的双仓 revision；
-- 实施后的 host revision；
-- Fresh Verification、独立审查和 residual risks。
-然后停止。下一步是新窗口的 4。
+discovery / evidence / affected_scope / invalidated_artifacts /
+decision_needed / recommended_resolution / resume_point
 ```
 
-## 8. Wave 4：领域最终复核
+修复后重新运行完整 Wave 5 和 Wave 6，直到 Delivery 与 Domain 同时通过。
 
-等 3c 达到 `overall_status=verified`，新会话。先贴 1.1，再贴：
+## 9. 完成判定
 
-```text
-本会话只做 /migrate-vue2-pages-to-vue3-host mode=verify。
-不重复实施，不修改应用代码、依赖、lock、fixture、runtime 或 feature switch。
-不要进入 Wave 5 的任何修复步骤。
+只有以下全部满足，才能声称“页面升级迁移完成”：
 
-校验 Delivery 已达到 overall_status=verified，并重新校验当前 A/B revision。
-若仓库或工件在 verified 后变化，停止并指出应重开的 3a/3b/3c 会话，
-不得沿用旧验证。
+- A 未发生应用代码修改；
+- B 为 Vue3 原生实现，未引入 Vue2 或 `@vue/compat`；
+- OpenSpec、批准、任务和证据均绑定当前 revision；
+- Delivery verified、G9 和 High 独立审查通过；
+- Domain functional、visual、runtime/build、permission 通过；
+- CSS/SCSS style closure 完整，A 的颜色、字体和图标契约通过；
+- 每个代表性状态有独立基线；
+- fallback 可演练且 rollback tested；
+- 无 blocking residual。
 
-功能、错误路径、权限、URL、视觉/表格、runtime/build、
-rollback 和 legacy fallback 全部按 Skill 当前契约重新核验。
+此时仍保留 fallback，不自动 archive、commit、push、PR、部署、切流、删除
+iframe 或下线 A；这些需要后续单独授权。
 
-若必须修改 B，输出 discovery backflow，退出 verify，
-指出下一步是新窗口的 5b-a，不得在本会话改代码。
+## 10. 使用者与 Agent 可用性检查
 
-结束时给出：
-- Domain verification.status 与当前双仓 revision；
-- 对照 A 仍存在的样式/功能残差（若有）；
-- 清单一里的下一步编号（完成判定 / 5b-a / 5a-A）。
+### 使用者
 
-不得仅凭 Delivery verified + Domain pass 宣告“本次迁移验证完成”。
-人眼对照 A 仍有样式或功能出入时，下一步是 Wave 5。
-不得宣称已部署、已切流、已关闭 A 或已移除 fallback。
-然后停止。
-```
+- 四个值只填一次；每个 Wave 只复制通用头和一个短提示词。
+- 不需要理解或操作内部工件。
+- 只处理阻塞问题和两次批准。
+- 每个阶段都有明确产物、停止点和下一步，可在中断后恢复。
 
-## 9. Wave 5：人眼残差修复
+### AI Agent
 
-在会话 4 之后使用。触发条件（任一即可）：
+- 每个 Wave 都明确 Skill/mode、状态源、权限范围、输入工件、完成门禁和输出。
+- 按阶段工件矩阵区分“尚未产生”与“应有但缺失”，避免误阻塞或误放行。
+- 迁移证据与 Delivery 生命周期不争夺状态权威；只有 Wave 5 修改应用代码。
+- revision/digest/approval 绑定和最终双重验证防止用旧证据宣布完成。
 
-- 对照源仓 A，迁入页样式仍有出入；
-- 对照源仓 A，部分交互/功能仍有出入；
-- 会话 4 输出 discovery backflow，必须改 B。
+### 可达性
 
-G9 pass 与 Domain visual pass **都不等于**肉眼对齐 A。  
-`/frontend-ui-stack-visual-parity` 只修样式（CSS/配置）；功能残差必须交还 Delivery，禁止用视觉 skill 改业务 JS。
+在 A 可验证、B 可构建、关键数据/权限环境可访问，并且六个 Wave 的硬门全部
+通过时，这套编排可以对“功能不变、迁入内容样式不变”给出证据化结论。
 
-```text
-同时有样式和功能残差：5b-a → 5b-b → 5b-c → 5a-A → 5a-B → 5c。
-仅样式：5a-A → 5a-B → 5c。
-仅功能：5b-a → 5b-b → 5b-c → 5c。
-```
-
-先功能再样式：行内编辑等交互态稳定后，视觉主样本才采得到编辑态。
-
-### 9.1 会话 5b-a：功能残差 Frame
-
-新会话。必须填入已观察的行为差；列表为空则停止询问，禁止扩成新一轮迁移。先贴 1.1，再贴：
-
-```text
-本会话只做 /delivery-frame-spec。
-这不是新功能，是迁入后的行为残差修复。
-规格闸门通过并写入 handoff 后停止。不要进入 plan/execute。
-
-固定 High，visual=required；A 只读，B 是唯一代码 mutation target。
-B 壳 host-native，迁入内容 strict parity，保留 legacy fallback。
-
-只修下列已观察差异（未列出的不扩 scope）：
-- <例如：进入行内编辑的触发条件与 A 不一致>
-- <例如：失焦后未写回 / 未触发原校验>
-- <例如：编辑态键盘行为或取消逻辑与 A 不一致>
-
-禁止新功能、禁止 Composition 全量重写、禁止引入 Vue2 / @vue/compat。
-B 中既有未提交内容属于用户改动，只检查碰撞，不覆盖、不丢弃。
-
-结束时给出 handoff 路径与规格闸门状态。
-然后停止。下一步是新窗口的 5b-b。
-```
-
-### 9.2 会话 5b-b：功能残差 Plan
-
-新会话。先贴 1.1，再贴：
-
-```text
-本会话只做 /delivery-plan-tasks。
-从 handoff 恢复残差范围。计划就绪后停止，不要进入 execute。
-若本窗口给出实施 go：写入 handoff（绑定当前 artifact 与双仓 revision）后仍停。
-修完后的 verified 不得沿用会话 3c/4 的旧结论。
-然后停止。下一步是新窗口的 5b-c。
-```
-
-### 9.3 会话 5b-c：功能残差 Execute
-
-新会话。先贴 1.1，再贴：
-
-```text
-本会话只做 /delivery-execute-verify。
-只修改 B 的批准残差范围。
-实施 go 必须已落盘且绑定当前 revision；否则停止。
-达到 verified 后停止：不 archive、不 Git、不部署、不切流、
-不移除 fallback、不关闭 A，也不要读取 migrate verify 或 5a。
-然后停止。下一步是新窗口的 5a-A（若还有样式残差）或 5c。
-```
-
-### 9.4 会话 5a-A：样式定界
-
-新会话。把观察到的样式出入写进提示词；没有具体点时，仍用默认主样本。先贴 1.1，再贴：
-
-```text
-本会话只做 /frontend-ui-stack-visual-parity Phase A。
-execution_scope=analysis_only。定界包写盘后停止。
-不要进入 Phase B，不要改 CSS/配置。
-
-parity_topology=cross-repo
-baseline_root=A（source_root）
-candidate_root=B（host_root）
-assessment_mode=strict_parity
-forbid_baseline_mutation=yes
-
-页面：
-- A：/table/inline-edit-table
-- B：/function/inline-edit-table
-主样本：搜索区 + 主表 + 单元格内控件；行内编辑态必采。
-策略默认「对齐 A」，不要改成跟 B 设计系统，除非用户另有书面决定。
-
-output-dir：
-D:\Hzhao\AI_Test\migration-artifacts\table-inline-edit\evidence\visual-parity\
-
-A 只读。不装包、不升依赖、不重开 Vue2→Vue3 路径选择、
-不改业务 JS/API/路由。
-
-结束时给出：
-- visual-summary.json 路径与当前包 revision；
-- 主因与最小修复集。
-然后停止。下一步是新窗口的 5a-B（需用户在该窗口给出绑定 revision 的 go）。
-```
-
-### 9.5 会话 5a-B：样式修复
-
-等 5a-A 定界包写盘后，新会话。先贴 1.1，再贴（必须含明确 go 与包 revision）：
-
-```text
-本会话只做 /frontend-ui-stack-visual-parity Phase B。
-从已写盘的 visual-summary.json / report 恢复，校验包 revision。
-
-go:visual-fix
-绑定包 revision：<从 5a-A 结束输出抄写>
-
-只改 B 的 CSS/配置。禁止改 A，禁止改业务 JS/API/路由，
-禁止装包或升依赖。「继续 / 看起来没问题 / 全部放行」不是 go；
-本窗口提示词里必须有上面这类明确 go。
-
-结束时给出修复文件、更新后的 visual-summary 路径与 final_visual_result。
-然后停止。下一步是新窗口的 5c。
-```
-
-### 9.6 会话 5c：残差后重验
-
-5a-B 或 5b-c 任一改动 B 后，旧 `host_revision`、G9 与 Domain verify 全部作废。新会话。先贴 1.1，再贴：
-
-```text
-本会话只做残差后重验。不要再改应用代码。
-
-校验 Wave 5 改动后的当前 A/B revision；
-不得沿用 3c/4 或本轮修复前的 verified/pass。
-
-若 5b-c 改过 B：确认 Delivery 已在新 host_revision 上达到 overall_status=verified。
-若 5a-B 改过 CSS/配置：把 visual-summary.json 仅作为 path+digest external_artifacts 引入；
-Delivery G9 仍只认自有 delivery-visual-evidence/v1，必须按新 revision 重出。
-若 G9 尚未在新 revision 上重出：停止，指出应重开的 Delivery 会话，不要在 verify 里补做 G9。
-
-然后使用 /migrate-vue2-pages-to-vue3-host，mode=verify。
-只做领域复核，不重复实施。
-
-若仍必须改 B，指出下一步是新窗口的 5b-a 或 5a-A，不要在本会话修复。
-人眼对照 A 仍有 blocking 残差时，不得宣告完成。
-然后停止。
-```
-
-## 10. 完成判定
-
-```text
-有效的领域设计
-+ 已完成的依赖决策（适用时）
-+ Delivery overall_status=verified（绑定当前双仓 revision）
-+ Domain verification.status=pass（绑定同一 revision）
-+ 人眼对照 A：无 blocking 样式残差、无 blocking 功能残差
-+ 若跑过 Wave 5：修复后的 host_revision 上 G9 与 Domain verify 均重新 pass
-+ 若跑过 5a：visual-summary 的 final_visual_result=pass
-  （Phase B done，或经书面决定 skipped）
-+ legacy fallback 可演练
-+ 无 blocking residual
-= 本次迁移验证完成
-```
-
-G9 pass ≠ 肉眼对齐 A。会话 4 两闸门 pass 后只要人眼仍偏，就还不是完成态。
-
-OpenSpec archive、Git 操作、部署、切流、观察期结束、移除 fallback 和关闭 A 均需另行授权，不属于本编排的自动步骤。
+缺少真实 A 基线、确定性数据、权限环境、字体或原始图标时必须明确阻塞，不能
+用代码审查、单张截图、功能 E2E 或“看起来相似”代替严格迁移结论。
