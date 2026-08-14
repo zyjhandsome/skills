@@ -66,6 +66,28 @@ reuse-B | adapt-to-B | replace | add-to-B | copy-local | retire | unknown
 `unknown` is a blocker when it can change behavior, security, deployment,
 licensing, runtime, rollback, or acceptance.
 
+## Style closure
+
+For every user-visible migration unit, produce a structured style closure before
+design is ready. Do not treat the SFC's local `<style>` block as the boundary.
+Recursively record:
+
+- SFC/page/component style blocks and CSS/SCSS/Less entry files;
+- `@import`, Sass `@use` / `@forward`, variables, mixins, functions and
+  placeholder selectors;
+- A global/reset/utility selectors actually used by the migrated subtree;
+- CSS custom properties and their definition/fallback chain;
+- scoped/deep selectors, pseudo elements and hover/focus/active/disabled states;
+- runtime class/style bindings and theme/dark-mode selectors;
+- fonts, images, background assets, SVG/sprite/icon-font assets and licenses;
+- cascade provenance, specificity and production load order.
+
+Each entry records `id / kind / source / evidence / disposition / target` using
+the normal closure dispositions. `unknown` is blocking. Copy page-owned styles
+and permitted assets when that is the smallest parity-preserving choice; convert
+A-global dependencies into a page-scoped B compatibility layer. Never copy A's
+global reset or theme wholesale.
+
 ## Host protocol inventory
 
 For each iframe or micro-frontend edge, record:

@@ -10,5 +10,24 @@
   },
   "fixture_id": "orders-v1",
   "required_state_classes": ["loading", "loaded", "empty", "editing", "narrow"],
+  "style_requirements": {
+    "style_closure_required": true,
+    "required_style_surfaces": ["layout", "typography", "box_model", "interaction"],
+    "required_style_properties": [
+      "font-family",
+      "font-size",
+      "font-weight",
+      "line-height",
+      "box-sizing"
+    ],
+    "required_color_roles": [
+      "page-background",
+      "body-text",
+      "border",
+      "primary-action",
+      "status-success"
+    ],
+    "required_icon_ids": ["edit", "refresh"]
+  },
   "legacy_boundary_required": true
 }

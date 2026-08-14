@@ -1,0 +1,37 @@
+{
+  "schema": "visual-baseline-manifest/v1",
+  "source_revision": "source-123",
+  "fixture_id": "orders-v1",
+  "states": [
+    {
+      "id": "loading",
+      "state_class": "loading",
+      "path": "artifacts/baseline-loading.ppm",
+      "digest": "76fa75e5051ba48a45709e95190c28d7058a2ac14b9aaa274c8a5e3756d53a6a"
+    },
+    {
+      "id": "loaded",
+      "state_class": "loaded",
+      "path": "artifacts/baseline-loaded.ppm",
+      "digest": "da46aa58b66b8d5e26ed93791eec692f2952be096f4a9f221fd7d3273e3f92ae"
+    },
+    {
+      "id": "empty",
+      "state_class": "empty",
+      "path": "artifacts/baseline-empty.ppm",
+      "digest": "769237b3a06bd2c52f8fe245a662dc70e1e964df558798b09cc43dab9e64ef7a"
+    },
+    {
+      "id": "editing",
+      "state_class": "editing",
+      "path": "artifacts/baseline-editing.ppm",
+      "digest": "c86f09dbf839abc739d00516cd3b1d2ddadbe38b90cf50cf928ab5704ecaa87f"
+    },
+    {
+      "id": "narrow",
+      "state_class": "narrow",
+      "path": "artifacts/baseline-narrow.ppm",
+      "digest": "59ccac24255d4b0be5ddb606df9a37d52b1c27165efe89204f00cb69251d3b57"
+    }
+  ]
+}

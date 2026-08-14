@@ -86,7 +86,10 @@ placeholder, stop and obtain the concrete values before discovery.
 3. **Choose a migration unit.** Use an independently switchable behavior or page
    entry, not an arbitrary folder or horizontal layer.
 4. **Compute its closure.** Trace components, stores, APIs, directives, filters,
-   mixins, assets, styles, messages, dependencies, permissions, and tests.
+   mixins, assets, styles, messages, dependencies, permissions, and tests. For a
+   user-visible unit, produce a complete `style_closure`: page/SFC styles,
+   CSS/SCSS/Less dependencies, global selectors used, variables, fonts, images,
+   icons, runtime classes, pseudo states, cascade/load order and dispositions.
 5. **Freeze parity contracts.** Capture behavior, API, permission, URL, error,
    performance, accessibility, and visual baselines before source evidence changes.
    Define the comparison boundary: keep B's shell host-native by default and hold
@@ -147,6 +150,15 @@ a failed check. For tables, require geometry, typography, wrapping, border, stat
 control, and interaction evidence. Do not claim parity from code review,
 functional E2E, or screenshots alone. Validate completed evidence with
 `scripts/validate_visual_evidence.mjs` when a JSON evidence artifact is available.
+
+For strict parity, require structured style evidence rather than a prose or
+self-attested `computed_style=pass`: a complete style closure, per-state computed
+style artifacts, page layout/typography/box/interaction metrics, semantic color
+roles, and exact icon-content/geometry/paint/accessibility checks for every
+contracted icon. Preserve A's migrated-content colors and icon identity through a
+page-scoped B-compatible layer; do not copy A's global reset/theme or alter B's
+shell tokens to repair one page. Each visual state owns a distinct A baseline
+artifact recorded in a revision-bound baseline manifest.
 
 ### Runtime compatibility
 

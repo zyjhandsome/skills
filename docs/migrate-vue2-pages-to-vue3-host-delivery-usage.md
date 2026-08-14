@@ -15,6 +15,7 @@
 | OpenSpec change | 生命周期与状态真相（若团队使用） |
 
 - 领域 Skill 与 Delivery family **互不调用**；Delivery family 内部按 handoff 链式接力。编排者只传摘要路径 + digest。  
+- 最新编排文档把「每步一个新会话」覆盖在链式接力之上：阶段结束必须停窗口，下一步只从 `handoff.json` / artifact 恢复。这是编排覆盖，不是改 Skill。  
 - Domain `verification=pass` **不等于** Delivery `verified`，更不等于生产切流或关停源仓 A。  
 - `implementation_authorization` 只是对外部批准的引用；批准权威在用户 / Delivery 闸门。Delivery 的单一
   `artifact_revision` 或 `repo_head` 不能自动映射成该授权：implementation go 必须显式携带并绑定
@@ -40,7 +41,18 @@ delivery-execute-verify（集成路线唯一代码 mutation owner，只改 B）
         ├─ Delivery：tasks + G9 `delivery-visual-evidence/v1`
         ▼
 migrate-vue2… verify（不重复实施；按新 revision 刷新领域证据）
+        │
+        ├─ 人眼仍有功能残差 → 交还 delivery-frame-spec（缺陷切片，只改 B）
+        ├─ 人眼仍有样式残差 → frontend-ui-stack-visual-parity
+        │     （Phase A 定界；明确 go 后只改 B 的 CSS/配置）
+        ▼
+migrate-vue2… verify（按新 host_revision 刷新；不得沿用旧 pass）
 ```
+
+上图每一条竖线都是**新会话窗口**。即使 Delivery Family 允许同会话接力，本编排也要求阶段结束即停。
+
+G9 `final_visual_result=pass` 与 Domain visual pass 都不等于迁入内容已肉眼对齐 A。
+功能残差不得交给视觉 skill；视觉 skill 不得改业务 JS。两闸门 pass 后只要人眼仍偏，就还不是完成态。
 
 Delivery 实施后 `host_revision` 会变化：先将旧 implementation authorization 标为 stale，
 再以当前 A/B revision 执行纯只读 verify。只读 verify 不需要新的实施授权；若验证过程需要改代码、
@@ -82,5 +94,5 @@ Delivery 侧：
 
 ## 4. 编排提示词
 
-最新四波完整编排见
+最新分波完整编排（每步独立会话；含 Wave 5 人眼残差修复）见
 [`vue2-page-migration-orchestration-latest.md`](./vue2-page-migration-orchestration-latest.md)。

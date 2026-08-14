@@ -125,7 +125,7 @@ visual=required；保留可演练的 iframe/legacy fallback
 配套说明：
 
 - [`docs/migrate-vue2-pages-to-vue3-host-delivery-usage.md`](./docs/migrate-vue2-pages-to-vue3-host-delivery-usage.md)（与 delivery-* 可选挂载）
-- [`docs/vue2-page-migration-orchestration-latest.md`](./docs/vue2-page-migration-orchestration-latest.md)（A→B 分波编排提示词）
+- [`docs/vue2-page-migration-orchestration-latest.md`](./docs/vue2-page-migration-orchestration-latest.md)（A→B 分波编排；每步独立会话；含人眼残差修复）
 
 ## UI 栈视觉 parity（升级后样式）
 

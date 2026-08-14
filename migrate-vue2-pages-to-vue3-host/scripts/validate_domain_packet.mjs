@@ -88,6 +88,22 @@ export function validateDomainPacket(packet, options = {}) {
     }
   }
   require(Array.isArray(packet?.closure), "closure must be an array");
+  const styleClosure = packet?.style_closure;
+  require(object(styleClosure), "style_closure is required");
+  require(["pending", "complete", "blocked"].includes(styleClosure?.status), "style_closure.status is invalid");
+  require(Array.isArray(styleClosure?.entries), "style_closure.entries must be an array");
+  require(Array.isArray(styleClosure?.unresolved), "style_closure.unresolved must be an array");
+  for (const [index, entry] of (styleClosure?.entries || []).entries()) {
+    const label = `style_closure.entries[${index}]`;
+    for (const key of ["id", "kind", "source", "evidence", "disposition", "target"]) {
+      require(nonEmpty(entry?.[key]), `${label}.${key} is required`);
+    }
+  }
+  if (["design", "execute", "verify"].includes(packet?.mode)) {
+    require(styleClosure?.status === "complete", `${packet.mode} requires style_closure.status=complete`);
+    require((styleClosure?.entries || []).length > 0, `${packet.mode} requires evidenced style_closure.entries`);
+    require((styleClosure?.unresolved || []).length === 0, `${packet.mode} requires style_closure.unresolved to be empty`);
+  }
   require(Array.isArray(packet?.host_protocols), "host_protocols must be an array");
   require(packet?.runtime_evidence?.schema === "runtime-compatibility-evidence/v1", "runtime_evidence.schema is invalid");
   require("path_or_inline" in (packet?.runtime_evidence ?? {}), "runtime_evidence.path_or_inline is required");

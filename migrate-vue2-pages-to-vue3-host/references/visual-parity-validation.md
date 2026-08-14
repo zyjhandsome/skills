@@ -22,7 +22,8 @@ migration_contract:
   digest: <sha256 of that file>
 baseline:
   source: <running A, screenshots, design, or approved substitute>
-  digest: <content digest>
+  manifest_path: <visual-baseline-manifest/v1 JSON>
+  manifest_digest: <sha256 of that file>
   substitute_approved_by: null
 comparison_boundary:
   host_shell: host_native | strict_parity | explicitly_accepted
@@ -42,6 +43,18 @@ difference_policy:
   tolerance_bound: []
   explicitly_accepted: []
 required_states: []
+style_closure:
+  status: complete
+  entries: []
+  unresolved: []
+page_style_contract:
+  metrics: []
+  result: not_run
+color_contract:
+  metrics: []
+  result: not_run
+contains_icons: false
+icon_contract: null
 contains_table: false
 table_contract: null
 legacy_boundary:
@@ -88,13 +101,23 @@ native_identity:
   marker: <expected data-visual-unit value>
 fixture_id: <stable fixture fingerprint>
 required_state_classes: [<at least five distinct classes>]
+style_requirements:
+  style_closure_required: true
+  required_style_surfaces: [layout, typography, box_model, interaction]
+  required_style_properties: []
+  required_color_roles: []
+  required_icon_ids: []
 legacy_boundary_required: true | false
 ```
 
 Evidence `migration_contract.path` / `digest` must point at that file. Each state
 row's identity `expected` values and `capture.fixture_id` must match the contract.
-Candidate and diff artifacts must be distinct across states. Validate completed
-JSON with `scripts/validate_visual_evidence.mjs`.
+Candidate and diff artifacts must be distinct across states. Every state also
+references a state-specific A baseline image and a machine-readable computed-style
+artifact. The top-level baseline points to a `visual-baseline-manifest/v1` that
+binds all state baselines to the source revision and fixture; it is not the digest
+of one reused screenshot. Validate completed JSON with
+`scripts/validate_visual_evidence.mjs`.
 
 ## Capture the baseline first
 
@@ -117,6 +140,64 @@ Require at least five meaningful rows and cover applicable state classes:
 
 Use stable data, locale, timezone, fonts, browser version, animation settings, and
 capture timing. Mask only genuinely nondeterministic regions and record every mask.
+
+Write a baseline manifest with one row per required state:
+
+```yaml
+schema: visual-baseline-manifest/v1
+source_revision: <A revision>
+fixture_id: <fixture fingerprint>
+states:
+  - id: <state id>
+    state_class: <class>
+    path: <baseline image>
+    digest: <sha256>
+```
+
+Different states normally have different baseline artifacts and digests. Reusing
+one screenshot for loading, loaded, empty, editing, and error is invalid even when
+the file exists.
+
+## Style, color, typography and icon contracts
+
+Freeze style requirements in the visual migration contract before implementation.
+The evidence must cover every contracted surface, property, semantic color role
+and icon ID.
+
+`style_closure` records page/SFC styles, preprocessor imports and symbols, global
+selectors used, CSS variables, runtime classes, fonts, images and icons, including
+their disposition into B. It must be complete with no unresolved item for a pass.
+
+`page_style_contract.metrics[]` records:
+
+```text
+surface / id / selector / state_class / property /
+baseline / candidate / tolerance / result
+```
+
+Use the `layout`, `typography`, `box_model`, and `interaction` surfaces when
+applicable. Contract exact font-family order, available weight, font size,
+line-height, box-sizing and wrapping semantics; use numeric tolerances only for
+properties where a bounded geometric difference is legitimate.
+
+`color_contract.metrics[]` records the same selector/state context plus a semantic
+`role`, for example page background, body text, border, primary action, status
+success/warning/error, placeholder, focus and disabled. Normalize computed colors
+to a stable representation before exact comparison. Do not infer parity from
+matching Sass variable names.
+
+When `required_icon_ids` is non-empty, set `contains_icons=true` and provide an
+`icon_contract`. For each icon record source and candidate asset path/digest plus a
+rendered fingerprint, then exact or bounded metrics for `content`, `geometry`,
+`paint`, and `accessibility`. Content covers SVG path/viewBox, sprite/glyph identity
+or an equivalent deterministic fingerprint. A semantically similar replacement
+with different content is a difference, not an automatic pass.
+
+Each state links a computed-style JSON artifact with its own digest. That artifact
+records the state ID, fixture ID and the actual selector/property measurements
+used by the page and color contracts. Every reported candidate value must bind to
+the matching state, selector and property in that artifact. A bare
+`computed_style: pass` flag without this artifact is invalid.
 
 ## Define the comparison boundary
 
@@ -295,6 +376,11 @@ Pass only when:
 
 - the evidence revision pair equals the current repositories;
 - every required row has current artifacts and a result;
+- every state baseline is present in the revision-bound baseline manifest and
+  every state has a validated computed-style artifact;
+- the style closure is complete with no unresolved dependency;
+- page style, semantic color and contracted icon evidence cover every frozen
+  requirement and pass declared tolerances;
 - no forbidden difference remains;
 - every state passes URL, route, marker, and fixture identity assertions;
 - tolerances stay within approved thresholds;

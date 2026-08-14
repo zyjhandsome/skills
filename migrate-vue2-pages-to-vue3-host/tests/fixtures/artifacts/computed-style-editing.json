@@ -1,0 +1,67 @@
+{
+  "schema": "computed-style-evidence/v1",
+  "state_id": "editing",
+  "fixture_id": "orders-v1",
+  "metrics": [
+    {
+      "selector": "[data-visual-unit='orders']",
+      "property": "width",
+      "value": 1200
+    },
+    {
+      "selector": "[data-visual-unit='orders']",
+      "property": "font-family",
+      "value": "Arial, sans-serif"
+    },
+    {
+      "selector": "[data-visual-unit='orders']",
+      "property": "font-size",
+      "value": "14px"
+    },
+    {
+      "selector": "[data-visual-unit='orders']",
+      "property": "font-weight",
+      "value": "400"
+    },
+    {
+      "selector": "[data-visual-unit='orders']",
+      "property": "line-height",
+      "value": "20px"
+    },
+    {
+      "selector": "[data-visual-unit='orders']",
+      "property": "box-sizing",
+      "value": "border-box"
+    },
+    {
+      "selector": "[data-visual-unit='orders']",
+      "property": "background-color",
+      "value": "rgb(255, 255, 255)"
+    },
+    {
+      "selector": "[data-visual-unit='orders']",
+      "property": "color",
+      "value": "rgb(48, 49, 51)"
+    },
+    {
+      "selector": ".orders-table",
+      "property": "border-color",
+      "value": "rgb(223, 230, 236)"
+    },
+    {
+      "selector": "[data-icon='edit']",
+      "property": "color",
+      "value": "rgb(64, 158, 255)"
+    },
+    {
+      "selector": "[data-icon='edit']",
+      "property": "cursor",
+      "value": "pointer"
+    },
+    {
+      "selector": ".status-success",
+      "property": "color",
+      "value": "rgb(103, 194, 58)"
+    }
+  ]
+}

@@ -103,6 +103,21 @@ then add the smallest page-scoped compatibility layer needed for parity. Record
 every deliberate visual difference. Follow `visual-parity-validation.md` before
 changing source CSS or replacing the UI library.
 
+For the migrated content root under `strict_parity`, preserve A's rendered color
+semantics rather than silently inheriting B/UI-library defaults. Cover text,
+background, border, action/status, placeholder, hover/focus/selected/disabled,
+overlay and gradient/alpha results. Resolve compile-time Sass values and runtime
+CSS-variable/currentColor chains to normalized computed values before comparing.
+Do not overwrite B's global tokens; expose page-scoped compatibility variables or
+selectors instead.
+
+Preserve source icon identity when an icon is business-, brand-, state- or
+parity-significant. Reuse permitted SVG content or an exact rendered fingerprint
+through B's icon pipeline rather than copying Vue 2 global loaders. Contract the
+SVG path/viewBox or glyph identity, fill/stroke, size, baseline, spacing, click
+target and accessible name. A merely synonymous Element Plus icon is not a parity
+substitute unless its difference is explicitly approved.
+
 ## Forbidden combined refactors
 
 Unless separately approved, do not combine framework migration with:

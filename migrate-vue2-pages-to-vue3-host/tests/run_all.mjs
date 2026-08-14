@@ -270,7 +270,7 @@ function checkVisualEvidenceValidator() {
     },
     {
       id: "unbound-baseline-metadata",
-      mutate: (evidence) => { delete evidence.baseline.source; evidence.baseline.digest = "not-a-digest"; },
+      mutate: (evidence) => { delete evidence.baseline.source; evidence.baseline.manifest_digest = "not-a-digest"; },
       error: "baseline.source is required",
     },
     {
@@ -306,6 +306,44 @@ function checkVisualEvidenceValidator() {
       },
       error: "existing host page",
     },
+    {
+      id: "missing-style-closure",
+      mutate: (evidence) => { delete evidence.style_closure; },
+      error: "style_closure.status must be complete",
+    },
+    {
+      id: "wrong-source-color-labeled-pass",
+      mutate: (evidence) => { evidence.color_contract.metrics[1].candidate = "rgb(0, 0, 0)"; },
+      error: "color_contract.metrics[1] baseline/candidate exceed tolerance",
+    },
+    {
+      id: "font-fallback-labeled-pass",
+      mutate: (evidence) => { evidence.page_style_contract.metrics[1].candidate = "system-ui"; },
+      error: "page_style_contract.metrics[1] baseline/candidate exceed tolerance",
+    },
+    {
+      id: "replacement-icon-content",
+      mutate: (evidence) => { evidence.icon_contract.icons[0].candidate.fingerprint = "different-icon"; },
+      error: "source/candidate fingerprint mismatch",
+    },
+    {
+      id: "missing-computed-style-artifact",
+      mutate: (evidence) => { evidence.required_states[0].artifacts.computed_style_path = "artifacts/not-generated.json"; },
+      error: "path does not exist",
+    },
+    {
+      id: "unbound-computed-style-measurement",
+      mutate: (evidence) => { evidence.page_style_contract.metrics[1].selector = "[data-unmeasured='font']"; },
+      error: "candidate is not backed by its state computed-style artifact",
+    },
+    {
+      id: "reused-state-baseline",
+      mutate: (evidence) => {
+        evidence.required_states[1].artifacts.baseline_path = evidence.required_states[0].artifacts.baseline_path;
+        evidence.required_states[1].artifacts.baseline_digest = evidence.required_states[0].artifacts.baseline_digest;
+      },
+      error: "baseline path must match baseline manifest",
+    },
   ];
   for (const testCase of cases) {
     const evidence = structuredClone(valid);
@@ -337,7 +375,16 @@ function checkDomainPacketValidator() {
     source: { root: "A", revision: "source-123" }, host: { root: "B", revision: "host-456" },
     migration_unit: { id: "orders", source_entry: "/orders", host_entry: "/native/orders" },
     intent: { goal: "preserve orders behavior", non_goals: ["redesign"] },
-    evidence: { facts: [], inferences: [], decisions: [] }, closure: [], host_protocols: [],
+    evidence: { facts: [], inferences: [], decisions: [] }, closure: [],
+    style_closure: {
+      status: "complete",
+      entries: [{
+        id: "orders-style", kind: "sfc-style", source: "src/views/orders.vue",
+        evidence: "style block inspected", disposition: "adapt-to-B", target: "src/views/orders.vue",
+      }],
+      unresolved: [],
+    },
+    host_protocols: [],
     runtime_evidence: { schema: "runtime-compatibility-evidence/v1", path_or_inline: runtimeInline },
     visual_evidence: {
       schema: "visual-parity-evidence/v1",
@@ -379,6 +426,10 @@ function checkDomainPacketValidator() {
   objectTarget.design.target = { kind: "native" };
   objectTarget.packet_digest = canonicalPacketDigest(objectTarget);
   assert.ok(validateDomainPacket(objectTarget).some((error) => error.includes("design.target")));
+  const missingStyleClosure = structuredClone(packet);
+  delete missingStyleClosure.style_closure;
+  missingStyleClosure.packet_digest = canonicalPacketDigest(missingStyleClosure);
+  assert.ok(validateDomainPacket(missingStyleClosure).some((error) => error.includes("style_closure is required")));
   const fakeInline = structuredClone(packet);
   fakeInline.runtime_evidence.path_or_inline = { final_runtime_result: "pass" };
   fakeInline.visual_evidence.path_or_inline = { final_visual_result: "pass" };

@@ -11,7 +11,10 @@ const SHA256 = /^[0-9a-f]{64}$/i;
 const IDENTITY_KEYS = ["url", "route", "marker", "fixture"];
 const CHECK_KEYS = ["screenshot", "computed_style", "semantic", "interaction"];
 const TABLE_SURFACES = ["container", "header", "rows_cells", "content", "controls"];
+const PAGE_STYLE_SURFACES = ["layout", "typography", "box_model", "interaction"];
+const ICON_SURFACES = ["content", "geometry", "paint", "accessibility"];
 const IMAGE_EXTENSIONS = /\.(png|jpe?g|webp|ppm)$/i;
+const ICON_EXTENSIONS = /\.(svg|png|jpe?g|webp|woff2?|ttf|otf)$/i;
 
 /** @param {unknown} value */
 function nonEmpty(value) {
@@ -73,6 +76,40 @@ export function validateVisualEvidence(evidence, options = {}) {
       require(sha256(absolute) === digestText.toLowerCase(), `${label}.digest does not match file contents`);
     }
   };
+  /**
+   * @param {unknown} pathValue
+   * @param {unknown} digestValue
+   * @param {string} label
+   * @param {RegExp} extensions
+   */
+  const validateFileArtifact = (pathValue, digestValue, label, extensions) => {
+    require(nonEmpty(pathValue), `${label}.path is required`);
+    require(SHA256.test(String(digestValue ?? "")), `${label}.digest must be a SHA-256 digest`);
+    if (!nonEmpty(pathValue)) return null;
+    const pathText = String(pathValue);
+    require(extensions.test(pathText), `${label}.path has an unsupported extension`);
+    const absolute = isAbsolute(pathText) ? pathText : resolve(baseDir, pathText);
+    require(existsSync(absolute), `${label}.path does not exist: ${absolute}`);
+    if (existsSync(absolute) && SHA256.test(String(digestValue ?? ""))) {
+      require(sha256(absolute) === String(digestValue).toLowerCase(), `${label}.digest does not match file contents`);
+    }
+    return existsSync(absolute) ? absolute : null;
+  };
+  /**
+   * @param {unknown} pathValue
+   * @param {unknown} digestValue
+   * @param {string} label
+   */
+  const loadJsonArtifact = (pathValue, digestValue, label) => {
+    const absolute = validateFileArtifact(pathValue, digestValue, label, /\.json$/i);
+    if (!absolute) return null;
+    try {
+      return JSON.parse(readFileSync(absolute, "utf8"));
+    } catch (error) {
+      require(false, `${label} is not valid JSON: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
+    }
+  };
 
   let migrationContract;
   const contractPathValue = evidence?.migration_contract?.path;
@@ -102,7 +139,14 @@ export function validateVisualEvidence(evidence, options = {}) {
   require(nonEmpty(evidence?.host_revision), "host_revision is required");
   require(["strict_parity", "approved_redesign"].includes(evidence?.assessment_mode), "assessment_mode is invalid");
   require(nonEmpty(evidence?.baseline?.source), "baseline.source is required");
-  require(SHA256.test(evidence?.baseline?.digest ?? ""), "baseline.digest must be a SHA-256 digest");
+  const baselineManifest = loadJsonArtifact(
+    evidence?.baseline?.manifest_path,
+    evidence?.baseline?.manifest_digest,
+    "baseline.manifest"
+  );
+  require(baselineManifest?.schema === "visual-baseline-manifest/v1", "baseline manifest schema must be visual-baseline-manifest/v1");
+  require(baselineManifest?.source_revision === evidence?.source_revision, "baseline manifest source_revision must match evidence");
+  require(baselineManifest?.fixture_id === evidence?.capture?.fixture_id, "baseline manifest fixture_id must match capture");
   if (evidence?.assessment_mode === "approved_redesign") {
     require(nonEmpty(evidence?.baseline?.substitute_approved_by), "approved_redesign requires baseline.substitute_approved_by");
   }
@@ -148,6 +192,119 @@ export function validateVisualEvidence(evidence, options = {}) {
     require(Array.isArray(accepted?.affected_states) && accepted.affected_states.length > 0, `${label}.affected_states is required`);
   }
 
+  const styleRequirements = migrationContract?.style_requirements;
+  require(styleRequirements?.style_closure_required === true, "migration contract must require style closure");
+  const requiredStyleSurfaces = Array.isArray(styleRequirements?.required_style_surfaces)
+    ? styleRequirements.required_style_surfaces : [];
+  for (const surface of PAGE_STYLE_SURFACES) {
+    require(requiredStyleSurfaces.includes(surface), `migration contract required_style_surfaces must include ${surface}`);
+  }
+  const requiredStyleProperties = Array.isArray(styleRequirements?.required_style_properties)
+    ? styleRequirements.required_style_properties : [];
+  for (const property of ["font-family", "font-size", "font-weight", "line-height", "box-sizing"]) {
+    require(requiredStyleProperties.includes(property), `migration contract required_style_properties must include ${property}`);
+  }
+  const requiredColorRoles = Array.isArray(styleRequirements?.required_color_roles)
+    ? styleRequirements.required_color_roles : [];
+  require(new Set(requiredColorRoles).size >= 3, "migration contract must require at least three semantic color roles");
+  const requiredIconIds = Array.isArray(styleRequirements?.required_icon_ids)
+    ? styleRequirements.required_icon_ids : [];
+
+  const styleClosure = evidence?.style_closure;
+  require(styleClosure?.status === "complete", "style_closure.status must be complete");
+  const styleEntries = Array.isArray(styleClosure?.entries) ? styleClosure.entries : [];
+  require(styleEntries.length > 0, "style_closure.entries must not be empty");
+  for (const [index, dependency] of styleEntries.entries()) {
+    const label = `style_closure.entries[${index}]`;
+    for (const key of ["id", "kind", "source", "evidence", "disposition", "target"]) {
+      require(nonEmpty(dependency?.[key]), `${label}.${key} is required`);
+    }
+  }
+  require(Array.isArray(styleClosure?.unresolved), "style_closure.unresolved must be an array");
+  require((styleClosure?.unresolved || []).length === 0, "style_closure.unresolved must be empty");
+
+  const pageStyle = evidence?.page_style_contract;
+  require(pageStyle?.result === PASS, "page_style_contract.result must be pass");
+  /** @type {any[]} */
+  const pageMetrics = Array.isArray(pageStyle?.metrics) ? pageStyle.metrics : [];
+  const coveredStyleSurfaces = new Set(pageMetrics.map((metric) => metric?.surface));
+  const coveredStyleProperties = new Set(pageMetrics.map((metric) => metric?.property));
+  for (const surface of requiredStyleSurfaces) {
+    require(coveredStyleSurfaces.has(surface), `page_style_contract.metrics must cover ${surface}`);
+  }
+  for (const property of requiredStyleProperties) {
+    require(coveredStyleProperties.has(property), `page_style_contract.metrics must cover property ${property}`);
+  }
+  for (const [index, metric] of pageMetrics.entries()) {
+    const label = `page_style_contract.metrics[${index}]`;
+    for (const key of ["surface", "id", "selector", "state_class", "property"]) {
+      require(nonEmpty(metric?.[key]), `${label}.${key} is required`);
+    }
+    require(metric?.baseline !== undefined, `${label}.baseline is required`);
+    require(metric?.candidate !== undefined, `${label}.candidate is required`);
+    require(typeof metric?.baseline === typeof metric?.candidate, `${label} baseline/candidate types must match`);
+    require(metric?.tolerance !== undefined, `${label}.tolerance is required`);
+    require(metricWithinTolerance(metric), `${label} baseline/candidate exceed tolerance`);
+    require(metric?.result === PASS, `${label}.result must be pass`);
+  }
+
+  const colorContract = evidence?.color_contract;
+  require(colorContract?.result === PASS, "color_contract.result must be pass");
+  /** @type {any[]} */
+  const colorMetrics = Array.isArray(colorContract?.metrics) ? colorContract.metrics : [];
+  const coveredColorRoles = new Set(colorMetrics.map((metric) => metric?.role));
+  for (const role of requiredColorRoles) {
+    require(coveredColorRoles.has(role), `color_contract.metrics must cover role ${role}`);
+  }
+  for (const [index, metric] of colorMetrics.entries()) {
+    const label = `color_contract.metrics[${index}]`;
+    for (const key of ["id", "role", "selector", "state_class", "property"]) {
+      require(nonEmpty(metric?.[key]), `${label}.${key} is required`);
+    }
+    require(metric?.baseline !== undefined, `${label}.baseline is required`);
+    require(metric?.candidate !== undefined, `${label}.candidate is required`);
+    require(typeof metric?.baseline === typeof metric?.candidate, `${label} baseline/candidate types must match`);
+    require(metric?.tolerance === "exact", `${label}.tolerance must be exact`);
+    require(metricWithinTolerance(metric), `${label} baseline/candidate exceed tolerance`);
+    require(metric?.result === PASS, `${label}.result must be pass`);
+  }
+
+  require(typeof evidence?.contains_icons === "boolean", "contains_icons must be explicit");
+  require(evidence?.contains_icons === (requiredIconIds.length > 0), "contains_icons must match migration contract required_icon_ids");
+  if (requiredIconIds.length > 0) {
+    const iconContract = evidence?.icon_contract;
+    require(iconContract?.result === PASS, "icon_contract.result must be pass");
+    /** @type {any[]} */
+    const icons = Array.isArray(iconContract?.icons) ? iconContract.icons : [];
+    const iconIds = new Set(icons.map((icon) => icon?.id));
+    for (const iconId of requiredIconIds) require(iconIds.has(iconId), `icon_contract.icons must cover ${iconId}`);
+    for (const [index, icon] of icons.entries()) {
+      const label = `icon_contract.icons[${index}]`;
+      require(nonEmpty(icon?.id), `${label}.id is required`);
+      require(nonEmpty(icon?.selector), `${label}.selector is required`);
+      validateFileArtifact(icon?.source?.path, icon?.source?.digest, `${label}.source`, ICON_EXTENSIONS);
+      validateFileArtifact(icon?.candidate?.path, icon?.candidate?.digest, `${label}.candidate`, ICON_EXTENSIONS);
+      require(nonEmpty(icon?.source?.fingerprint), `${label}.source.fingerprint is required`);
+      require(nonEmpty(icon?.candidate?.fingerprint), `${label}.candidate.fingerprint is required`);
+      require(icon?.source?.fingerprint === icon?.candidate?.fingerprint, `${label} source/candidate fingerprint mismatch`);
+      /** @type {any[]} */
+      const iconMetrics = Array.isArray(icon?.metrics) ? icon.metrics : [];
+      const iconSurfaces = new Set(iconMetrics.map((metric) => metric?.surface));
+      for (const surface of ICON_SURFACES) require(iconSurfaces.has(surface), `${label}.metrics must cover ${surface}`);
+      for (const [metricIndex, metric] of iconMetrics.entries()) {
+        const metricLabel = `${label}.metrics[${metricIndex}]`;
+        require(nonEmpty(metric?.id), `${metricLabel}.id is required`);
+        require(metric?.baseline !== undefined, `${metricLabel}.baseline is required`);
+        require(metric?.candidate !== undefined, `${metricLabel}.candidate is required`);
+        require(typeof metric?.baseline === typeof metric?.candidate, `${metricLabel} baseline/candidate types must match`);
+        require(metric?.tolerance !== undefined, `${metricLabel}.tolerance is required`);
+        require(metricWithinTolerance(metric), `${metricLabel} baseline/candidate exceed tolerance`);
+        require(metric?.result === PASS, `${metricLabel}.result must be pass`);
+      }
+      require(icon?.result === PASS, `${label}.result must be pass`);
+    }
+  }
+
   /** @type {any[]} */
   const states = Array.isArray(evidence?.required_states) ? evidence.required_states : [];
   require(states.length >= 5, "at least five required_states are required");
@@ -158,6 +315,12 @@ export function validateVisualEvidence(evidence, options = {}) {
   const contractedClasses = Array.isArray(migrationContract?.required_state_classes) ? migrationContract.required_state_classes : [];
   require(contractedClasses.length >= 5, "migration contract must require at least five state classes");
   for (const stateClass of contractedClasses) require(stateClasses.includes(stateClass), `required_states must cover contracted state class '${stateClass}'`);
+  const baselineRows = Array.isArray(baselineManifest?.states) ? baselineManifest.states : [];
+  require(baselineRows.length === states.length, "baseline manifest must contain exactly one row per required state");
+  const baselineById = new Map(baselineRows.map((row) => [row?.id, row]));
+  require(baselineById.size === baselineRows.length, "baseline manifest state ids must be unique");
+  /** @type {Map<unknown, any[]>} */
+  const computedMetricsByStateClass = new Map();
 
   for (const [index, state] of states.entries()) {
     const label = `required_states[${index}]${nonEmpty(state?.id) ? `(${state.id})` : ""}`;
@@ -180,24 +343,64 @@ export function validateVisualEvidence(evidence, options = {}) {
       require(mode?.expected !== undefined && same(mode.actual, mode.expected), `${label}.identity_assertions.migration_mode expected/actual mismatch`);
       require(mode?.expected === "native", `${label}.identity_assertions.migration_mode.expected must be native for candidate evidence`);
     }
+    const baselineRow = baselineById.get(state?.id);
+    require(baselineRow !== undefined, `${label} is missing from baseline manifest`);
+    require(baselineRow?.state_class === state?.state_class, `${label} baseline manifest state_class mismatch`);
+    require(baselineRow?.path === state?.artifacts?.baseline_path, `${label} baseline path must match baseline manifest`);
+    require(baselineRow?.digest === state?.artifacts?.baseline_digest, `${label} baseline digest must match baseline manifest`);
     validateArtifact(state?.artifacts?.baseline_path, state?.artifacts?.baseline_digest, `${label}.artifacts.baseline`);
     validateArtifact(state?.artifacts?.candidate_path, state?.artifacts?.candidate_digest, `${label}.artifacts.candidate`);
     validateArtifact(state?.artifacts?.diff_path, state?.artifacts?.diff_digest, `${label}.artifacts.diff`);
+    const computedStyle = loadJsonArtifact(
+      state?.artifacts?.computed_style_path,
+      state?.artifacts?.computed_style_digest,
+      `${label}.artifacts.computed_style`
+    );
+    require(computedStyle?.schema === "computed-style-evidence/v1", `${label} computed style schema must be computed-style-evidence/v1`);
+    require(computedStyle?.state_id === state?.id, `${label} computed style state_id mismatch`);
+    require(computedStyle?.fixture_id === evidence?.capture?.fixture_id, `${label} computed style fixture_id mismatch`);
+    /** @type {any[]} */
+    const computedMetrics = Array.isArray(computedStyle?.metrics) ? computedStyle.metrics : [];
+    require(computedMetrics.length > 0, `${label} computed style metrics must not be empty`);
+    for (const [metricIndex, metric] of computedMetrics.entries()) {
+      const metricLabel = `${label}.artifacts.computed_style.metrics[${metricIndex}]`;
+      require(nonEmpty(metric?.selector), `${metricLabel}.selector is required`);
+      require(nonEmpty(metric?.property), `${metricLabel}.property is required`);
+      require(metric?.value !== undefined, `${metricLabel}.value is required`);
+    }
+    computedMetricsByStateClass.set(state?.state_class, computedMetrics);
     for (const key of CHECK_KEYS) {
       require(state?.checks?.[key] === PASS, `${label}.checks.${key} must be pass`);
     }
     require(state?.result === PASS, `${label}.result must be pass`);
   }
+  /**
+   * @param {any[]} contractMetrics
+   * @param {string} contractLabel
+   */
+  const requireComputedStyleBacking = (contractMetrics, contractLabel) => {
+    for (const [index, metric] of contractMetrics.entries()) {
+      const computedMetrics = computedMetricsByStateClass.get(metric?.state_class) || [];
+      require(
+        computedMetrics.some((measured) =>
+          measured?.selector === metric?.selector &&
+          measured?.property === metric?.property &&
+          same(measured?.value, metric?.candidate)
+        ),
+        `${contractLabel}.metrics[${index}] candidate is not backed by its state computed-style artifact`
+      );
+    }
+  };
+  requireComputedStyleBacking(pageMetrics, "page_style_contract");
+  requireComputedStyleBacking(colorMetrics, "color_contract");
   const candidateDigests = states.map((state) => state?.artifacts?.candidate_digest).filter(nonEmpty);
   const diffDigests = states.map((state) => state?.artifacts?.diff_digest).filter(nonEmpty);
   const baselineDigests = states.map((state) => state?.artifacts?.baseline_digest).filter(nonEmpty);
+  const baselinePaths = states.map((state) => state?.artifacts?.baseline_path).filter(nonEmpty);
   require(new Set(candidateDigests).size === candidateDigests.length, "required_states candidate artifacts must be distinct");
   require(new Set(diffDigests).size === diffDigests.length, "required_states diff artifacts must be distinct");
-  require(
-    baselineDigests.length === states.length &&
-      baselineDigests.every(/** @param {unknown} digest */ (digest) => digest === evidence?.baseline?.digest),
-    "baseline.digest must match every required state baseline artifact"
-  );
+  require(new Set(baselinePaths).size === states.length, "required_states baseline artifact paths must be distinct");
+  require(new Set(baselineDigests).size === states.length, "required_states baseline artifact digests must be distinct");
   for (const [index, tolerance] of (differencePolicy?.tolerance_bound || []).entries()) {
     for (const stateId of tolerance?.affected_states || []) {
       require(stateIds.includes(stateId), `difference_policy.tolerance_bound[${index}] references unknown state '${stateId}'`);

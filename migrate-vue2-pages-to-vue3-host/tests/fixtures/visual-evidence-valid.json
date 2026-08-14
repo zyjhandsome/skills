@@ -7,11 +7,12 @@
   "assessment_mode": "strict_parity",
   "migration_contract": {
     "path": "visual-migration-contract.json",
-    "digest": "c6f6306c5e59b905ea458ade53158a279d235999fdc7f4f326e3ebe26e4e69aa"
+    "digest": "d8892e30b4b641f0c1dbe1b227c04d2ed94b224c16d23b8ff72bfdacf0a1a446"
   },
   "baseline": {
     "source": "running-a",
-    "digest": "064ea70c5ca111e4e9b50fb256594110f669a1339c4ccf067aa6f3970a827976"
+    "manifest_path": "visual-baseline-manifest.json",
+    "manifest_digest": "473a868108701ec4e1615a134e1bfc3099c8e082c975724d9e0fc3380bcaad17"
   },
   "comparison_boundary": {
     "host_shell": "host_native",
@@ -32,6 +33,282 @@
     "forbidden": [],
     "tolerance_bound": [],
     "explicitly_accepted": []
+  },
+  "style_closure": {
+    "status": "complete",
+    "entries": [
+      {
+        "id": "orders-sfc-style",
+        "kind": "sfc-style",
+        "source": "src/views/orders/index.vue",
+        "evidence": "SFC style block inspected",
+        "disposition": "adapt-to-B",
+        "target": "src/views/orders/index.vue"
+      },
+      {
+        "id": "orders-theme-vars",
+        "kind": "scss-variable",
+        "source": "src/styles/variables.scss",
+        "evidence": "$primary-color=#409eff",
+        "disposition": "adapt-to-B",
+        "target": "src/views/orders/orders-compat.scss"
+      },
+      {
+        "id": "orders-edit-icon",
+        "kind": "icon",
+        "source": "src/icons/edit.svg",
+        "evidence": "sha256 fingerprint",
+        "disposition": "copy-local",
+        "target": "src/views/orders/icons/edit.svg"
+      }
+    ],
+    "unresolved": []
+  },
+  "page_style_contract": {
+    "metrics": [
+      {
+        "surface": "layout",
+        "id": "content-width",
+        "selector": "[data-visual-unit='orders']",
+        "state_class": "loaded",
+        "property": "width",
+        "baseline": 1200,
+        "candidate": 1200,
+        "tolerance": 2,
+        "result": "pass"
+      },
+      {
+        "surface": "typography",
+        "id": "body-font-family",
+        "selector": "[data-visual-unit='orders']",
+        "state_class": "loaded",
+        "property": "font-family",
+        "baseline": "Arial, sans-serif",
+        "candidate": "Arial, sans-serif",
+        "tolerance": "exact",
+        "result": "pass"
+      },
+      {
+        "surface": "typography",
+        "id": "body-font-size",
+        "selector": "[data-visual-unit='orders']",
+        "state_class": "loaded",
+        "property": "font-size",
+        "baseline": "14px",
+        "candidate": "14px",
+        "tolerance": "exact",
+        "result": "pass"
+      },
+      {
+        "surface": "typography",
+        "id": "body-font-weight",
+        "selector": "[data-visual-unit='orders']",
+        "state_class": "loaded",
+        "property": "font-weight",
+        "baseline": "400",
+        "candidate": "400",
+        "tolerance": "exact",
+        "result": "pass"
+      },
+      {
+        "surface": "typography",
+        "id": "body-line-height",
+        "selector": "[data-visual-unit='orders']",
+        "state_class": "loaded",
+        "property": "line-height",
+        "baseline": "20px",
+        "candidate": "20px",
+        "tolerance": "exact",
+        "result": "pass"
+      },
+      {
+        "surface": "box_model",
+        "id": "content-box-sizing",
+        "selector": "[data-visual-unit='orders']",
+        "state_class": "loaded",
+        "property": "box-sizing",
+        "baseline": "border-box",
+        "candidate": "border-box",
+        "tolerance": "exact",
+        "result": "pass"
+      },
+      {
+        "surface": "interaction",
+        "id": "edit-cursor",
+        "selector": "[data-icon='edit']",
+        "state_class": "editing",
+        "property": "cursor",
+        "baseline": "pointer",
+        "candidate": "pointer",
+        "tolerance": "exact",
+        "result": "pass"
+      }
+    ],
+    "result": "pass"
+  },
+  "color_contract": {
+    "metrics": [
+      {
+        "id": "page-background",
+        "role": "page-background",
+        "selector": "[data-visual-unit='orders']",
+        "state_class": "loaded",
+        "property": "background-color",
+        "baseline": "rgb(255, 255, 255)",
+        "candidate": "rgb(255, 255, 255)",
+        "tolerance": "exact",
+        "result": "pass"
+      },
+      {
+        "id": "body-text",
+        "role": "body-text",
+        "selector": "[data-visual-unit='orders']",
+        "state_class": "loaded",
+        "property": "color",
+        "baseline": "rgb(48, 49, 51)",
+        "candidate": "rgb(48, 49, 51)",
+        "tolerance": "exact",
+        "result": "pass"
+      },
+      {
+        "id": "table-border",
+        "role": "border",
+        "selector": ".orders-table",
+        "state_class": "loaded",
+        "property": "border-color",
+        "baseline": "rgb(223, 230, 236)",
+        "candidate": "rgb(223, 230, 236)",
+        "tolerance": "exact",
+        "result": "pass"
+      },
+      {
+        "id": "primary-action",
+        "role": "primary-action",
+        "selector": "[data-icon='edit']",
+        "state_class": "loaded",
+        "property": "color",
+        "baseline": "rgb(64, 158, 255)",
+        "candidate": "rgb(64, 158, 255)",
+        "tolerance": "exact",
+        "result": "pass"
+      },
+      {
+        "id": "success-status",
+        "role": "status-success",
+        "selector": ".status-success",
+        "state_class": "loaded",
+        "property": "color",
+        "baseline": "rgb(103, 194, 58)",
+        "candidate": "rgb(103, 194, 58)",
+        "tolerance": "exact",
+        "result": "pass"
+      }
+    ],
+    "result": "pass"
+  },
+  "contains_icons": true,
+  "icon_contract": {
+    "icons": [
+      {
+        "id": "edit",
+        "selector": "[data-icon='edit']",
+        "source": {
+          "path": "artifacts/edit-source.svg",
+          "digest": "488f088bf66c50acf6a56b5c0da638741b39bc24071a70768a196a4325a42aaa",
+          "fingerprint": "488f088bf66c50acf6a56b5c0da638741b39bc24071a70768a196a4325a42aaa"
+        },
+        "candidate": {
+          "path": "artifacts/edit-candidate.svg",
+          "digest": "488f088bf66c50acf6a56b5c0da638741b39bc24071a70768a196a4325a42aaa",
+          "fingerprint": "488f088bf66c50acf6a56b5c0da638741b39bc24071a70768a196a4325a42aaa"
+        },
+        "metrics": [
+          {
+            "surface": "content",
+            "id": "edit-viewbox-path",
+            "baseline": "488f088bf66c50acf6a56b5c0da638741b39bc24071a70768a196a4325a42aaa",
+            "candidate": "488f088bf66c50acf6a56b5c0da638741b39bc24071a70768a196a4325a42aaa",
+            "tolerance": "exact",
+            "result": "pass"
+          },
+          {
+            "surface": "geometry",
+            "id": "edit-size",
+            "baseline": 16,
+            "candidate": 16,
+            "tolerance": 1,
+            "result": "pass"
+          },
+          {
+            "surface": "paint",
+            "id": "edit-fill",
+            "baseline": "currentColor",
+            "candidate": "currentColor",
+            "tolerance": "exact",
+            "result": "pass"
+          },
+          {
+            "surface": "accessibility",
+            "id": "edit-label",
+            "baseline": "Edit",
+            "candidate": "Edit",
+            "tolerance": "exact",
+            "result": "pass"
+          }
+        ],
+        "result": "pass"
+      },
+      {
+        "id": "refresh",
+        "selector": "[data-icon='refresh']",
+        "source": {
+          "path": "artifacts/refresh-source.svg",
+          "digest": "a232cd0f2fb536365f45b83a0de6757ea087b9970030cab6cfea618b585f297f",
+          "fingerprint": "a232cd0f2fb536365f45b83a0de6757ea087b9970030cab6cfea618b585f297f"
+        },
+        "candidate": {
+          "path": "artifacts/refresh-candidate.svg",
+          "digest": "a232cd0f2fb536365f45b83a0de6757ea087b9970030cab6cfea618b585f297f",
+          "fingerprint": "a232cd0f2fb536365f45b83a0de6757ea087b9970030cab6cfea618b585f297f"
+        },
+        "metrics": [
+          {
+            "surface": "content",
+            "id": "refresh-viewbox-path",
+            "baseline": "a232cd0f2fb536365f45b83a0de6757ea087b9970030cab6cfea618b585f297f",
+            "candidate": "a232cd0f2fb536365f45b83a0de6757ea087b9970030cab6cfea618b585f297f",
+            "tolerance": "exact",
+            "result": "pass"
+          },
+          {
+            "surface": "geometry",
+            "id": "refresh-size",
+            "baseline": 16,
+            "candidate": 16,
+            "tolerance": 1,
+            "result": "pass"
+          },
+          {
+            "surface": "paint",
+            "id": "refresh-fill",
+            "baseline": "currentColor",
+            "candidate": "currentColor",
+            "tolerance": "exact",
+            "result": "pass"
+          },
+          {
+            "surface": "accessibility",
+            "id": "refresh-label",
+            "baseline": "Refresh",
+            "candidate": "Refresh",
+            "tolerance": "exact",
+            "result": "pass"
+          }
+        ],
+        "result": "pass"
+      }
+    ],
+    "result": "pass"
   },
   "contains_table": true,
   "required_states": [
@@ -66,12 +343,14 @@
         }
       },
       "artifacts": {
-        "baseline_path": "artifacts/baseline.ppm",
-        "baseline_digest": "064ea70c5ca111e4e9b50fb256594110f669a1339c4ccf067aa6f3970a827976",
+        "baseline_path": "artifacts/baseline-loading.ppm",
+        "baseline_digest": "76fa75e5051ba48a45709e95190c28d7058a2ac14b9aaa274c8a5e3756d53a6a",
         "candidate_path": "artifacts/candidate-loading.ppm",
         "candidate_digest": "b28104e0bf4f5c53d57202427bd586d7387870a7297590e2ccebf19f85685c6d",
         "diff_path": "artifacts/diff-loading.ppm",
-        "diff_digest": "d62723213857f1e7fccc9423af92f312d6398592b26af50a80d133d4ccc78b11"
+        "diff_digest": "d62723213857f1e7fccc9423af92f312d6398592b26af50a80d133d4ccc78b11",
+        "computed_style_path": "artifacts/computed-style-loading.json",
+        "computed_style_digest": "7bdccf687ac8f792bc9d6333438072e333c69d7a4859c6e099249b01170c91b7"
       },
       "checks": {
         "screenshot": "pass",
@@ -112,12 +391,14 @@
         }
       },
       "artifacts": {
-        "baseline_path": "artifacts/baseline.ppm",
-        "baseline_digest": "064ea70c5ca111e4e9b50fb256594110f669a1339c4ccf067aa6f3970a827976",
+        "baseline_path": "artifacts/baseline-loaded.ppm",
+        "baseline_digest": "da46aa58b66b8d5e26ed93791eec692f2952be096f4a9f221fd7d3273e3f92ae",
         "candidate_path": "artifacts/candidate-loaded.ppm",
         "candidate_digest": "2e002fa4e7e63fbe15aabca924e5b49a0b32467ac444ced8959d9f69e0281538",
         "diff_path": "artifacts/diff-loaded.ppm",
-        "diff_digest": "6d90b99284e62ab9b65e800cb207052b91cdb49fbe20640b9e3e09fb9bf6473c"
+        "diff_digest": "6d90b99284e62ab9b65e800cb207052b91cdb49fbe20640b9e3e09fb9bf6473c",
+        "computed_style_path": "artifacts/computed-style-loaded.json",
+        "computed_style_digest": "23c6d8586d38ea2b5efe5a7d794c2d1c0861b933838a721f986ee86468b21558"
       },
       "checks": {
         "screenshot": "pass",
@@ -158,12 +439,14 @@
         }
       },
       "artifacts": {
-        "baseline_path": "artifacts/baseline.ppm",
-        "baseline_digest": "064ea70c5ca111e4e9b50fb256594110f669a1339c4ccf067aa6f3970a827976",
+        "baseline_path": "artifacts/baseline-empty.ppm",
+        "baseline_digest": "769237b3a06bd2c52f8fe245a662dc70e1e964df558798b09cc43dab9e64ef7a",
         "candidate_path": "artifacts/candidate-empty.ppm",
         "candidate_digest": "da52cf06e5876b987f1f7d6fcf43f991e67910ef659d46d4b29f08518aa29286",
         "diff_path": "artifacts/diff-empty.ppm",
-        "diff_digest": "8b748a5f5ffca4edc662e804bebe95b2b1fcd8ac0a91c4f3ec6920b85369cf1d"
+        "diff_digest": "8b748a5f5ffca4edc662e804bebe95b2b1fcd8ac0a91c4f3ec6920b85369cf1d",
+        "computed_style_path": "artifacts/computed-style-empty.json",
+        "computed_style_digest": "77ed7284e91570a6c239cf11211deb736fce2c88103c789444e3b2ecbbfd1202"
       },
       "checks": {
         "screenshot": "pass",
@@ -204,12 +487,14 @@
         }
       },
       "artifacts": {
-        "baseline_path": "artifacts/baseline.ppm",
-        "baseline_digest": "064ea70c5ca111e4e9b50fb256594110f669a1339c4ccf067aa6f3970a827976",
+        "baseline_path": "artifacts/baseline-editing.ppm",
+        "baseline_digest": "c86f09dbf839abc739d00516cd3b1d2ddadbe38b90cf50cf928ab5704ecaa87f",
         "candidate_path": "artifacts/candidate-editing.ppm",
         "candidate_digest": "36b635514f5efa9e6da9b5876e9517cb9542a7272673079cb733b71c1bafa29c",
         "diff_path": "artifacts/diff-editing.ppm",
-        "diff_digest": "be756d43197e1a76c083d405e90398b906dfe923f495bc7391366d3232c51d82"
+        "diff_digest": "be756d43197e1a76c083d405e90398b906dfe923f495bc7391366d3232c51d82",
+        "computed_style_path": "artifacts/computed-style-editing.json",
+        "computed_style_digest": "ce07c8bf8fbdbaafeb1e942d183ea98df14bcf0bcf01e8341b71e163143a2fc8"
       },
       "checks": {
         "screenshot": "pass",
@@ -250,12 +535,14 @@
         }
       },
       "artifacts": {
-        "baseline_path": "artifacts/baseline.ppm",
-        "baseline_digest": "064ea70c5ca111e4e9b50fb256594110f669a1339c4ccf067aa6f3970a827976",
+        "baseline_path": "artifacts/baseline-narrow.ppm",
+        "baseline_digest": "59ccac24255d4b0be5ddb606df9a37d52b1c27165efe89204f00cb69251d3b57",
         "candidate_path": "artifacts/candidate-narrow.ppm",
         "candidate_digest": "186df5062460ac760c712984cab1740f42055bf7b29277f26f8cf7de4fe63368",
         "diff_path": "artifacts/diff-narrow.ppm",
-        "diff_digest": "bfb31922c404aaa123a7b110ce81a17d8f93b233827e6e86aa65101c8026557e"
+        "diff_digest": "bfb31922c404aaa123a7b110ce81a17d8f93b233827e6e86aa65101c8026557e",
+        "computed_style_path": "artifacts/computed-style-narrow.json",
+        "computed_style_digest": "d5b8d4f305abe4ddd33ef401d596ced3cc66bfced3c211a52e5aaabe3b18dc36"
       },
       "checks": {
         "screenshot": "pass",

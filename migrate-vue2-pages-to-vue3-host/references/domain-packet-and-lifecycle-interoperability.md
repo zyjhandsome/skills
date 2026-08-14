@@ -30,6 +30,10 @@ evidence:
   inferences: []
   decisions: []
 closure: []
+style_closure:
+  status: pending | complete | blocked
+  entries: []
+  unresolved: []
 host_protocols: []
 runtime_evidence:
   schema: runtime-compatibility-evidence/v1
@@ -59,6 +63,13 @@ verification:
 blockers: []
 packet_digest: <digest of canonical packet content>
 ```
+
+For a user-visible unit, `design`, `execute`, and `verify` packets require
+`style_closure.status: complete`, at least one evidenced entry, and no unresolved
+items. Entries use `id / kind / source / evidence / disposition / target` and
+cover the page-owned and inherited style/assets described in
+`discovery-and-page-closure.md`. A generic `closure` array without this style
+inventory is not sufficient for design readiness.
 
 For persisted JSON, canonicalize objects by recursively sorting keys, omit the
 `packet_digest` field from the hash input, preserve array order, and write
