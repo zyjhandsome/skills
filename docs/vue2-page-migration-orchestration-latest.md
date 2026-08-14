@@ -32,15 +32,16 @@ Wave 1  Delivery Frame
 
 ### 1.1 用户怎么使用
 
-1. 在下面的“会话通用头”填写四个值，并保存这份工作副本。
+1. 在下面的“会话通用头”填写四个必填值；有 A 页面截图时再填写可选项。
 2. 每个 Wave 开一个全新会话。
 3. 每次将“会话通用头 + 当前 Wave 代码块”连续粘贴为一条消息。
 4. 当前 Wave 完成后，根据输出打开下一个会话。
 
-用户只需要填写四个值，以及回答真正阻塞的问题、规格批准和实施批准。
+用户只需要填写四个必填值，可选提供一个截图文件或目录，并回答真正阻塞的
+问题、规格批准和实施批准。
 用户不需要寻找 JSON、复制 digest、维护工件路径或手工更新任务状态。
 
-### 1.2 会话通用头——四个值只填一次
+### 1.2 会话通用头——必填值只填一次，截图按需提供
 
 ```text
 这是一个全新独立会话，不得使用其他会话的聊天记忆补结论。
@@ -50,6 +51,7 @@ Wave 1  Delivery Frame
 <B> = Vue3 仓库绝对路径
 <PAGE> = Vue2 待迁移页面的文件路径或路由
 <HTML> = Vue3 入口 HTML 文件绝对路径
+<A_PAGE_REF> = 可选；A 页面参考截图文件或截图目录；没有则留空
 
 自动派生并保持稳定：
 - <SLUG>：由 <PAGE> 规范化得到；过长时追加短 SHA-256 摘要。
@@ -57,10 +59,17 @@ Wave 1  Delivery Frame
 - <CHANGE_DIR>：<B>\openspec\changes\<CHANGE_ID>。
 - <EVIDENCE_ROOT>：<CHANGE_DIR>\evidence。
 - <DOMAIN_ROOT>：<EVIDENCE_ROOT>\vue-cross-repo-migration。
+- <A_PAGE_REF_ROOT>：<DOMAIN_ROOT>\input-reference。
 - <G9_ROOT>：<EVIDENCE_ROOT>\delivery-visual。
 - <CONFIG>：<DOMAIN_ROOT>\migration-run-config.json。
 
 <CONFIG> 存在后，以其中记录为准；本次输入与配置不一致时停止。
+
+<A_PAGE_REF> 为空不阻塞；优先从当前运行中的 A 捕获正式视觉基线。非空时验证
+路径和图片类型，计算 digest，并在 Wave 2 复制到 <A_PAGE_REF_ROOT>。它仅用于
+确认页面身份、布局、颜色、字体、图标和应覆盖的状态，不替代当前 revision 的
+多状态基线、computed-style、交互或响应式证据。若与当前 A 冲突，停止并报告
+页面身份或版本不一致。A 无法运行时，单张参考图不足以支持 strict parity 结论。
 
 固定边界：
 - <A> 严格只读，<B> 是唯一应用代码修改目标。
@@ -88,6 +97,7 @@ A/B revision、OpenSpec artifact_revision、批准绑定和用户改动碰撞。
 |---|---|---|
 | `<CONFIG>` | 在同一 change 中定位迁移任务及派生路径 | 不操作 |
 | `<DOMAIN_ROOT>` | 保存 Domain/runtime/visual 事实、基线、设计和复核 | 最终看摘要 |
+| `<A_PAGE_REF_ROOT>` | 保存可选参考截图、来源路径和 digest | 不操作 |
 | OpenSpec 工件与 `handoff.json` | 保存 Delivery 规格、批准、计划、任务和状态 | 批准时看摘要 |
 | `<G9_ROOT>` | 保存 Delivery 自己的 G9 视觉验收证据 | 最终看摘要 |
 
@@ -102,7 +112,7 @@ specs、design、tasks、verification 和 handoff 仍是 Delivery 权威工件�
 | Wave | 应当存在的主要上游工件 |
 |---|---|
 | 1 Frame | 无；通过 OpenSpec 创建 change、Config 和 evidence 子目录 |
-| 2 Assess | Config、已批准 Frame 规格和 change 目录 |
+| 2 Assess | Config、已批准 Frame 规格、change 目录和可选 A 页面参考图 |
 | 3 Design | Config、assess packet、runtime、visual contract、baseline |
 | 4 Plan | Domain evidence、proposal/spec、Frame handoff |
 | 5 Execute | design/tasks、Plan handoff、领域基线与运行时证据 |
@@ -123,7 +133,7 @@ specs、design、tasks、verification 和 handoff 仍是 Delivery 权威工件�
 通过 OpenSpec 正式创建或恢复唯一 <CHANGE_DIR>。创建：
 - <DOMAIN_ROOT>；
 - <G9_ROOT>；
-- <CONFIG>，仅记录四项输入和派生路径，不保存批准或任务状态。
+- <CONFIG>，仅记录必填输入、可选 <A_PAGE_REF> 和派生路径，不保存批准或任务状态。
 
 基于当前代码事实完成 proposal.md 和增量规格，明确：
 - A 只读、B 单一 mutation target；
@@ -155,6 +165,11 @@ handoff path/revision。说明下一步为 Wave 2，然后停止，不读取 Pla
 
 artifact_directory 固定为 <DOMAIN_ROOT>，不得在 <CHANGE_DIR> 外创建报告目录。
 
+若 <A_PAGE_REF> 非空：验证文件或目录存在，只接收常见图片；复制到
+<A_PAGE_REF_ROOT> 并记录原路径、文件 digest 和用途。目录中的截图建议按
+loaded/loading/empty/editing/error/narrow 等状态命名。用它辅助确认页面身份、
+布局、颜色、字体、图标和状态清单，但不得把它当作完整视觉基线。
+
 按当前 Skill 契约完成：
 - 解析 <PAGE> 的真实 source_entry 和 <HTML> 对应的 B 挂载链路；
 - 发现页面功能闭包和完整 style_closure；
@@ -162,14 +177,18 @@ artifact_directory 固定为 <DOMAIN_ROOT>，不得在 <CHANGE_DIR> 外创建报
 - 在 A 仍可运行时冻结 strict-parity 视觉契约和独立状态基线；
 - 颜色使用 A 计算样式，字体与图标保留 A 的实际内容身份。
 
+若参考截图与当前 A 的页面身份或视觉事实冲突，停止并报告版本/页面不一致，
+不得自行选择一方。若 A 无法运行，参考截图只能作为替代参考；单张图不能支持
+严格视觉等价声明，除非规格明确降级并重新批准。
+
 生成并校验 assess domain packet、runtime evidence、visual contract 和 baseline
 manifest，全部写入 <DOMAIN_ROOT>。
 
 若发现 Frame 的目标、验收或风险边界不成立，输出 discovery backflow 并停止；
 不得自行改 OpenSpec 规格。
 
-结束时输出 packet path/digest、A/B revision、source/host entry、closure/runtime/
-baseline 状态和 blockers。说明下一步为 Wave 3，然后停止。
+结束时输出 packet path/digest、A/B revision、source/host entry、参考图处置、
+closure/runtime/baseline 状态和 blockers。说明下一步为 Wave 3，然后停止。
 ```
 
 若 A 无法运行且没有可信截图、设计稿或获批替代基线，必须阻塞“样式不变”
@@ -335,7 +354,7 @@ iframe 或下线 A；这些需要后续单独授权。
 
 ### 使用者
 
-- 四个值只填一次；每个 Wave 只复制通用头和一个短提示词。
+- 四个必填值只填一次；`<A_PAGE_REF>` 可选；每个 Wave 只复制通用头和一个短提示词。
 - 不需要理解或操作内部工件。
 - 只处理阻塞问题和两次批准。
 - 每个阶段都有明确产物、停止点和下一步，可在中断后恢复。
