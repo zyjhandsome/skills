@@ -118,7 +118,7 @@ digest、revision 或任务状态。
 
 1. 首次使用时，在“会话通用头”填写 A、B、PAGE、HTML 四个必填值。
 2. 按第 0.2 节选择当前 Wave 的模型，启动一个全新 Claude Code 会话。
-3. 先执行 `/status` 和 `/model`；provider 或模型不符时停止并重新启动。
+3. 用户先执行 `/status` 和 `/model`；provider 或模型不符时停止并重新启动。
 4. 将“会话通用头 + 当前 Wave 代码块”连续粘贴为一条消息。
 5. 当前 Wave 完成并停止后，按下一 Wave 标注的模型打开新会话。
 6. 需要跨模型复核时另开只读会话；复核通过磁盘证据交接，不在主会话换模型。
@@ -131,10 +131,10 @@ digest、revision 或任务状态。
 ```text
 这是一个全新独立会话，不得使用其他会话的聊天记忆补结论。
 
-当前模型由随后粘贴的 Wave 代码块声明。执行前读取 /status 和 /model：
-- 当前 provider 或模型不匹配时立即停止；
-- 本 Wave 内禁止切换模型或覆盖 provider 环境变量；
-- 不得假设另一个模型正在同一 Claude Code 会话中辅助执行。
+当前模型由随后粘贴的 Wave 代码块声明。用户已在粘贴本提示前执行 /status 和
+/model 完成核对；Agent 不得声称自己执行过 Claude Code slash command。
+本 Wave 内禁止切换模型、覆盖 provider 环境变量，或假设另一个模型正在同一
+Claude Code 会话中辅助执行。
 
 用户输入：
 <A> = Vue2 仓库绝对路径
@@ -150,8 +150,26 @@ digest、revision 或任务状态。
 - <DOMAIN_ROOT>：<EVIDENCE_ROOT>\vue-cross-repo-migration。
 - <G9_ROOT>：<EVIDENCE_ROOT>\delivery-visual。
 - <CONFIG>：<DOMAIN_ROOT>\migration-run-config.json。
+- <INDEX_MANIFEST>：<DOMAIN_ROOT>\codebase-index-manifest.json。
+- <RUNTIME_MANIFEST>：<DOMAIN_ROOT>\runtime-service-manifest.json。
 
 <CONFIG> 存在后，以其中记录为准；本次输入与配置不一致时停止。
+
+代码检索默认使用 Codebase Memory MCP：
+1. search_graph 查页面、组件、路由、API、store、权限和符号；
+2. trace_path 追踪调用、依赖和数据流；
+3. get_code_snippet 读取已定位的函数、类或符号；
+4. query_graph 处理复杂闭包；get_architecture 检查结构和入口；
+5. search_code 查模板引用、导入和字符串。
+
+只有 package.json、锁文件、HTML、CSS、环境配置、资源路径等非代码事实，或 MCP
+结果为空、明显不完整、不支持对应语法时，才降级到直接文件读取或 rg。降级必须
+记录 query、MCP 结果不足之处和 fallback 原因；不得因图谱没有 Route 节点就
+断言路由不存在。
+
+<INDEX_MANIFEST> 必须记录 A/B 的 graph project、repo path、repo revision、
+index mode 和 indexed_at。图谱 revision 与当前仓库 revision 不一致时视为 stale；
+stale 图谱不能证明闭包完整，也不能用于最终 pass。
 
 正式视觉基线必须从当前运行中的 A 捕获：多状态截图、computed-style、交互和
 响应式证据。不要向用户索要 A 页面参考截图，也不要把用户粘贴的图片当作视觉
@@ -184,6 +202,8 @@ A/B revision、OpenSpec artifact_revision、批准绑定和用户改动碰撞。
 |---|---|---|
 | `<CONFIG>` | 定位同一 change 的业务输入和派生路径 | 不操作 |
 | `<DOMAIN_ROOT>` | 保存 Domain/runtime/visual 事实、基线、设计和复核 | 最终看摘要 |
+| `<INDEX_MANIFEST>` | 绑定 Codebase Memory project、revision 和索引时间 | 不操作 |
+| `<RUNTIME_MANIFEST>` | 保存 Node、安装、服务、端口、PID 和日志 | 不操作 |
 | OpenSpec 工件与 `handoff.json` | 保存规格、批准、计划、任务和交付状态 | 批准时看摘要 |
 | `<G9_ROOT>` | 保存 Delivery G9 视觉验收证据 | 最终看摘要 |
 | `model-reviews/` | 保存可选只读复核证据 | 不操作 |
@@ -205,13 +225,59 @@ specs、design、tasks、verification 和 handoff 仍是 Delivery 权威工件�
 | 6 Execute | design/tasks、Plan handoff、领域基线与运行时证据 |
 | 7 Verify | Delivery verification、G9、完整领域证据和当前代码 |
 
+### 1.4 Node、依赖与服务生命周期
+
+先读取各仓库的 `.nvmrc`、`.node-version`、`package.json#engines`、
+`packageManager`、锁文件和 `scripts`，再确定命令。不得默认两个仓库使用同一
+Node、同一包管理器或存在 `serve` script。
+
+| 阶段 | A（Vue2） | B（Vue3 Host） |
+|---|---|---|
+| 执行前校准 | 准备兼容 Node；不安装项目依赖 | 准备兼容 Node 与仓库声明的包管理器 |
+| Wave 1 | 不安装、不启动 | 不安装、不启动 |
+| Wave 2 | 在当前 revision 的一次性副本安装依赖并启动，捕获正式基线 | 在一次性副本验证 frozen install、build/dev 和 host 入口 |
+| Wave 3–5 | 默认不重装、不重启；只消费已冻结证据 | 默认不重装、不重启 |
+| Wave 6 | 严格只读；仅 baseline stale 才返回 Wave 2 | 在获批 B 中安装/刷新依赖，启动开发服务，执行 build/test/G9 |
+| Wave 7 | 默认消费冻结基线；A revision 变化则返回 Wave 2 | 按当前 revision 启动干净服务并重新验证；lock 未变化不重复安装 |
+
+正式 A 不得直接执行可能改写 lockfile 的安装。优先在一次性副本使用 frozen
+install；失败后只有在副本中才可运行非 frozen install，并记录 lockfile diff 和
+失败原因。副本生成的依赖解析不能冒充原仓库锁文件事实。
+
+每次安装或启动都更新 `<RUNTIME_MANIFEST>`：
+
+```text
+repository / revision / runtime_copy / node_version /
+package_manager / package_manager_version / lock_digest /
+install_command / start_command / port / pid / started_at /
+log_path / healthcheck_url / stop_command / status
+```
+
+服务由启动它的 Wave 负责健康检查、日志和停止/保留决定。A/B 需要不同 Node 时，
+使用独立终端、独立进程或按项目固定版本的运行器；不得在同一服务进程依赖的
+环境中反复全局切换 Node。
+
+参考项目的仓库原生命令：
+
+```text
+A Vue2_Test：npm；start script 是 npm run dev，不是 npm run serve。
+B Vue3_Test：Node ^20.19.0 或 >=22.12.0；pnpm@11.16.0；
+             pnpm install --frozen-lockfile；pnpm dev；pnpm build。
+             preinstall 强制 pnpm，禁止 npm install 和 npm run serve。
+```
+
+用户已经授权 Agent 在任务范围内安装依赖、启动服务和截图，默认无需人工代跑。
+只有系统级 Node/包管理器安装需要管理员权限、Windows 防火墙、私有 registry、
+VPN/代理/证书、SSO/验证码、测试权限或安装将修改正式 lockfile 时才请求人工。
+
 ## 2. Wave 1：建 change（无规格闸门）
 
 新会话粘贴“会话通用头”，再粘贴：
 
 ```text
-当前 Claude Code 模型：GLM 5.2（实际 model id 以 provider 配置为准）。
-先用 /status 和 /model 确认；不匹配时停止并重开会话。本 Wave 禁止切换模型。
+expected_model=GLM 5.2（实际 model id 以 provider 配置为准）。
+用户已在粘贴前校验 /status 和 /model；Agent 不执行 slash command。
+本 Wave 禁止切换模型。
 
 显式使用 delivery-frame-spec Skill。
 建档停点覆盖：本波只建或恢复 change，禁止规格闸门。
@@ -219,12 +285,17 @@ specs、design、tasks、verification 和 handoff 仍是 Delivery 权威工件�
 这是迁移类变更，固定 High、quality_profiles.visual=required。
 不要使用 delivery-explore，不要进入 Plan/Execute。
 
-硬前提是 B 的 OpenSpec 已初始化且 A/B Codebase Memory 索引可用。
+硬前提是 B 的 OpenSpec 已初始化。读取 A/B 当前 revision；验证 Codebase Memory
+MCP 是否已有对应 project。索引缺失时先 index_repository，再用 get_architecture
+证明可查询。不得把图谱为空解释为仓库没有代码。
 
 通过 OpenSpec 正式创建或恢复唯一 <CHANGE_DIR>。创建：
 - <DOMAIN_ROOT>；
 - <G9_ROOT>；
 - <CONFIG>，仅记录必填输入和派生路径，不保存批准或任务状态。
+- <INDEX_MANIFEST>，记录 A/B graph project、repo path、当前 repo revision、
+  index mode 和 indexed_at；
+- <RUNTIME_MANIFEST> 初始结构；本波不得安装依赖或启动 A/B。
 
 只写意图草稿：A 只读、B 单一 mutation target、B shell host-native、迁入内容 strict parity、保留 fallback、部署/切流/A 下线为非目标。
 不要把尚未摸底的颜色、字体、图标或页面闭包写成已批准验收。
@@ -232,7 +303,8 @@ specs、design、tasks、verification 和 handoff 仍是 Delivery 权威工件�
 本波禁止规格闸门和范围批准。proposal 保持草稿。不要询问范围批准，
 不要写 State Source 批准记录，不要生成进入 Plan 的 handoff transition。
 
-结束时输出 change id/dir、Config、route/risk 草稿。说明下一步为 Wave 2，然后停止，不读取 migrate 或 Plan Skill。
+结束时输出 change id/dir、Config、Index Manifest、A/B revision 和 route/risk 草稿。
+说明下一步为 Wave 2，然后停止，不读取 migrate 或 Plan Skill。
 ```
 
 ## 3. Wave 2：迁移领域摸底
@@ -240,14 +312,26 @@ specs、design、tasks、verification 和 handoff 仍是 Delivery 权威工件�
 新会话粘贴“会话通用头”，再粘贴：
 
 ```text
-当前 Claude Code 模型：Kimi K2.6（实际 model id 以 provider 配置为准）。
-先用 /status 和 /model 确认；不匹配时停止并重开会话。本 Wave 禁止切换模型。
+expected_model=Kimi K2.6（实际 model id 以 provider 配置为准）。
+用户已在粘贴前校验 /status 和 /model；Agent 不执行 slash command。
+本 Wave 禁止切换模型。
 
 显式使用 migrate-vue2-pages-to-vue3-host Skill，mode=assess。
 
 恢复 Wave 1 创建的 change 与 Config，只做只读摸底和证据采集；不要进入design/verify，不要修改 A/B 应用代码。migrate 没有 execute mode。
 
+先校验 <INDEX_MANIFEST> 的 A/B repo revision 等于当前 revision。索引缺失或 stale
+时重新 index_repository 并更新 manifest。代码发现遵守通用头中的 Codebase
+Memory 顺序；路由、动态 import 或 Vue SFC 结果不完整时记录 fallback 原因后再
+读取配置/源码，不得仅凭图谱空结果结束闭包分析。
+
 artifact_directory 固定为 <DOMAIN_ROOT>，不得在 <CHANGE_DIR> 外创建报告目录。
+
+按 1.4 节解析 A/B 的 Node、包管理器、lockfile 和 scripts。在当前 revision 的
+一次性副本中安装依赖：启动 A 的仓库原生 dev script 以捕获正式基线；验证 B 的
+frozen install、build/dev 和 host 入口。禁止在正式 A 中运行可能改写 lockfile
+的安装。将版本、命令、lock digest、端口、PID、日志、healthcheck 和停止方式
+写入 <RUNTIME_MANIFEST>。遇到管理员权限、私服/VPN/证书或登录验证再请求人工。
 
 不要向用户索要 A 页面参考截图。正式视觉基线必须从当前运行中的 A 捕获。
 
@@ -279,8 +363,9 @@ manifest，全部写入 <DOMAIN_ROOT>。视觉链不可用时仍可写评估事�
 若发现 Wave 1 意图草稿的目标或边界不成立，输出 discovery backflow 并停止；
 不得自行改 OpenSpec 规格。
 
-结束时输出 packet path/digest（若有）、A/B revision、source/host entry、
-closure/runtime/baseline 状态、terminal 与 blockers。
+结束时输出 packet path/digest（若有）、A/B revision、Index Manifest、
+Runtime Manifest、source/host entry、closure/runtime/baseline 状态、terminal
+与 blockers。
 仅当视觉处理链可用且基线已冻结、无 visual blocker 时，才说明下一步为 Wave 3。
 然后停止。
 ```
@@ -292,8 +377,9 @@ closure/runtime/baseline 状态、terminal 与 blockers。
 新会话粘贴“会话通用头”，再粘贴：
 
 ```text
-当前 Claude Code 模型：GLM 5.2（实际 model id 以 provider 配置为准）。
-先用 /status 和 /model 确认；不匹配时停止并重开会话。本 Wave 禁止切换模型。
+expected_model=GLM 5.2（实际 model id 以 provider 配置为准）。
+用户已在粘贴前校验 /status 和 /model；Agent 不执行 slash command。
+本 Wave 禁止切换模型。
 
 显式使用 migrate-vue2-pages-to-vue3-host Skill，mode=design。
 
@@ -326,8 +412,9 @@ readiness 和 blockers。说明下一步为 Wave 4，然后停止。
 新会话粘贴“会话通用头”，再粘贴：
 
 ```text
-当前 Claude Code 模型：GLM 5.2（实际 model id 以 provider 配置为准）。
-先用 /status 和 /model 确认；不匹配时停止并重开会话。本 Wave 禁止切换模型。
+expected_model=GLM 5.2（实际 model id 以 provider 配置为准）。
+用户已在粘贴前校验 /status 和 /model；Agent 不执行 slash command。
+本 Wave 禁止切换模型。
 
 显式使用 delivery-frame-spec Skill。
 
@@ -360,8 +447,9 @@ handoff path/revision。说明下一步为 Wave 5，然后停止，不读取 Pla
 新会话粘贴“会话通用头”，再粘贴：
 
 ```text
-当前 Claude Code 模型：GLM 5.2（实际 model id 以 provider 配置为准）。
-先用 /status 和 /model 确认；不匹配时停止并重开会话。本 Wave 禁止切换模型。
+expected_model=GLM 5.2（实际 model id 以 provider 配置为准）。
+用户已在粘贴前校验 /status 和 /model；Agent 不执行 slash command。
+本 Wave 禁止切换模型。
 
 显式使用 delivery-plan-tasks Skill。
 
@@ -391,8 +479,9 @@ path/revision。说明下一步为 Wave 6，然后停止，不读取 Execute Ski
 新会话粘贴“会话通用头”，再粘贴：
 
 ```text
-当前 Claude Code 模型：Kimi K2.6（实际 model id 以 provider 配置为准）。
-先用 /status 和 /model 确认；不匹配时停止并重开会话。本 Wave 禁止切换模型。
+expected_model=Kimi K2.6（实际 model id 以 provider 配置为准）。
+用户已在粘贴前校验 /status 和 /model；Agent 不执行 slash command。
+本 Wave 禁止切换模型。
 
 显式使用 delivery-execute-verify Skill。
 
@@ -401,12 +490,21 @@ Delivery 是唯一代码 mutation owner；migrate 没有 execute mode，不要�
 Preflight 确认实施 go 绑定当前 revision、A 只读、B 用户改动受保护、任务路径
 无未接受冲突、baseline/runtime evidence 有效。
 
+切换到 B 声明的 Node 与包管理器；只有 node_modules 缺失、Node/package manager
+变化或 manifest/lock 变化时才执行仓库原生 frozen install。启动 B 的 dev script，
+记录 PID、端口、日志和 healthcheck 到 <RUNTIME_MANIFEST>。不得对参考 B 执行
+npm install 或 npm run serve。
+
 严格按 tasks.md 执行：适用时 RED→GREEN→REFACTOR，一次处理一个 ready task，
 只改 B 获批范围；任务验证通过后才勾选。范围问题回 Wave 4，设计/兼容/回滚/
 任务问题回 Wave 5。
 
 视觉实现遵循 domain contract：B shell 原生、内容 strict parity、page-scoped
 样式、A 的计算颜色/字体/图标身份；不得用 B 全局主题或 UI 库默认差异掩盖问题。
+
+代码修改稳定后、Fresh Verification Gate 前重新 index_repository 索引 B，并将
+当前 host_revision、graph project、index mode、indexed_at 写回 <INDEX_MANIFEST>。
+索引后若再次修改 B，索引立即 stale，必须在图谱相关审查前重新索引。
 
 完成后运行 Fresh Verification Gate：构建/测试、Requirement/Scenario、页面身份、
 功能/权限/错误/交互、写入 <G9_ROOT> 的 Delivery G9、rollback、OpenSpec
@@ -431,12 +529,23 @@ Delivery `verified` 只表示交付变更通过，不能单独宣布整次迁移
 新会话粘贴“会话通用头”，再粘贴：
 
 ```text
-当前 Claude Code 模型：GLM 5.2（实际 model id 以 provider 配置为准）。
-先用 /status 和 /model 确认；不匹配时停止并重开会话。本 Wave 禁止切换模型。
+expected_model=GLM 5.2（实际 model id 以 provider 配置为准）。
+用户已在粘贴前校验 /status 和 /model；Agent 不执行 slash command。
+本 Wave 禁止切换模型。
 
 显式使用 migrate-vue2-pages-to-vue3-host Skill，mode=verify。
 
 Delivery 已拥有代码 mutation；migrate 没有 execute mode，不修改 A/B 应用代码。
+
+先校验 <INDEX_MANIFEST>：A revision 变化时返回 Wave 2 重建 baseline；B 图谱
+revision 与当前 host_revision 不一致时先重新 index_repository 并更新 manifest。
+最终闭包、调用和入口结论不得来自 stale 图谱。Codebase Memory 结果不足时按
+通用 fallback 协议读取路由配置、SFC、HTML、package 和样式文件并记录原因。
+
+按当前 host_revision 停止旧 B 服务并启动干净 dev 服务，更新
+<RUNTIME_MANIFEST>。lock digest 未变化时不重复安装；Node/package manager 或
+lock 变化时使用仓库原生 frozen install。A 默认消费已冻结基线，不重新安装；
+A baseline stale 时返回 Wave 2。
 
 针对当前 A/B revision 刷新 stale 的领域证据，不混用旧 pass。按当前 Skill
 契约完整复核功能、API/权限/错误、URL/页面身份、runtime/build、style_closure、
@@ -471,6 +580,9 @@ Wave 7 失败时继续使用原 `<CHANGE_ID>`，不创建第二个 OpenSpec chan
 | Delivery 设计、兼容、回滚或任务拆分错误 | Wave 5 Plan |
 | 已批准范围内的实现缺陷 | Wave 6 Execute |
 | A/B revision 或基线 stale | 产生该证据的 Wave 2/3 |
+| A 图谱 revision stale | Wave 2 Assess |
+| B 图谱 revision stale | Wave 6 末尾重建索引，再执行 Wave 7 |
+| Node、依赖或服务证据 stale | 产生该 runtime evidence 的 Wave 2/6 |
 
 回流必须携带：
 
@@ -488,11 +600,13 @@ decision_needed / recommended_resolution / resume_point
 - A 未发生应用代码修改；
 - B 为 Vue3 原生实现，未引入 Vue2 或 `@vue/compat`；
 - OpenSpec、批准、任务和证据均绑定当前 revision；
+- A/B Codebase Memory 索引或 fallback 证据均绑定当前 revision；
 - Delivery verified、G9 和 High 独立审查通过；
 - Domain functional、visual、runtime/build、permission 通过；
 - CSS/SCSS style closure 完整，A 的颜色、字体和图标契约通过；
 - 每个代表性状态有独立基线；
 - fallback 可演练且 rollback tested；
+- Node、包管理器、lock digest、服务 PID/端口/日志和 healthcheck 可追溯；
 - 无 blocking residual。
 
 此时仍保留 fallback，不自动 archive、commit、push、PR、部署、切流、删除
