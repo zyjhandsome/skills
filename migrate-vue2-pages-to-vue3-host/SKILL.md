@@ -143,7 +143,14 @@ when a persisted packet and the repositories disagree.
 ### Visual parity
 
 Require `visual-parity-evidence/v1` for user-visible migration unless an explicit
-decision permits redesign. Freeze a `visual-migration-contract/v1` and bind it via
+decision permits redesign. Before any visual conclusion, prove this session can
+produce a **traceable image measurement**: image reading, OCR, color extraction,
+pixel or perceptual diff, or an independent multimodal analyzer. If it cannot,
+archive screenshots for humans only. Do not infer page identity, layout, color,
+font, or icon facts from pixels or from reading CSS. Block strict-parity visual
+conclusions. Design is not ready. Domain verification cannot pass.
+
+Freeze a `visual-migration-contract/v1` and bind it via
 `migration_contract.path` / `digest`. Capture at least five representative state
 rows with stable browser, viewport, locale, timezone, fonts, data, animation, and
 masks. Define host-shell and migrated-content comparison scopes explicitly. Assert
@@ -207,9 +214,11 @@ explicit caller-provided artifact directory. Follow
 - Mark assessment complete only when evidence-findable facts are investigated and
   material unknowns are explicit.
 - Mark design ready only when every approved scenario maps to a vertical slice,
-  validation row, migration step, dependency disposition, and rollback condition.
+  validation row, migration step, dependency disposition, and rollback condition,
+  and the visual measurement chain plus required baseline are unblocked.
 - Mark domain verification pass only when current-revision functional, visual,
   runtime/build, permission, rollback, and required independent review evidence
-  pass with no blocking residual.
+  pass with no blocking residual, and visual evidence came from a traceable
+  image measurement chain.
 - Never equate domain verification with production rollout, external lifecycle
   completion, deployment, traffic switching, monitoring, or source shutdown.

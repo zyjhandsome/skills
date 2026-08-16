@@ -124,6 +124,9 @@ function simulate(scenario) {
   }
   if (!scenario.revision_fresh) return { terminal: "stale:refresh-required", trace };
   trace.push("discover", "contract");
+  if (scenario.visual_chain === "unavailable") {
+    return { terminal: "blocked:visual-chain", trace };
+  }
   if (scenario.visual_baseline === "missing") {
     return { terminal: "blocked:visual-baseline", trace };
   }

@@ -161,6 +161,33 @@
     "required_files": {
       "references/visual-parity-validation.md": ["never claim exact parity", "approved substitute", "approved_redesign"]
     }
+  },
+  {
+    "id": "text-only-visual-chain-unavailable",
+    "prompt": "Screenshots can be archived, but this session cannot produce traceable image measurements.",
+    "revision_fresh": true,
+    "visual_chain": "unavailable",
+    "visual_baseline": "available",
+    "runtime": "ready",
+    "dependency": "ready",
+    "authorization": true,
+    "verification": "pass",
+    "expected_terminal": "blocked:visual-chain",
+    "required_files": {
+      "SKILL.md": [
+        "traceable image measurement",
+        "design is not ready",
+        "verification cannot pass",
+        "archive"
+      ],
+      "references/visual-parity-validation.md": [
+        "measurement chain",
+        "archive-only",
+        "do not infer",
+        "design is not ready",
+        "verification cannot pass"
+      ]
+    }
   }
 ]
 

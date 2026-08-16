@@ -12,44 +12,129 @@
 
 ## 0. 编排结论
 
+Claude Code 一个主会话只有一个当前模型。本文不会假设 GLM 5.2 与 Kimi K2.6
+能够在同一会话中同时工作；每个 Wave 都明确选择一个模型，并在全新会话开始时
+通过 `/status` 和 `/model` 校验。
+
 ```text
 Wave 1  建 change（无规格闸门）
+        当前模型：GLM 5.2
   → Wave 2  migrate assess
+        当前模型：Kimi K2.6；包含视觉基线
   → Wave 3  migrate design
+        当前模型：GLM 5.2
   → Wave 4  Frame 规格批准
+        当前模型：GLM 5.2
   → Wave 5  Delivery Plan go
+        当前模型：GLM 5.2
   → Wave 6  Delivery Execute
+        当前模型：Kimi K2.6
   → Wave 7  migrate verify
+        当前模型：GLM 5.2
 ```
 
-职责边界：
+这是一套参考分配，不是 Skill 的模型依赖：
 
-- 迁移 Skill：A/B 事实、页面闭包、运行时与依赖、CSS/SCSS、颜色、字体、
-  图标、视觉基线、迁移设计、回滚和最终领域复核。只有
-  assess / design / verify，不改应用代码。
-- Delivery Family：OpenSpec、范围批准、技术计划、实施批准、B 代码修改、
-  Delivery G9、独立审查和交付状态。`delivery-execute-verify` 是唯一代码
+- GLM 5.2 负责长契约阅读、结构化状态、规格、计划和最终领域核对。
+- Kimi K2.6 负责需要直接图片理解的摸底，以及长程代码实施。
+- Wave 7 使用 GLM 5.2 时，视觉结论必须来自当前 revision 的确定性工具证据；
+  若仍需要视觉语义判断，可在 Wave 7 前另开 Kimi 只读复核会话。
+- 实际 Claude Code 链路不具备相应能力时必须阻塞，不能根据模型名称假定可用。
+
+### 0.1 Skill 职责边界
+
+- `migrate-vue2-pages-to-vue3-host` 独立负责 A/B 事实、页面与样式闭包、运行时、
+  视觉基线、迁移设计、回滚和最终领域复核；只有 assess / design / verify，
+  不修改应用代码，也不调用 Delivery Family。
+- Delivery Family 独立负责 OpenSpec、规格与实施批准、技术计划、B 代码修改、
+  Delivery G9、独立审查和交付状态；`delivery-execute-verify` 是唯一应用代码
   mutation owner。
-- `delivery-explore` 不适用，因为迁移目标已经确定。
-- 主路径不插入 `frontend-dependency-upgrade-impact-analysis` 或
+- 模型选择和会话切换只属于本文，不写入任何 Skill schema 或验证器。
+- `delivery-explore` 不适用；主路径也不插入
+  `frontend-dependency-upgrade-impact-analysis` 或
   `frontend-ui-stack-visual-parity`。
+
+### 0.2 一波一个当前模型
+
+| Wave | 当前 Claude Code 模型 | 选择原因 |
+|---|---|---|
+| 1 建 change | GLM 5.2 | 建档、派生路径和意图草稿以结构化文本为主 |
+| 2 Assess | Kimi K2.6 | 需要读取 A 的多状态截图并形成可追溯视觉事实 |
+| 3 Design | GLM 5.2 | 从冻结证据形成闭包、切片、fallback 与 rollback 设计 |
+| 4 Frame | GLM 5.2 | 将领域事实转成 proposal/spec，并绑定规格批准 |
+| 5 Plan | GLM 5.2 | 生成可追踪的 design/tasks，并绑定实施批准 |
+| 6 Execute | Kimi K2.6 | 按纵向切片修改 B，并进行实现期视觉调整 |
+| 7 Verify | GLM 5.2 | 与实现会话分离，核验当前 revision 上的完整证据 |
+
+`/model` 只能切换当前 Claude Code 连接所暴露的模型。如果 GLM 与 Kimi 使用
+不同 Base URL、API Key 或 provider，不能只靠 `/model` 跨供应商切换；应关闭
+当前会话，使用相应 provider 配置启动新的 Claude Code 进程。不得在一个 Wave
+中途覆盖环境变量或静默换模型。
+
+### 0.3 可选的跨模型串行复核
+
+跨模型复核不是同会话“辅助模型”，而是另开的只读 Claude Code 会话。它不加载
+本 Wave 的 mutation Skill，不修改权威工件，只将结果写入：
+
+```text
+<EVIDENCE_ROOT>\model-reviews\<CHECKPOINT>\<MODEL>\
+```
+
+推荐检查点：
+
+- Wave 6 实现后，可另开 GLM 5.2 只读会话检查 current diff、测试与任务覆盖；
+- Wave 7 前，可另开全新 Kimi K2.6 只读会话检查 baseline/candidate/diff 图片。
+
+复核结果只保存输入 path+digest、模型/接口版本、结论和 blockers，不是新的状态
+源，也不能覆盖 OpenSpec、handoff、domain packet、tasks、G9 或 Skill 验证结果。
+同一模型的新会话只能称为会话独立；模型判断不以投票代替测试、revision/digest、
+DOM/computed-style、像素或感知差异等确定性证据。
+
+### 0.4 执行前校准与人工职责
+
+执行前校准不属于迁移生命周期，不新增 Wave 状态。至少验证：
+
+1. 两个 provider 配置均可读取 A/B 和对应 Skill，且密钥不会写入仓库；
+2. `/status`、`/model`、连续工具调用、JSON/schema、超时重试可以正常工作；
+3. Kimi K2.6 能读取本地 baseline/candidate/diff，并输出带输入摘要的结果；
+4. GLM 5.2 的视觉通道被如实记录为 direct / tool-assisted / unavailable；
+5. A/B 所需 Node、包管理器、浏览器、字体、后端/Mock 和测试账号可用。
+
+人工只负责安装依赖、启动 A/B/后端或 Mock、登录/验证码/权限、稳定测试数据、
+无法自动化的业务语义判断，以及 Wave 4/Wave 5 两次批准。用户不手工搬运 JSON、
+digest、revision 或任务状态。
+
+传输、超时或 schema 错误允许原模型重试一次；连续两次失败后停止当前 Wave。
+若必须更换当前模型，应废弃未完成输出，以新会话重新执行本 Wave preflight。
+
+能力校准参考：
+
+- GLM 5.2：<https://docs.z.ai/guides/llm/glm-5.2>
+- Kimi K2.6：<https://platform.kimi.com/docs/guide/kimi-k2-6-quickstart>
 
 ## 1. 通用输入与自动恢复协议
 
 ### 1.1 用户怎么使用
 
-1. 在下面的“会话通用头”填写四个必填值。
-2. 每个 Wave 开一个全新会话。
-3. 每次将“会话通用头 + 当前 Wave 代码块”连续粘贴为一条消息。
-4. 当前 Wave 完成后，根据输出打开下一个会话。
+1. 首次使用时，在“会话通用头”填写 A、B、PAGE、HTML 四个必填值。
+2. 按第 0.2 节选择当前 Wave 的模型，启动一个全新 Claude Code 会话。
+3. 先执行 `/status` 和 `/model`；provider 或模型不符时停止并重新启动。
+4. 将“会话通用头 + 当前 Wave 代码块”连续粘贴为一条消息。
+5. 当前 Wave 完成并停止后，按下一 Wave 标注的模型打开新会话。
+6. 需要跨模型复核时另开只读会话；复核通过磁盘证据交接，不在主会话换模型。
 
-用户只需要填写四个必填值，并回答真正阻塞的问题、规格批准和实施批准。
-用户不需要寻找 JSON、复制 digest、维护工件路径或手工更新任务状态。
+用户只填写四个业务输入，并回答真正阻塞的问题、规格批准和实施批准。用户不
+需要寻找 JSON、复制 digest、维护工件路径、转述模型结论或手工更新任务状态。
 
-### 1.2 会话通用头——必填值只填一次
+### 1.2 会话通用头——四个业务值只填一次
 
 ```text
 这是一个全新独立会话，不得使用其他会话的聊天记忆补结论。
+
+当前模型由随后粘贴的 Wave 代码块声明。执行前读取 /status 和 /model：
+- 当前 provider 或模型不匹配时立即停止；
+- 本 Wave 内禁止切换模型或覆盖 provider 环境变量；
+- 不得假设另一个模型正在同一 Claude Code 会话中辅助执行。
 
 用户输入：
 <A> = Vue2 仓库绝对路径
@@ -70,10 +155,9 @@ Wave 1  建 change（无规格闸门）
 
 正式视觉基线必须从当前运行中的 A 捕获：多状态截图、computed-style、交互和
 响应式证据。不要向用户索要 A 页面参考截图，也不要把用户粘贴的图片当作视觉
-事实。若当前模型只支持文本输入（例如 GLM-5.2），不得声称模型直接看过图片；
-必须由可验证的图片读取、OCR、颜色提取、像素/感知差异工具，或独立多模态模型
-生成可追溯的分析证据。没有这些能力时，捕获的截图只能归档和供人工查看，不能
-产生视觉结论。A 无法运行时，不得用单张外部截图宣称 strict parity。
+事实。文本模型不得声称直接看过图片；必须使用可验证的图片读取、OCR、颜色
+提取、像素/感知差异工具，或消费另一个只读视觉会话生成的 path+digest 证据。
+没有这些能力时，截图只能归档和供人工查看，不能产生 visual pass。
 
 固定边界：
 - <A> 严格只读，<B> 是唯一应用代码修改目标。
@@ -87,30 +171,29 @@ Wave 1  建 change（无规格闸门）
 自动恢复当前 Wave 已由上游产生且应当存在的工件，并校验路径、digest、
 A/B revision、OpenSpec artifact_revision、批准绑定和用户改动碰撞。
 
-尚未进入其生产 Wave 的工件不存在属于正常情况；已完成生产 Wave但工件
-缺失、损坏或 stale 时，停止并指出需要重跑的 Wave。不要要求用户手工提供
-工件路径、digest 或 JSON 内容。
+尚未进入其生产 Wave 的工件不存在属于正常情况。已完成生产 Wave 但工件缺失、
+损坏或 stale 时，停止并指出需要重跑的 Wave；不要要求用户手工提供工件内容。
 
 会话停点覆盖：本会话只执行随后指定的一个 Wave。完成、写盘并校验后立即
 停止；不要加载或执行下一个 Skill。
 ```
 
-### 1.3 工件是给 Agent 用的
+### 1.3 工件恢复矩阵
 
 | 工件组 | Agent 用途 | 用户操作 |
 |---|---|---|
-| `<CONFIG>` | 在同一 change 中定位迁移任务及派生路径 | 不操作 |
+| `<CONFIG>` | 定位同一 change 的业务输入和派生路径 | 不操作 |
 | `<DOMAIN_ROOT>` | 保存 Domain/runtime/visual 事实、基线、设计和复核 | 最终看摘要 |
-| OpenSpec 工件与 `handoff.json` | 保存 Delivery 规格、批准、计划、任务和状态 | 批准时看摘要 |
-| `<G9_ROOT>` | 保存 Delivery 自己的 G9 视觉验收证据 | 最终看摘要 |
+| OpenSpec 工件与 `handoff.json` | 保存规格、批准、计划、任务和交付状态 | 批准时看摘要 |
+| `<G9_ROOT>` | 保存 Delivery G9 视觉验收证据 | 最终看摘要 |
+| `model-reviews/` | 保存可选只读复核证据 | 不操作 |
 
 默认不得在 `<CHANGE_DIR>` 外另建 migration-artifacts/report 目录。`evidence/`
 只保存 path+digest 可校验的外部证据，不是第二状态源；OpenSpec 的 proposal、
 specs、design、tasks、verification 和 handoff 仍是 Delivery 权威工件。
-当前 Delivery `artifact_revision` 只覆盖这些权威工件及 `specs/**`；新增或更新
-`evidence/` 不会使 Frame 批准失效，但修改 proposal/spec 等权威工件仍会失效。
 
-按阶段恢复：
+当前 Delivery `artifact_revision` 只覆盖权威工件及 `specs/**`。新增或更新
+`evidence/` 不会使 Frame 批准失效，但修改 proposal/spec 等权威工件仍会失效。
 
 | Wave | 应当存在的主要上游工件 |
 |---|---|
@@ -127,6 +210,9 @@ specs、design、tasks、verification 和 handoff 仍是 Delivery 权威工件�
 新会话粘贴“会话通用头”，再粘贴：
 
 ```text
+当前 Claude Code 模型：GLM 5.2（实际 model id 以 provider 配置为准）。
+先用 /status 和 /model 确认；不匹配时停止并重开会话。本 Wave 禁止切换模型。
+
 显式使用 delivery-frame-spec Skill。
 建档停点覆盖：本波只建或恢复 change，禁止规格闸门。
 
@@ -140,15 +226,13 @@ specs、design、tasks、verification 和 handoff 仍是 Delivery 权威工件�
 - <G9_ROOT>；
 - <CONFIG>，仅记录必填输入和派生路径，不保存批准或任务状态。
 
-只写意图草稿：A 只读、B 单一 mutation target、B shell host-native、
-迁入内容 strict parity、保留 fallback、部署/切流/A 下线为非目标。
+只写意图草稿：A 只读、B 单一 mutation target、B shell host-native、迁入内容 strict parity、保留 fallback、部署/切流/A 下线为非目标。
 不要把尚未摸底的颜色、字体、图标或页面闭包写成已批准验收。
 
 本波禁止规格闸门和范围批准。proposal 保持草稿。不要询问范围批准，
 不要写 State Source 批准记录，不要生成进入 Plan 的 handoff transition。
 
-结束时输出 change id/dir、Config、route/risk 草稿。说明下一步为 Wave 2，
-然后停止，不读取 migrate 或 Plan Skill。
+结束时输出 change id/dir、Config、route/risk 草稿。说明下一步为 Wave 2，然后停止，不读取 migrate 或 Plan Skill。
 ```
 
 ## 3. Wave 2：迁移领域摸底
@@ -156,38 +240,49 @@ specs、design、tasks、verification 和 handoff 仍是 Delivery 权威工件�
 新会话粘贴“会话通用头”，再粘贴：
 
 ```text
+当前 Claude Code 模型：Kimi K2.6（实际 model id 以 provider 配置为准）。
+先用 /status 和 /model 确认；不匹配时停止并重开会话。本 Wave 禁止切换模型。
+
 显式使用 migrate-vue2-pages-to-vue3-host Skill，mode=assess。
 
-恢复 Wave 1 创建的 change 与 Config，只做只读摸底和证据采集；不要进入
-design/verify，不要修改 A/B 应用代码。migrate 没有 execute mode。
+恢复 Wave 1 创建的 change 与 Config，只做只读摸底和证据采集；不要进入design/verify，不要修改 A/B 应用代码。migrate 没有 execute mode。
 
 artifact_directory 固定为 <DOMAIN_ROOT>，不得在 <CHANGE_DIR> 外创建报告目录。
 
 不要向用户索要 A 页面参考截图。正式视觉基线必须从当前运行中的 A 捕获。
 
-先证明本会话存在可用的视觉处理链。纯文本模型必须通过图片读取、OCR、颜色
-提取、像素/感知差异工具或独立多模态模型得到可追溯结果；否则将捕获的截图仅
-归档，不得从像素推断页面身份、布局、颜色、字体或图标，并阻塞 strict-parity
-视觉结论。
+先证明本会话存在可用的视觉处理链。纯文本模型必须通过图片读取、OCR、颜色提取、像素/感知差异工具或独立多模态模型得到可追溯结果；否则将捕获的截图仅归档，不得从像素推断页面身份、布局、颜色、字体或图标，并阻塞 strict-parity 视觉结论。
+
+视觉处理链门禁（硬停止）：
+- 无法证明可追溯图像测量时：visual_chain=unavailable，
+  terminal=blocked:visual-chain。
+- 截图只归档；不得写 visual pass，不得将 design 标为 ready。
+- 输出 blockers 后立即停止；不得进入 Wave 3，不得加载 migrate design。
+- A 仍在运行也不能放行：没有测量链就不能声称 strict parity。
+
+若 A 无法运行或无法冻结当前 revision 的多状态基线：
+terminal=blocked:visual-baseline，同样停止，不得进入 Wave 3。
 
 按当前 Skill 契约完成：
 - 解析 <PAGE> 的真实 source_entry 和 <HTML> 对应的 B 挂载链路；
 - 发现页面功能闭包和完整 style_closure；
 - 分析 A/B runtime、依赖、构建和 fallback；
-- 在 A 仍可运行时冻结 strict-parity 视觉契约和独立状态基线；
+- 在 A 仍可运行且视觉处理链可用时冻结 strict-parity 视觉契约和独立状态基线；
 - 颜色使用 A 计算样式，字体与图标保留 A 的实际内容身份。
 
-若 A 无法运行，必须阻塞“样式不变”结论。不得用单张外部截图替代当前
-revision 的多状态基线。
+不得用单张外部截图替代当前 revision 的多状态基线。
 
 生成并校验 assess domain packet、runtime evidence、visual contract 和 baseline
-manifest，全部写入 <DOMAIN_ROOT>。
+manifest，全部写入 <DOMAIN_ROOT>。视觉链不可用时仍可写评估事实，但视觉结论
+必须保持 blocked。
 
 若发现 Wave 1 意图草稿的目标或边界不成立，输出 discovery backflow 并停止；
 不得自行改 OpenSpec 规格。
 
-结束时输出 packet path/digest、A/B revision、source/host entry、
-closure/runtime/baseline 状态和 blockers。说明下一步为 Wave 3，然后停止。
+结束时输出 packet path/digest（若有）、A/B revision、source/host entry、
+closure/runtime/baseline 状态、terminal 与 blockers。
+仅当视觉处理链可用且基线已冻结、无 visual blocker 时，才说明下一步为 Wave 3。
+然后停止。
 ```
 
 若 A 无法运行，必须阻塞“样式不变”结论。
@@ -197,7 +292,13 @@ closure/runtime/baseline 状态和 blockers。说明下一步为 Wave 3，然后
 新会话粘贴“会话通用头”，再粘贴：
 
 ```text
+当前 Claude Code 模型：GLM 5.2（实际 model id 以 provider 配置为准）。
+先用 /status 和 /model 确认；不匹配时停止并重开会话。本 Wave 禁止切换模型。
+
 显式使用 migrate-vue2-pages-to-vue3-host Skill，mode=design。
+
+若当前 assess 的 terminal 为 blocked:visual-chain 或 blocked:visual-baseline，
+立即停止，返回 Wave 2，不得把 design 标为 ready。
 
 恢复当前 assess packet 和 Wave 1 意图草稿；仅在 stale 时刷新受影响事实。
 不要修改 A/B 应用代码。migrate 没有 execute mode。
@@ -225,6 +326,9 @@ readiness 和 blockers。说明下一步为 Wave 4，然后停止。
 新会话粘贴“会话通用头”，再粘贴：
 
 ```text
+当前 Claude Code 模型：GLM 5.2（实际 model id 以 provider 配置为准）。
+先用 /status 和 /model 确认；不匹配时停止并重开会话。本 Wave 禁止切换模型。
+
 显式使用 delivery-frame-spec Skill。
 
 恢复 <CHANGE_DIR> 与 <DOMAIN_ROOT> 中的 domain packet。从 packet 摘
@@ -256,6 +360,9 @@ handoff path/revision。说明下一步为 Wave 5，然后停止，不读取 Pla
 新会话粘贴“会话通用头”，再粘贴：
 
 ```text
+当前 Claude Code 模型：GLM 5.2（实际 model id 以 provider 配置为准）。
+先用 /status 和 /model 确认；不匹配时停止并重开会话。本 Wave 禁止切换模型。
+
 显式使用 delivery-plan-tasks Skill。
 
 只消费当前有效 Frame handoff；不要修改应用代码，不要进入 Execute。
@@ -284,6 +391,9 @@ path/revision。说明下一步为 Wave 6，然后停止，不读取 Execute Ski
 新会话粘贴“会话通用头”，再粘贴：
 
 ```text
+当前 Claude Code 模型：Kimi K2.6（实际 model id 以 provider 配置为准）。
+先用 /status 和 /model 确认；不匹配时停止并重开会话。本 Wave 禁止切换模型。
+
 显式使用 delivery-execute-verify Skill。
 
 Delivery 是唯一代码 mutation owner；migrate 没有 execute mode，不要调用它。
@@ -321,6 +431,9 @@ Delivery `verified` 只表示交付变更通过，不能单独宣布整次迁移
 新会话粘贴“会话通用头”，再粘贴：
 
 ```text
+当前 Claude Code 模型：GLM 5.2（实际 model id 以 provider 配置为准）。
+先用 /status 和 /model 确认；不匹配时停止并重开会话。本 Wave 禁止切换模型。
+
 显式使用 migrate-vue2-pages-to-vue3-host Skill，mode=verify。
 
 Delivery 已拥有代码 mutation；migrate 没有 execute mode，不修改 A/B 应用代码。

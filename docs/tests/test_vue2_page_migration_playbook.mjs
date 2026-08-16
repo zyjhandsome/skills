@@ -61,4 +61,43 @@ assert.ok(usage.includes("已作废"), "usage must retire the conflicting sequen
 assert.ok(!usage.includes("](./vue2-page-migration-orchestration-latest.md)"), "usage must not link to the retired latest file");
 assert.ok(usage.indexOf("已作废") < usage.indexOf("assess + design 先于建 change"), "retired assess-first order must sit in the obsolete section");
 
+/**
+ * @param {string} src
+ * @param {string} start
+ * @param {string} end
+ */
+function section(src, start, end) {
+  const i = src.indexOf(start);
+  const j = src.indexOf(end);
+  assert.ok(i !== -1 && j > i, `missing section ${start} .. ${end}`);
+  return src.slice(i, j);
+}
+
+const wave2 = section(playbook, "## 3. Wave 2", "## 4. Wave 3");
+const wave2Fence = wave2.match(/```text\r?\n([\s\S]*?)\r?\n```/);
+assert.ok(wave2Fence, "Wave 2 prompt fence is missing");
+const wave2Prompt = wave2Fence[1];
+assert.ok(wave2Prompt.includes("visual_chain=unavailable"), "Wave 2 must name visual_chain=unavailable");
+assert.ok(wave2Prompt.includes("blocked:visual-chain"), "Wave 2 must emit blocked:visual-chain");
+assert.ok(wave2Prompt.includes("不得进入 Wave 3"), "Wave 2 must hard-stop Wave 3 when the visual chain is unavailable");
+assert.ok(
+  /仅当视觉处理链可用[\s\S]*下一步为 Wave 3/.test(wave2Prompt),
+  "Wave 2 may name Wave 3 only after the visual chain and baseline are unblocked"
+);
+const wave3NextSentences = wave2Prompt
+  .split(/[。\n]/)
+  .map((line) => line.trim())
+  .filter((line) => line.includes("下一步为 Wave 3"));
+assert.ok(wave3NextSentences.length >= 1, "Wave 2 must still name the unblocked next wave");
+assert.ok(
+  wave3NextSentences.every((line) => line.includes("仅当") || line.includes("才说明")),
+  "Wave 2 must not unconditionally send a blocked assess to Wave 3"
+);
+
+const wave3 = section(playbook, "## 4. Wave 3", "## 5. Wave 4");
+assert.ok(
+  wave3.includes("blocked:visual-chain") && /停止/.test(wave3),
+  "Wave 3 must refuse a blocked:visual-chain assess packet"
+);
+
 console.log("PASS: vue2 page migration playbook and usage share one High, Frame-after-design sequence");

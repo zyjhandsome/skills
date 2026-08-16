@@ -277,6 +277,23 @@ Prefer B's supported components plus the smallest page-scoped compatibility laye
 Do not import A's global Element UI stylesheet or overwrite B's global tokens to
 repair one page. If global CSS is unavoidable, apply the collateral gate below.
 
+## Measurement chain
+
+A screenshot file is not a visual conclusion. First prove a traceable image
+measurement chain exists in this session: image reading, OCR, color extraction,
+pixel or perceptual diff, or an independent multimodal analyzer.
+
+If the chain is unavailable:
+
+- keep screenshots as archive-only artifacts;
+- do not infer identity, layout, color, font, or icon facts from pixels or CSS;
+- stop strict-parity visual conclusions;
+- design is not ready;
+- domain verification cannot pass.
+
+This blocker is independent of whether A is running. A running page without a
+measurement chain still cannot support strict parity.
+
 ## Missing baseline
 
 If the original A page cannot be captured:
