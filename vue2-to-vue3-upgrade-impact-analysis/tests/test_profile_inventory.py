@@ -169,6 +169,68 @@ class ProfileInventoryTests(unittest.TestCase):
             self.assertEqual(data["lockfile_status"], "unparsed")
             self.assertTrue(data["lockfile_errors"])
 
+    def test_profiles_multiple_source_roots_and_vant_ui(self) -> None:
+        pkg = {
+            "name": "multi-page-vue2",
+            "dependencies": {
+                "vue": "2.7.14",
+                "element-ui": "2.15.14",
+                "vant": "2.12.54",
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "package.json").write_text(json.dumps(pkg), encoding="utf-8")
+            desktop = root / "src"
+            mobile = root / "src.mobile"
+            desktop.mkdir()
+            mobile.mkdir()
+            (desktop / "main.js").write_text(
+                "import Vue from 'vue'\nnew Vue({})\n", encoding="utf-8"
+            )
+            (mobile / "main.js").write_text(
+                "import Vue from 'vue'\nimport Vant from 'vant'\n"
+                "Vue.use(Vant)\nnew Vue({})\n",
+                encoding="utf-8",
+            )
+
+            data = self._run_profile(root)
+
+            self.assertEqual(data["source_roots"], ["src", "src.mobile"])
+            self.assertEqual(data["source_impact_signals"]["scanned_files"], 2)
+            self.assertEqual(data["source_impact_signals"]["signals"]["new_vue"], 2)
+            self.assertIn("vant", data["related_packages"])
+            self.assertEqual(data["related_packages"]["vant"]["readiness"], "needs-major")
+            self.assertEqual(data["ui_stacks"], ["element-ui", "vant"])
+
+    def test_explicit_output_writes_reproducible_inventory(self) -> None:
+        pkg = {"name": "output-case", "dependencies": {"vue": "2.7.14"}}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "project"
+            root.mkdir()
+            (root / "package.json").write_text(json.dumps(pkg), encoding="utf-8")
+            output = Path(tmp) / "evidence" / "inventory.json"
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(PROFILE),
+                    "--project-root",
+                    str(root),
+                    "--json",
+                    "--output",
+                    str(output),
+                ],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(json.loads(output.read_text(encoding="utf-8"))["package_name"], "output-case")
+            self.assertEqual(json.loads(result.stdout)["package_name"], "output-case")
+
 
 if __name__ == "__main__":
     unittest.main()

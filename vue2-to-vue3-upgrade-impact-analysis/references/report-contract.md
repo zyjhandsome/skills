@@ -24,7 +24,7 @@
 | 1 | 报告在证据目录根 |
 | ≥2 | `<entry-kind>/<workspace-slug>__variant-<build-variant>__scope-<batch-scope>/vue2-to-vue3-upgrade-report.md` + 根 `BATCH-INDEX.md` |
 
-`entry-kind`：`workspace` / `inventory`
+`entry-kind`：`workspace` / `inventory` / `host-port`
 
 ## 顶层状态字段
 
@@ -52,6 +52,16 @@
 `lockfile_status: present`；`absent` / `unparsed` 一律保持 `frozen`。每个
 High/blocker 与每个 `required_for_path=yes` 均为 `decided`（`deferred` 只允许
 `complete`+`frozen`）。
+
+`upgrade-summary.json` 额外必填（仍 ≤12 KiB；不得出现 `required_skill` /
+`consumer_skill` / `handoff_skill`）：
+
+| 字段 | 取值 |
+|---|---|
+| `lockfile_status` | `present` / `absent` / `unparsed`（与 §1 一致；`ready` 时必须 `present`） |
+| `named_recipes` | 配方 id 字符串数组（≤20）。`complete` 且路径不是 `deferred-inventory-only` 时非空 |
+| `named_validations` | 实施期验证短句数组（≤20）。`complete` 时非空，且能对应 `named_recipes` |
+| `next_action` | `complete` → `analysis_complete`；`needs_choice` 不得用 `analysis_complete` |
 
 ## 必选章节（按顺序）
 
@@ -154,6 +164,13 @@ High/blocker 与每个 `required_for_path=yes` 均为 `decided`（`deferred` 只
 `子系统 | scope_status | 风险 | 就绪度 | required_for_path | 命名配方 | 说明`
 
 `required_for_path`：`yes` / `no`
+
+## 验证矩阵表列（§8）
+
+`命名配方 | 实施期命令 | 失败证明什么 | 证据状态`
+
+§4 中 `in_scope` 且命名配方不是 `—` 的每一配方 id，必须在本表出现至少一行。
+实施期命令本阶段不执行；禁止空行或 `待补` / `tbd`。
 
 ## 确认队列表列（§7）
 

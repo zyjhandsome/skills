@@ -69,8 +69,9 @@ build variant × scope** (A→B: workspace=A; scope often `page-closure`).
 - **A→B / 并入 / iframe 收编:** `host-port-direct` (`direct-vue3` +
   `existing-vite` + `host-port`). §1 needs `source_root`,
   `implementation_target`, `forbid_source_mutation: yes`. Compat is **not**
-  primary. Axes + Wave 1 `proceed:path:…` still required — details in
-  `references/migration-path-ladder.md`.
+  primary. Same git repo with a separate Vue3 host workspace is also
+  `host-port`, not in-place. Axes + Wave 1 `proceed:path:…` still required —
+  details in `references/migration-path-ladder.md`.
 
 ## Workflow
 
@@ -116,7 +117,7 @@ python scripts/validate_report.py <report.md>
 python scripts/validate_report.py --evidence-dir <evidence-dir> [--json]
 python scripts/validate_upgrade_summary.py <upgrade-summary.json>
 python scripts/preflight.py --project-root <dir> [--json]
-python scripts/profile_inventory.py --project-root <dir> [--json]
+python scripts/profile_inventory.py --project-root <dir> [--json] [--output <inventory.json>]
 ```
 
 Exit `0` pass / `3` errors / `4` missing. Pass = shape only. Fixtures:
@@ -145,7 +146,8 @@ validator `0`; Agent review → `analysis_status=complete`.
 
 ## Context budget and portability
 
-Return `upgrade-summary.json` by default. Load the full report only for a named
+Return `upgrade-summary.json` by default (includes `lockfile_status`,
+`named_recipes`, `named_validations`). Load the full report only for a named
 section, one decision record for a named decision, and inventory only for a
 named evidence question. The output bundle must validate and remain useful
 when every other Skill folder is absent.

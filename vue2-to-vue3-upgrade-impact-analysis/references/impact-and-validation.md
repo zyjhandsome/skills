@@ -33,11 +33,16 @@
 
 ## Validation matrix guidance
 
-Prefer naming:
+§8 table headers (required): `命名配方 | 实施期命令 | 失败证明什么 | 证据状态`.
 
-- Install/build commands **for the implementation stage** (do not run here)
+Every in-scope §4 recipe other than `—` must have one §8 row. Commands are
+**named for the implementation stage**; do not run them here. `证据状态` is
+usually `待实施阶段` / `待执行`.
+
+Also name, without executing:
+
 - Smoke/E2E routes over deep unit rewrites when UT migration cost is high
-- Visual regression for UI library majors
+- Visual sample states when `visual_acceptance_required=yes` (generic next action only)
 - Rollback = redeploy previous workspace release / revert upgrade branch
 
 ## Structured UI visual risk

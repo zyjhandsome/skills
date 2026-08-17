@@ -11,15 +11,34 @@ Exit codes: 0 pass, 2 usage error, 3 validation error, 4 path not found.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+
+
+def _load_summary_validator():
+    module_path = Path(__file__).with_name("validate_upgrade_summary.py")
+    spec = importlib.util.spec_from_file_location(
+        "vue2_to_vue3_validate_upgrade_summary", module_path
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load summary validator: {module_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.validate
+
+
+validate_summary = _load_summary_validator()
+
 REPORT_NAME = "vue2-to-vue3-upgrade-report.md"
 BATCH_INDEX_NAME = "BATCH-INDEX.md"
 DECISION_RECORDS_DIR = "decision-records"
+SUMMARY_NAME = "upgrade-summary.json"
+INVENTORY_NAME = "inventory.json"
 
 STATUS_ENUMS = {
     "analysis_status": {"partial", "blocked", "complete"},
@@ -47,6 +66,7 @@ SUBSYSTEM_HEADERS = (
     "说明",
 )
 QUEUE_HEADERS = ("单元", "类型", "状态", "问题", "选项")
+VALIDATION_HEADERS = ("命名配方", "实施期命令", "失败证明什么", "证据状态")
 RECORD_HEADERS = ("字段", "内容")
 YES_NO = {"yes", "no"}
 AXIS_MARKERS = (
@@ -159,14 +179,25 @@ MANUAL_GAP_ITEMS = (
     ("lockfile reproducibility", ("lockfile",)),
 )
 CHECKLIST_PLACEHOLDERS = {"", "-", "—", "todo", "待填", "待填写"}
+VALIDATION_PLACEHOLDERS = CHECKLIST_PLACEHOLDERS | {"tbd", "待补", "n/a", "na"}
+RECIPE_SKIP = {"name", "never", "run"}
+RECIPE_ID_RE = re.compile(r"[A-Za-z][A-Za-z0-9_-]*")
 UNIT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 FENCE = re.compile(r"(?ms)^[ \t]*(```|~~~).*?^[ \t]*\1[ \t]*$")
 HTML_COMMENT = re.compile(r"(?s)<!--.*?-->")
 VISUAL_PACKAGE_TRIGGERS = (
     "element-ui",
     "element-plus",
+    "ant-design-vue",
+    "vuetify",
+    "vant",
     "tailwindcss",
     "vxe-table",
+    "vue-grid-layout",
+    "vue-json-tree-view",
+    "vue-ueditor-wrap",
+    "quill",
+    "codemirror",
     "wangeditor",
     "vue3-tree-org",
     "butterfly-dag",
@@ -543,6 +574,16 @@ def validate_host_port_baseline(
         result.error("§1 must not name vue-compat as primary recipe for host-port")
 
 
+def extract_recipe_ids(text: str) -> set[str]:
+    ids: set[str] = set()
+    for token in RECIPE_ID_RE.findall(text or ""):
+        lowered = token.lower()
+        if lowered in RECIPE_SKIP or lowered in {"http", "https"}:
+            continue
+        ids.add(token)
+    return ids
+
+
 def parse_subsystems(block: str, result: ReportResult) -> list[dict[str, str]]:
     rows, errors = parse_table(block, SUBSYSTEM_HEADERS)
     for error in errors:
@@ -583,6 +624,7 @@ def parse_subsystems(block: str, result: ReportResult) -> list[dict[str, str]]:
                 "risk": risk,
                 "readiness": readiness,
                 "required_for_path": required,
+                "recipe": recipe,
             }
         )
     missing_defaults = [sid for sid in DEFAULT_SUBSYSTEMS if sid not in seen]
@@ -631,6 +673,40 @@ def parse_queue(block: str, result: ReportResult) -> list[dict[str, str]]:
     if len(path_rows) != 1:
         result.error(f"confirmation queue requires exactly one path row; found {len(path_rows)}")
     return parsed
+
+
+def validate_validation_matrix(
+    block: str, subsystems: list[dict[str, str]], result: ReportResult
+) -> None:
+    rows, errors = parse_table(block, VALIDATION_HEADERS)
+    for error in errors:
+        result.error(f"§8 {error}")
+    if not rows:
+        result.error("§8 validation matrix must contain at least one data row")
+        return
+    covered: set[str] = set()
+    for recipe, command, failure, evidence in rows:
+        if any(
+            not cell or cell.strip().lower() in VALIDATION_PLACEHOLDERS
+            for cell in (recipe, command, failure, evidence)
+        ):
+            result.error(f"§8 row has blank or placeholder cells: {recipe!r}")
+            continue
+        covered.update(extract_recipe_ids(recipe))
+    required: set[str] = set()
+    for row in subsystems:
+        if row.get("scope_status") != "in_scope":
+            continue
+        recipe = row.get("recipe", "")
+        if recipe.strip() in {"—", "-", "–"}:
+            continue
+        required.update(extract_recipe_ids(recipe))
+    missing = sorted(required - covered)
+    if missing:
+        result.error(
+            "§8 missing implementation-stage rows for named recipes: "
+            + ", ".join(missing)
+        )
 
 
 def parse_record(path: Path, expected_unit: str, expected_status: str, result: ReportResult) -> None:
@@ -758,6 +834,7 @@ def validate_report(path: Path) -> ReportResult:
     validate_manual_gap_checklist(gap_block, result)
 
     subsystems = parse_subsystems(sections.get("子系统影响清单", ""), result)
+    validate_validation_matrix(sections.get("验证矩阵", ""), subsystems, result)
     queue = parse_queue(sections.get("确认队列", ""), result)
     queue_by_unit = {row["unit"]: row for row in queue}
     path_rows = [row for row in queue if row["type"] == "path"]
@@ -893,12 +970,167 @@ def validate_batch_index(evidence_dir: Path, reports: list[Path], result: Report
     for report in reports:
         relative = report.relative_to(evidence_dir).as_posix()
         parts = report.relative_to(evidence_dir).parts
-        if len(parts) != 3 or parts[0] not in {"workspace", "inventory"} or not re.fullmatch(
+        if len(parts) != 3 or parts[0] not in {"workspace", "inventory", "host-port"} or not re.fullmatch(
             r"[A-Za-z0-9._-]+__variant-[A-Za-z0-9._-]+__scope-[A-Za-z0-9._-]+", parts[1]
         ):
             result.error(f"invalid multi-batch report layout: {relative}")
         if relative not in text and parts[1] not in text:
             result.error(f"{BATCH_INDEX_NAME} does not reference batch report: {relative}")
+
+
+def declared_file_matches(value: str, expected: Path) -> bool:
+    text = str(value).strip().strip("`").replace("\\", "/")
+    if not text or text in {".", "./"}:
+        return False
+    target = expected.resolve()
+    candidate = Path(text)
+    try:
+        if candidate.is_absolute():
+            return candidate.resolve() == target
+        return (Path.cwd() / candidate).resolve() == target
+    except OSError:
+        return False
+
+
+def validate_bundle_artifacts(report: Path, result: ReportResult) -> None:
+    """Validate the standalone bundle and report/summary/inventory agreement."""
+    bundle_dir = report.parent
+    summary_path = bundle_dir / SUMMARY_NAME
+    inventory_path = bundle_dir / INVENTORY_NAME
+    if not summary_path.is_file():
+        result.error(f"bundle missing required {SUMMARY_NAME}")
+    if not inventory_path.is_file():
+        result.error(f"bundle missing required {INVENTORY_NAME}")
+    if not summary_path.is_file():
+        return
+
+    raw = summary_path.read_bytes()
+    try:
+        summary = json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        result.error(f"{SUMMARY_NAME} is not valid UTF-8 JSON: {exc}")
+        return
+    for error in validate_summary(summary, len(raw)):
+        result.error(f"{SUMMARY_NAME}: {error}")
+    if not isinstance(summary, dict):
+        return
+
+    report_text = visible_markdown(report.read_text(encoding="utf-8"))
+    status, _ = parse_status(report_text)
+    sections, _ = split_sections(report_text)
+    path_match = RECOMMENDED_PATH_RE.search(sections.get("推荐迁移路径", ""))
+    report_path_id = path_match.group(1) if path_match else None
+    axis_values = {}
+    path_block = sections.get("推荐迁移路径", "")
+    for marker, _allowed in AXIS_MARKERS:
+        match = re.search(rf"(?im)^\s*[-*]?\s*{re.escape(marker)}\s*`?([A-Za-z0-9_-]+)`?", path_block)
+        if match:
+            axis_values[marker[:-1]] = match.group(1)
+    lock_match = re.search(
+        r"(?im)^\s*[-*]?\s*`?lockfile_status`?\s*[:：]\s*`?(present|absent|unparsed)`?",
+        sections.get("基线与假设", ""),
+    )
+    report_lock = lock_match.group(1) if lock_match else None
+
+    comparisons = {
+        "analysis_status": status.get("analysis_status"),
+        "decision_status": status.get("decision_status"),
+        "batch_implementation_gate": status.get("batch_implementation_gate"),
+        "visual_acceptance_required": status.get("visual_acceptance_required"),
+        "recommended_path": report_path_id,
+        "lockfile_status": report_lock,
+    }
+    for field_name, report_value in comparisons.items():
+        if report_value is not None and summary.get(field_name) != report_value:
+            result.error(
+                f"{SUMMARY_NAME} {field_name}={summary.get(field_name)!r} "
+                f"does not match report {report_value!r}"
+            )
+
+    summary_axes = summary.get("axes")
+    if isinstance(summary_axes, dict):
+        report_axes = {
+            "runtime": axis_values.get("runtime_axis"),
+            "build": axis_values.get("build_axis"),
+            "topology": axis_values.get("topology_axis"),
+        }
+        if summary_axes != report_axes:
+            result.error(
+                f"{SUMMARY_NAME} axes={summary_axes!r} does not match report {report_axes!r}"
+            )
+
+    subsystem_rows, _ = parse_table(
+        sections.get("子系统影响清单", ""), SUBSYSTEM_HEADERS
+    )
+    report_recipes: set[str] = set()
+    for _sid, scope, _risk, _readiness, _required, recipe, _note in subsystem_rows:
+        if scope == "in_scope":
+            report_recipes.update(extract_recipe_ids(recipe))
+    summary_recipe_values = summary.get("named_recipes")
+    if isinstance(summary_recipe_values, list) and all(
+        isinstance(item, str) for item in summary_recipe_values
+    ):
+        summary_recipes = set(summary_recipe_values)
+        if summary_recipes != report_recipes:
+            result.error(
+                f"{SUMMARY_NAME} named_recipes={sorted(summary_recipes)!r} "
+                f"does not match report subsystem recipes={sorted(report_recipes)!r}"
+            )
+
+    if not declared_file_matches(summary.get("report_path", ""), report):
+        result.error(f"{SUMMARY_NAME} report_path does not resolve to {report}")
+    if inventory_path.is_file() and not declared_file_matches(
+        summary.get("inventory_path", ""), inventory_path
+    ):
+        result.error(f"{SUMMARY_NAME} inventory_path does not resolve to {inventory_path}")
+    if not declared_file_matches(status.get("summary_path", ""), summary_path):
+        result.error(f"report summary_path does not resolve to {summary_path}")
+
+    declared_records = summary.get("decision_records")
+    if isinstance(declared_records, list) and all(
+        isinstance(item, str) for item in declared_records
+    ):
+        actual_records = sorted((bundle_dir / "decision-records").glob("*.md"))
+        missing_from_manifest = [
+            path
+            for path in actual_records
+            if not any(declared_file_matches(item, path) for item in declared_records)
+        ]
+        unresolved_manifest = [
+            item
+            for item in declared_records
+            if not any(declared_file_matches(item, path) for path in actual_records)
+        ]
+        if missing_from_manifest or unresolved_manifest:
+            details = []
+            if missing_from_manifest:
+                details.append(
+                    "unlisted=" + ",".join(path.name for path in missing_from_manifest)
+                )
+            if unresolved_manifest:
+                details.append("missing=" + ",".join(unresolved_manifest))
+            result.error(
+                f"{SUMMARY_NAME} decision_records does not match decision-records/: "
+                + "; ".join(details)
+            )
+
+    if inventory_path.is_file():
+        try:
+            inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            result.error(f"{INVENTORY_NAME} is not valid UTF-8 JSON: {exc}")
+        else:
+            if not isinstance(inventory, dict):
+                result.error(f"{INVENTORY_NAME} root must be an object")
+            elif inventory.get("lockfile_status") not in LOCKFILE_STATUSES:
+                result.error(
+                    f"{INVENTORY_NAME} lockfile_status must be one of {sorted(LOCKFILE_STATUSES)}"
+                )
+            elif report_lock and inventory.get("lockfile_status") != report_lock:
+                result.error(
+                    f"{INVENTORY_NAME} lockfile_status={inventory.get('lockfile_status')!r} "
+                    f"does not match report {report_lock!r}"
+                )
 
 
 def validate_evidence_dir(evidence_dir: Path) -> list[ReportResult]:
@@ -919,14 +1151,21 @@ def validate_evidence_dir(evidence_dir: Path) -> list[ReportResult]:
             result = validate_report(root_report)
             result.error("single-batch evidence directory must not contain BATCH-INDEX.md")
             return [result]
-        return [validate_report(root_report)]
+        result = validate_report(root_report)
+        validate_bundle_artifacts(root_report, result)
+        return [result]
     if not nested_reports:
         result = ReportResult(path=evidence_dir)
         result.error(f"no {REPORT_NAME} under evidence directory")
         return [result]
     index_result = ReportResult(path=evidence_dir / BATCH_INDEX_NAME)
     validate_batch_index(evidence_dir, nested_reports, index_result)
-    return [index_result] + [validate_report(report) for report in nested_reports]
+    nested_results = []
+    for report in nested_reports:
+        result = validate_report(report)
+        validate_bundle_artifacts(report, result)
+        nested_results.append(result)
+    return [index_result] + nested_results
 
 
 def main() -> int:

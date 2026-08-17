@@ -1,0 +1,25 @@
+{
+  "project_root": "/repo/admin-web",
+  "profile_as_of": "2026-08-01",
+  "package_name": "admin-web",
+  "vue_version_spec": "2.7.16",
+  "vue_major": "2",
+  "builder": "vue-cli",
+  "store": "vuex",
+  "ui_stack": "element-ui",
+  "ui_stacks": ["element-ui"],
+  "source_roots": ["src"],
+  "lockfiles": ["/repo/admin-web/package-lock.json"],
+  "lockfile_status": "present",
+  "lockfile_errors": [],
+  "related_packages": {},
+  "source_impact_signals": {
+    "scanned_files": 1,
+    "skipped_large_files": 0,
+    "truncated": false,
+    "signals": {},
+    "samples": {},
+    "vue_plugin_packages": {},
+    "global_mounts": {}
+  }
+}

@@ -11,6 +11,17 @@
     "topology": "host-port"
   },
   "visual_acceptance_required": "yes",
+  "lockfile_status": "present",
+  "named_recipes": [
+    "manual-adapt-to-host",
+    "manual-router4-on-host",
+    "map-ui-to-host"
+  ],
+  "named_validations": [
+    "manual-adapt-to-host: B-native SFC mounts; fail = iframe still required",
+    "manual-router4-on-host: host route opens page; fail = 404 or leftover A router",
+    "map-ui-to-host: search+table vs A baseline; fail = host UI mapping missing"
+  ],
   "report_path": "fixtures/valid-report-host-port.md",
   "inventory_path": "fixtures/inventory.json",
   "decision_records": [],

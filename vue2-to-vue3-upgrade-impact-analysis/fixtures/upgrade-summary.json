@@ -11,6 +11,19 @@
     "topology": "single-cutover"
   },
   "visual_acceptance_required": "yes",
+  "lockfile_status": "present",
+  "named_recipes": [
+    "vue-compat",
+    "webpack-to-vite",
+    "gogocode-element",
+    "manual-router4"
+  ],
+  "named_validations": [
+    "vue-compat: alias vue to @vue/compat then build; fail = missing migration build",
+    "webpack-to-vite: vite build; fail = non-zero exit",
+    "gogocode-element: primary form/table pages render; fail = Element Plus mapping missing",
+    "manual-router4: login redirect and 404 catch-all; fail = Router 4 history/wildcard break"
+  ],
   "report_path": "fixtures/valid-report-complete.md",
   "inventory_path": "fixtures/inventory.json",
   "decision_records": ["fixtures/decision-records/migration-path__compat-big-bang.md"],

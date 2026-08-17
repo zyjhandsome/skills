@@ -11,6 +11,9 @@
     "topology": "single-cutover"
   },
   "visual_acceptance_required": "yes",
+  "lockfile_status": "present",
+  "named_recipes": [],
+  "named_validations": [],
   "report_path": "<output-dir>/vue2-to-vue3-upgrade-report.md",
   "inventory_path": "<output-dir>/inventory.json",
   "decision_records": [],

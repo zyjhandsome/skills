@@ -19,7 +19,7 @@ Files live beside the report under `decision-records/`.
 | 风险 | `blocker` / `high` / `medium` / `low` / `n/a` |
 | 命名配方 | recipe ids or `—`；never executed |
 | 兼容性证据（URL） | 须含至少一处 `http://` 或 `https://` URL（优先 official-docs-index） |
-| 已命名验证项 | |
+| 已命名验证项 | 实施期命令 + 失败证明什么（本阶段不执行）；有命名配方时禁止空白 |
 | 回滚触发条件 + 恢复目标 | |
 | 责任人 | |
 | 推荐确认选项 | `proceed:path:…` / `proceed:subsystem:…` / `defer` / `other` |

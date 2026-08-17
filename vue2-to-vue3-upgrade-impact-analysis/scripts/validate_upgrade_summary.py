@@ -20,7 +20,9 @@ ENUMS = {
     "decision_status": {"needs_choice", "not_needed", "decided"},
     "batch_implementation_gate": {"frozen", "ready"},
     "visual_acceptance_required": {"yes", "no"},
+    "lockfile_status": {"present", "absent", "unparsed"},
 }
+RECIPE_ID = re.compile(r"^[A-Za-z][A-Za-z0-9_-]*$")
 
 
 def validate(data: Any, raw_size: int) -> list[str]:
@@ -54,6 +56,39 @@ def validate(data: Any, raw_size: int) -> list[str]:
             action = visual.get("recommended_next_action")
             if not isinstance(action, str) or PLACEHOLDER.match(action.strip()):
                 errors.append("ui_visual_risk.recommended_next_action is required")
+    for field, limit in [("named_recipes", 20), ("named_validations", 20)]:
+        value = data.get(field)
+        if not isinstance(value, list) or len(value) > limit:
+            errors.append(f"{field} must be a string array with at most {limit} items")
+            continue
+        if not all(isinstance(item, str) and item.strip() and not PLACEHOLDER.match(item.strip()) for item in value):
+            errors.append(f"{field} items must be non-empty concrete strings")
+            continue
+        if field == "named_recipes" and not all(RECIPE_ID.fullmatch(item.strip()) for item in value):
+            errors.append("named_recipes items must be kebab/ascii recipe ids")
+    recipes = data.get("named_recipes") if isinstance(data.get("named_recipes"), list) else []
+    validations = data.get("named_validations") if isinstance(data.get("named_validations"), list) else []
+    status = data.get("analysis_status")
+    decision = data.get("decision_status")
+    gate = data.get("batch_implementation_gate")
+    path = data.get("recommended_path")
+    if status == "complete" and path != "deferred-inventory-only" and not recipes:
+        errors.append("complete summary requires named_recipes")
+    if status == "complete" and not validations:
+        errors.append("complete summary requires named_validations")
+    if status == "complete" and data.get("next_action") != "analysis_complete":
+        errors.append("complete summary next_action must be analysis_complete")
+    if decision == "needs_choice" and data.get("next_action") == "analysis_complete":
+        errors.append("needs_choice summary must not use next_action=analysis_complete")
+    if gate == "ready" and data.get("lockfile_status") != "present":
+        errors.append("batch_implementation_gate=ready requires lockfile_status=present")
+    if recipes and validations:
+        blob = " ".join(str(item) for item in validations)
+        missing = [item for item in recipes if item not in blob]
+        if missing:
+            errors.append(
+                "named_validations must mention each named_recipes id: " + ", ".join(missing)
+            )
     generated_at = data.get("generated_at")
     if not isinstance(generated_at, str) or not RFC3339.match(generated_at):
         errors.append("generated_at must be RFC3339")

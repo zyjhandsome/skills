@@ -38,6 +38,25 @@ class ValidateUpgradeSummaryTests(unittest.TestCase):
         self.assertEqual(data["recommended_path"], "host-port-direct")
         self.assertEqual(data["axes"]["topology"], "host-port")
 
+    def test_complete_requires_named_recipes(self) -> None:
+        self.data["named_recipes"] = []
+        self.data["named_validations"] = ["vite build"]
+        errors = MODULE.validate(self.data, self.raw_size)
+        self.assertTrue(any("named_recipes" in e for e in errors))
+
+    def test_needs_choice_rejects_analysis_complete(self) -> None:
+        self.data["analysis_status"] = "partial"
+        self.data["decision_status"] = "needs_choice"
+        self.data["batch_implementation_gate"] = "frozen"
+        self.data["next_action"] = "analysis_complete"
+        errors = MODULE.validate(self.data, self.raw_size)
+        self.assertTrue(any("needs_choice" in e for e in errors))
+
+    def test_ready_requires_lockfile_present(self) -> None:
+        self.data["lockfile_status"] = "absent"
+        errors = MODULE.validate(self.data, self.raw_size)
+        self.assertTrue(any("lockfile_status" in e for e in errors))
+
 
 if __name__ == "__main__":
     unittest.main()

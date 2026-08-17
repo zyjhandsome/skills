@@ -18,6 +18,7 @@ from pathlib import Path
 RELATED_NAMES = {
     "vue", "@vue/compat", "vue-router", "vuex", "pinia", "element-ui",
     "element-plus", "ant-design-vue", "vuetify", "vue-i18n",
+    "vant",
     "@vue/test-utils", "@vue/composition-api", "@vue/cli-service",
     "@vue/compiler-sfc", "vue-template-compiler", "vite",
     "@vitejs/plugin-vue", "vite-plugin-vue2", "eslint-plugin-vue",
@@ -148,6 +149,7 @@ def classify_vue3_readiness(name: str, spec: str) -> str:
         "element-plus": 1,
         "ant-design-vue": 2,
         "vuetify": 3,
+        "vant": 3,
         "vue-i18n": 9,
         "@vue/test-utils": 2,
         "@vue/compiler-sfc": 3,
@@ -286,7 +288,34 @@ def _append_sample(target: dict[str, list[str]], key: str, relative: str) -> Non
         bucket.append(relative)
 
 
-def scan_source(root: Path, max_files: int = 5000, max_bytes: int = 1_000_000) -> dict:
+def discover_source_roots(root: Path) -> list[Path]:
+    """Discover bounded sibling source roots used by multi-page Vue workspaces.
+
+    Vue CLI projects commonly keep additional entries in top-level directories
+    such as ``src.mobile``. Scanning only ``src`` silently drops an entire build
+    surface, while recursively scanning the repository pulls in vendored assets.
+    Restrict discovery to conventional top-level ``src`` variants.
+    """
+    candidates = []
+    try:
+        children = sorted(root.iterdir(), key=lambda item: item.name.lower())
+    except OSError:
+        return candidates
+    for child in children:
+        if not child.is_dir():
+            continue
+        name = child.name
+        if name == "src" or name.startswith(("src.", "src-", "src_")):
+            candidates.append(child)
+    return candidates
+
+
+def scan_source(
+    root: Path,
+    source_roots: list[Path] | None = None,
+    max_files: int = 5000,
+    max_bytes: int = 1_000_000,
+) -> dict:
     signal_keys = list(SOURCE_PATTERNS) + ["composition_setup"]
     counts: Counter[str] = Counter()
     samples: dict[str, list[str]] = {key: [] for key in signal_keys}
@@ -297,12 +326,13 @@ def scan_source(root: Path, max_files: int = 5000, max_bytes: int = 1_000_000) -
     legacy_definitions: dict[str, list[str]] = {}
     vue3_definitions: dict[str, list[str]] = {}
     consumers: dict[str, list[str]] = {}
-    source_root = root / "src"
-    if not source_root.is_dir():
+    roots = source_roots if source_roots is not None else discover_source_roots(root)
+    if not roots:
         return {"scanned_files": 0, "skipped_large_files": 0, "truncated": False,
                 "signals": {}, "samples": {}, "vue_plugin_packages": {},
                 "global_mounts": {}}
-    for path in source_root.rglob("*"):
+    paths = (path for source_root in roots for path in source_root.rglob("*"))
+    for path in paths:
         if any(part in SKIP_DIRS for part in path.parts) or not path.is_file() or path.suffix.lower() not in SOURCE_SUFFIXES:
             continue
         if scanned_files >= max_files:
@@ -396,7 +426,8 @@ def profile(root: Path) -> dict:
     lockfile_state = assess_lockfiles(lockfiles)
     resolved = package_lock_versions(lockfiles, set(deps))
     peer_vue_specs = package_peer_vue_specs(root, lockfiles, set(deps))
-    source_impact = scan_source(root)
+    source_roots = discover_source_roots(root)
+    source_impact = scan_source(root, source_roots)
     related = {}
     for name, spec in sorted(deps.items()):
         candidate_reasons: list[str] = []
@@ -434,6 +465,11 @@ def profile(root: Path) -> dict:
         builder = "unknown"
     package_manager = pkg.get("packageManager")
     volta = pkg.get("volta") if isinstance(pkg.get("volta"), dict) else {}
+    ui_stacks = [
+        name
+        for name in ("element-ui", "element-plus", "ant-design-vue", "vuetify", "vant")
+        if name in deps
+    ]
     return {
         "project_root": str(root.resolve()),
         "profile_as_of": date.today().isoformat(),
@@ -453,7 +489,9 @@ def profile(root: Path) -> dict:
         "builder": builder,
         "has_typescript": bool(deps.get("typescript") or (root / "tsconfig.json").is_file()),
         "store": "both" if "vuex" in deps and "pinia" in deps else "vuex" if "vuex" in deps else "pinia" if "pinia" in deps else "none",
-        "ui_stack": "element-ui" if "element-ui" in deps else "element-plus" if "element-plus" in deps else "ant-design-vue" if "ant-design-vue" in deps else "vuetify" if "vuetify" in deps else "none",
+        "ui_stack": ui_stacks[0] if ui_stacks else "none",
+        "ui_stacks": ui_stacks,
+        "source_roots": [path.relative_to(root).as_posix() for path in source_roots],
         "composition_bridge": "@vue/composition-api" in deps,
         "lockfiles": lockfiles,
         "lockfile_status": lockfile_state["status"],
@@ -467,6 +505,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project-root", type=Path, default=Path.cwd())
     parser.add_argument("--json", action="store_true")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="explicit UTF-8 JSON artifact path; omitted means no filesystem writes",
+    )
     args = parser.parse_args()
     root = args.project_root.resolve()
     try:
@@ -477,8 +520,12 @@ def main() -> int:
     except (json.JSONDecodeError, ValueError) as exc:
         print(f"invalid package.json: {exc}", file=sys.stderr)
         return 3
+    rendered = json.dumps(data, ensure_ascii=False, indent=2)
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(rendered + "\n", encoding="utf-8")
     if args.json:
-        print(json.dumps(data, ensure_ascii=False, indent=2))
+        print(rendered)
     else:
         print(f"workspace: {data['package_name']} @ {data['project_root']}")
         print(f"vue: {data['vue_version_spec']} (major={data['vue_major']})")

@@ -45,19 +45,6 @@
 | 包名 | 当前版本 | Vue3 就绪度 | 建议 | 证据 |
 |---|---|---|---|---|
 
-### ui_visual_risk（有视觉触发器时必填）
-
-- triggers:
-- legacy_selectors:
-- css_entry_order:
-- theme_and_teleport:
-- tailwind_reset:
-- primary_sample:
-- secondary_sample:
-- baseline_status:
-- required_visual_states:
-- recommended_next_action: run_visual_review / include_in_implementation_validation / no_action
-
 ## 3. 推荐迁移路径
 
 - 推荐路径 id：`compat-big-bang` / `direct-vue3` / `host-port-direct` / `microfrontend-coexist` / …
@@ -79,6 +66,19 @@
 | 层级 | 文件/模块 | 事实或推断 | 所需变更（仅描述，不实施） | 风险 |
 |---|---|---|---|---|
 
+### ui_visual_risk（有视觉触发器时必填）
+
+- triggers:
+- legacy_selectors:
+- css_entry_order:
+- theme_and_teleport:
+- tailwind_reset:
+- primary_sample:
+- secondary_sample:
+- baseline_status:
+- required_visual_states:
+- recommended_next_action: run_visual_review / include_in_implementation_validation / no_action
+
 ## 6. 风险分级
 
 | 项 | 分级 | 说明 | 上游链接 |
@@ -92,8 +92,9 @@
 
 ## 8. 验证矩阵
 
-| 范围 | 测试项 | 预期结果 | 证据状态 |
+| 命名配方 | 实施期命令 | 失败证明什么 | 证据状态 |
 |---|---|---|---|
+| | | | |
 
 ## 9. 回滚与责任人
 
@@ -109,7 +110,8 @@
 | `slot-scope` / 旧 `slot=` | |
 | 全局 `Vue.filter` | |
 | 非 `vue-*` Vue2-only / 编辑器包 | |
-| `Vue.prototype.$*` 定义/`this.$*` 消费与 `globalProperties` / `provide/inject` 迁移目标 | |
+| `Vue.prototype.$*` 定义与 `this.$*` 消费点 | |
+| 对应的 `app.config.globalProperties` 或 `provide/inject` 迁移目标 | |
 | lockfile 缺失或未解析 | |
 
 其他未决：

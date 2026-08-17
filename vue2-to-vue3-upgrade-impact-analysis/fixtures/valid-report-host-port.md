@@ -114,10 +114,12 @@
 
 ## 8. 验证矩阵
 
-| 范围 | 测试项 | 预期结果 | 证据状态 |
+| 命名配方 | 实施期命令 | 失败证明什么 | 证据状态 |
 |---|---|---|---|
-| 挂载 | B 路由打开该页 | 非 iframe | 待执行 |
-| 视觉 | 对照 A 基线 | 关键态对齐 | 待执行 |
+| `manual-adapt-to-host` | B 原生 SFC 挂载该页 | 仍依赖 iframe | 待执行 |
+| `manual-router4-on-host` | B 路由打开该页 | 404 或残留 A router | 待执行 |
+| `map-ui-to-host` | 搜索+主表对照 A 基线 | host UI 映射缺失 | 待执行 |
+| `manual-pinia-or-host-store` | 对接 B store 冒烟 | 状态不同步 | 待执行
 
 ## 9. 回滚与责任人
 

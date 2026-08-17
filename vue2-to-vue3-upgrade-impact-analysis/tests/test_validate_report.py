@@ -4,6 +4,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import json
+import shutil
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -48,7 +50,15 @@ MINIMAL_SECTIONS = """
 ## 7. 确认队列
 {queue_table}
 ## 8. 验证矩阵
-分析说明（非占位）
+| 命名配方 | 实施期命令 | 失败证明什么 | 证据状态 |
+|---|---|---|---|
+| vue-compat | alias vue to @vue/compat then build | missing migration build | 待实施阶段 |
+| manual-router4 | migrate router per Vue Router 4 guide | 404 or history break | 待实施阶段 |
+| webpack-to-vite | vite build after human-accept config | non-zero vite build | 待实施阶段 |
+| vuex4 | Vuex 4 install API smoke | store inject fail | 待实施阶段 |
+| test-utils | @vue/test-utils v2 mount | unit suite red | 待实施阶段 |
+| eslint-vue3 | eslint-plugin-vue vue3 rules | leftover Vue2 lint | 待实施阶段 |
+| gogocode-element | element form/table pages render | Plus mapping missing | 待实施阶段 |
 ## 9. 回滚与责任人
 分析说明（非占位）
 ## 10. 未决问题与证据缺口
@@ -167,6 +177,115 @@ class ValidateReportTests(unittest.TestCase):
     def test_evidence_dir_complete_passes(self) -> None:
         result = self._run("--evidence-dir", str(FIXTURES / "evidence-complete"))
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def _copy_complete_evidence(self, target: Path) -> None:
+        shutil.copytree(FIXTURES / "evidence-complete", target, dirs_exist_ok=True)
+        report = target / "vue2-to-vue3-upgrade-report.md"
+        body = report.read_text(encoding="utf-8")
+        body = body.replace(
+            "| report_path | fixtures/evidence-complete |",
+            f"| report_path | {target.resolve()} |",
+        ).replace(
+            "| summary_path | fixtures/evidence-complete/upgrade-summary.json |",
+            f"| summary_path | {(target / 'upgrade-summary.json').resolve()} |",
+        )
+        report.write_text(body, encoding="utf-8")
+        summary = target / "upgrade-summary.json"
+        data = json.loads(summary.read_text(encoding="utf-8"))
+        data["report_path"] = str(report.resolve())
+        data["inventory_path"] = str((target / "inventory.json").resolve())
+        data["decision_records"] = [
+            str(path.resolve()) for path in sorted((target / "decision-records").glob("*.md"))
+        ]
+        summary.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def test_evidence_dir_rejects_missing_summary_and_inventory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "evidence"
+            self._copy_complete_evidence(root)
+            (root / "upgrade-summary.json").unlink()
+            inventory = root / "inventory.json"
+            if inventory.exists():
+                inventory.unlink()
+
+            result = self._run("--evidence-dir", str(root))
+
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertIn("upgrade-summary.json", result.stdout)
+            self.assertIn("inventory.json", result.stdout)
+
+    def test_evidence_dir_rejects_cross_artifact_status_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "evidence"
+            self._copy_complete_evidence(root)
+            summary = root / "upgrade-summary.json"
+            data = json.loads(summary.read_text(encoding="utf-8"))
+            data["recommended_path"] = "direct-vue3"
+            data["axes"] = {
+                "runtime": "direct-vue3",
+                "build": "vite",
+                "topology": "single-cutover",
+            }
+            summary.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+            result = self._run("--evidence-dir", str(root))
+
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertIn("recommended_path", result.stdout)
+
+    def test_evidence_dir_rejects_decision_record_manifest_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "evidence"
+            self._copy_complete_evidence(root)
+            summary = root / "upgrade-summary.json"
+            data = json.loads(summary.read_text(encoding="utf-8"))
+            data["decision_records"] = []
+            summary.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+            result = self._run("--evidence-dir", str(root))
+
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertIn("decision_records", result.stdout + result.stderr)
+
+    def test_evidence_dir_rejects_named_recipe_summary_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "evidence"
+            self._copy_complete_evidence(root)
+            summary = root / "upgrade-summary.json"
+            data = json.loads(summary.read_text(encoding="utf-8"))
+            data["named_recipes"] = [
+                recipe for recipe in data["named_recipes"] if recipe != "eslint-vue3"
+            ]
+            summary.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+            result = self._run("--evidence-dir", str(root))
+
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertIn("named_recipes", result.stdout + result.stderr)
+
+    def test_multi_batch_accepts_documented_host_port_entry_kind(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "evidence"
+            batches = [
+                root / "workspace" / "desktop__variant-default__scope-full-stack",
+                root / "host-port" / "mobile__variant-default__scope-page-closure",
+            ]
+            for batch in batches:
+                self._copy_complete_evidence(batch)
+            (root / "BATCH-INDEX.md").write_text(
+                "# Batch index\n\n"
+                "| path | workspace | variant | scope | analysis_status | decision_status | batch_implementation_gate |\n"
+                "|---|---|---|---|---|---|---|\n"
+                + "\n".join(
+                    f"| {batch.relative_to(root).as_posix()} | {batch.parent.name} | default | full-stack | complete | decided | ready |"
+                    for batch in batches
+                ),
+                encoding="utf-8",
+            )
+
+            result = self._run("--evidence-dir", str(root))
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_missing_path_exit_4(self) -> None:
         result = self._run(str(FIXTURES / "no-such-report.md"))
@@ -685,6 +804,24 @@ class ValidateReportTests(unittest.TestCase):
             result = self._run(str(report))
             self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
             self.assertIn("source_root:", result.stdout + result.stderr)
+
+    def test_rejects_validation_matrix_missing_named_recipe(self) -> None:
+        body = (FIXTURES / "valid-report.md").read_text(encoding="utf-8")
+        body = body.replace(
+            "| `gogocode-element` | Element 主表单/表格页渲染 | Plus 映射缺失 | 待执行 |\n",
+            "",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            report = Path(tmp) / "vue2-to-vue3-upgrade-report.md"
+            body = body.replace("| report_path | fixtures |", f"| report_path | {tmp} |")
+            body = body.replace(
+                "| summary_path | fixtures/upgrade-summary.json |",
+                f"| summary_path | {Path(tmp).as_posix()}/upgrade-summary.json |",
+            )
+            report.write_text(body, encoding="utf-8")
+            result = self._run(str(report))
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertIn("gogocode-element", result.stdout + result.stderr)
 
 
 if __name__ == "__main__":

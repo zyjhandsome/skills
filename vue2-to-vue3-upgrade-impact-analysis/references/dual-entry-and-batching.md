@@ -24,6 +24,21 @@
 
 Skip already-Vue3 workspaces unless the caller asks for re-audit.
 
+## Topology: same git repo is not automatically in-place
+
+「单个仓库」只说明 git 边界，不决定 `topology_axis`。
+
+| Observed layout | Entry / path |
+|---|---|
+| One Vue2 SPA; this workspace **is** the app being upgraded | `workspace` + in-place (`compat-big-bang` / `direct-vue3`) |
+| Same git repo contains a Vue2 app **and** an already-Vue3 host (packages, apps, or iframe target) | `host-port` with two roots (`source_root` = Vue2 workspace, `implementation_target` = Vue3 host). Do **not** recommend `compat-big-bang` |
+| Two git repos, iframe / 微前端收编 | `host-port` (same dual-root packet) |
+| Many Vue2 workspaces, no host chosen | `inventory` first; human picks a batch |
+
+If inventory or the current repo tree shows a distinct Vue3 host workspace,
+switch `entry_kind` to `host-port` before Wave 1 path confirmation. An in-place
+preset with `topology_axis: host-port` is invalid.
+
 ## Batch identity
 
 One analysis batch =

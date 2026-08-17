@@ -116,10 +116,14 @@
 
 ## 8. 验证矩阵
 
-| 范围 | 测试项 | 预期结果 | 证据状态 |
+| 命名配方 | 实施期命令 | 失败证明什么 | 证据状态 |
 |---|---|---|---|
-| 构建 | `vite build`（实施阶段） | 通过 | 待执行 |
-| 冒烟 | 登录 + 主列表 | 无控制台 compat 残留 warning | 待执行 |
+| `vue-compat` | alias `vue` → `@vue/compat` 后构建 | 构建失败或缺 migration build | 待执行 |
+| `webpack-to-vite` | `vite build`（人接受配置后） | 非 0 退出 | 待执行 |
+| `gogocode-element` | Element 主表单/表格页渲染 | Plus 映射缺失 | 待执行 |
+| `manual-router4` | 登录跳转 + 404 通配 | history / catch-all 行为错 | 待执行 |
+| `manual-pinia-or-vuex4` | Vuex 4 安装 API 冒烟 | store 注入失败 | 待执行 |
+| `eslint-vue3` | Vue3 eslint 规则 | 残留 Vue2 API lint | 待执行
 
 ## 9. 回滚与责任人
 

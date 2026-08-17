@@ -46,6 +46,15 @@ assert.ok(playbook.includes("固定 High"), "playbook must state the High route"
 assert.ok(playbook.includes("会话停点覆盖"), "playbook must enable the Delivery session-stop overlay");
 assert.ok(playbook.includes("唯一代码 mutation owner"), "playbook must name Delivery as the sole code mutation owner");
 assert.ok(playbook.includes("source_revision + host_revision"), "implementation go must bind both repository revisions");
+assert.ok(playbook.includes("search_graph") && playbook.includes("trace_path"), "playbook must default code discovery to Codebase Memory MCP");
+assert.ok(playbook.includes("get_code_snippet") && playbook.includes("query_graph"), "playbook must state the graph discovery order");
+assert.ok(playbook.includes("不得因图谱没有 Route 节点"), "empty route graph results must not prove that routes are absent");
+assert.ok(playbook.includes("codebase-index-manifest.json"), "playbook must persist an index revision manifest");
+assert.ok(playbook.includes("runtime-service-manifest.json"), "playbook must persist runtime and service evidence");
+assert.ok(playbook.includes("用户先执行 `/status` 和 `/model`"), "the user must own Claude Code slash-command checks");
+assert.ok(!playbook.includes("先用 /status 和 /model 确认"), "Wave prompts must not ask the model to execute slash commands");
+assert.ok(playbook.includes("npm run dev，不是 npm run serve"), "the Vue2 reference command must use the repository-native dev script");
+assert.ok(playbook.includes("preinstall 强制 pnpm，禁止 npm install 和 npm run serve"), "the Vue3 reference must forbid npm commands rejected by the repository");
 assert.ok(playbook.includes("本波禁止规格闸门"), "Wave 1 must defer the specification gate");
 assert.ok(playbook.includes("建档停点覆盖"), "Wave 1 must enable the Frame scaffold-only overlay");
 assert.ok(playbook.includes("baseline_state_ids"), "playbook must cite the G9 external-claim whitelist");
@@ -99,5 +108,28 @@ assert.ok(
   wave3.includes("blocked:visual-chain") && /停止/.test(wave3),
   "Wave 3 must refuse a blocked:visual-chain assess packet"
 );
+
+const wave1 = section(playbook, "## 2. Wave 1", "## 3. Wave 2");
+const wave4 = section(playbook, "## 5. Wave 4", "## 6. Wave 5");
+const wave5 = section(playbook, "## 6. Wave 5", "## 7. Wave 6");
+const wave6 = section(playbook, "## 7. Wave 6", "## 8. Wave 7");
+const wave7 = section(playbook, "## 8. Wave 7", "## 9. 失败回流");
+const expectedModels = [
+  [wave1, "expected_model=GLM 5.2"],
+  [wave2, "expected_model=Kimi K2.6"],
+  [wave3, "expected_model=GLM 5.2"],
+  [wave4, "expected_model=GLM 5.2"],
+  [wave5, "expected_model=GLM 5.2"],
+  [wave6, "expected_model=Kimi K2.6"],
+  [wave7, "expected_model=GLM 5.2"],
+];
+for (const [wave, expectedModel] of expectedModels) {
+  assert.ok(wave.includes(expectedModel), `Wave prompt missing model marker: ${expectedModel}`);
+  assert.ok(wave.includes("Agent 不执行 slash command"), "Wave prompt must not delegate slash commands to the model");
+}
+assert.ok(wave1.includes("index_repository") && wave1.includes("<INDEX_MANIFEST>"), "Wave 1 must establish graph indexes and the revision manifest");
+assert.ok(wave2.includes("一次性副本") && wave2.includes("<RUNTIME_MANIFEST>"), "Wave 2 must isolate installs and record runtime services");
+assert.ok(wave6.includes("重新 index_repository 索引 B"), "Wave 6 must rebuild the B graph after implementation");
+assert.ok(wave7.includes("stale 图谱") && wave7.includes("启动干净 dev 服务"), "Wave 7 must reject stale graphs and use a fresh B service");
 
 console.log("PASS: vue2 page migration playbook and usage share one High, Frame-after-design sequence");

@@ -105,8 +105,11 @@ class SkillStructureTests(unittest.TestCase):
         self.assertIn("@vue/compat", recipes)
         self.assertIn("gogocode", recipes)
         self.assertIn("vue-upgrade-tool", recipes)
+        self.assertIn("manual-cli5-webpack5", recipes)
         self.assertIn("never runs", recipes.lower() + skill.lower())
         self.assertIn("Name, never run", skill)
+        self.assertIn("Typical globs", recipes)
+        self.assertIn("Implementation-stage command shape", recipes)
 
     def test_report_contract_enums(self) -> None:
         text = (ROOT / "references" / "report-contract.md").read_text(encoding="utf-8")
@@ -133,6 +136,8 @@ class SkillStructureTests(unittest.TestCase):
             "默认子系统全集",
             "推荐路径 id",
             "evidence_as_of",
+            "named_recipes",
+            "失败证明什么",
         ):
             self.assertIn(token, text)
 
@@ -153,9 +158,35 @@ class SkillStructureTests(unittest.TestCase):
         self.assertIn("dedupe", text.lower())
         self.assertIn("queue_eligible=no", text)
 
+    def test_same_repo_host_is_host_port(self) -> None:
+        text = (ROOT / "references" / "dual-entry-and-batching.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("not automatically in-place", text)
+        self.assertIn("implementation_target", text)
+
     def test_agents_yaml_exists(self) -> None:
         text = (ROOT / "agents" / "openai.yaml").read_text(encoding="utf-8")
         self.assertIn("vue2-to-vue3-upgrade-impact-analysis", text)
+
+    def test_decision_packet_template_matches_visual_and_manual_contract(self) -> None:
+        text = (ROOT / "templates" / "decision-packet.md").read_text(encoding="utf-8")
+        visual = text.index("### ui_visual_risk")
+        section_five = text.index("## 5. 分层影响分析")
+        section_six = text.index("## 6. 风险分级")
+        self.assertLess(section_five, visual)
+        self.assertLess(visual, section_six)
+
+        checklist = text[text.index("### 人工补搜检查") :]
+        prototype_lines = [line for line in checklist.splitlines() if "Vue.prototype" in line]
+        target_lines = [
+            line
+            for line in checklist.splitlines()
+            if "globalProperties" in line or "provide/inject" in line
+        ]
+        self.assertEqual(len(prototype_lines), 1)
+        self.assertEqual(len(target_lines), 1)
+        self.assertNotEqual(prototype_lines[0], target_lines[0])
 
 
 if __name__ == "__main__":

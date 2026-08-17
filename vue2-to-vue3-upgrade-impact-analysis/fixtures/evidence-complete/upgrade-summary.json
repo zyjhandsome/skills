@@ -11,9 +11,33 @@
     "topology": "single-cutover"
   },
   "visual_acceptance_required": "yes",
+  "lockfile_status": "present",
+  "named_recipes": [
+    "vue-compat",
+    "webpack-to-vite",
+    "gogocode-element",
+    "manual-router4",
+    "manual-pinia-or-vuex4",
+    "eslint-vue3"
+  ],
+  "named_validations": [
+    "vue-compat: alias vue to @vue/compat then build; fail = missing migration build",
+    "webpack-to-vite: vite build; fail = non-zero exit",
+    "gogocode-element: primary form/table pages render; fail = Element Plus mapping missing",
+    "manual-router4: login redirect and 404 catch-all; fail = Router 4 history/wildcard break",
+    "manual-pinia-or-vuex4: Vuex 4 install and store smoke; fail = store injection break",
+    "eslint-vue3: Vue3 lint rules; fail = leftover Vue2 API"
+  ],
   "report_path": "fixtures/evidence-complete/vue2-to-vue3-upgrade-report.md",
   "inventory_path": "fixtures/evidence-complete/inventory.json",
-  "decision_records": ["fixtures/evidence-complete/decision-records/migration-path__compat-big-bang.md"],
+  "decision_records": [
+    "fixtures/evidence-complete/decision-records/migration-path__compat-big-bang.md",
+    "fixtures/evidence-complete/decision-records/subsystem__build.md",
+    "fixtures/evidence-complete/decision-records/subsystem__core-vue.md",
+    "fixtures/evidence-complete/decision-records/subsystem__i18n-plugins.md",
+    "fixtures/evidence-complete/decision-records/subsystem__router.md",
+    "fixtures/evidence-complete/decision-records/subsystem__ui.md"
+  ],
   "blockers": [],
   "high_risks": ["core-vue", "router", "ui", "build"],
   "ui_visual_risk": {
