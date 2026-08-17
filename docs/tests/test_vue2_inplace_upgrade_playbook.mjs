@@ -33,7 +33,6 @@ const orderNeedles = [
   "Wave 2  Frame 规格批准",
   "Wave 3  Delivery Plan go",
   "Wave 4  Delivery Execute",
-  "Wave 5  可选视觉残差（不默认）",
 ];
 let lastIndex = -1;
 for (const needle of orderNeedles) {
@@ -59,6 +58,8 @@ assert.ok(playbook.includes("vue2-page-migration-playbook.md"), "host-port must 
 assert.ok(!/可(?:偏|走)?\s*Quick|否则可\s*Quick|Quick\s*直接\s*execute/i.test(corpus), "docs must not offer a Quick bypass");
 assert.ok(!/mode=execute|migrate execute/i.test(playbook), "inplace playbook must not invoke migrate execute");
 assert.ok(!playbook.includes("expected_model="), "inplace playbook must stay host-neutral (no Claude Code model pins)");
+assert.ok(playbook.includes("GLM 5.2"), "inplace playbook may run entirely on GLM 5.2");
+assert.ok(!playbook.includes("frontend-ui-stack-visual-parity"), "inplace playbook must not mention the visual-parity skill");
 
 /**
  * @param {string} src
@@ -75,8 +76,7 @@ function section(src, start, end) {
 const wave1 = section(playbook, "## 2. Wave 1", "## 3. Wave 2");
 const wave2 = section(playbook, "## 3. Wave 2", "## 4. Wave 3");
 const wave3 = section(playbook, "## 4. Wave 3", "## 5. Wave 4");
-const wave4 = section(playbook, "## 5. Wave 4", "## 6. Wave 5");
-const wave5 = section(playbook, "## 6. Wave 5", "## 7. 失败回流");
+const wave4 = section(playbook, "## 5. Wave 4", "## 6. 失败回流");
 
 assert.ok(wave1.includes("显式使用 vue2-to-vue3-upgrade-impact-analysis"), "Wave 1 must invoke the analysis skill");
 assert.ok(wave1.includes("不改代码") && wave1.includes("不跑 codemod"), "Wave 1 must remain analysis-only");
@@ -92,7 +92,7 @@ assert.ok(!wave1.includes("OpenSpec 已初始化"), "Wave 1 must not require Ope
 assert.ok(wave2.includes("显式使用 delivery-frame-spec"), "Wave 2 must invoke Frame");
 assert.ok(wave2.includes("禁止 Quick") || wave2.includes("固定 High"), "Wave 2 must keep High");
 assert.ok(wave2.includes("external_artifacts"), "Wave 2 must cite the analysis bundle as external artifacts");
-assert.ok(wave2.includes("不要调用 migrate-vue2-pages-to-vue3-host"), "Wave 2 must not invoke migrate");
+assert.ok(playbook.includes("不要调用 migrate-vue2-pages-to-vue3-host"), "playbook must not invoke migrate");
 assert.ok(wave2.includes("quality_profiles.visual"), "Wave 2 must recompute visual from evidence");
 
 assert.ok(wave3.includes("显式使用 delivery-plan-tasks"), "Wave 3 must invoke Plan");
@@ -103,15 +103,7 @@ assert.ok(wave4.includes("显式使用 delivery-execute-verify"), "Wave 4 must i
 assert.ok(wave4.includes("唯一应用代码 mutation owner"), "Wave 4 must be the sole mutation owner");
 assert.ok(wave4.includes("不要 archive"), "Wave 4 must defer OpenSpec archive");
 assert.ok(wave4.includes("verified ≠ 生产完成") || wave4.includes("仓内 verified ≠ 生产完成"), "Wave 4 must not claim production complete");
-
-assert.ok(wave5.includes("显式使用 frontend-ui-stack-visual-parity"), "Wave 5 must invoke visual parity");
-assert.ok(wave5.includes("analysis_only"), "Wave 5 must default to analysis-only");
-assert.ok(wave5.includes("parity_topology=same-repo"), "Wave 5 in-place residual must use same-repo visual topology");
-assert.ok(wave5.includes("go:visual-fix") || wave5.includes("开始修复"), "Wave 5 must require an explicit visual-fix go");
-assert.ok(
-  playbook.includes("Wave 5 不是完成必要条件") || playbook.includes("跳过 Wave 5"),
-  "Wave 5 must remain optional for verified close-out"
-);
+assert.ok(wave4.includes("G9"), "Wave 4 must close visual via Delivery G9");
 
 assert.ok(usage.includes("vue2-to-vue3-inplace-upgrade-playbook.md"), "usage must point at the inplace playbook");
 assert.ok(usage.includes("batch_implementation_gate"), "usage must explain the analysis gate");

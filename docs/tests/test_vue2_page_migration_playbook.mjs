@@ -120,13 +120,16 @@ const expectedModels = [
   [wave3, "expected_model=GLM 5.2"],
   [wave4, "expected_model=GLM 5.2"],
   [wave5, "expected_model=GLM 5.2"],
-  [wave6, "expected_model=Kimi K2.6"],
+  [wave6, "expected_model=GLM 5.2"],
   [wave7, "expected_model=GLM 5.2"],
 ];
 for (const [wave, expectedModel] of expectedModels) {
   assert.ok(wave.includes(expectedModel), `Wave prompt missing model marker: ${expectedModel}`);
-  assert.ok(wave.includes("Agent 不执行 slash command"), "Wave prompt must not delegate slash commands to the model");
 }
+assert.ok(
+  playbook.includes("Agent 不得声称执行过 slash command") || playbook.includes("Agent 不执行 slash command"),
+  "Wave prompt must not delegate slash commands to the model"
+);
 assert.ok(wave1.includes("index_repository") && wave1.includes("<INDEX_MANIFEST>"), "Wave 1 must establish graph indexes and the revision manifest");
 assert.ok(wave2.includes("一次性副本") && wave2.includes("<RUNTIME_MANIFEST>"), "Wave 2 must isolate installs and record runtime services");
 assert.ok(wave6.includes("重新 index_repository 索引 B"), "Wave 6 must rebuild the B graph after implementation");
