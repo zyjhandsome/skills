@@ -135,4 +135,39 @@ assert.ok(wave2.includes("一次性副本") && wave2.includes("<RUNTIME_MANIFEST
 assert.ok(wave6.includes("重新 index_repository 索引 B"), "Wave 6 must rebuild the B graph after implementation");
 assert.ok(wave7.includes("stale 图谱") && wave7.includes("启动干净 dev 服务"), "Wave 7 must reject stale graphs and use a fresh B service");
 
+/**
+ * @param {string} src
+ */
+function fence(src) {
+  const match = src.match(/```text\r?\n([\s\S]*?)\r?\n```/);
+  assert.ok(match, "prompt fence is missing");
+  return match[1];
+}
+
+const header = section(playbook, "### 1.2", "### 1.3");
+assert.ok(header.includes("仅 Wave 6"), "header must restrict application-code mutation to Wave 6");
+assert.ok(header.includes("失败回流最小字段"), "header must carry backflow keys for independent sessions");
+assert.ok(header.includes("页面升级迁移完成"), "header must carry the completion gate for Wave 7");
+
+const wavePrompts = [
+  ["Wave 1", wave1],
+  ["Wave 2", wave2],
+  ["Wave 3", wave3],
+  ["Wave 4", wave4],
+  ["Wave 5", wave5],
+  ["Wave 6", wave6],
+  ["Wave 7", wave7],
+];
+for (const [name, wave] of wavePrompts) {
+  assert.ok(fence(wave).includes("应已存在"), `${name} prompt must declare required upstream artifacts`);
+}
+
+assert.ok(!wave2Prompt.includes("按 1.4"), "Wave 2 must inline install rules instead of dangling to §1.4");
+assert.ok(wave1.includes("initialize_repo"), "Wave 1 must recover uninitialized OpenSpec via initialize_repo");
+assert.ok(fence(wave4).includes("design-ready"), "Wave 4 must refuse assess-only packets");
+assert.ok(fence(wave5).includes("G1–G3") || fence(wave5).includes("G1-G3"), "Wave 5 must name readiness G-checks");
+assert.ok(fence(wave6).includes("不能单独宣布整次迁移完成"), "Wave 6 paste block must not claim migration complete");
+assert.ok(!fence(wave7).includes("本文完成条件"), "Wave 7 must not dangle to unpasted completion section");
+assert.ok(fence(wave7).includes("通用头完成判定"), "Wave 7 must judge completion from the session header");
+
 console.log("PASS: vue2 page migration playbook and usage share one High, Frame-after-design sequence");

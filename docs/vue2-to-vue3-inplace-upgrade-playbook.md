@@ -17,6 +17,8 @@
 > 分析 Skill 单独用法见
 > [vue2-to-vue3-upgrade-impact-analysis-usage.md](./vue2-to-vue3-upgrade-impact-analysis-usage.md)。
 
+
+
 ## 0. 编排结论
 
 ```text
@@ -35,25 +37,29 @@ Wave 1  vue2 分析（只出决策包）
 ### 0.1 Skill 职责边界
 
 - `vue2-to-vue3-upgrade-impact-analysis` 只负责路径三维、子系统风险、确认队列
-  和决策包。Name, never run。不改应用代码，不写 OpenSpec 状态，报告里不得填写
-  其他 Skill 名称。
+和决策包。Name, never run。不改应用代码，不写 OpenSpec 状态，报告里不得填写
+其他 Skill 名称。
 - Delivery Family 负责 OpenSpec、规格与实施批准、技术计划、应用代码修改、
-  Delivery G9、独立审查和交付状态。`delivery-execute-verify` 是唯一应用代码
-  mutation owner。
+Delivery G9、独立审查和交付状态。`delivery-execute-verify` 是唯一应用代码
+mutation owner。
 - `delivery-explore` 不适用。主路径不插入
-  `frontend-dependency-upgrade-impact-analysis`，也不调用
-  `migrate-vue2-pages-to-vue3-host`。
+`frontend-dependency-upgrade-impact-analysis`，也不调用
+`migrate-vue2-pages-to-vue3-host`。
 - 视觉验收只走 Delivery G9。G9 未过则留在 Wave 4。
+
+
 
 ### 0.2 拓扑消歧（开写前）
 
-| 实际形态 | 走哪份剧本 |
-| --- | --- |
-| 一个 Vue2 SPA，全 workspace 原地升到 Vue3 | **本文**（`pages` 空） |
-| 同一 Vue2 SPA，只升某几个页面（含闭包） | **本文**（填写 `pages`） |
-| 同一仓库里已有 Vue3 宿主，要把 Vue2 页面/包装进去 | A→B 剧本（两个 root；`host-port`） |
-| 两个独立仓库，iframe / 微前端收编 | A→B 剧本 |
-| 只要决策包、不改代码 | 分析 usage；不要进入 Wave 2+ |
+
+| 实际形态                              | 走哪份剧本                       |
+| --------------------------------- | --------------------------- |
+| 一个 Vue2 SPA，全 workspace 原地升到 Vue3 | **本文**（`pages` 空）           |
+| 同一 Vue2 SPA，只升某几个页面（含闭包）          | **本文**（填写 `pages`）          |
+| 同一仓库里已有 Vue3 宿主，要把 Vue2 页面/包装进去   | A→B 剧本（两个 root；`host-port`） |
+| 两个独立仓库，iframe / 微前端收编             | A→B 剧本                      |
+| 只要决策包、不改代码                        | 分析 usage；不要进入 Wave 2+       |
+
 
 页面范围只收窄本 change 的闭包，**不是**把页面迁到另一个 Vue3 宿主。共享
 runtime/build（`vue` / router / store / Vite）仍属分析范围，因为这些页面跑在
@@ -66,23 +72,31 @@ workspace：停止原地升，改走 A→B 剧本。不要在本剧本里继续 
 
 分析报告不得点名 Skill。调用方按本表翻译：
 
-| 决策包字段 | 本剧本 |
-| --- | --- |
-| `next_action: analysis_complete` 且 `batch_implementation_gate=ready` | Wave 2 Frame |
-| 同上但 gate=`frozen` | 停在分析；补 lock / 未决 High 后再交接 |
+
+| 决策包字段                                                                           | 本剧本                            |
+| ------------------------------------------------------------------------------- | ------------------------------ |
+| `next_action: analysis_complete` 且 `batch_implementation_gate=ready`            | Wave 2 Frame                   |
+| 同上但 gate=`frozen`                                                               | 停在分析；补 lock / 未决 High 后再交接     |
 | `visual_acceptance_required=yes` 且 `recommended_next_action: run_visual_review` | Wave 3 把基线+G9 写入任务；Wave 4 做 G9 |
-| `recommended_path: host-port-direct` | 改走 A→B 剧本 |
-| `Composition API 全仓重写：另立项` | 本 change 的 non-goal |
+| `recommended_path: host-port-direct`                                            | 改走 A→B 剧本                      |
+| `Composition API 全仓重写：另立项`                                                      | 本 change 的 non-goal            |
+
+
+
 
 ## 1. 通用输入与自动恢复协议
+
+
 
 ### 1.1 用户怎么使用
 
 1. 在前端 workspace 打开会话。全仓升则不必填路径；只升某几个页面时在通用头写
-   `pages`。
+  `pages`。
 2. 启动全新会话，将「会话通用头 + 当前 Wave」连续粘贴为一条消息。
 3. 当前 Wave 完成并停止后，打开新会话粘贴下一 Wave。
 4. 用户只回答分析确认 token、规格批准和实施批准。不要手工搬运 JSON 或 digest。
+
+
 
 ### 1.2 会话通用头——可省略；有值只填一次
 
@@ -92,6 +106,7 @@ workspace：停止原地升，改走 A→B 剧本。不要在本剧本里继续 
 本会话只执行随后指定的一个 Wave；写盘校验后立即停止，不要加载或执行下一个 Skill。
 不要使用 delivery-explore，不要调用 migrate-vue2-pages-to-vue3-host，
 不要让 vue2 分析 Skill 改代码或重开决策包。
+Wave 粘贴块只补充本波 Skill、应已存在的上游工件、增量门禁和结束产物。
 
 默认（用户未改则照此）：
 - workspace = 当前本地仓库 / workspace（含待升级的 package.json）
@@ -116,9 +131,23 @@ CONFIG 存在后以其中记录为准；本次输入与配置不一致时停止�
 固定边界：
 - 单仓原地升。pages 只收窄本 change，不是 A→B host-port，也不是页面闭包迁入。
 - 默认行为 parity；保留 Options API。Composition API 全仓重写另立项。
-- 命名配方只在获批实施后由 Delivery Execute 运行；分析阶段 Name, never run。
+- 仅 Wave 4（delivery-execute-verify）可修改应用代码并安装依赖、运行命名配方；
+  Wave 1–3 只读。分析阶段 Name, never run。
 - 保护 workspace 里已有的本地改动。
 - 部署、生产切流、监控不属于本轮。禁止 Quick。本变更固定 High。
+
+自动恢复以随后 Wave 块「应已存在」行为准。已完成 Wave 的工件缺失/损坏/stale
+则停止并指出重跑 Wave，不要求用户手工提供内容。
+
+失败回流最小字段（alignment_backflow）：
+discovery / evidence / affected_scope / invalidated_artifacts /
+decision_needed / recommended_resolution / resume_point
+
+仓内 verified（仅 Wave 4 在 Fresh Verification 通过后才能声称）须同时：
+分析包 complete 且交接时 gate=ready；路径仍是原地升；规格批准与实现 go 绑定当前
+revision；权威任务完成；Fresh Verification 与 High 独立审查通过；visual=required
+时 G9 pass；Composition 全仓重写仍在 non-goals；无 blocking residual。
+仍不 archive/commit/push/PR/部署。
 
 代码检索（Wave 2 起）：默认 Codebase Memory MCP
 （search_graph → trace_path → get_code_snippet；复杂闭包 query_graph；
@@ -127,25 +156,31 @@ CONFIG 存在后以其中记录为准；本次输入与配置不一致时停止�
 文件读取或 rg，并记录 query、缺口和原因。不得因图谱没有 Route 节点断言路由不存在。
 ```
 
+
+
 ### 1.3 工件恢复矩阵
 
-| 工件组 | Agent 用途 | 用户操作 |
-| --- | --- | --- |
-| `ANALYSIS_ROOT` | 分析决策包、summary、inventory、decision-records | 确认路径；看摘要 |
-| `CONFIG` | 同一 change 的业务输入和派生路径 | 不操作 |
-| OpenSpec 工件与 `handoff.json` | 规格、批准、计划、任务和交付状态 | 批准时看摘要 |
-| `G9_ROOT` | Delivery G9 视觉验收 | 最终看摘要 |
+
+| 工件组                         | Agent 用途                                 | 用户操作     |
+| --------------------------- | ---------------------------------------- | -------- |
+| `ANALYSIS_ROOT`             | 分析决策包、summary、inventory、decision-records | 确认路径；看摘要 |
+| `CONFIG`                    | 同一 change 的业务输入和派生路径                     | 不操作      |
+| OpenSpec 工件与 `handoff.json` | 规格、批准、计划、任务和交付状态                         | 批准时看摘要   |
+| `G9_ROOT`                   | Delivery G9 视觉验收                         | 最终看摘要    |
+
 
 默认不得在 `CHANGE_DIR` 外另建第二套 delivery 状态。分析目录可以先于 change
 存在；Wave 2 只把报告 path+digest 记为 `external_artifacts`，不把分析 schema
 写进 Delivery 状态。新增分析报告不会使 Frame 批准失效；改 proposal/spec 仍会。
 
-| Wave | 应当存在的主要上游工件 |
-| --- | --- |
-| 1 分析 | 无；不要求 OpenSpec / Memory |
-| 2 规格批准 | 定稿决策包（`analysis_status=complete`）；OpenSpec + Memory 从此波开始是硬前提 |
-| 3 Plan | 已批准 Frame 规格、分析 path+digest、Frame handoff |
-| 4 Execute | design/tasks、Plan handoff、实现闸门；`visual=required` 时含 G9 |
+
+| Wave      | 应当存在的主要上游工件                                                   |
+| --------- | ------------------------------------------------------------- |
+| 1 分析      | 无；不要求 OpenSpec / Memory                                       |
+| 2 规格批准    | 定稿决策包（`analysis_status=complete`）；OpenSpec + Memory 从此波开始是硬前提 |
+| 3 Plan    | 已批准 Frame 规格、分析 path+digest、Frame handoff                     |
+| 4 Execute | design/tasks、Plan handoff、实现闸门；`visual=required` 时含 G9        |
+
 
 Wave 1 **不**要求 OpenSpec 或 Codebase Memory。Wave 2–4 硬前提失败时用
 Delivery 固定三行报告停止，不降级。
@@ -158,8 +193,10 @@ Delivery 固定三行报告停止，不降级。
 本波：显式使用 vue2-to-vue3-upgrade-impact-analysis。只出决策包。
 不改代码、不跑 codemod、不写 OpenSpec。
 
+应已存在：无。不要求 OpenSpec / Memory。
 入口：单 workspace；project-root = workspace。--output-dir OUTPUT_DIR。
-路径已给出，不要再向用户索要口语「写到仓库」。
+OUTPUT_DIR 已由通用头给出；禁止再问 confirm:output-dir，也不要向用户索要
+口语「写到仓库」。
 pages 空 → batch_scope=full-stack。
 pages 有值 → batch_scope=page-closure：只评估这些页面及其闭包，外加它们依赖的
 共享 runtime/build；未点名且未进入闭包的页面记为 non-goal，不要扩成全仓。
@@ -187,6 +224,8 @@ gate=ready 且仍是原地升：说明下一步 Wave 2，然后停止。
 gate=frozen：说明缺 lock 或未决 High/blocker，不要进入 Wave 2，然后停止。
 ```
 
+
+
 ## 3. Wave 2：Frame 规格批准
 
 新会话粘贴“会话通用头”，再粘贴：
@@ -194,8 +233,10 @@ gate=frozen：说明缺 lock 或未决 High/blocker，不要进入 Wave 2，然�
 ```text
 本波：显式使用 delivery-frame-spec。不要进入 Plan/Execute。
 不要再次执行 vue2 分析 Skill（只读已定稿的 ANALYSIS_ROOT）。
-框架升级 / 迁移类变更，固定 High，禁止 Quick。
+框架升级 / 迁移类变更，固定 High，禁止 Quick。本波不得修改应用代码。
 
+应已存在：定稿决策包（analysis_status=complete，batch_implementation_gate=ready）。
+缺失或 gate=frozen：停止，回 Wave 1。OpenSpec + Memory 本波起为硬前提。
 硬前提：workspace 的 OpenSpec 已初始化；Codebase Memory 对 workspace 可查询。
 索引缺失时先 index_repository。openspec: cli-only 时走三行报告并询问
 initialize_repo，不得发明平行 Markdown 状态。
@@ -226,6 +267,8 @@ icon_identity、table_metrics、rollback_fixture。
 通过规格闸门：只问一次范围批准。然后停止。下一步 Wave 3。
 ```
 
+
+
 ## 4. Wave 3：Delivery Plan go
 
 新会话粘贴“会话通用头”，再粘贴：
@@ -233,6 +276,8 @@ icon_identity、table_metrics、rollback_fixture。
 ```text
 本波：显式使用 delivery-plan-tasks。不要实施、不要改应用代码。
 
+应已存在：已批准 Frame 规格、分析 path+digest、Frame handoff。缺失或批准失效
+则回 Wave 2。
 只读 ANALYSIS_ROOT 的 summary（named_recipes / named_validations）、
 点名 decision-records，以及已批准 spec。
 把分析里的命名配方写成纵向任务（精确文件/符号或 glob、实施期命令、
@@ -246,8 +291,10 @@ visual=required 时：基线捕获发生在升级之前；每个 required sample
 就绪审查跑 G1–G3、G8、G5。阻塞项不得进入实施闸门。
 实现闸门只问一次（High 附代价/风险/回滚摘要）。用户选项：
 建议：开始实施 / 先不实施 / 有修改（说明）。
-go 必须绑定当前 artifact_revision。然后停止。下一步 Wave 4。
+go 必须绑定当前 artifact_revision 与仓库 revision。然后停止。下一步 Wave 4。
 ```
+
+
 
 ## 5. Wave 4：Delivery Execute
 
@@ -257,8 +304,15 @@ go 必须绑定当前 artifact_revision。然后停止。下一步 Wave 4。
 本波：显式使用 delivery-execute-verify。它是唯一应用代码 mutation owner。
 无绑定当前 revision 的实现 go：停止，不要编辑。
 
-按 tasks.md 纵向实施。现在可以安装依赖并运行已命名配方；每步对照 allowed/
-forbidden scope。TDD 基础设施可用则 RED→GREEN；不适用须记录替代验证与缺口。
+应已存在：design/tasks、Plan handoff、绑定当前 revision 的实现 go；
+visual=required 时含升级前基线。缺失则回 Wave 3。
+
+先读 .nvmrc/.node-version/engines/packageManager/锁文件/scripts，再 install；
+优先 frozen install；禁止用仓库拒绝的包管理器。现在可以安装依赖并运行已命名
+配方。按 tasks.md 纵向实施；每步对照 allowed/forbidden scope。TDD 基础设施
+可用则 RED→GREEN；不适用须记录替代验证与缺口。
+实施后、Fresh Verification 前按 Execute Skill 刷新 Codebase Memory 索引。
+lock digest 未变化不重复安装。
 
 visual=required：先确认基线仍绑定升级前 revision；升级后写
 delivery-visual-evidence/v1 到 G9_ROOT 并校验。外部分析/视觉报告只作
@@ -266,25 +320,29 @@ external_artifacts path/digest，不能代替 G9 final_visual_result=pass。
 
 High 必须独立审查（独立 SubAgent 或人类）pass/warn 且无 CRITICAL，才能
 verified。不要 archive OpenSpec，不要 commit/push/PR，除非用户在本波之后
-另授权。
+另授权。失败回流写入通用头 alignment_backflow 字段。
 
 结束时输出 verification、G9、独立审查、rollback 与 handoff path/revision。
-说明：仓内 verified ≠ 生产完成。G9 未过则留在本波。
-然后停止。
+对照通用头仓内 verified 条件后才能声称仓内 verified。仓内 verified ≠ 生产完成。
+G9 未过则留在本波。然后停止。
 ```
+
+
 
 ## 6. 失败回流
 
 始终使用原 `CHANGE_ID`，不创建第二个 OpenSpec change。
 
-| 发现 | 返回 |
-| --- | --- |
-| workspace / 拓扑选错，或应走 host-port | Wave 1；必要时改 A→B 剧本 |
-| 目标、验收、行为 parity、视觉是否 required、pages 范围错误 | Wave 2 规格批准 |
-| 配方拆分、回滚、基线时机、任务范围错误 | Wave 3 Plan |
-| 已批准范围内的实现、测试或 G9 缺陷 | Wave 4 Execute |
-| OpenSpec / Memory 硬前提失败 | 停在当前 Delivery Wave，按三行报告恢复后再继续 |
-| 分析 gate 仍 frozen 却进入 Wave 2 | 回 Wave 1 |
+
+| 发现                                       | 返回                             |
+| ---------------------------------------- | ------------------------------ |
+| workspace / 拓扑选错，或应走 host-port           | Wave 1；必要时改 A→B 剧本             |
+| 目标、验收、行为 parity、视觉是否 required、pages 范围错误 | Wave 2 规格批准                    |
+| 配方拆分、回滚、基线时机、任务范围错误                      | Wave 3 Plan                    |
+| 已批准范围内的实现、测试或 G9 缺陷                      | Wave 4 Execute                 |
+| OpenSpec / Memory 硬前提失败                  | 停在当前 Delivery Wave，按三行报告恢复后再继续 |
+| 分析 gate 仍 frozen 却进入 Wave 2              | 回 Wave 1                       |
+
 
 回流携带：
 
@@ -298,6 +356,7 @@ alignment_backflow:
 
 ## 7. 完成判定
 
+与独立会话通用头边界一致，供通读本文的人核对。
 只有以下全部满足，才能声称本 change 仓内 `verified`：
 
 - 分析包 `analysis_status=complete`，且交接时 `batch_implementation_gate=ready`；
@@ -309,6 +368,6 @@ alignment_backflow:
 - 无 blocking residual；
 - `pages` 空：本 workspace 原地升完成；
 - `pages` 有值：仅这些页面+闭包+本 change 批准的共享 runtime/build 完成，
-  未点名页面仍 Vue2/compat 不阻塞本 change 的 verified。
+未点名页面仍 Vue2/compat 不阻塞本 change 的 verified。
 
 此时不自动 archive、commit、push、PR、部署或生产切流。

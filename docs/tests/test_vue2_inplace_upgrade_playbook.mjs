@@ -105,6 +105,34 @@ assert.ok(wave4.includes("不要 archive"), "Wave 4 must defer OpenSpec archive"
 assert.ok(wave4.includes("verified ≠ 生产完成") || wave4.includes("仓内 verified ≠ 生产完成"), "Wave 4 must not claim production complete");
 assert.ok(wave4.includes("G9"), "Wave 4 must close visual via Delivery G9");
 
+/**
+ * @param {string} src
+ */
+function fence(src) {
+  const match = src.match(/```text\r?\n([\s\S]*?)\r?\n```/);
+  assert.ok(match, "prompt fence is missing");
+  return match[1];
+}
+
+const header = section(playbook, "### 1.2", "### 1.3");
+assert.ok(header.includes("仅 Wave 4"), "header must restrict application-code mutation to Wave 4");
+assert.ok(header.includes("alignment_backflow") || header.includes("失败回流最小字段"), "header must carry backflow keys");
+assert.ok(header.includes("仓内 verified"), "header must carry the in-repo verified gate");
+
+const inplaceWaves = [
+  ["Wave 1", wave1],
+  ["Wave 2", wave2],
+  ["Wave 3", wave3],
+  ["Wave 4", wave4],
+];
+for (const [name, wave] of inplaceWaves) {
+  assert.ok(fence(wave).includes("应已存在"), `${name} prompt must declare required upstream artifacts`);
+}
+
+assert.ok(wave1.includes("confirm:output-dir"), "Wave 1 must suppress the analysis skill output-dir confirm prompt");
+assert.ok(wave4.includes("frozen install"), "Wave 4 must state lockfile-safe install");
+assert.ok(wave4.includes("Codebase Memory"), "Wave 4 must refresh the graph before fresh verification");
+
 assert.ok(usage.includes("vue2-to-vue3-inplace-upgrade-playbook.md"), "usage must point at the inplace playbook");
 assert.ok(usage.includes("batch_implementation_gate"), "usage must explain the analysis gate");
 assert.ok(usage.includes("proceed:path:compat-big-bang"), "usage must show verbatim path tokens");
