@@ -108,7 +108,7 @@ Wave 粘贴块只补充本波 Skill、应已存在的上游工件、增量门禁
 默认（仅 CONFIG 不存在且用户未覆盖时使用）：
 - workspace = 当前本地仓库 / workspace（含待升级的 package.json）
 - pages = 空 → 全 workspace（batch_scope=full-stack）
-- target_vue_version = 3.5.29（精确目标版本；不是 `latest`）
+- target_vue_version = 3.5.39（精确目标版本；不是 `latest`）
 
 可选覆盖（需要时才写）：
 pages = <路由或文件，多个用逗号或换行；填写则 batch_scope=page-closure>
@@ -228,7 +228,7 @@ Delivery 固定三行报告停止，不降级。
 pages 空 → batch_scope=full-stack。
 pages 有值 → batch_scope=page-closure（页面+闭包+共享 runtime/build；其余 non-goal）。
 
-目标 Vue = TARGET_VUE_VERSION（默认 3.5.29），不得改成 latest。
+目标 Vue = TARGET_VUE_VERSION（默认 3.5.39），不得改成 latest。
 「2. 仓画像与依赖就绪度」与「3. 推荐迁移路径」必须写出该版本。
 compat 对齐 vue / @vue/compat / @vue/compiler-sfc 同版本；direct 至少 vue 与
 @vue/compiler-sfc；SSR 再对齐 @vue/server-renderer。版本不可用或冲突：gate=frozen。
@@ -385,7 +385,7 @@ alignment_backflow:
 
 - 分析包 `analysis_status=complete`，且交接时 `batch_implementation_gate=ready`；
 - 路径仍是原地升（`compat-big-bang` 或已记录的 `direct-vue3`），不是 host-port；
-- `vue` resolved version 等于 TARGET_VUE_VERSION（默认 `3.5.29`），且适用的
+- `vue` resolved version 等于 TARGET_VUE_VERSION（默认 `3.5.39`），且适用的
   `@vue/compat` / `@vue/compiler-sfc` / `@vue/server-renderer` 与其完全一致；
 - OpenSpec 规格批准与实现 go 绑定当前 artifact_revision 与仓库 revision；
 - 权威任务全部完成；Fresh Verification 与（High）独立审查通过；
