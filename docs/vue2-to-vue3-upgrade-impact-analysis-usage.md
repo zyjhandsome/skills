@@ -96,7 +96,8 @@ install / codemod / 改 `package.json` 的授权。
 - 只要决策包：到此停止。
 - 单仓原地升要改代码并做到仓内 `verified`：按
   [`vue2-to-vue3-inplace-upgrade-playbook.md`](./vue2-to-vue3-inplace-upgrade-playbook.md)
-  分波粘贴；不要同一会话从本 Skill 接到 Execute。
+  分波粘贴；不要同一会话从本 Skill 接到 Execute。实施会话（Wave 4）通过后还须
+  新开 Wave 5 做独立功能验证，才能声称仓内 `verified`。
 - 跨仓把一页迁入已有 Vue3 host：按
   [`vue2-page-migration-playbook.md`](./vue2-page-migration-playbook.md)。
 

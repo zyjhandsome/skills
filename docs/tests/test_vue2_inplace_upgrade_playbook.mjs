@@ -33,6 +33,7 @@ const orderNeedles = [
   "Wave 2  Frame 规格批准",
   "Wave 3  Delivery Plan go",
   "Wave 4  Delivery Execute",
+  "Wave 5  独立功能验证",
 ];
 let lastIndex = -1;
 for (const needle of orderNeedles) {
@@ -76,7 +77,8 @@ function section(src, start, end) {
 const wave1 = section(playbook, "## 2. Wave 1", "## 3. Wave 2");
 const wave2 = section(playbook, "## 3. Wave 2", "## 4. Wave 3");
 const wave3 = section(playbook, "## 4. Wave 3", "## 5. Wave 4");
-const wave4 = section(playbook, "## 5. Wave 4", "## 6. 失败回流");
+const wave4 = section(playbook, "## 5. Wave 4", "## 6. Wave 5");
+const wave5 = section(playbook, "## 6. Wave 5", "## 7. 失败回流");
 
 assert.ok(wave1.includes("显式使用 vue2-to-vue3-upgrade-impact-analysis"), "Wave 1 must invoke the analysis skill");
 assert.ok(wave1.includes("不改代码") && wave1.includes("不跑 codemod"), "Wave 1 must remain analysis-only");
@@ -102,8 +104,17 @@ assert.ok(wave3.includes("本波不跑") || wave3.includes("仍不执行"), "Wav
 assert.ok(wave4.includes("显式使用 delivery-execute-verify"), "Wave 4 must invoke Execute");
 assert.ok(wave4.includes("唯一应用代码 mutation owner"), "Wave 4 must be the sole mutation owner");
 assert.ok(wave4.includes("不要 archive"), "Wave 4 must defer OpenSpec archive");
-assert.ok(wave4.includes("verified ≠ 生产完成") || wave4.includes("仓内 verified ≠ 生产完成"), "Wave 4 must not claim production complete");
+assert.ok(wave4.includes("Delivery verified ≠ 仓内 verified"), "Wave 4 must not treat Delivery verified as in-repo verified");
+assert.ok(wave4.includes("下一步 Wave 5"), "Wave 4 must stop for independent functional verification");
 assert.ok(wave4.includes("G9"), "Wave 4 must close visual via Delivery G9");
+
+assert.ok(wave5.includes("显式使用 delivery-execute-verify"), "Wave 5 must reuse Execute in verify-only mode");
+assert.ok(wave5.includes("不得修改应用代码"), "Wave 5 must remain application-code read-only");
+assert.ok(wave5.includes("干净") && wave5.includes("dev/preview"), "Wave 5 must start a clean runtime rather than reuse Wave 4 processes");
+assert.ok(wave5.includes("named_validations"), "Wave 5 must re-run analysis named validations");
+assert.ok(wave5.includes("仓内 verified ≠ 生产完成"), "Wave 5 must not claim production complete");
+assert.ok(wave5.includes("不要改代码") || wave5.includes("不要在本波修复"), "Wave 5 must backflow defects instead of fixing them");
+assert.ok(wave5.includes("回 Wave 4"), "Wave 5 implementation/G9 defects must return to Execute");
 
 /**
  * @param {string} src
@@ -116,6 +127,7 @@ function fence(src) {
 
 const header = section(playbook, "### 1.2", "### 1.3");
 assert.ok(header.includes("仅 Wave 4"), "header must restrict application-code mutation to Wave 4");
+assert.ok(header.includes("仅 Wave 5"), "header must defer in-repo verified to Wave 5");
 assert.ok(header.includes("alignment_backflow") || header.includes("失败回流最小字段"), "header must carry backflow keys");
 assert.ok(header.includes("仓内 verified"), "header must carry the in-repo verified gate");
 assert.ok(
@@ -129,9 +141,9 @@ assert.ok(
 assert.ok(header.includes("不要复述"), "header must tell wave blocks not to restate shared protocol");
 
 const headerFences = [...header.matchAll(/```text\r?\n([\s\S]*?)\r?\n```/g)].map((m) => m[1]);
-assert.equal(headerFences.length, 2, "header must split every-wave vs Wave 2-4 append");
+assert.equal(headerFences.length, 2, "header must split every-wave vs Wave 2-5 append");
 assert.ok(!headerFences[0].includes("search_graph"), "every-wave header must not include Memory protocol");
-assert.ok(headerFences[1].includes("search_graph"), "Wave 2-4 append must include Memory protocol");
+assert.ok(headerFences[1].includes("search_graph"), "Wave 2-5 append must include Memory protocol");
 assert.ok(!headerFences[0].includes("不要让 vue2 分析 Skill 改代码"), "Wave 1 must not be told not to create the decision packet");
 
 const inplaceWaves = [
@@ -139,6 +151,7 @@ const inplaceWaves = [
   ["Wave 2", wave2],
   ["Wave 3", wave3],
   ["Wave 4", wave4],
+  ["Wave 5", wave5],
 ];
 for (const [name, wave] of inplaceWaves) {
   assert.ok(fence(wave).includes("应已存在"), `${name} prompt must declare required upstream artifacts`);
@@ -156,6 +169,7 @@ const wave1Prompt = fence(wave1);
 const wave2Prompt = fence(wave2);
 const wave3Prompt = fence(wave3);
 const wave4Prompt = fence(wave4);
+const wave5Prompt = fence(wave5);
 assert.ok(wave1Prompt.includes("3. 推荐迁移路径"), "Wave 1 must name the analysis report H2, not a playbook section number");
 assert.ok(wave1Prompt.includes(COMPOSITION_MARKER), "Wave 1 must use the analysis validator's exact Composition marker");
 assert.ok(!wave1Prompt.includes("写进"), "Wave 1 must not insert author notes into the Composition marker");
@@ -172,6 +186,11 @@ assert.ok(wave2Prompt.includes("vue2-to-vue3-upgrade-report.md"), "Wave 2 must n
 assert.ok(wave3Prompt.includes("decision-records"), "Wave 3 must name the decision-records directory");
 assert.ok(!wave3Prompt.includes("点名 decision-records"), "Wave 3 must not say 点名 decision-records");
 assert.ok(wave4Prompt.includes("index_repository"), "Wave 4 must name index_repository instead of 按 Execute Skill");
+assert.ok(!wave4Prompt.includes("仓内 verified ≠ 生产完成"), "Wave 4 paste must not claim in-repo verified");
+assert.ok(wave5Prompt.includes("named_validations"), "Wave 5 paste must re-run named_validations");
+assert.ok(wave5Prompt.includes("干净"), "Wave 5 paste must require a clean runtime");
+assert.ok(!wave5Prompt.includes("vue2-page-migration-playbook.md"), "Wave 5 must not require the sibling playbook as input");
+assert.ok(!wave5Prompt.includes("A→B 剧本"), "Wave 5 must not dangle to an unpasted playbook nickname");
 for (const [name, wave] of inplaceWaves) {
   assert.ok(!fence(wave).includes("§"), `${name} paste block must not use bare § (unpasted playbook/report section numbers)`);
   assert.ok(

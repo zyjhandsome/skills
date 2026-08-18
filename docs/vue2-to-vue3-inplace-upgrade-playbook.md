@@ -24,13 +24,15 @@ Wave 1  vue2 分析（只出决策包）
   → Wave 2  Frame 规格批准
   → Wave 3  Delivery Plan go
   → Wave 4  Delivery Execute
+  → Wave 5  独立功能验证
 ```
 
 全程 GLM 5.2。不按波换模型，不插入 Kimi。视觉结论来自 Delivery G9 的确定性
 工具证据，不以模型看图代替。模型选择不写入任何 Skill schema。
 
-完成水位是仓内 `verified`（测试 + 需要时的 Delivery G9），不含生产发布、切流、
-监控。归档、commit、push、PR 仍须另授权。
+完成水位是仓内 `verified`（Wave 4 实施与 Delivery 闸门 + Wave 5 独立功能验证，
+含测试与需要时的 Delivery G9），不含生产发布、切流、监控。归档、commit、push、
+PR 仍须另授权。Wave 4 的 Delivery verified 不够，不能单独宣布仓内 verified。
 
 ### 0.1 Skill 职责边界
 
@@ -39,11 +41,12 @@ Wave 1  vue2 分析（只出决策包）
 其他 Skill 名称。
 - Delivery Family 负责 OpenSpec、规格与实施批准、技术计划、应用代码修改、
 Delivery G9、独立审查和交付状态。`delivery-execute-verify` 是唯一应用代码
-mutation owner。
+mutation owner；Wave 4 实施，Wave 5 只用它做独立验证、不改应用代码。
 - `delivery-explore` 不适用。主路径不插入
 `frontend-dependency-upgrade-impact-analysis`，也不调用
 `migrate-vue2-pages-to-vue3-host`。
-- 视觉验收只走 Delivery G9。G9 未过则留在 Wave 4。
+- 视觉验收只走 Delivery G9。G9 未过则留在 Wave 4。仓内 verified 只在 Wave 5
+独立功能验证通过后声称。
 
 ### 0.2 拓扑消歧（开写前）
 
@@ -86,7 +89,7 @@ workspace：停止原地升，改走 A→B 剧本。不要在本剧本里继续 
   `pages`。
 2. 启动全新会话，按当前 Wave 连续粘贴为一条消息：
    Wave 1：「每波必贴」+ Wave 1 块；
-   Wave 2–4：「每波必贴」+「Wave 2–4 追加」+ 当前 Wave 块。
+   Wave 2–5：「每波必贴」+「Wave 2–5 追加」+ 当前 Wave 块。
 3. 当前 Wave 完成并停止后，打开新会话粘贴下一 Wave。
 4. 用户只回答分析确认 token、规格批准和实施批准。不要手工搬运 JSON 或 digest。
 
@@ -136,10 +139,12 @@ CONFIG 已记录旧分析路径时沿用，不要并行维护 workspace 根
 - 单仓原地升。pages 只收窄本 change，不是 A→B host-port，也不是页面闭包迁入。
 - 默认行为 parity；保留 Options API。Composition API 全仓重写另立项。
 - 仅 Wave 4（delivery-execute-verify）可修改应用代码并安装依赖、运行命名配方；
-  Wave 1–3 只读。分析阶段 Name, never run。
+  Wave 1–3 与 Wave 5 对应用代码只读。分析阶段 Name, never run。
+- Wave 5 可启动/停止干净服务、重跑验证、刷新 Codebase Memory 索引与 G9 证据；
+  lock/Node/包管理器变化时允许 frozen install，不得跑实施配方或改 tasks 勾选。
 - 保护 workspace 里已有的本地改动。
 - 部署、生产切流、监控不属于本轮。禁止 Quick。本变更固定 High。
-- Wave 1 不得声称仓内 verified。
+- Wave 1–4 不得声称仓内 verified。
 
 自动恢复以随后 Wave 块「应已存在」行为准。已完成 Wave 的工件缺失/损坏/stale
 则停止并指出重跑 Wave，不要求用户手工提供内容。
@@ -149,7 +154,7 @@ discovery / evidence / affected_scope / invalidated_artifacts /
 decision_needed / recommended_resolution / resume_point
 ```
 
-#### Wave 2–4 追加（Wave 1 不要贴）
+#### Wave 2–5 追加（Wave 1 不要贴）
 
 ```text
 不要让 vue2 分析 Skill 改代码或重开决策包。
@@ -173,11 +178,13 @@ visual=required 时 G9 用 delivery-visual-evidence/v1，目录 G9_ROOT。
 identity_marker、comparison_boundary、style_closure_status、color_metrics、
 typography_metrics、icon_identity、table_metrics、rollback_fixture。
 
-仓内 verified（仅 Wave 4 在 Fresh Verification 通过后才能声称）须同时：
+仓内 verified（仅 Wave 5 在独立功能验证通过后才能声称）须同时：
 分析包 complete 且交接时 gate=ready；路径仍是原地升；规格批准与实现 go 绑定当前
-revision；权威任务完成；Fresh Verification 与 High 独立审查通过；visual=required
-时 G9 pass；Vue resolved version 与 TARGET_VUE_VERSION 一致；Composition 全仓
-重写仍在 non-goals；无 blocking residual。
+revision；权威任务完成；Wave 4 已写出绑定当前 revision 的 Delivery verification
+与 verified handoff；Wave 4 Fresh Verification 与 High 独立审查通过；Wave 5 在
+全新会话对当前 revision 重跑 named_validations、规格场景与升级后功能冒烟，且不
+混用 Wave 4 旧 pass；visual=required 时 G9 pass；Vue resolved version 与
+TARGET_VUE_VERSION 一致；Composition 全仓重写仍在 non-goals；无 blocking residual。
 仍不 archive/commit/push/PR/部署。
 ```
 
@@ -206,9 +213,10 @@ workspace 根 `.vue2-to-vue3-upgrade-analysis`。分析报告默认落在
 | 2 规格批准    | 定稿决策包（`analysis_status=complete`）；OpenSpec + Memory 从此波开始是硬前提 |
 | 3 Plan    | 已批准 Frame 规格、分析 path+digest、Frame handoff                     |
 | 4 Execute | design/tasks、Plan handoff、实现闸门；`visual=required` 时含 G9        |
+| 5 独立功能验证 | Wave 4 verification / verified handoff / G9、当前代码、CONFIG     |
 
 
-Wave 1 **不**要求 OpenSpec 或 Codebase Memory。Wave 2–4 硬前提失败时用
+Wave 1 **不**要求 OpenSpec 或 Codebase Memory。Wave 2–5 硬前提失败时用
 Delivery 固定三行报告停止，不降级。
 
 ## 2. Wave 1：vue2 分析（只出决策包）
@@ -248,7 +256,7 @@ gate=frozen：说明缺口，不要进入 Wave 2，然后停止。
 
 ## 3. Wave 2：Frame 规格批准
 
-新会话粘贴「每波必贴」和「Wave 2–4 追加」，再粘贴：
+新会话粘贴「每波必贴」和「Wave 2–5 追加」，再粘贴：
 
 ```text
 本波：显式使用 delivery-frame-spec。不要进入 Plan/Execute。
@@ -290,7 +298,7 @@ required 时基线须在改 vue/依赖之前捕获；G9 目录 G9_ROOT。
 
 ## 4. Wave 3：Delivery Plan go
 
-新会话粘贴「每波必贴」和「Wave 2–4 追加」，再粘贴：
+新会话粘贴「每波必贴」和「Wave 2–5 追加」，再粘贴：
 
 ```text
 本波：显式使用 delivery-plan-tasks。不要实施、不要改应用代码。
@@ -319,7 +327,7 @@ visual=required 时：基线捕获发生在升级之前；每个 required sample
 
 ## 5. Wave 4：Delivery Execute
 
-新会话粘贴「每波必贴」和「Wave 2–4 追加」，再粘贴：
+新会话粘贴「每波必贴」和「Wave 2–5 追加」，再粘贴：
 
 ```text
 本波：显式使用 delivery-execute-verify。它是唯一应用代码 mutation owner。
@@ -347,11 +355,56 @@ visual=required：升级后写 delivery-visual-evidence/v1 到 G9_ROOT 并校验
 结束时输出 verification、G9、独立审查、rollback 与 handoff path/revision。
 Node 证据须含：当前基线、目标 Node 下升级前兼容性（或为何不适用）、目标 Node frozen
 install/build/test、声明面一致性；临时双 Node 未满足删除条件时记 residual。
-对照通用头仓内 verified 条件后才能声称仓内 verified。仓内 verified ≠ 生产完成。
-G9 未过则留在本波。然后停止。
+写 verification.md 与 verified handoff（overall_status=verified，
+archive.status=deferred_to_openspec）。Delivery verified ≠ 仓内 verified。
+不要声称仓内 verified。G9 未过则留在本波。说明下一步 Wave 5，然后停止。
 ```
 
-## 6. 失败回流
+## 6. Wave 5：独立功能验证
+
+新会话粘贴「每波必贴」和「Wave 2–5 追加」，再粘贴：
+
+```text
+本波：显式使用 delivery-execute-verify，仅做独立新鲜验证与升级后功能验收。
+不得修改应用代码，不得改 tasks 勾选，不得跑新的实施配方，不得 archive/commit/push/PR。
+发现缺陷不要在本波修复。
+
+应已存在：绑定当前 revision 的 Delivery verification.md 与 verified handoff、
+Plan/Execute 工件、CONFIG；visual=required 时含 G9_ROOT 且 final_visual_result=pass。
+缺失、Delivery 未 verified、或 revision 与当前仓库不一致：停止，回 Wave 4。
+先读 CONFIG；target_vue_version 或派生路径与通用头不一致时停止，回 Wave 2。
+
+不要采信 Wave 4 会话结论或旧 pass 日志。以当前磁盘工件 + 本会话新跑命令为准。
+图谱 revision 与当前仓库不一致时先 index_repository，再取证。
+
+按当前 revision 启动干净 dev/preview（不要复用 Wave 4 残留进程）。
+lock digest 未变化不重复安装；Node/包管理器或 lock 变化时 frozen install。
+首次启动前打印实际 node -v 与包管理器版本；不满足已批准 target range 时停止。
+
+必须在本会话重跑并阅读完整输出：
+- ANALYSIS_ROOT/upgrade-summary.json 的 named_validations
+- 已批准 spec 的 Requirement/Scenario
+- 任务列出的验证命令
+vue resolved version 必须仍等于 TARGET_VUE_VERSION；适用的
+@vue/compat / @vue/compiler-sfc / @vue/server-renderer 必须与之完全一致。
+
+功能冒烟（pages 空=全仓代表入口/路由；pages 有值=这些页面+闭包）：
+已批准验收场景、登录后主路径、路由切换、列表/表单/弹层等规格点名交互。
+同时记录 Vue runtime 控制台：error 与升级相关 warning（compat / filters /
+已移除实例 API 等）不得无处置。不得用测试已绿代替未执行的场景。
+
+visual=required：按当前 revision 重新校验 G9_ROOT 的 delivery-visual-evidence/v1。
+基线仍是升级前捕获；必要时刷新 current/diff，不得改应用代码。
+validator 未过或 revision 不匹配：停止，回 Wave 4。
+
+pass：对照通用头仓内 verified 条件后才能声称仓内 verified。仓内 verified ≠ 生产完成。
+仍不 archive/commit/push/PR/部署。然后停止。
+fail：按 alignment_backflow 输出，不要改代码，返回：
+规格/验收→Wave 2；任务/验证命令/回滚→Wave 3；实现、测试、G9 或功能回归→Wave 4。
+然后停止。
+```
+
+## 7. 失败回流
 
 始终使用原 `CHANGE_ID`，不创建第二个 OpenSpec change。
 
@@ -363,7 +416,8 @@ G9 未过则留在本波。然后停止。
 | 目标、验收、行为 parity、视觉是否 required、pages 范围错误 | Wave 2 规格批准                    |
 | CONFIG / 已批准规格中的 target_vue_version 不一致      | Wave 2                           |
 | 配方拆分、回滚、基线时机、任务范围错误                      | Wave 3 Plan                    |
-| 已批准范围内的实现、测试或 G9 缺陷                      | Wave 4 Execute                 |
+| 已批准范围内的实现、测试、G9 或功能回归                   | Wave 4 Execute                 |
+| Wave 5 发现 Delivery 未 verified 或证据 stale | Wave 4 Execute                 |
 | OpenSpec / Memory 硬前提失败                  | 停在当前 Delivery Wave，按三行报告恢复后再继续 |
 | 分析 gate 仍 frozen 却进入 Wave 2              | 回 Wave 1                       |
 
@@ -376,9 +430,10 @@ alignment_backflow:
   decision_needed / recommended_resolution / resume_point
 ```
 
-规格或计划变更后，必须重跑受影响闸门；声称完成前必须新鲜验证。
+规格或计划变更后，必须重跑受影响闸门。Wave 4 修复后必须重跑受影响任务的 Fresh
+Verification，并重新执行完整 Wave 5；不得用 Wave 4 旧 pass 声称仓内 verified。
 
-## 7. 完成判定
+## 8. 完成判定
 
 与独立会话通用头边界一致，供通读本文的人核对。
 只有以下全部满足，才能声称本 change 仓内 `verified`：
@@ -388,7 +443,9 @@ alignment_backflow:
 - `vue` resolved version 等于 TARGET_VUE_VERSION（默认 `3.5.39`），且适用的
   `@vue/compat` / `@vue/compiler-sfc` / `@vue/server-renderer` 与其完全一致；
 - OpenSpec 规格批准与实现 go 绑定当前 artifact_revision 与仓库 revision；
-- 权威任务全部完成；Fresh Verification 与（High）独立审查通过；
+- 权威任务全部完成；Wave 4 Fresh Verification 与（High）独立审查通过；
+- Wave 5 在全新会话对当前 revision 重跑 named_validations、规格场景与升级后
+  功能冒烟，且不混用 Wave 4 旧 pass；
 - `visual=required` 时 Delivery G9 `final_visual_result=pass`；
 - Composition 全仓重写仍在 non-goals；
 - 目标 Node 范围与工具链精确版本有证据；Fresh Verification 使用受支持 Node；
