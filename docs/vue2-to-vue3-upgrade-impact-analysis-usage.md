@@ -40,6 +40,10 @@ Agent 体检环境 → 画像 workspace → 推荐路径三维 → 当场按确�
 --output-dir <前端 workspace>/.vue2-to-vue3-upgrade-analysis
 ```
 
+若接下来会按原地升剧本做到仓内 `verified`，把 `--output-dir` 改成剧本默认的
+`<workspace>/openspec/changes/vue2-to-vue3-inplace-<SLUG>/evidence/vue2-to-vue3-upgrade`，
+不要再写一份到 workspace 根。
+
 **多仓巡检：**
 
 ```text
@@ -57,9 +61,9 @@ implementation_target：<Vue3 host B>
 forbid_source_mutation: yes
 ```
 
-想把报告挂进已有 OpenSpec change 时，由**调用方**提供绝对路径，例如
-`--output-dir <change-dir>/evidence/vue2-to-vue3-upgrade`。本 Skill 不认识
-OpenSpec，也不创建 change。
+想把报告挂进 OpenSpec change 时，由**调用方**提供绝对路径。单仓原地升剧本默认：
+`--output-dir <workspace>/openspec/changes/vue2-to-vue3-inplace-<SLUG>/evidence/vue2-to-vue3-upgrade`。
+本 Skill 不认识 OpenSpec，也不创建 change。
 
 ---
 

@@ -110,9 +110,10 @@ verbatim `proceed:path:…` / `proceed:subsystem:…` menus.
 
 ## Output
 
-1. Explicit `--output-dir`, else candidate
+1. Explicit `--output-dir` in the invocation **is** confirmation — do not
+   also ask `confirm:output-dir`. Else candidate
    `<project-root>/.vue2-to-vue3-upgrade-analysis` after
-   `confirm:output-dir` / `--output-dir <path>`. Until confirmed: read-only.
+   `confirm:output-dir`. Until confirmed: read-only.
 2. Bundle: `vue2-to-vue3-upgrade-report.md`, `upgrade-summary.json` (≤12 KiB),
    `inventory.json` when profiled, `decision-records/*.md`.
 3. Multi-batch:

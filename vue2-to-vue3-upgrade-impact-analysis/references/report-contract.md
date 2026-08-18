@@ -12,10 +12,10 @@
 
 ## 报告目录解析
 
-1. 显式 `--output-dir`
+1. 显式 `--output-dir`（调用里已出现即确认，不必再问 `confirm:output-dir`）
 2. 否则默认候选：`<project-root>/.vue2-to-vue3-upgrade-analysis`
 
-硬规则：输出目录只属于本 Skill；须复述绝对路径并得到显式确认（`--output-dir <path>` 或 `confirm:output-dir`）后再写。路径未确认前只读分析、禁止写入。口语「写到仓库」无效。
+硬规则：输出目录只属于本 Skill。调用已含 `--output-dir <path>` 视为已确认；否则须复述绝对路径并得到 `confirm:output-dir` 后再写。路径未确认前只读分析、禁止写入。口语「写到仓库」无效。
 
 ## 多批次布局
 

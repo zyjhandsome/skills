@@ -118,6 +118,21 @@ const header = section(playbook, "### 1.2", "### 1.3");
 assert.ok(header.includes("仅 Wave 4"), "header must restrict application-code mutation to Wave 4");
 assert.ok(header.includes("alignment_backflow") || header.includes("失败回流最小字段"), "header must carry backflow keys");
 assert.ok(header.includes("仓内 verified"), "header must carry the in-repo verified gate");
+assert.ok(
+  header.includes("OUTPUT_DIR = ANALYSIS_ROOT = <EVIDENCE_ROOT>/vue2-to-vue3-upgrade"),
+  "header must default analysis output under the OpenSpec change evidence dir"
+);
+assert.ok(
+  !header.includes("OUTPUT_DIR = <workspace>/.vue2-to-vue3-upgrade-analysis"),
+  "header must not default analysis output to the workspace-root analysis dir"
+);
+assert.ok(header.includes("不要复述"), "header must tell wave blocks not to restate shared protocol");
+
+const headerFences = [...header.matchAll(/```text\r?\n([\s\S]*?)\r?\n```/g)].map((m) => m[1]);
+assert.equal(headerFences.length, 2, "header must split every-wave vs Wave 2-4 append");
+assert.ok(!headerFences[0].includes("search_graph"), "every-wave header must not include Memory protocol");
+assert.ok(headerFences[1].includes("search_graph"), "Wave 2-4 append must include Memory protocol");
+assert.ok(!headerFences[0].includes("不要让 vue2 分析 Skill 改代码"), "Wave 1 must not be told not to create the decision packet");
 
 const inplaceWaves = [
   ["Wave 1", wave1],
@@ -130,6 +145,9 @@ for (const [name, wave] of inplaceWaves) {
 }
 
 assert.ok(wave1.includes("confirm:output-dir"), "Wave 1 must suppress the analysis skill output-dir confirm prompt");
+assert.ok(wave1.includes("evidence/vue2-to-vue3-upgrade"), "Wave 1 must write analysis under the change evidence dir");
+assert.ok(wave1.includes("不写 OpenSpec 状态") || wave1.includes("不 init OpenSpec"), "Wave 1 must not write OpenSpec state");
+assert.ok(wave2.includes("同一 CHANGE_ID") || wave2.includes("不要另建 change"), "Wave 2 must recover the Wave 1 change directory");
 assert.ok(wave4.includes("frozen install"), "Wave 4 must state lockfile-safe install");
 assert.ok(wave4.includes("Codebase Memory"), "Wave 4 must refresh the graph before fresh verification");
 
@@ -141,6 +159,8 @@ const wave4Prompt = fence(wave4);
 assert.ok(wave1Prompt.includes("3. 推荐迁移路径"), "Wave 1 must name the analysis report H2, not a playbook section number");
 assert.ok(wave1Prompt.includes(COMPOSITION_MARKER), "Wave 1 must use the analysis validator's exact Composition marker");
 assert.ok(!wave1Prompt.includes("写进"), "Wave 1 must not insert author notes into the Composition marker");
+assert.ok(!wave1Prompt.includes("search_graph"), "Wave 1 paste must not include Memory protocol");
+assert.ok(!wave1Prompt.includes("仓内 verified"), "Wave 1 paste must not include the verified checklist");
 assert.ok(!wave1Prompt.includes("vue2-page-migration-playbook.md"), "Wave 1 must not require the sibling playbook as input");
 assert.ok(!wave2Prompt.includes("vue2-page-migration-playbook.md"), "Wave 2 must not require the sibling playbook as input");
 assert.ok(wave1Prompt.includes("不得加载其他剧本") || wave1Prompt.includes("不要加载其他剧本"), "Wave 1 host-port stop must stay inside this playbook");
@@ -161,6 +181,7 @@ for (const [name, wave] of inplaceWaves) {
 }
 
 assert.ok(usage.includes("vue2-to-vue3-inplace-upgrade-playbook.md"), "usage must point at the inplace playbook");
+assert.ok(usage.includes("openspec/changes/vue2-to-vue3-inplace-<SLUG>/evidence/vue2-to-vue3-upgrade"), "usage must document the playbook analysis path under the change dir");
 assert.ok(usage.includes("batch_implementation_gate"), "usage must explain the analysis gate");
 assert.ok(usage.includes("proceed:path:compat-big-bang"), "usage must show verbatim path tokens");
 assert.ok(usage.includes("implementation_readiness"), "usage must keep implementation_readiness unset");
