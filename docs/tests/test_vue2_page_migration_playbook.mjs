@@ -93,6 +93,14 @@ assert.ok(
   /仅当视觉处理链可用[\s\S]*下一步为 Wave 3/.test(wave2Prompt),
   "Wave 2 may name Wave 3 only after the visual chain and baseline are unblocked"
 );
+assert.ok(!playbook.includes("不要向用户索要参考截图"), "playbook must allow user-provided screenshots");
+assert.ok(!playbook.includes("也不把用户粘贴图当视觉事实"), "user screenshots are an allowed image source, not banned as facts a priori");
+assert.ok(playbook.includes("用户提供的") && playbook.includes("多状态截图"), "playbook must accept user-provided multi-state screenshots");
+assert.ok(playbook.includes("不得因已有截图跳过检索"), "screenshots must not skip code retrieval");
+assert.ok(playbook.includes("截图与代码矛盾时，以代码事实为准"), "code facts must win when screenshots contradict code");
+assert.ok(wave2Prompt.includes("用户未提供覆盖这些") || wave2Prompt.includes("用户未提供覆盖所需状态"), "Wave 2 may freeze baseline images from user-provided running-A screenshots");
+assert.ok(wave2Prompt.includes("截图与代码矛盾以代码为准") || wave2Prompt.includes("不能覆盖与代码矛盾"), "Wave 2 must keep code authoritative over screenshots");
+assert.ok(wave2Prompt.includes("颜色以 A 代码"), "Wave 2 must take colors from A code, not from screenshots alone");
 const wave3NextSentences = wave2Prompt
   .split(/[。\n]/)
   .map((line) => line.trim())
@@ -148,6 +156,9 @@ const header = section(playbook, "### 1.2", "### 1.3");
 assert.ok(header.includes("仅 Wave 6"), "header must restrict application-code mutation to Wave 6");
 assert.ok(header.includes("失败回流最小字段"), "header must carry backflow keys for independent sessions");
 assert.ok(header.includes("页面升级迁移完成"), "header must carry the completion gate for Wave 7");
+assert.ok(header.includes("用户提供的") && header.includes("多状态截图"), "session header must accept user-provided screenshots");
+assert.ok(header.includes("不得因已有截图跳过检索"), "session header must require code retrieval even when screenshots exist");
+assert.ok(header.includes("截图与代码矛盾时，以代码事实为准"), "session header must make code authoritative over screenshots");
 
 const wavePrompts = [
   ["Wave 1", wave1],
@@ -169,5 +180,19 @@ assert.ok(fence(wave5).includes("G1–G3") || fence(wave5).includes("G1-G3"), "W
 assert.ok(fence(wave6).includes("不能单独宣布整次迁移完成"), "Wave 6 paste block must not claim migration complete");
 assert.ok(!fence(wave7).includes("本文完成条件"), "Wave 7 must not dangle to unpasted completion section");
 assert.ok(fence(wave7).includes("通用头完成判定"), "Wave 7 must judge completion from the session header");
+assert.ok(fence(wave7).includes("validate_runtime_evidence.mjs"), "Wave 7 must name the runtime validator");
+assert.ok(fence(wave7).includes("validate_visual_evidence.mjs"), "Wave 7 must name the visual validator");
+assert.ok(fence(wave7).includes("validate_domain_packet.mjs"), "Wave 7 must name the domain packet validator");
+assert.ok(!fence(wave7).includes("三个验证器"), "Wave 7 must not dangle to unnamed validators");
+assert.ok(fence(wave1).includes("缺什么"), "Wave 1 must name the Frame three-line report keys");
+for (const [name, wave] of wavePrompts) {
+  assert.ok(!fence(wave).includes("§"), `${name} paste block must not use bare §`);
+  assert.ok(
+    !fence(wave).includes("vue2-to-vue3-inplace-upgrade-playbook.md"),
+    `${name} paste block must not require the sibling in-place playbook`
+  );
+}
+assert.ok(fence(wave6).includes("packageManager"), "Wave 6 must take B install rules from the host repo, not a reference project");
+assert.ok(!fence(wave6).includes("参考 B 禁止"), "Wave 6 must not cite unpasted §1.4 reference-project commands");
 
 console.log("PASS: vue2 page migration playbook and usage share one High, Frame-after-design sequence");

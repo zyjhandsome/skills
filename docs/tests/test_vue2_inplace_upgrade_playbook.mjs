@@ -133,6 +133,33 @@ assert.ok(wave1.includes("confirm:output-dir"), "Wave 1 must suppress the analys
 assert.ok(wave4.includes("frozen install"), "Wave 4 must state lockfile-safe install");
 assert.ok(wave4.includes("Codebase Memory"), "Wave 4 must refresh the graph before fresh verification");
 
+const COMPOSITION_MARKER = "Composition API 全仓重写：另立项，本次不评估工作量";
+const wave1Prompt = fence(wave1);
+const wave2Prompt = fence(wave2);
+const wave3Prompt = fence(wave3);
+const wave4Prompt = fence(wave4);
+assert.ok(wave1Prompt.includes("3. 推荐迁移路径"), "Wave 1 must name the analysis report H2, not a playbook section number");
+assert.ok(wave1Prompt.includes(COMPOSITION_MARKER), "Wave 1 must use the analysis validator's exact Composition marker");
+assert.ok(!wave1Prompt.includes("写进"), "Wave 1 must not insert author notes into the Composition marker");
+assert.ok(!wave1Prompt.includes("vue2-page-migration-playbook.md"), "Wave 1 must not require the sibling playbook as input");
+assert.ok(!wave2Prompt.includes("vue2-page-migration-playbook.md"), "Wave 2 must not require the sibling playbook as input");
+assert.ok(wave1Prompt.includes("不得加载其他剧本") || wave1Prompt.includes("不要加载其他剧本"), "Wave 1 host-port stop must stay inside this playbook");
+assert.ok(wave2Prompt.includes("不要加载其他剧本"), "Wave 2 host-port stop must stay inside this playbook");
+assert.ok(!wave2Prompt.includes("A→B 剧本"), "Wave 2 must not dangle to an unpasted playbook nickname");
+assert.ok(!wave2Prompt.includes("改走"), "Wave 2 must stop, not redirect to another document");
+assert.ok(!wave2Prompt.includes("点名章节"), "Wave 2 must name the report file instead of 点名章节");
+assert.ok(wave2Prompt.includes("vue2-to-vue3-upgrade-report.md"), "Wave 2 must name the analysis report file");
+assert.ok(wave3Prompt.includes("decision-records"), "Wave 3 must name the decision-records directory");
+assert.ok(!wave3Prompt.includes("点名 decision-records"), "Wave 3 must not say 点名 decision-records");
+assert.ok(wave4Prompt.includes("index_repository"), "Wave 4 must name index_repository instead of 按 Execute Skill");
+for (const [name, wave] of inplaceWaves) {
+  assert.ok(!fence(wave).includes("§"), `${name} paste block must not use bare § (unpasted playbook/report section numbers)`);
+  assert.ok(
+    !fence(wave).includes("vue2-page-migration-playbook.md"),
+    `${name} paste block must not require the sibling playbook as input`
+  );
+}
+
 assert.ok(usage.includes("vue2-to-vue3-inplace-upgrade-playbook.md"), "usage must point at the inplace playbook");
 assert.ok(usage.includes("batch_implementation_gate"), "usage must explain the analysis gate");
 assert.ok(usage.includes("proceed:path:compat-big-bang"), "usage must show verbatim path tokens");

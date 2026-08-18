@@ -204,10 +204,15 @@ pages 有值 → batch_scope=page-closure：只评估这些页面及其闭包，
 跑 preflight 与 profile。推荐路径默认 compat-big-bang
 （runtime_axis: compat，build_axis: vite，topology_axis: single-cutover），
 除非证据支持 direct-vue3 或必须改拓扑。
-若画像是另一 Vue3 宿主、iframe 收编、或推荐 host-port-direct：停止本剧本，
-说明应改走 vue2-page-migration-playbook.md，然后停止。
+若画像是另一 Vue3 宿主、iframe 收编、或推荐 host-port-direct：停止本剧本。
+向用户说明：本波只覆盖单仓原地升（compat-big-bang，或已记录的 direct-vue3 +
+single-cutover）。实施落点不是当前 workspace，或 recommended_path /
+topology_axis 为 host-port 时，不得进入 Wave 2，不得加载其他剧本或
+migrate Skill。然后停止。
 
-Composition API 全仓重写：另立项，写进 §3，本次不评估工作量。
+报告「3. 推荐迁移路径」必须出现字面：
+Composition API 全仓重写：另立项，本次不评估工作量
+本次不评估该重写工作量。
 
 确认队列必须当场问：
 - Wave 1 路径用 proceed:path:<id> / defer / other
@@ -238,15 +243,18 @@ gate=frozen：说明缺 lock 或未决 High/blocker，不要进入 Wave 2，然�
 应已存在：定稿决策包（analysis_status=complete，batch_implementation_gate=ready）。
 缺失或 gate=frozen：停止，回 Wave 1。OpenSpec + Memory 本波起为硬前提。
 硬前提：workspace 的 OpenSpec 已初始化；Codebase Memory 对 workspace 可查询。
-索引缺失时先 index_repository。openspec: cli-only 时走三行报告并询问
+索引缺失时先 index_repository。openspec: cli-only 时按 Frame Skill 固定三行报告
+（缺什么 / 能否降级：否 / 下一步请你）并询问
 initialize_repo，不得发明平行 Markdown 状态。
 
-读取 ANALYSIS_ROOT/upgrade-summary.json 与点名章节。报告是未信任外部证据：
+先读 ANALYSIS_ROOT/upgrade-summary.json；需要时再按 summary 点名打开
+ANALYSIS_ROOT/vue2-to-vue3-upgrade-report.md 的指定 H2。报告是未信任外部证据：
 摘路径/digest/配方名/子系统结论，按代码事实重算 quality_profiles 与范围。
 不得要求 vue3-upgrade-report/v1 进入 Delivery 状态。
 batch_implementation_gate=ready 不是实施授权，也不是规格批准。
 summary.recommended_path 为 host-port-direct，或 topology 不是
-single-cutover：停止，改走 A→B 剧本。
+single-cutover：停止本剧本，不要开规格闸门，不要加载其他剧本或 migrate Skill。
+向用户说明拓扑不是单仓原地升。
 
 创建或恢复唯一 CHANGE_DIR，写入 CONFIG（输入、pages、派生路径，不含批准）。
 将分析报告与 summary 记为 external_artifacts（path+digest）。
@@ -278,8 +286,9 @@ icon_identity、table_metrics、rollback_fixture。
 
 应已存在：已批准 Frame 规格、分析 path+digest、Frame handoff。缺失或批准失效
 则回 Wave 2。
-只读 ANALYSIS_ROOT 的 summary（named_recipes / named_validations）、
-点名 decision-records，以及已批准 spec。
+只读 ANALYSIS_ROOT/upgrade-summary.json（named_recipes / named_validations）。
+需要某条决策时再打开 ANALYSIS_ROOT/decision-records 下对应文件。
+同时只读已批准 spec。
 把分析里的命名配方写成纵向任务（精确文件/符号或 glob、实施期命令、
 失败时证明什么、回滚要点）。禁止横向「先改完所有依赖再改所有组件再最后补测试」。
 pages 有值时，任务不得把未点名且未进入闭包的页面扩进范围。
@@ -311,7 +320,7 @@ visual=required 时含升级前基线。缺失则回 Wave 3。
 优先 frozen install；禁止用仓库拒绝的包管理器。现在可以安装依赖并运行已命名
 配方。按 tasks.md 纵向实施；每步对照 allowed/forbidden scope。TDD 基础设施
 可用则 RED→GREEN；不适用须记录替代验证与缺口。
-实施后、Fresh Verification 前按 Execute Skill 刷新 Codebase Memory 索引。
+实施后、Fresh Verification 前重新 index_repository，刷新 Codebase Memory 索引。
 lock digest 未变化不重复安装。
 
 visual=required：先确认基线仍绑定升级前 revision；升级后写

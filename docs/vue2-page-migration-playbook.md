@@ -94,8 +94,8 @@ DOM/computed-style、像素或感知差异等确定性证据。
 5. A/B 所需 Node、包管理器、浏览器、字体、后端/Mock 和测试账号可用。
 
 人工只负责安装依赖、启动 A/B/后端或 Mock、登录/验证码/权限、稳定测试数据、
-无法自动化的业务语义判断，以及 Wave 4/Wave 5 两次批准。用户不手工搬运 JSON、
-digest、revision 或任务状态。
+无法自动化的业务语义判断、可选提供 A 的多状态截图，以及 Wave 4/Wave 5 两次
+批准。用户截图不替代代码检索，也不手工搬运 JSON、digest、revision 或任务状态。
 
 传输、超时或 schema 错误允许原模型重试一次；连续两次失败后停止当前 Wave。
 若必须更换当前模型，应废弃未完成输出，以新会话重新执行本 Wave preflight。
@@ -117,8 +117,9 @@ digest、revision 或任务状态。
 5. 当前 Wave 完成并停止后，按下一 Wave 标注的模型打开新会话。
 6. 需要跨模型复核时另开只读会话；复核通过磁盘证据交接，不在主会话换模型。
 
-用户只填写四个业务输入，并回答真正阻塞的问题、规格批准和实施批准。用户不
-需要寻找 JSON、复制 digest、维护工件路径、转述模型结论或手工更新任务状态。
+用户只填写四个业务输入，并回答真正阻塞的问题、规格批准和实施批准。可额外
+提供当前 revision 运行中 A 的多状态截图（粘贴或本地路径）；不需要寻找 JSON、
+复制 digest、维护工件路径、转述模型结论或手工更新任务状态。
 
 ### 1.2 会话通用头——四个业务值只填一次
 
@@ -159,8 +160,12 @@ digest、revision 或任务状态。
 indexed_at。图谱 revision 与仓库不一致视为 stale；stale 图谱不能证明闭包完整，
 也不能用于最终 pass。
 
-正式视觉基线必须从当前运行中的 A 捕获（多状态截图、computed-style、交互、
-响应式）。不要向用户索要参考截图，也不把用户粘贴图当视觉事实。文本模型不得
+正式视觉基线的图像须来自当前 revision 运行中的 A：Agent 捕获，或用户提供的
+多状态截图（粘贴或本地路径）。Agent 捕获困难或失败时可以请用户补充；不得使用
+设计稿、过期环境或无关页面图。A 可运行时仍采集 computed-style、交互和响应式；
+用户截图只补图像，不替代这些测量。无论图像来源，必须同时检索 A 的代码（图谱、
+模板、样式闭包、token、字体/图标资源、class 绑定）；不得因已有截图跳过检索。
+截图与代码矛盾时，以代码事实为准，截图只作外观线索并记录冲突。文本模型不得
 声称直接看过图片；必须使用可验证读图/OCR/颜色/像素或感知差异工具，或消费只
 读视觉会话的 path+digest。没有这些能力时，截图只归档供人看，不能产生 visual
 pass。
@@ -264,6 +269,7 @@ B Vue3_Test：Node ^20.19.0 或 >=22.12.0；pnpm@11.16.0；
 ```
 
 用户已经授权 Agent 在任务范围内安装依赖、启动服务和截图，默认无需人工代跑。
+用户提供的运行中 A 截图是合法图像来源，但不能代替代码检索或覆盖代码事实。
 只有系统级 Node/包管理器安装需要管理员权限、Windows 防火墙、私有 registry、
 VPN/代理/证书、SSO/验证码、测试权限或安装将修改正式 lockfile 时才请求人工。
 
@@ -278,7 +284,8 @@ expected_model=GLM 5.2（实际 model id 以 provider 配置为准）。
 delivery-explore，不要 Plan/Execute。本波不得修改 A/B 应用代码。
 
 应已存在：无上游 change。本波创建 Config 与 evidence 目录。
-硬前提：B 的 OpenSpec 可写。openspec: cli-only 时走固定三行报告并询问
+硬前提：B 的 OpenSpec 可写。openspec: cli-only 时按 Frame Skill 固定三行报告
+（缺什么 / 能否降级：否 / 下一步请你）并询问
 initialize_repo，不得发明平行 Markdown 状态。读取 A/B 当前 revision；验证
 Codebase Memory 已有 project。索引缺失时先 index_repository，再用
 get_architecture 证明可查询。图谱为空 ≠ 仓库无代码。校验 <PAGE>/<HTML> 在
@@ -314,21 +321,26 @@ INDEX_MANIFEST 的 A/B revision 必须等于当前 revision；缺失或 stale �
 index_repository。artifact_directory 固定为 <DOMAIN_ROOT>。
 
 在当前 revision 一次性副本安装并启动：先读各仓 .nvmrc/.node-version/engines/
-packageManager/锁文件/scripts，不得默认同一 Node 或存在 serve script。A 捕获
-正式基线；B 验证 frozen install、build/dev 和 host 入口。禁止改写正式 A 的
-lockfile。A/B 不同 Node 时用独立进程。写 <RUNTIME_MANIFEST>。管理员权限、
-私服/VPN/证书或登录验证才请求人工。
+packageManager/锁文件/scripts，不得默认同一 Node 或存在 serve script。A 冻结
+正式基线：图像来自运行中捕获或用户提供的多状态截图，样式/结构仍须检索 A 代码；
+截图与代码矛盾以代码为准。B 验证 frozen install、build/dev 和 host 入口。禁止
+改写正式 A 的 lockfile。A/B 不同 Node 时用独立进程。写 <RUNTIME_MANIFEST>。
+管理员权限、私服/VPN/证书或登录验证才请求人工。
 
 视觉处理链门禁（硬停止；视觉事实协议见通用头）：
 - 先证明本会话可追溯图像测量（读图 / OCR / 颜色 / 像素或感知差异，或独立多模态）。
 - 失败：visual_chain=unavailable，terminal=blocked:visual-chain；截图只归档；
   不得 visual pass、不得 design ready、不得进入 Wave 3。
-- A 无法运行或无法冻结多状态基线：terminal=blocked:visual-baseline，同样停止。
-A 仍在运行也不能放行：没有测量链就不能声称 strict parity。
+- 无法冻结多状态基线（Agent 未能从运行中 A 捕获所需状态，且用户未提供覆盖这些
+  状态、来自当前 revision 运行中 A 的截图）：terminal=blocked:visual-baseline，
+  同样停止。
+A 仍在运行也不能放行：没有测量链就不能声称 strict parity。用户截图不能跳过
+代码检索，也不能覆盖与代码矛盾的颜色/字体/图标/结构。
 
 按 Skill 契约完成 source_entry / B 挂载链路、功能闭包、style_closure、
 runtime/依赖/fallback，以及（链可用时）strict-parity 视觉契约和独立状态基线。
-颜色用 A 计算样式；字体与图标保留 A 内容身份。
+颜色以 A 代码与（可得时）计算样式为准；字体与图标保留 A 内容身份。用户截图
+不得覆盖这些代码事实。
 
 生成并校验 assess packet、runtime、visual contract、baseline 到 <DOMAIN_ROOT>。
 链不可用仍可写评估事实，视觉结论保持 blocked。意图草稿不成立则按通用头回流
@@ -340,7 +352,8 @@ source/host entry、closure/runtime/baseline、terminal、blockers。
 然后停止。
 ```
 
-若 A 无法运行，必须阻塞“样式不变”结论。
+若未能从运行中 A 得到覆盖所需状态的图像，且用户也未提供当前 revision 运行中
+A 的多状态截图，必须阻塞“样式不变”结论。仅有截图而未经代码检索，同样阻塞。
 
 ## 4. Wave 3：迁移领域设计
 
@@ -444,8 +457,9 @@ Preflight：实施 go 绑定当前 revision；A 只读；B 用户改动受保护
 接受冲突；baseline/runtime 有效。
 
 切到 B 声明的 Node 与包管理器；仅 node_modules 缺失、Node/包管理器变化或 lock
-变化时 frozen install。启动 B 的 dev script，写入 <RUNTIME_MANIFEST>。参考 B
-禁止 npm install / npm run serve。A 严格只读，不重装不重启。
+变化时 frozen install。启动 B 的 dev script，写入 <RUNTIME_MANIFEST>。
+禁止使用 B 仓库拒绝的包管理器或 script 名（以 packageManager / preinstall /
+scripts 为准）。A 严格只读，不重装不重启。
 
 严格按 tasks.md：适用时 RED→GREEN→REFACTOR；一次一个 ready task；只改 B 获批
 范围；验证通过后才勾选。范围问题回 Wave 4；设计/兼容/回滚/任务问题回 Wave 5。
@@ -502,7 +516,9 @@ A 默认消费已冻结基线；A baseline stale 时返回 Wave 2。
 path+digest。
 
 artifact_directory 固定为 <DOMAIN_ROOT>。更新并校验 runtime/visual evidence 和
-verify domain packet，运行迁移 Skill 自带的三个验证器。
+verify domain packet。运行 migrate Skill 脚本：
+validate_runtime_evidence.mjs、validate_visual_evidence.mjs、
+validate_domain_packet.mjs。
 
 只有当前 revision 上 functional、visual、runtime/build、permission、rollback
 全部通过，style_closure complete 且无 blocking residual，domain verification
@@ -567,7 +583,7 @@ iframe 或下线 A；这些需要后续单独授权。
 ### 使用者
 
 - 四个必填值只填一次；每个 Wave 只复制通用头和一个增量提示词。
-- 不需要理解或操作内部工件。
+- 可提供当前 revision 运行中 A 的多状态截图；不需要理解或操作内部工件。
 - 只处理阻塞问题和两次批准（Wave 4 规格、Wave 5 实施）。
 - 每个阶段都有明确产物、停止点和下一步，可在中断后恢复。
 
@@ -585,4 +601,5 @@ iframe 或下线 A；这些需要后续单独授权。
 通过时，这套编排可以对“功能不变、迁入内容样式不变”给出证据化结论。
 
 缺少真实 A 基线、确定性数据、权限环境、字体或原始图标时必须明确阻塞，不能
-用代码审查、单张截图、功能 E2E 或“看起来相似”代替严格迁移结论。
+用代码审查、单张截图、功能 E2E 或“看起来相似”代替严格迁移结论。用户提供的
+截图必须与代码检索并行；与代码矛盾时以代码为准，截图本身不能构成 visual pass。
