@@ -30,8 +30,12 @@ Before analysis (including manifest-only reads), run
 `references/environment-preflight.md` / `scripts/preflight.py`. Missing Node
 (or project pin probe), package manager detection, or Python → batch-wide
 `analysis_status=blocked`; list gaps in chat; **do not write** reports. Host
-Node vs `engines` mismatch is recorded, not a hard block. Network probe runs in
-the same wave; dual registry+docs failure follows the offline confirm gate.
+Node vs project declarations mismatch is recorded, not by itself a hard block.
+Treat Node as a two-plane decision: record the current project's effective Node
+contract separately from the selected target toolchain's `engines.node`
+intersection. An unknown target range or unresolved current→target conflict
+keeps the handoff frozen. Network probe runs in the same wave; dual
+registry+docs failure follows the offline confirm gate.
 
 ## Boundaries
 
@@ -79,20 +83,27 @@ build variant × scope** (A→B: workspace=A; scope often `page-closure`).
 2. Light inventory (`scripts/profile_inventory.py`). Cover
    `references/subsystem-inventory.md`. Record `lockfile_status`
    `present|absent|unparsed`; gate stays `frozen` unless `present`.
-3. Classify subsystems (`risk`, readiness, `required_for_path`) and Vue-related
+3. Build the Node compatibility matrix from current pins/`engines`/CI/container
+   evidence and the **exact selected target versions** of the build, test, SSR,
+   and package-manager toolchain. Do not call this a universal “Vue 3 minimum”:
+   use registry metadata and official docs as of `evidence_as_of`. Classify it
+   as `compatible` / `upgrade-required` / `conflict` / `unknown`; put any Node
+   transition under the `build` subsystem and name `same-node`,
+   `upgrade-before-vue`, or `temporary-dual-node` strategy.
+4. Classify subsystems (`risk`, readiness, `required_for_path`) and Vue-related
    packages (`ready` / `needs-major` / `replace` / `unknown` / `unused`).
-4. Pick `recommended_path` + three axes; name recipes; never execute.
-5. Map impact (`references/impact-and-validation.md`); cite
+5. Pick `recommended_path` + three axes; name recipes; never execute.
+6. Map impact (`references/impact-and-validation.md`); cite
    `references/official-docs-index.md`. Fact vs inference. Composition rewrite
    out of scope. Complete §10 人工补搜检查. Register every `Vue.prototype.$*`
    and `globalProperties` / `provide/inject` target. UI/CSS triggers → full
    `ui_visual_risk` block (not a one-liner).
-6. Draft packet + Decision Records (path + High/blocker /
+7. Draft packet + Decision Records (path + High/blocker /
    `required_for_path=yes`).
-7. Confirmation queue (`references/human-confirmation-gates.md`): Wave 1 path;
+8. Confirmation queue (`references/human-confirmation-gates.md`): Wave 1 path;
    after path decided, Wave 2+ ready High/blocker / required subsystems.
    Record → regenerate → Agent review → `analysis_status=complete`.
-8. Stop. Do not open implementation plans.
+9. Stop. Do not open implementation plans.
 
 「继续 / 全部放行 / 别再问了 / 全部纳入」**≠** proceed token. Re-prompt
 verbatim `proceed:path:…` / `proceed:subsystem:…` menus.
@@ -141,8 +152,9 @@ blocker / required rows `decided` — still never install/codemod from this skil
 ## Completion gate
 
 Preflight OK; profiled; path+axes; recipes named not run; Composition scoped
-out; High/blocker/required queued+recorded; queue clear; DRs complete;
-validator `0`; Agent review → `analysis_status=complete`.
+out; Node current/target contracts evidenced and transition decided; High /
+blocker / required queued+recorded; queue clear; DRs complete; validator `0`;
+Agent review → `analysis_status=complete`.
 
 ## Context budget and portability
 

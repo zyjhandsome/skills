@@ -27,7 +27,13 @@
 - 项目根路径：
 - 前端 workspace：
 - 环境前置：Node / package manager / Python（PASS 摘要）
-- 主机 Node vs `engines`：
+- host_node_version:
+- current_node_contract:（.nvmrc / .node-version / Volta / engines / CI / container / deploy）
+- current_node_evidence:（区分声明与已知绿色基线）
+- target_node_requirement:（精确目标版本的 engines.node 交集；保留完整联合范围）
+- target_node_sources:（package@version → engines.node / no engines.node + 官方或 registry 证据）
+- node_compatibility_status: compatible / upgrade-required / conflict / unknown
+- node_transition_strategy: same-node / upgrade-before-vue / temporary-dual-node / blocked / undecided
 - lockfile：`<path>` / 无 lockfile（无 lock 时 handoff gate 保持 frozen）
 - lockfile_status: present / absent / unparsed
 - evidence_as_of: YYYY-MM-DD（可与状态表一致复述）

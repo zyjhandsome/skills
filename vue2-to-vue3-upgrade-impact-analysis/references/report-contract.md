@@ -83,6 +83,26 @@ High/blocker 与每个 `required_for_path=yes` 均为 `decided`（`deferred` 只
 `frozen`。
 §1 可复述 `evidence_as_of`；若复述则必须与状态表一致。
 
+§1 还必须分别记录当前与目标 Node 契约，禁止只写“Node 18 PASS”或笼统的
+“Vue3 最低 Node”：
+
+- `host_node_version:` 当前分析进程的 `node -v`
+- `current_node_contract:` 当前项目 pins / `engines` / CI / 容器 / 部署声明的综合结论
+- `current_node_evidence:` 逐项来源，并区分“声明”与“已知绿色基线”
+- `target_node_requirement:` 已选目标工具链精确版本的 `engines.node` 可满足交集
+- `target_node_sources:` `package@version → engines.node`（无字段也要明确写）及官方/registry 证据
+- `node_compatibility_status:` `compatible` / `upgrade-required` / `conflict` / `unknown`
+- `node_transition_strategy:` `same-node` / `upgrade-before-vue` /
+  `temporary-dual-node` / `blocked` / `undecided`
+
+`target_node_requirement` 必须保留完整 semver 联合范围，不能把
+`^20.19.0 || >=22.12.0` 简化为“Node 20+”。非
+`deferred-inventory-only` 的 `analysis_status=complete` 不允许目标要求或
+`node_compatibility_status` 仍为 `unknown`。
+`node_compatibility_status=conflict|unknown` 时 handoff gate 必须 `frozen`；
+`upgrade-required` 时 §4 的 `build` 必须为 `high|blocker`、
+`required_for_path=yes`，并按普通 High 子系统进入 §7 与 Decision Record。
+
 当 `推荐路径 id` 为 `host-port-direct` 或 `topology_axis: host-port` 时，§1 **额外**
 必须出现具体值（禁止占位）：
 

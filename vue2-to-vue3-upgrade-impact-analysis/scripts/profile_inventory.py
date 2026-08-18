@@ -89,6 +89,10 @@ REQUIRE_BINDING = re.compile(
     r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\(\s*['\"]([^'\"]+)['\"]\s*\)"
 )
 GLOBAL_MOUNT_CONSUMER = re.compile(r"\bthis\.(\$[A-Za-z_$][\w$]*)\b")
+NODE_DECLARATION_PATTERN = re.compile(
+    r"(?:node-version|NODE_VERSION|FROM\s+node:|setup-node|nodejs_version)",
+    re.I,
+)
 VUE_BUILTIN_INSTANCE_PROPERTIES = {
     "$attrs", "$children", "$data", "$delete", "$destroy", "$el", "$emit",
     "$forceUpdate", "$listeners", "$mount", "$nextTick", "$off", "$on", "$once",
@@ -118,6 +122,56 @@ def deps_map(pkg: dict) -> dict[str, str]:
         if isinstance(block, dict):
             merged.update({str(name): str(version) for name, version in block.items()})
     return merged
+
+
+def node_contract_evidence(root: Path, pkg: dict) -> dict:
+    """Collect bounded Node declarations without treating them as build proof."""
+    candidates = [
+        root / "Dockerfile",
+        root / "docker-compose.yml",
+        root / "docker-compose.yaml",
+        root / ".gitlab-ci.yml",
+        root / "azure-pipelines.yml",
+        root / "netlify.toml",
+        root / "vercel.json",
+    ]
+    for directory in (root / ".github" / "workflows", root / ".devcontainer"):
+        if directory.is_dir():
+            candidates.extend(path for path in directory.rglob("*") if path.is_file())
+    declarations: list[dict[str, object]] = []
+    seen: set[Path] = set()
+    for path in candidates:
+        if path in seen or not path.is_file():
+            continue
+        seen.add(path)
+        try:
+            if path.stat().st_size > 512_000:
+                continue
+            lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+        except OSError:
+            continue
+        for line_number, line in enumerate(lines, 1):
+            if NODE_DECLARATION_PATTERN.search(line):
+                declarations.append(
+                    {
+                        "path": path.relative_to(root).as_posix(),
+                        "line": line_number,
+                        "text": line.strip()[:300],
+                    }
+                )
+                if len(declarations) >= 50:
+                    break
+        if len(declarations) >= 50:
+            break
+    volta = pkg.get("volta") if isinstance(pkg.get("volta"), dict) else {}
+    engines = pkg.get("engines") if isinstance(pkg.get("engines"), dict) else {}
+    return {
+        "package_json_engines_node": engines.get("node"),
+        "package_json_volta_node": volta.get("node"),
+        "config_declarations": declarations,
+        "known_green_baseline": None,
+        "note": "declarations are contract signals; they do not prove a green build",
+    }
 
 
 def major_from_spec(spec: str) -> int | None:
@@ -481,6 +535,7 @@ def profile(root: Path) -> dict:
             ".nvmrc": (root / ".nvmrc").read_text(encoding="utf-8").strip() if (root / ".nvmrc").is_file() else None,
             ".node-version": (root / ".node-version").read_text(encoding="utf-8").strip() if (root / ".node-version").is_file() else None,
         },
+        "node_contract_evidence": node_contract_evidence(root, pkg),
         "vue_version_spec": vue_spec or None,
         # Contract: string major ("2" / "3"), never int — matches dual-entry schema.
         "vue_major": _string_vue_major(

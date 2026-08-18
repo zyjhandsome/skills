@@ -29,6 +29,13 @@ MINIMAL_SECTIONS = """
 ## 1. 基线与假设
 - lockfile：`package-lock.json`
 - lockfile_status: present
+- host_node_version: v18.20.4
+- current_node_contract: >=18 from engines and CI
+- current_node_evidence: engines declaration; CI Node 18 green build
+- target_node_requirement: ^18.0.0 || >=20.0.0
+- target_node_sources: vue@3.5.18 no engines.node; vite@5.4.19 engines.node ^18.0.0 || >=20.0.0; https://registry.npmjs.org/vite/5.4.19
+- node_compatibility_status: compatible
+- node_transition_strategy: same-node
 - 说明：分析说明（非占位）
 ## 2. 仓画像与依赖就绪度
 | 包名 | 当前版本 | Vue3 就绪度 | 建议 | 证据 |
@@ -391,6 +398,87 @@ class ValidateReportTests(unittest.TestCase):
             result = self._run(str(report))
             self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
             self.assertIn("lockfile", result.stdout.lower())
+
+    def test_rejects_missing_target_node_requirement(self) -> None:
+        body = _status_block(
+            analysis="partial", decision="needs_choice", gate="frozen"
+        ) + MINIMAL_SECTIONS.format(
+            subsystem_table=DEFAULT_SUBSYSTEM_ROWS,
+            queue_table=(
+                "| 单元 | 类型 | 状态 | 问题 | 选项 |\n"
+                "|---|---|---|---|---|\n"
+                "| `path:compat-big-bang` | path | ready | ok | "
+                "`proceed:path:compat-big-bang` / `defer` |"
+            ),
+        )
+        body = body.replace("- target_node_requirement: ^18.0.0 || >=20.0.0\n", "")
+        with tempfile.TemporaryDirectory() as tmp:
+            report = Path(tmp) / "report.md"
+            report.write_text(body, encoding="utf-8")
+            result = self._run(str(report))
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertIn("target_node_requirement", result.stdout)
+
+    def test_rejects_ready_gate_with_unknown_node_matrix(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            body = _status_block(report_path=str(root.resolve())) + MINIMAL_SECTIONS.format(
+                subsystem_table=DEFAULT_SUBSYSTEM_ROWS,
+                queue_table=(
+                    "| 单元 | 类型 | 状态 | 问题 | 选项 |\n"
+                    "|---|---|---|---|---|\n"
+                    "| `path:compat-big-bang` | path | decided | ok | proceed:path:compat-big-bang |"
+                ),
+            )
+            body = body.replace(
+                "- target_node_requirement: ^18.0.0 || >=20.0.0",
+                "- target_node_requirement: unknown (target versions not selected)",
+            ).replace(
+                "- node_compatibility_status: compatible",
+                "- node_compatibility_status: unknown",
+            ).replace(
+                "- node_transition_strategy: same-node",
+                "- node_transition_strategy: undecided",
+            ).replace(
+                f"| report_path | {root.resolve()} |",
+                f"| report_path | {root.resolve()} |\n\n**横幅：** 实施需另授权 handoff only",
+            )
+            report = root / "vue2-to-vue3-upgrade-report.md"
+            report.write_text(body, encoding="utf-8")
+            records = root / "decision-records"
+            records.mkdir()
+            (records / "migration-path__compat-big-bang.md").write_text(
+                _record("path:compat-big-bang"), encoding="utf-8"
+            )
+            result = self._run("--evidence-dir", str(root))
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertIn("Node status conflict/unknown", result.stdout)
+
+    def test_upgrade_required_node_makes_build_high_and_required(self) -> None:
+        body = _status_block(
+            analysis="partial", decision="needs_choice", gate="frozen"
+        ) + MINIMAL_SECTIONS.format(
+            subsystem_table=DEFAULT_SUBSYSTEM_ROWS,
+            queue_table=(
+                "| 单元 | 类型 | 状态 | 问题 | 选项 |\n"
+                "|---|---|---|---|---|\n"
+                "| `path:compat-big-bang` | path | ready | ok | "
+                "`proceed:path:compat-big-bang` / `defer` |"
+            ),
+        )
+        body = body.replace(
+            "- node_compatibility_status: compatible",
+            "- node_compatibility_status: upgrade-required",
+        ).replace(
+            "- node_transition_strategy: same-node",
+            "- node_transition_strategy: upgrade-before-vue",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            report = Path(tmp) / "report.md"
+            report.write_text(body, encoding="utf-8")
+            result = self._run(str(report))
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertIn("requires §4 build risk", result.stdout)
 
     def test_rejects_ready_when_no_lockfile(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

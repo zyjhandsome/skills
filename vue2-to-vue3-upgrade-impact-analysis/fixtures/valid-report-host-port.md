@@ -30,6 +30,13 @@
 - batch_scope: page-closure
 - 前端 workspace：`vue2-source`（只读）
 - 环境前置：Node 18 / npm / Python PASS
+- host_node_version: `v18.20.4`
+- current_node_contract: B `>=18`（pnpm + CI）；A Node 16 仅用于只读源基线
+- current_node_evidence: B `engines.node >=18` + CI Node 18 build 为已知绿色基线；A `.nvmrc=16` 为声明
+- target_node_requirement: `^18.0.0 || >=20.0.0`
+- target_node_sources: `vue@3.5.18 → no engines.node; vite@5.4.19 → ^18.0.0 || >=20.0.0; https://registry.npmjs.org/vite/5.4.19`
+- node_compatibility_status: compatible
+- node_transition_strategy: same-node
 - 构建变体 / 批次范围：`default` / `page-closure`
 - 入口：host-port
 - lockfile：B `pnpm-lock.yaml`（A 可能无 lock）

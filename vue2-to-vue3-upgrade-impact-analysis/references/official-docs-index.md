@@ -69,6 +69,9 @@ the Vue 3 runtime. Compile/runtime **warnings drive the remaining edit backlog**
 | `ui` (Element) | https://element-plus.org/en-US/guide/migration.html | Element UI→Plus |
 | `test` | https://test-utils.vuejs.org/migration/ | `@vue/test-utils` v1→v2 |
 | `build` (Vite) | https://vite.dev/guide/ | Prefer with recommendations (`vitejs.dev` redirects here) |
+| `build` Node support (selected Vite major) | https://vite.dev/guide/migration | Follow the migration page for the exact selected major; do not copy the latest major's Node floor onto older targets |
+| Vue quick start toolchain | https://vuejs.org/guide/quick-start | Requirement applies to the current create-vue/Vite scaffold, not a universal floor for every Vue 3 app |
+| npm registry metadata | `https://registry.npmjs.org/<package>/<version>` | Exact `engines.node` for every selected target package; record absent fields explicitly |
 | Vue 2 EOL (`2023-12-31`) | https://v3-migration.vuejs.org/ | Timing / Extended LTS context only |
 
 Other UI stacks (Ant Design Vue, Vuetify, …): use that library’s own migration

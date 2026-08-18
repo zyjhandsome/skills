@@ -51,6 +51,13 @@ class ProfileInventoryTests(unittest.TestCase):
             (root / "package.json").write_text(
                 json.dumps(pkg), encoding="utf-8"
             )
+            workflows = root / ".github" / "workflows"
+            workflows.mkdir(parents=True)
+            (workflows / "ci.yml").write_text(
+                "steps:\n  - uses: actions/setup-node@v4\n    with:\n      node-version: 18\n",
+                encoding="utf-8",
+            )
+            (root / "Dockerfile").write_text("FROM node:18-alpine\n", encoding="utf-8")
             data = self._run_profile(root)
             self.assertEqual(data["vue_major"], "2")
             self.assertIsInstance(data["vue_major"], str)
@@ -58,6 +65,12 @@ class ProfileInventoryTests(unittest.TestCase):
             self.assertEqual(data["ui_stack"], "element-ui")
             self.assertEqual(data["store"], "vuex")
             self.assertEqual(data["lockfile_status"], "absent")
+            node_declarations = data["node_contract_evidence"]["config_declarations"]
+            self.assertTrue(
+                any(item["path"] == ".github/workflows/ci.yml" for item in node_declarations)
+            )
+            self.assertTrue(any(item["path"] == "Dockerfile" for item in node_declarations))
+            self.assertIsNone(data["node_contract_evidence"]["known_green_baseline"])
             self.assertEqual(
                 data["related_packages"]["element-ui"]["readiness"], "replace"
             )

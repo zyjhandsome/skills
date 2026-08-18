@@ -75,6 +75,28 @@ AXIS_MARKERS = (
     ("topology_axis:", {"single-cutover", "coexist", "host-port"}),
 )
 LOCKFILE_STATUSES = {"present", "absent", "unparsed"}
+NODE_COMPATIBILITY_STATUSES = {
+    "compatible",
+    "upgrade-required",
+    "conflict",
+    "unknown",
+}
+NODE_TRANSITION_STRATEGIES = {
+    "same-node",
+    "upgrade-before-vue",
+    "temporary-dual-node",
+    "blocked",
+    "undecided",
+}
+NODE_BASELINE_FIELDS = (
+    "host_node_version",
+    "current_node_contract",
+    "current_node_evidence",
+    "target_node_requirement",
+    "target_node_sources",
+    "node_compatibility_status",
+    "node_transition_strategy",
+)
 PATH_IDS = {
     "compat-big-bang",
     "direct-vue3",
@@ -434,6 +456,61 @@ def parse_lockfile_status(baseline: str, result: ReportResult) -> str | None:
         )
         return None
     return value
+
+
+def parse_node_matrix(baseline: str, result: ReportResult) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for name in NODE_BASELINE_FIELDS:
+        match = re.search(
+            rf"(?im)^\s*[-*]?\s*`?{re.escape(name)}`?\s*[:：]\s*(.+?)\s*$",
+            baseline,
+        )
+        if not match:
+            result.error(f"§1 missing structured {name}:")
+            continue
+        value = match.group(1).strip().strip("`").strip()
+        if not value or re.fullmatch(r"(?:<[^>]+>|tbd|todo|待补)", value, re.I):
+            result.error(f"§1 {name} must contain a concrete value or explicit unknown")
+            continue
+        values[name] = value
+
+    status = values.get("node_compatibility_status", "").lower()
+    strategy = values.get("node_transition_strategy", "").lower()
+    target_sources = values.get("target_node_sources", "")
+    if target_sources and not HTTP_URL_RE.search(target_sources):
+        result.error("§1 target_node_sources must include an official/registry http(s) URL")
+    if status and status not in NODE_COMPATIBILITY_STATUSES:
+        result.error(
+            "§1 node_compatibility_status must be one of "
+            f"{sorted(NODE_COMPATIBILITY_STATUSES)}"
+        )
+    if strategy and strategy not in NODE_TRANSITION_STRATEGIES:
+        result.error(
+            "§1 node_transition_strategy must be one of "
+            f"{sorted(NODE_TRANSITION_STRATEGIES)}"
+        )
+    if status == "compatible" and strategy != "same-node":
+        result.error(
+            "§1 compatible Node matrix requires node_transition_strategy=same-node"
+        )
+    if status == "upgrade-required" and strategy not in {
+        "upgrade-before-vue",
+        "temporary-dual-node",
+    }:
+        result.error(
+            "§1 upgrade-required Node matrix requires upgrade-before-vue or "
+            "temporary-dual-node"
+        )
+    if status == "conflict" and strategy != "blocked":
+        result.error(
+            "§1 conflicting Node matrix requires node_transition_strategy=blocked"
+        )
+    if status == "unknown" and strategy not in {"undecided", "blocked"}:
+        result.error(
+            "§1 unknown Node matrix requires "
+            "node_transition_strategy=undecided|blocked"
+        )
+    return values
 
 
 def parse_named_lockfile_status(baseline: str, name: str) -> str | None:
@@ -800,6 +877,7 @@ def validate_report(path: Path) -> ReportResult:
     if "lockfile" not in baseline.lower():
         result.error("§1 must state lockfile status (e.g. path present, or 无 lockfile)")
     lock_status = parse_lockfile_status(baseline, result)
+    node_matrix = parse_node_matrix(baseline, result)
     parse_evidence_as_of_baseline(baseline, status.get("evidence_as_of"), result)
 
     path_block = sections.get("推荐迁移路径", "")
@@ -891,6 +969,35 @@ def validate_report(path: Path) -> ReportResult:
         result.error("batch_implementation_gate=ready requires complete/decided")
     if gate == "ready" and blocked_or_deferred:
         result.error("batch_implementation_gate=ready forbidden while blocked/deferred rows remain")
+    node_status = node_matrix.get("node_compatibility_status", "").lower()
+    target_node_requirement = node_matrix.get("target_node_requirement", "")
+    target_node_unknown = bool(
+        re.search(r"(?i)\bunknown\b|未知|未定|未解析", target_node_requirement)
+    )
+    if (
+        analysis == "complete"
+        and recommended_path != "deferred-inventory-only"
+        and (target_node_unknown or node_status == "unknown")
+    ):
+        result.error(
+            "complete analysis requires a resolved target_node_requirement and "
+            "node_compatibility_status"
+        )
+    if gate == "ready" and node_status in {"conflict", "unknown"}:
+        result.error(
+            "batch_implementation_gate=ready forbidden for Node status conflict/unknown"
+        )
+    if node_status == "upgrade-required":
+        build = next((row for row in subsystems if row["id"] == "build"), None)
+        if (
+            not build
+            or build["risk"] not in HIGH_BLOCKER_RISKS
+            or build["required_for_path"] != "yes"
+        ):
+            result.error(
+                "node_compatibility_status=upgrade-required requires §4 build risk "
+                "high|blocker and required_for_path=yes"
+            )
     host_lock = parse_named_lockfile_status(baseline, "host_lockfile_status")
     source_lock = parse_named_lockfile_status(baseline, "source_lockfile_status")
     is_host_port = (
