@@ -95,7 +95,10 @@ build variant × scope** (A→B: workspace=A; scope often `page-closure`).
    `upgrade-before-vue`, or `temporary-dual-node` strategy.
 4. Classify subsystems (`risk`, readiness, `required_for_path`) and Vue-related
    packages (`ready` / `needs-major` / `replace` / `unknown` / `unused`).
-5. Pick `recommended_path` + three axes; name recipes; never execute.
+5. Pick `recommended_path` + three axes; name recipes; never execute. Give every
+   named recipe one `recipe_constraints` row (`after` + `atomic`) per
+   `references/implementation-sequencing-constraints.md` — order and atomicity
+   are code facts, not a schedule.
 6. Map impact (`references/impact-and-validation.md`); cite
    `references/official-docs-index.md`. Fact vs inference. Composition rewrite
    out of scope. Complete §10 人工补搜检查. Register every `Vue.prototype.$*`
@@ -163,7 +166,7 @@ Agent review → `analysis_status=complete`.
 ## Context budget and portability
 
 Return `upgrade-summary.json` by default (includes `lockfile_status`,
-`named_recipes`, `named_validations`). Load the full report only for a named
+`named_recipes`, `named_validations`, `recipe_constraints`). Load the full report only for a named
 section, one decision record for a named decision, and inventory only for a
 named evidence question. The output bundle must validate and remain useful
 when every other Skill folder is absent.
@@ -175,6 +178,7 @@ when every other Skill folder is absent.
 
 **On demand:** `references/dual-entry-and-batching.md`,
 `references/migration-path-ladder.md`, `references/impact-and-validation.md`,
+`references/implementation-sequencing-constraints.md`,
 `references/official-docs-index.md`, `references/named-migration-recipes.md`,
 `references/common-upgrade-patterns.md`,
 `references/next-action-choice-menus.md`, `references/report-contract.md`,

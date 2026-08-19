@@ -225,6 +225,66 @@ class ProfileInventoryTests(unittest.TestCase):
             ]
             self.assertIn("deployment/Dockerfile", node_paths)
 
+    def test_interaction_assertion_candidates_locate_every_silent_break(self) -> None:
+        pkg = {"name": "assertion-web", "dependencies": {"vue": "2.7.16"}}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "package.json").write_text(json.dumps(pkg), encoding="utf-8")
+            src = root / "src"
+            src.mkdir()
+            (src / "Picker.vue").write_text(
+                "<template>\n"
+                '  <el-input @click.native="go" />\n'
+                '  <el-input @keyup.13="go" />\n'
+                "  <transition name=\"slide\"><div /></transition>\n"
+                "</template>\n"
+                "<script>\n"
+                "export default {\n"
+                "  model: { prop: 'value', event: 'change' },\n"
+                "}\n"
+                "</script>\n",
+                encoding="utf-8",
+            )
+            (src / "Order.vue").write_text(
+                '<template><a @click.native="save" /></template>\n',
+                encoding="utf-8",
+            )
+
+            data = self._run_profile(root)
+
+            candidates = data["source_impact_signals"]["interaction_assertion_candidates"]
+            self.assertEqual(candidates["cap"], 200)
+            self.assertFalse(candidates["truncated"])
+            rows = candidates["rows"]
+            located = {(row["signal"], row["file"], row["line"]) for row in rows}
+            self.assertIn(("native_modifier", "src/Picker.vue", 2), located)
+            self.assertIn(("keycode_modifier", "src/Picker.vue", 3), located)
+            self.assertIn(("transition_component", "src/Picker.vue", 4), located)
+            self.assertIn(("model_option", "src/Picker.vue", 8), located)
+            self.assertIn(("native_modifier", "src/Order.vue", 1), located)
+            # Every hit is listed, not only the first five samples of each signal.
+            self.assertEqual(
+                len([row for row in rows if row["signal"] == "native_modifier"]), 2
+            )
+            self.assertEqual(
+                sorted(rows, key=lambda row: (row["file"], row["line"], row["signal"])),
+                rows,
+            )
+            for row in rows:
+                self.assertTrue(row["match"].strip())
+                self.assertLessEqual(len(row["match"]), 160)
+
+    def test_interaction_candidates_empty_without_source_roots(self) -> None:
+        pkg = {"name": "no-src", "dependencies": {"vue": "2.7.16"}}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "package.json").write_text(json.dumps(pkg), encoding="utf-8")
+
+            data = self._run_profile(root)
+
+            candidates = data["source_impact_signals"]["interaction_assertion_candidates"]
+            self.assertEqual(candidates, {"cap": 200, "truncated": False, "rows": []})
+
     def test_marks_malformed_package_lock_unparsed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

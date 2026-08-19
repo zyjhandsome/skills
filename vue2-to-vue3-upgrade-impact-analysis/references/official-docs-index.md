@@ -63,7 +63,7 @@ the Vue 3 runtime. Compile/runtime **warnings drive the remaining edit backlog**
 | `core-vue` migration build | https://v3-migration.vuejs.org/migration-build | `@vue/compat`, warnings, `compatConfig` |
 | Framework recommendations | https://v3-migration.vuejs.org/recommendations | Vite / Pinia / Volar defaults |
 | `router` (3→4) | https://router.vuejs.org/guide/migration/ | Vue Router 3→4 primary cutover |
-| `router` (4→5 note) | https://router.vuejs.org/guide/migration/v4-to-v5 | Optional later minor line; most 3→4 work stays on v4 docs |
+| `router` (4→5 note) | https://router.vuejs.org/guide/migration/v4-to-v5 | v5 is a **major**, not a minor line; most 3→4 work stays on v4 docs, but the installed major must be pinned (see note below) |
 | `store` (Vuex bridge) | https://vuex.vuejs.org/guide/migrating-to-4-0-from-3-x.html | Vuex 3→4 |
 | `store` (Pinia target) | https://pinia.vuejs.org/cookbook/migration-vuex.html | Vuex→Pinia |
 | `ui` (Element) | https://element-plus.org/en-US/guide/migration.html | Element UI→Plus |
@@ -76,6 +76,15 @@ the Vue 3 runtime. Compile/runtime **warnings drive the remaining edit backlog**
 
 Other UI stacks (Ant Design Vue, Vuetify, …): use that library’s own migration
 page; do not invent Element Plus URLs for them.
+
+**`vue-router` major note.** The `latest` dist-tag has moved past v4 (currently
+the v5 line), so a bare `npm i vue-router` resolves to v5, not v4. Two separate
+facts must be recorded, never collapsed into one: the **migration document** for
+a Vue2 workspace is still v3→v4, while the **installed major** is its own
+decision that must be pinned and evidenced from registry metadata at
+`evidence_as_of`. `unplugin-vue-router` is deprecated upstream (merged into
+vuejs/router, its deprecation notice points at the v4→v5 guide) — a hit on it is
+a router-major decision, not a version bump.
 
 ## High-signal breaking checklist
 

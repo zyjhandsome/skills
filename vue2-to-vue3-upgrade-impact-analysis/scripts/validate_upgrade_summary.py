@@ -23,6 +23,102 @@ ENUMS = {
     "lockfile_status": {"present", "absent", "unparsed"},
 }
 RECIPE_ID = re.compile(r"^[A-Za-z][A-Za-z0-9_-]*$")
+# Fixed implementation-stage phase order. A recipe may only be sequenced after one
+# of these anchors or after another named recipe.
+SEQUENCE_ANCHORS = (
+    "baseline-green",
+    "visual-baseline",
+    "node-lane",
+    "first-install",
+    "runtime-cutover",
+    "post-cutover",
+)
+
+
+def first_cycle(edges: dict[str, list[str]]) -> list[str]:
+    """Return one recipe→recipe cycle as a path, or an empty list when acyclic."""
+    state: dict[str, int] = {}
+    stack: list[str] = []
+
+    def visit(node: str) -> list[str]:
+        state[node] = 1
+        stack.append(node)
+        for following in edges.get(node, []):
+            if state.get(following) == 1:
+                return stack[stack.index(following) :] + [following]
+            if state.get(following, 0) == 0 and following in edges:
+                found = visit(following)
+                if found:
+                    return found
+        stack.pop()
+        state[node] = 2
+        return []
+
+    for node in edges:
+        if state.get(node, 0) == 0:
+            found = visit(node)
+            if found:
+                return found
+    return []
+
+
+def validate_recipe_constraints(data: Any, recipes: list[str], status: Any) -> list[str]:
+    errors: list[str] = []
+    value = data.get("recipe_constraints")
+    if value is None:
+        if status == "complete" and recipes:
+            errors.append("complete summary requires recipe_constraints")
+        return errors
+    if not isinstance(value, list) or len(value) > 20:
+        errors.append("recipe_constraints must be an array with at most 20 items")
+        return errors
+    allowed_after = set(SEQUENCE_ANCHORS) | set(recipes)
+    edges: dict[str, list[str]] = {}
+    seen: list[str] = []
+    for item in value:
+        if not isinstance(item, dict):
+            errors.append("recipe_constraints items must be objects")
+            return errors
+        raw_id = item.get("id")
+        if not isinstance(raw_id, str) or not RECIPE_ID.fullmatch(raw_id.strip()):
+            errors.append("recipe_constraints[].id must be a kebab/ascii recipe id")
+            continue
+        recipe_id = raw_id.strip()
+        seen.append(recipe_id)
+        if item.get("atomic") not in {"yes", "no"}:
+            errors.append(f"recipe_constraints[{recipe_id}].atomic must be yes or no")
+        after = item.get("after")
+        if not isinstance(after, list) or not all(isinstance(entry, str) for entry in after):
+            errors.append(f"recipe_constraints[{recipe_id}].after must be a string array")
+            continue
+        cleaned = [entry.strip() for entry in after]
+        unknown = sorted({entry for entry in cleaned if entry not in allowed_after})
+        if unknown:
+            errors.append(
+                f"recipe_constraints[{recipe_id}].after must reference a sequence anchor "
+                f"{list(SEQUENCE_ANCHORS)} or a named recipe: " + ", ".join(unknown)
+            )
+        if recipe_id in cleaned:
+            errors.append(f"recipe_constraints[{recipe_id}].after must not reference itself")
+        edges[recipe_id] = [entry for entry in cleaned if entry in set(recipes)]
+    duplicates = sorted({item for item in seen if seen.count(item) > 1})
+    if duplicates:
+        errors.append("recipe_constraints ids must be unique: " + ", ".join(duplicates))
+    if recipes:
+        missing = sorted(set(recipes) - set(seen))
+        if missing:
+            errors.append(
+                "recipe_constraints must cover each named_recipes id: " + ", ".join(missing)
+            )
+        extra = sorted(set(seen) - set(recipes))
+        if extra:
+            errors.append(
+                "recipe_constraints must not add ids outside named_recipes: " + ", ".join(extra)
+            )
+    cycle = first_cycle(edges)
+    if cycle:
+        errors.append("recipe_constraints after edges must not form a cycle: " + " -> ".join(cycle))
+    return errors
 
 
 def validate(data: Any, raw_size: int) -> list[str]:
@@ -91,6 +187,11 @@ def validate(data: Any, raw_size: int) -> list[str]:
             errors.append(
                 "named_validations must mention each named_recipes id: " + ", ".join(missing)
             )
+    errors.extend(
+        validate_recipe_constraints(
+            data, [item.strip() for item in recipes if isinstance(item, str)], status
+        )
+    )
     generated_at = data.get("generated_at")
     if not isinstance(generated_at, str) or not RFC3339.match(generated_at):
         errors.append("generated_at must be RFC3339")

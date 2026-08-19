@@ -65,6 +65,48 @@ class ValidateUpgradeSummaryTests(unittest.TestCase):
         errors = MODULE.validate(self.data, self.raw_size)
         self.assertTrue(any("lockfile_status" in e for e in errors))
 
+    def test_complete_requires_recipe_constraints(self) -> None:
+        del self.data["recipe_constraints"]
+        errors = MODULE.validate(self.data, self.raw_size)
+        self.assertTrue(any("requires recipe_constraints" in e for e in errors))
+
+    def test_recipe_constraints_must_cover_every_named_recipe(self) -> None:
+        self.data["recipe_constraints"] = self.data["recipe_constraints"][:2]
+        errors = MODULE.validate(self.data, self.raw_size)
+        self.assertTrue(any("must cover each named_recipes id" in e for e in errors))
+
+    def test_recipe_constraints_reject_unknown_after_target(self) -> None:
+        self.data["recipe_constraints"][0]["after"] = ["after-lunch"]
+        errors = MODULE.validate(self.data, self.raw_size)
+        self.assertTrue(any("after-lunch" in e for e in errors))
+
+    def test_recipe_constraints_reject_self_reference(self) -> None:
+        self.data["recipe_constraints"][0]["after"] = ["webpack-to-vite"]
+        errors = MODULE.validate(self.data, self.raw_size)
+        self.assertTrue(any("must not reference itself" in e for e in errors))
+
+    def test_recipe_constraints_reject_cycle(self) -> None:
+        self.data["recipe_constraints"] = [
+            {"id": "webpack-to-vite", "after": ["manual-router4"], "atomic": "yes"},
+            {"id": "vue-compat", "after": ["first-install"], "atomic": "yes"},
+            {"id": "gogocode-element", "after": ["webpack-to-vite"], "atomic": "no"},
+            {"id": "manual-router4", "after": ["gogocode-element"], "atomic": "yes"},
+        ]
+        errors = MODULE.validate(self.data, self.raw_size)
+        self.assertTrue(any("must not form a cycle" in e for e in errors))
+
+    def test_recipe_constraints_reject_bad_atomic(self) -> None:
+        self.data["recipe_constraints"][0]["atomic"] = "maybe"
+        errors = MODULE.validate(self.data, self.raw_size)
+        self.assertTrue(any("atomic must be yes or no" in e for e in errors))
+
+    def test_recipe_constraints_optional_while_partial(self) -> None:
+        raw = (ROOT / "templates" / "upgrade-summary.json").read_bytes()
+        data = json.loads(raw)
+        del data["recipe_constraints"]
+        errors = MODULE.validate(data, len(raw))
+        self.assertFalse(any("recipe_constraints" in e for e in errors))
+
 
 if __name__ == "__main__":
     unittest.main()

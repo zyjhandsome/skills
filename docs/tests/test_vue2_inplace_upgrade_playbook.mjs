@@ -61,7 +61,7 @@ assert.ok(!/mode=execute|migrate execute/i.test(playbook), "inplace playbook mus
 assert.ok(!playbook.includes("expected_model="), "inplace playbook must stay host-neutral (no Claude Code model pins)");
 assert.ok(playbook.includes("单一模型"), "inplace playbook must run a single model end to end without naming one");
 assert.ok(playbook.includes("不按波换模型"), "inplace playbook must forbid per-wave model switching");
-assert.ok(!playbook.includes("3.5.39"), "playbook must not hardcode a Vue patch version (resolve at analysis time)");
+assert.ok(!/\b3\.5\.\d+\b/.test(playbook), "playbook must not hardcode a Vue patch version (resolve at analysis time)");
 assert.ok(!playbook.includes("frontend-ui-stack-visual-parity"), "inplace playbook must not mention the visual-parity skill");
 
 /**

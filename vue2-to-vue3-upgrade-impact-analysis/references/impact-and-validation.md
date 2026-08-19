@@ -18,6 +18,16 @@
    `人工补搜检查` for residual gaps and non-`vue-*` blockers (`tui-editor`,
    internal plugins, editors, etc.).
 
+   **Interaction assertion candidates:** counts plus five samples per signal are
+   not a closure. `source_impact_signals.interaction_assertion_candidates`
+   locates every `model_option`, `native_modifier`, `keycode_modifier` and
+   `transition_component` hit with file, line and excerpt, bounded by its own
+   `cap` and `truncated` flag (separate from the file-scan `truncated`). Each
+   row needs an interaction-level check named in §8; `truncated: true` means the
+   list is incomplete and must be re-scanned before it is treated as complete.
+   Sequencing and atomicity for these rows:
+   `implementation-sequencing-constraints.md`.
+
    **Silent-break rule:** `model_option` hits must be split into live options
    (a parent consumes the component via `v-model` — Vue3 silently rebinds to
    `modelValue` and the write-back chain goes dead; mark blocker) and dead
@@ -32,6 +42,21 @@
    breaks from memory. Static checklist = candidates; name Migration Build
    warnings / per-component `compatConfig` as the dynamic backlog (do not run)
 5. Inference — label explicitly
+
+**Installed target major vs migration document.** A doc URL pins the interval
+being crossed; it never pins what `npm i <pkg>` resolves to. Every package the
+implementation stage will install needs its target major resolved from registry
+metadata at `evidence_as_of` and written into the packet, and any gap between
+that major and the migration-guide interval is itself a recorded decision. Rules
+and the `peer_conflicts` obligation: `subsystem-inventory.md`.
+
+**Exact-pin peers.** Some Vue packages peer-depend on an exact version rather
+than a range — `@vue/compat` declares `"vue": "<same exact version>"`, not a
+caret range. Where that holds, "keep `vue` / `@vue/compat` / `@vue/compiler-sfc`
+aligned" stops being a discipline the reviewer must enforce and becomes a
+package-manager-enforced constraint: a mismatched pin fails or warns at install
+time instead of drifting silently. Record which alignment rules are
+tool-enforced and which still need a named validation.
 
 ## Impact layers (report §5)
 
@@ -63,6 +88,24 @@ In §1, write concrete lines for `host_node_version`, `current_node_contract`,
   `required_for_path=yes`. Its decision record must cover local development,
   CI, Docker/devcontainer, deployment builders, package-manager/Corepack,
   native addons, caches, and rollback.
+
+### Worked intersection (shape, not a lookup table)
+
+Three selected packages, each with a differently shaped union range, observed on
+one `evidence_as_of`:
+
+```text
+vite@8.2.1      engines.node = ^20.19.0 || >=22.12.0
+vitest@4.1.11   engines.node = ^20.0.0 || ^22.0.0 || >=24.0.0
+vue-i18n@11.4.8 engines.node = >= 22
+```
+
+`vite ∩ vitest` = `^20.19.0 || ^22.12.0 || >=24.0.0` — an operand that appears in
+neither input. Adding `vue-i18n` removes the Node 20 branch entirely, leaving
+`^22.12.0 || >=24.0.0`. Two lessons the packet must reflect: copying any single
+operand ("Node 20+", "^20.19.0 || >=22.12.0") is wrong, and a single library
+major on a subsystem that looks unrelated to the build can delete a whole Node
+lane. Re-resolve these numbers per run; they are a shape, not a fact to reuse.
 
 Name validations for: existing baseline on its current Node; existing baseline
 on the proposed target Node before Vue dependency changes (when feasible);

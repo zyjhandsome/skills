@@ -24,6 +24,12 @@
     "gogocode-element: primary form/table pages render; fail = Element Plus mapping missing",
     "manual-router4: login redirect and 404 catch-all; fail = Router 4 history/wildcard break"
   ],
+  "recipe_constraints": [
+    { "id": "webpack-to-vite", "after": ["node-lane"], "atomic": "yes" },
+    { "id": "vue-compat", "after": ["first-install"], "atomic": "yes" },
+    { "id": "gogocode-element", "after": ["runtime-cutover"], "atomic": "no" },
+    { "id": "manual-router4", "after": ["runtime-cutover"], "atomic": "yes" }
+  ],
   "report_path": "fixtures/valid-report-complete.md",
   "inventory_path": "fixtures/inventory.json",
   "decision_records": ["fixtures/decision-records/migration-path__compat-big-bang.md"],

@@ -22,6 +22,11 @@
     "manual-router4-on-host: host route opens page; fail = 404 or leftover A router",
     "map-ui-to-host: search+table vs A baseline; fail = host UI mapping missing"
   ],
+  "recipe_constraints": [
+    { "id": "manual-adapt-to-host", "after": ["baseline-green"], "atomic": "no" },
+    { "id": "manual-router4-on-host", "after": ["manual-adapt-to-host"], "atomic": "yes" },
+    { "id": "map-ui-to-host", "after": ["manual-adapt-to-host"], "atomic": "no" }
+  ],
   "report_path": "fixtures/valid-report-host-port.md",
   "inventory_path": "fixtures/inventory.json",
   "decision_records": [],

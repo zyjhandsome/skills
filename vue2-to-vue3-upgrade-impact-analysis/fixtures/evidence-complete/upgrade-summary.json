@@ -28,6 +28,14 @@
     "manual-pinia-or-vuex4: Vuex 4 install and store smoke; fail = store injection break",
     "eslint-vue3: Vue3 lint rules; fail = leftover Vue2 API"
   ],
+  "recipe_constraints": [
+    { "id": "webpack-to-vite", "after": ["node-lane"], "atomic": "yes" },
+    { "id": "vue-compat", "after": ["first-install"], "atomic": "yes" },
+    { "id": "gogocode-element", "after": ["runtime-cutover"], "atomic": "no" },
+    { "id": "manual-router4", "after": ["runtime-cutover"], "atomic": "yes" },
+    { "id": "manual-pinia-or-vuex4", "after": ["runtime-cutover"], "atomic": "yes" },
+    { "id": "eslint-vue3", "after": ["gogocode-element", "manual-router4"], "atomic": "no" }
+  ],
   "report_path": "fixtures/evidence-complete/vue2-to-vue3-upgrade-report.md",
   "inventory_path": "fixtures/evidence-complete/inventory.json",
   "decision_records": [

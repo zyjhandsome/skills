@@ -61,7 +61,20 @@ High/blocker 与每个 `required_for_path=yes` 均为 `decided`（`deferred` 只
 | `lockfile_status` | `present` / `absent` / `unparsed`（与 §1 一致；`ready` 时必须 `present`） |
 | `named_recipes` | 配方 id 字符串数组（≤20）。`complete` 且路径不是 `deferred-inventory-only` 时非空 |
 | `named_validations` | 实施期验证短句数组（≤20）。`complete` 时非空，且能对应 `named_recipes` |
+| `recipe_constraints` | 对象数组（≤20）：`id` / `after` / `atomic`。`complete` 且 `named_recipes` 非空时必填 |
 | `next_action` | `complete` → `analysis_complete`；`needs_choice` 不得用 `analysis_complete` |
+
+`recipe_constraints` 记录**顺序与原子性**，不是任务排期：
+
+- `id` 必须与 `named_recipes` 一一对应（不多不少，不重复）
+- `after` 每项只能是保留锚点 `baseline-green` / `visual-baseline` / `node-lane` /
+  `first-install` / `runtime-cutover` / `post-cutover`，或另一个 `named_recipes` id；
+  禁止自引用，recipe→recipe 边禁止成环
+- `atomic`：`yes` 表示该配方没有可停留的中间态（必须整体落地或整体回退），
+  `no` 表示可按目录/模块分批并逐批 review diff
+
+约束的判定依据见 `implementation-sequencing-constraints.md`。本阶段只描述顺序，
+不产出任务、责任人或工作量。
 
 ## 必选章节（按顺序）
 

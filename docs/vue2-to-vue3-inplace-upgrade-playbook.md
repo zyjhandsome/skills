@@ -112,7 +112,8 @@ Wave 粘贴块只补充本波 Skill、应已存在的上游工件、增量门禁
 默认（仅 CONFIG 不存在且用户未覆盖时使用）：
 - workspace = 当前本地仓库 / workspace（含待升级的 package.json）
 - pages = 空 → 全 workspace（batch_scope=full-stack）
-- target_vue_version = 3.5.39（钉精确补丁号；禁止写 latest）
+- target_vue_version = Wave 1 从 registry 解析出的 3.5.x 线最新稳定补丁号
+  （必须精确到补丁；禁止 latest / next / rc / beta；解析结果写入 CONFIG 后全程不变）
 
 可选覆盖（需要时才写）：
 pages = <路由或文件，多个用逗号或换行；填写则 batch_scope=page-closure>
@@ -141,8 +142,14 @@ CONFIG 已记录旧分析路径时沿用，不要并行维护 workspace 根
 .vue2-to-vue3-upgrade-analysis。
 
 固定边界：
+- 任何包都不得用 dist-tag 解析版本（latest / next / rc / beta / edge）。dist-tag
+  会指向非预期版本：vue 的 rc 现指向 3.6.0-rc.4（Vapor 预发布），vue-router 的
+  next 反而指向五年前的 4.0.13，而其 latest 已是 v5 主版本——裸装 vue-router 会
+  解析到 5.x 而不是 4.x。安装目标 major 必须显式钉死，并在报告或任务里留下依据。
 - 单仓原地升。pages 只收窄本 change，不是 A→B host-port，也不是页面闭包迁入。
 - 默认行为 parity；保留 Options API。Composition API 全仓重写另立项。
+- Vue 3.6 / Vapor mode 不在本轮范围。3.6 线目前只有预发布，任何 rc/beta 都不得
+  进入本次升级；本轮目标固定在 3.5.x 的精确补丁号。
 - 仅 Wave 4（delivery-execute-verify）可修改应用代码并安装依赖、运行命名配方；
   Wave 1–3 与 Wave 5 对应用代码只读。分析阶段 Name, never run。
 - Wave 5 可启动/停止干净服务、重跑验证、刷新 Codebase Memory 索引与 G9 证据；
@@ -177,6 +184,13 @@ vue 的 resolved version 必须等于 TARGET_VUE_VERSION；路径涉及
 @vue/compat / @vue/compiler-sfc / @vue/server-renderer 时，这些包的
 resolved version 必须完全一致。manifest 是否保留范围符号遵循已批准规格，
 但 lock 不得漂到其他 Vue 版本。
+@vue/compat 的 peer 是精确版本而非范围，补丁号对不上会在安装期直接失败或告警，
+不会静默漂移——按硬约束对待，不要只靠事后核对 resolved version。
+
+router / i18n / store 等会被实际安装的包，其目标 major 必须显式钉死并有依据：
+dist-tags.latest 可能已越过迁移指南所在的区间（例如 vue-router 的 latest 已是
+v5，而 Vue2 仓的主迁移文档仍是 v3→v4）。裸装解析到哪个 major 与该读哪份文档是
+两件事，不得互相替代。
 
 visual=required 时 G9 用 delivery-visual-evidence/v1，目录 G9_ROOT。
 外部分析视觉字段只允许引用 G9 白名单：baseline_state_ids、identity_route、
@@ -245,12 +259,20 @@ Delivery 固定三行报告停止，不降级。
 pages 空 → batch_scope=full-stack。
 pages 有值 → batch_scope=page-closure（页面+闭包+共享 runtime/build；其余 non-goal）。
 
-目标 Vue = TARGET_VUE_VERSION；用户未覆盖时固定为 3.5.39，写入 CONFIG 与报告，
-不得改成 latest、不得改成「当前最新 3.x」、不得凭记忆填其他版本号。
-本波可向 npm registry 核验 3.5.39 是否可解析，但不得因此改成其他版本。
-「2. 仓画像与依赖就绪度」与「3. 推荐迁移路径」必须写出 3.5.39（或用户覆盖的精确版本）。
+目标 Vue = TARGET_VUE_VERSION。用户未覆盖时，本波向 npm registry 解析 3.5.x 线的
+最新稳定补丁号，钉成精确版本写入 CONFIG 与报告；不得写 latest、不得写「当前最新
+3.x」、不得凭记忆填版本号、不得落到 3.6 线的任何预发布（alpha/beta/rc）。
+解析失败或该线不可用时停下询问用户，不得自行改钉其他版本。
+「2. 仓画像与依赖就绪度」与「3. 推荐迁移路径」必须写出该精确补丁号。
+CONFIG 一旦记录，后续各 Wave 一律沿用，不得因为上游发了新补丁而漂移。
 compat 对齐 vue / @vue/compat / @vue/compiler-sfc 同版本；direct 至少 vue 与
 @vue/compiler-sfc；SSR 再对齐 @vue/server-renderer。版本不可用或冲突：gate=frozen。
+
+router / store / i18n / ui / test 等会被实际安装的包，报告须分别写出「迁移文档区间」
+与「安装目标 major」，后者按 evidence_as_of 当天的 registry 元数据解析并注明来源；
+两者不一致时（例如 vue-router 的 latest 已越过 v4）把差距记为决策，不得默认取其一。
+跨子系统的 peer 约束（router×build、router×store、i18n×Node 等）在对应子系统行与
+决策记录里双向登记，不得只写在一侧。
 
 host-port-direct、另一 Vue3 宿主、iframe 收编、topology_axis=host-port、
 或实施落点不是当前 workspace：停止本剧本，不要进入 Wave 2，不要加载其他剧本。
@@ -262,6 +284,11 @@ browser_support_floor；下游各 Wave 以此判定分析是否 stale。
 
 报告「3. 推荐迁移路径」必须出现字面：
 Composition API 全仓重写：另立项，本次不评估工作量
+
+summary 必须给出 recipe_constraints：每个命名配方一行 after（保留锚点或另一配方 id）
+与 atomic；inventory 必须含 source_impact_signals.interaction_assertion_candidates
+（逐点定位 model_option / native_modifier / keycode_modifier / transition_component）。
+candidates.truncated=true 说明清单不完备，须在本波补一次全量检索或写入证据缺口。
 
 确认队列按 Skill 用 proceed:path:<id> / proceed:subsystem:<id>。
 报告与 summary 不得填写其他 Skill 名称。
@@ -317,7 +344,8 @@ summary.recommended_path 为 host-port-direct，或 topology 不是 single-cutov
 范围：pages 空 = 全 workspace；pages 有值 = 这些页面+闭包+共享 runtime/build，其余 non-goals。
 规格钉死 TARGET_VUE_VERSION，适用的 vue / @vue/compat / compiler-sfc / server-renderer
 resolved 必须一致；禁止 latest。
-non-goals 必须含：Composition API 全仓重写；生产发布/切流；compat 若选用须写移除日期或退出条件。
+non-goals 必须含：Composition API 全仓重写；Vue 3.6 / Vapor mode；生产发布/切流；
+compat 若选用须写移除日期或退出条件。
 
 quality_profiles.visual：分析 visual_acceptance_required=yes 或代码/配置出现
 UI-kit、Tailwind/reset、表格混用、scoped-style 风险时为 required；否则按证据写明不需要。
@@ -338,11 +366,15 @@ required 时 required_visual_states 必须至少 5 个唯一状态——下游 G
 
 应已存在：已批准 Frame 规格、分析 path+digest、Frame handoff。缺失或批准失效则回 Wave 2。
 先读 CONFIG；target_vue_version 或派生路径与通用头不一致时停止，回 Wave 2。
-只读 ANALYSIS_ROOT/upgrade-summary.json（named_recipes / named_validations）。
+只读 ANALYSIS_ROOT/upgrade-summary.json（named_recipes / named_validations /
+recipe_constraints）与 ANALYSIS_ROOT/inventory.json 的
+source_impact_signals.interaction_assertion_candidates。
 需要某条决策时再打开 ANALYSIS_ROOT/decision-records 下对应文件。
 同时只读已批准 spec。
 
 把分析里的命名配方写成纵向任务（精确文件/符号或 glob、实施期命令、失败时证明什么、回滚要点）。
+任务顺序按 summary.recipe_constraints 的 after 拓扑排列，不自行改序；atomic=yes 的配方
+不得拆成多个可分别落地的任务，atomic=no 才允许按目录/模块分批并逐批 review diff。
 pages 有值时，任务不得把未点名且未进入闭包的页面扩进范围。
 本波不跑配方（gogocode / vue-upgrade-tool / webpack-to-vite / npm install）。
 依赖任务必须使用 TARGET_VUE_VERSION，校验适用包 resolved version 相等，拒绝 lock 漂移。
@@ -359,12 +391,14 @@ temporary-dual-node 的旧 lane）；若证明不可启动，须显式二选一�
 用预生产/生产环境捕获替代基线，或把「无基线」记为 blocking residual 并回
 Wave 2 重议 visual 契约。不允许 baseline_status 悬空滑过。
 
-交互断言清单：以 inventory 的 source_impact_signals.signals（model_option /
-native_modifier / transition_component 等）与 v-model 消费点映射为候选，生成
-逐点交互验证任务（每个消费点一条「输入→状态回写」断言，最小组件测试或
-脚本化浏览器检查），写入 tasks 与验证命令，不留给执行期自拟冒烟范围。
-source_impact_signals.truncated=true 或页面闭包超出扫描面时，先补一次全量
-检索再生成清单，不得把截断结果当完备清单。
+交互断言清单：以 inventory 的
+source_impact_signals.interaction_assertion_candidates.rows 为准，逐行生成交互
+验证任务（每行一条「输入→状态回写」断言，最小组件测试或脚本化浏览器检查），
+写入 tasks 与验证命令，不留给执行期自拟冒烟范围。model_option 行须按报告
+「10. 未决问题与证据缺口」人工补搜检查里的 live/dead 结论区分：live（父级用
+v-model 消费）为必做断言，dead 可降级。
+candidates.truncated=true、source_impact_signals.truncated=true 或页面闭包超出
+扫描面时，先补一次全量检索再生成清单，不得把截断结果当完备清单。
 
 回滚演练任务：计划中必须有一条命名验证——在临时 worktree checkout 升级前
 revision，用旧 lane frozen install + build 证明回滚路径可用，产出机器证据。

@@ -87,6 +87,16 @@ SOURCE_PATTERNS = {
         re.S,
     ),
 }
+# Signals whose Vue3 breakage is invisible to build and lint: every hit needs an
+# interaction-level assertion, so counts and five samples are not enough evidence.
+INTERACTION_ASSERTION_SIGNALS = (
+    "model_option",
+    "native_modifier",
+    "keycode_modifier",
+    "transition_component",
+)
+INTERACTION_CANDIDATE_CAP = 200
+INTERACTION_EXCERPT_LIMIT = 160
 SCRIPT_SETUP_ATTR = re.compile(r"<script\b[^>]*\bsetup\b", re.I)
 # Vue Options/Composition setup(props|context) — not editor callbacks like setup(editor)
 VUE_SETUP_FN = re.compile(
@@ -561,6 +571,18 @@ def _append_sample(target: dict[str, list[str]], key: str, relative: str) -> Non
         bucket.append(relative)
 
 
+def _match_excerpt(text: str, start: int, limit: int = INTERACTION_EXCERPT_LIMIT) -> str:
+    """Return the trimmed source line containing ``start``, bounded to ``limit``."""
+    line_start = text.rfind("\n", 0, start) + 1
+    line_end = text.find("\n", start)
+    if line_end == -1:
+        line_end = len(text)
+    excerpt = text[line_start:line_end].strip()
+    if len(excerpt) > limit:
+        return excerpt[: limit - 1] + "…"
+    return excerpt
+
+
 def discover_source_roots(root: Path) -> list[Path]:
     """Discover bounded sibling source roots used by multi-page Vue workspaces.
 
@@ -599,11 +621,15 @@ def scan_source(
     legacy_definitions: dict[str, list[str]] = {}
     vue3_definitions: dict[str, list[str]] = {}
     consumers: dict[str, list[str]] = {}
+    candidates: list[dict[str, object]] = []
+    candidates_truncated = False
     roots = source_roots if source_roots is not None else discover_source_roots(root)
     if not roots:
         return {"scanned_files": 0, "skipped_large_files": 0, "truncated": False,
                 "signals": {}, "samples": {}, "vue_plugin_packages": {},
-                "global_mounts": {}}
+                "global_mounts": {},
+                "interaction_assertion_candidates": {
+                    "cap": INTERACTION_CANDIDATE_CAP, "truncated": False, "rows": []}}
     paths = (path for source_root in roots for path in source_root.rglob("*"))
     for path in paths:
         if any(part in SKIP_DIRS for part in path.parts) or not path.is_file() or path.suffix.lower() not in SOURCE_SUFFIXES:
@@ -665,6 +691,17 @@ def scan_source(
                 counts[key] += len(matches)
                 if len(samples[key]) < 5:
                     samples[key].append(relative)
+                if key in INTERACTION_ASSERTION_SIGNALS:
+                    for match in matches:
+                        if len(candidates) >= INTERACTION_CANDIDATE_CAP:
+                            candidates_truncated = True
+                            break
+                        candidates.append({
+                            "signal": key,
+                            "file": relative,
+                            "line": text.count("\n", 0, match.start()) + 1,
+                            "match": _match_excerpt(text, match.start()),
+                        })
         setup_hits = count_composition_setup(text, relative)
         if setup_hits:
             counts["composition_setup"] += setup_hits
@@ -689,6 +726,14 @@ def scan_source(
         "samples": {key: value for key, value in samples.items() if value},
         "vue_plugin_packages": dict(sorted(plugin_packages.items())),
         "global_mounts": global_mounts,
+        "interaction_assertion_candidates": {
+            "cap": INTERACTION_CANDIDATE_CAP,
+            "truncated": candidates_truncated,
+            "rows": sorted(
+                candidates,
+                key=lambda row: (row["file"], row["line"], row["signal"]),
+            ),
+        },
     }
 
 
@@ -821,6 +866,11 @@ def main() -> int:
         print(
             f"locks: {len(data['lockfiles'])} ({data['lockfile_status']}) "
             f"source files: {data['source_impact_signals']['scanned_files']}"
+        )
+        interaction = data["source_impact_signals"]["interaction_assertion_candidates"]
+        print(
+            f"interaction assertion candidates: {len(interaction['rows'])}"
+            + (" (truncated)" if interaction["truncated"] else "")
         )
         for name, meta in data["related_packages"].items():
             shown = meta["resolved_version"] or meta["declared_version"]

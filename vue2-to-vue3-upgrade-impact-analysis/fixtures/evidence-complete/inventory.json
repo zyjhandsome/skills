@@ -18,9 +18,47 @@
     "scanned_files": 1,
     "skipped_large_files": 0,
     "truncated": false,
-    "signals": {},
-    "samples": {},
+    "signals": {
+      "model_option": 1,
+      "native_modifier": 2,
+      "transition_component": 1
+    },
+    "samples": {
+      "model_option": ["src/components/AmountPicker.vue"],
+      "native_modifier": ["src/components/AmountPicker.vue"],
+      "transition_component": ["src/components/AmountPicker.vue"]
+    },
     "vue_plugin_packages": {},
-    "global_mounts": {}
+    "global_mounts": {},
+    "interaction_assertion_candidates": {
+      "cap": 200,
+      "truncated": false,
+      "rows": [
+        {
+          "signal": "native_modifier",
+          "file": "src/components/AmountPicker.vue",
+          "line": 4,
+          "match": "<el-input @keyup.enter.native=\"submit\" />"
+        },
+        {
+          "signal": "transition_component",
+          "file": "src/components/AmountPicker.vue",
+          "line": 7,
+          "match": "<transition name=\"fade\">"
+        },
+        {
+          "signal": "native_modifier",
+          "file": "src/components/AmountPicker.vue",
+          "line": 9,
+          "match": "<el-button @click.native=\"reset\">reset</el-button>"
+        },
+        {
+          "signal": "model_option",
+          "file": "src/components/AmountPicker.vue",
+          "line": 18,
+          "match": "model: { prop: 'value', event: 'change' },"
+        }
+      ]
+    }
   }
 }
