@@ -29,6 +29,8 @@ MINIMAL_SECTIONS = """
 ## 1. 基线与假设
 - lockfile：`package-lock.json`
 - lockfile_status: present
+- repo_revision: 3f2a1b7c9d0e
+- browser_support_floor: 无 browserslist 配置；Vite 默认 modern target（不含 IE11）
 - host_node_version: v18.20.4
 - current_node_contract: >=18 from engines and CI
 - current_node_evidence: engines declaration; CI Node 18 green build
@@ -76,6 +78,12 @@ MINIMAL_SECTIONS = """
 - Vue.prototype：无挂载
 - globalProperties / provide/inject：n/a（无自定义挂载）
 - lockfile：lockfile_status=present
+- `model:` 选项（自定义 v-model）：无命中
+- `.native` / keyCode 修饰符：无命中
+- `emits` 声明与事件双触发：无未声明 emit
+- `Vue.component` / `Vue.directive` / `Vue.mixin` 全局注册：无命中
+- `<transition>` 过渡类名（v-enter → v-enter-from）：无命中
+- 静默语义变更（v-if/v-for 优先级等）：同元素无命中
 """
 
 
@@ -168,6 +176,21 @@ class ValidateReportTests(unittest.TestCase):
             result = self._run(str(report))
             self.assertEqual(result.returncode, 3)
             self.assertIn("ui_visual_risk", result.stdout + result.stderr)
+
+    def test_rejects_fewer_than_five_required_visual_states(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            text = (FIXTURES / "valid-report.md").read_text(encoding="utf-8")
+            text = text.replace(
+                "- required_visual_states: search-default, table-empty, table-data, cell-popper, icon-toolbar",
+                "- required_visual_states: search-default, table-empty, table-data, cell-popper",
+            )
+            text = text.replace("| report_path | fixtures |", f"| report_path | {root.resolve()} |")
+            report = root / "report.md"
+            report.write_text(text, encoding="utf-8")
+            result = self._run(str(report))
+            self.assertEqual(result.returncode, 3)
+            self.assertIn("required_visual_states needs at least 5", result.stdout + result.stderr)
 
     def test_rejects_missing_compact_summary_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -852,6 +875,58 @@ class ValidateReportTests(unittest.TestCase):
                 "dedicated line" in result.stdout or "shallow answer" in result.stdout,
                 result.stdout,
             )
+
+    def test_rejects_missing_repo_revision_anchor(self) -> None:
+        body = _status_block(
+            analysis="partial", decision="needs_choice", gate="frozen"
+        ) + MINIMAL_SECTIONS.format(
+            subsystem_table=DEFAULT_SUBSYSTEM_ROWS,
+            queue_table=(
+                "| 单元 | 类型 | 状态 | 问题 | 选项 |\n"
+                "|---|---|---|---|---|\n"
+                "| `path:compat-big-bang` | path | ready | ok | "
+                "`proceed:path:compat-big-bang` / `defer` |"
+            ),
+        )
+        body = body.replace("- repo_revision: 3f2a1b7c9d0e\n", "")
+        with tempfile.TemporaryDirectory() as tmp:
+            report = Path(tmp) / "report.md"
+            report.write_text(body, encoding="utf-8")
+            result = self._run(str(report))
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertIn("repo_revision", result.stdout)
+
+    def test_rejects_complete_packet_on_already_vue3_inventory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "evidence"
+            self._copy_complete_evidence(root)
+            inventory = root / "inventory.json"
+            data = json.loads(inventory.read_text(encoding="utf-8"))
+            data["vue_major"] = "3"
+            inventory.write_text(
+                json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+
+            result = self._run("--evidence-dir", str(root))
+
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertIn("residual-audit", result.stdout + result.stderr)
+
+    def test_rejects_inventory_repo_revision_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "evidence"
+            self._copy_complete_evidence(root)
+            inventory = root / "inventory.json"
+            data = json.loads(inventory.read_text(encoding="utf-8"))
+            data["repo_revision"] = "deadbeef0000"
+            inventory.write_text(
+                json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+
+            result = self._run("--evidence-dir", str(root))
+
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertIn("stale analysis packet", result.stdout + result.stderr)
 
     def test_host_port_fixture_ok(self) -> None:
         result = self._run(str(FIXTURES / "valid-report-host-port.md"))

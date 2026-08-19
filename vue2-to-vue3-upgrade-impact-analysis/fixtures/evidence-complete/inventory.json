@@ -1,6 +1,7 @@
 {
   "project_root": "/repo/admin-web",
   "profile_as_of": "2026-08-01",
+  "repo_revision": "3f2a1b7c9d0e",
   "package_name": "admin-web",
   "vue_version_spec": "2.7.16",
   "vue_major": "2",

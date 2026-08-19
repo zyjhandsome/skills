@@ -43,6 +43,8 @@
 - lockfile_status: present
 - source_lockfile_status: absent
 - host_lockfile_status: present
+- repo_revision: `a1b2c3d4e5f6`（A 仓 git HEAD，样例；只读画像绑定此状态）
+- browser_support_floor: 跟随宿主 B 的 browserslist（modern target，不含 IE11）
 - evidence_as_of: 2026-08-10
 - 假设与限制：读 A 对照 B；compat 非主路径；不改 A；不实施；gate 跟 B lock
 
@@ -100,7 +102,7 @@
 - primary_sample: 指定业务页列表+筛选
 - secondary_sample: not_applicable
 - baseline_status: capture-on-A-before-port
-- required_visual_states: search-default, table-empty, table-data, cell-popper
+- required_visual_states: search-default, table-empty, table-data, cell-popper, icon-toolbar
 - recommended_next_action: run_visual_review
 
 ## 6. 风险分级
@@ -146,3 +148,9 @@
 | `Vue.prototype.$*` / `this.$*` 定义与消费点 | 实施前在闭包内逐一登记 |
 | `globalProperties` / `provide/inject` 迁移目标 | 对接 B 时逐一登记 |
 | lockfile 缺失或未解析 | lockfile_status=present（A 侧 package-lock） |
+| `model:` 选项（自定义 v-model prop/event） | 闭包内待精确扫描（改写到 B 时须迁 modelValue） |
+| `.native` / keyCode 修饰符 | 闭包内待精确扫描 |
+| `emits` 声明与事件双触发 | 改写到 B 时逐组件声明 emits |
+| `Vue.component` / `Vue.directive` / `Vue.mixin` 全局注册与指令钩子改名 | 闭包内待精确扫描 |
+| `<transition>` 过渡类名（v-enter → v-enter-from） | 闭包内待扫描 |
+| 静默语义变更（v-if/v-for 优先级、v-bind 顺序、watch 数组、data 浅合并、attr coercion） | 同元素 v-if+v-for 待扫描；其余列入 B 侧改写核对 |

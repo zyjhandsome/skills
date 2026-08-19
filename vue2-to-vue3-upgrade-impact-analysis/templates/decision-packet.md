@@ -36,6 +36,8 @@
 - node_transition_strategy: same-node / upgrade-before-vue / temporary-dual-node / blocked / undecided
 - lockfile：`<path>` / 无 lockfile（无 lock 时 handoff gate 保持 frozen）
 - lockfile_status: present / absent / unparsed
+- repo_revision:（git HEAD commit 或无 git 时的关键文件 digest；分析包绑定此仓库状态，下游须核对漂移）
+- browser_support_floor:（browserslist / .browserslistrc 原文，或「无配置 + Vite 默认 modern target 需决策」；Vue3 不支持 IE11）
 - evidence_as_of: YYYY-MM-DD（可与状态表一致复述）
 - 构建变体 / 批次范围：
 - 入口：workspace / inventory / host-port
@@ -119,6 +121,12 @@
 | `Vue.prototype.$*` 定义与 `this.$*` 消费点 | |
 | 对应的 `app.config.globalProperties` 或 `provide/inject` 迁移目标 | |
 | lockfile 缺失或未解析 | |
+| `model:` 选项（自定义 v-model；区分父级 v-model 消费的活选项与死选项） | |
+| `.native` / keyCode 修饰符 | |
+| `emits` 声明与事件双触发（未声明 emit 走 fallthrough 触发两次） | |
+| `Vue.component` / `Vue.directive` / `Vue.mixin` 全局注册与指令钩子改名 | |
+| `<transition>` 过渡类名（v-enter → v-enter-from） | |
+| 静默语义变更（v-if/v-for 优先级、v-bind 顺序、watch 数组、data 浅合并、attr coercion） | |
 
 其他未决：
 -

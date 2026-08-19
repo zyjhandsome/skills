@@ -27,7 +27,7 @@ Wave 1  vue2 分析（只出决策包）
   → Wave 5  独立功能验证
 ```
 
-全程 GLM 5.2。不按波换模型，不插入 Kimi。视觉结论来自 Delivery G9 的确定性
+全程使用单一模型，不按波换模型。视觉结论来自 Delivery G9 的确定性
 工具证据，不以模型看图代替。模型选择不写入任何 Skill schema。
 
 完成水位是仓内 `verified`（Wave 4 实施与 Delivery 闸门 + Wave 5 独立功能验证，
@@ -57,6 +57,7 @@ mutation owner；Wave 4 实施，Wave 5 只用它做独立验证、不改应用�
 | 同一 Vue2 SPA，只升某几个页面（含闭包）          | **本文**（填写 `pages`）          |
 | 同一仓库里已有 Vue3 宿主，要把 Vue2 页面/包装进去   | A→B 剧本（两个 root；`host-port`） |
 | 两个独立仓库，iframe / 微前端收编             | A→B 剧本                      |
+| workspace 已经（部分）升级到 Vue3（`vue_major=3` 或 Vue3 源码占面） | **不走本剧本主线**：Wave 1 只允许停止或显式 residual-audit 残留审计包 |
 | 只要决策包、不改代码                        | 分析 usage；不要进入 Wave 2+       |
 
 
@@ -72,13 +73,13 @@ workspace：停止原地升，改走 A→B 剧本。不要在本剧本里继续 
 分析报告不得点名 Skill。调用方按本表翻译：
 
 
-| 决策包字段                                                                           | 本剧本                            |
+| 决策包字段或报告字面                                                                      | 本剧本                            |
 | ------------------------------------------------------------------------------- | ------------------------------ |
 | `next_action: analysis_complete` 且 `batch_implementation_gate=ready`            | Wave 2 Frame                   |
 | 同上但 gate=`frozen`                                                               | 停在分析；补 lock / 未决 High 后再交接     |
 | `visual_acceptance_required=yes` 且 `recommended_next_action: run_visual_review` | Wave 3 把基线+G9 写入任务；Wave 4 做 G9 |
 | `recommended_path: host-port-direct`                                            | 改走 A→B 剧本                      |
-| `Composition API 全仓重写：另立项`                                                      | 本 change 的 non-goal            |
+| 报告「3. 推荐迁移路径」字面 `Composition API 全仓重写：另立项`                                     | 本 change 的 non-goal            |
 
 
 ## 1. 通用输入与自动恢复协议
@@ -102,7 +103,7 @@ Wave 粘贴块只补充本波 Skill、应已存在的上游工件、增量门禁
 
 ```text
 这是一个全新独立会话，不得使用其他会话的聊天记忆补结论。
-当前模型：GLM 5.2。本波内不换模型。
+全程使用单一模型；本波内不换模型。
 本会话只执行随后指定的一个 Wave；写盘校验后立即停止，不要加载或执行下一个 Skill。
 不要使用 delivery-explore，不要调用 migrate-vue2-pages-to-vue3-host。
 Wave 粘贴块只补充本波 Skill、应已存在的上游工件、增量门禁和结束产物；
@@ -111,7 +112,8 @@ Wave 粘贴块只补充本波 Skill、应已存在的上游工件、增量门禁
 默认（仅 CONFIG 不存在且用户未覆盖时使用）：
 - workspace = 当前本地仓库 / workspace（含待升级的 package.json）
 - pages = 空 → 全 workspace（batch_scope=full-stack）
-- target_vue_version = 3.5.39（精确目标版本；不是 `latest`）
+- target_vue_version = 未指定时，由 Wave 1 从 npm registry 解析当前最新稳定
+  3.x 的**精确版本**写入 CONFIG 与报告（钉精确补丁号；禁止写 latest）
 
 可选覆盖（需要时才写）：
 pages = <路由或文件，多个用逗号或换行；填写则 batch_scope=page-closure>
@@ -132,6 +134,10 @@ target_vue_version = <仅在用户明确指定其他精确版本时覆盖>
 - G9_ROOT = <EVIDENCE_ROOT>/delivery-visual
 - CONFIG = <EVIDENCE_ROOT>/inplace-run-config.json
 CONFIG 存在后以其中记录为准；只有本次**显式填写**的值与配置不一致时停止。
+每波开始先检索 <workspace>/openspec/changes/ 下已有的 vue2-to-vue3-inplace-*
+目录：存在且与本次派生 CHANGE_ID 不同（例如 pages 改动导致 SLUG 变化）时停止
+询问用户，不得静默派生新 CHANGE_ID 分叉第二条线。同一 workspace 同时只允许
+一个 inplace change。
 CONFIG 已记录旧分析路径时沿用，不要并行维护 workspace 根
 .vue2-to-vue3-upgrade-analysis。
 
@@ -183,9 +189,12 @@ typography_metrics、icon_identity、table_metrics、rollback_fixture。
 revision；权威任务完成；Wave 4 已写出绑定当前 revision 的 Delivery verification
 与 verified handoff；Wave 4 Fresh Verification 与 High 独立审查通过；Wave 5 在
 全新会话对当前 revision 重跑 named_validations、规格场景与升级后功能冒烟，且不
-混用 Wave 4 旧 pass；visual=required 时 G9 pass；Vue resolved version 与
-TARGET_VUE_VERSION 一致；Composition 全仓重写仍在 non-goals；无 blocking residual。
-仍不 archive/commit/push/PR/部署。
+混用 Wave 4 旧 pass；visual=required 时 G9 pass 且 required 状态未被任何 Wave
+单方降级；回滚演练证据存在（升级前 revision 在旧 lane frozen install/build 通过）；
+console-evidence.json 无未处置 error（error 记 accepted-residual 须用户显式批准）；
+交互断言清单逐条有结果；结论落盘 EVIDENCE_ROOT/inrepo-verification.md；
+Vue resolved version 与 TARGET_VUE_VERSION 一致；Composition 全仓重写仍在
+non-goals；无 blocking residual。仍不 archive/commit/push/PR/部署。
 ```
 
 ### 1.3 工件恢复矩阵
@@ -202,8 +211,9 @@ TARGET_VUE_VERSION 一致；Composition 全仓重写仍在 non-goals；无 block
 默认不得在 `CHANGE_DIR` 外另建第二套 delivery 状态，也不得把分析包写到
 workspace 根 `.vue2-to-vue3-upgrade-analysis`。分析报告默认落在
 `ANALYSIS_ROOT`（`<CHANGE_DIR>/evidence/vue2-to-vue3-upgrade`）。Wave 1
-只创建该证据目录，不写 OpenSpec 状态。Wave 2 在同一 `CHANGE_ID` 上创建或
-恢复 change，把报告 path+digest 记为 `external_artifacts`，不把分析 schema
+只创建该证据目录并写入 `CONFIG`，不写 OpenSpec 状态。Wave 2 在同一
+`CHANGE_ID` 上创建或恢复 change（接管 Wave 1 留下的 evidence-only 目录），
+把报告 path+digest 记为 `external_artifacts`，不把分析 schema
 写进 Delivery 状态。新增分析报告不会使 Frame 批准失效；改 proposal/spec 仍会。
 
 
@@ -231,12 +241,13 @@ Delivery 固定三行报告停止，不降级。
 应已存在：无。不要求 OpenSpec / Memory。
 入口：单 workspace；project-root = workspace。--output-dir OUTPUT_DIR
 （CHANGE_DIR/evidence/vue2-to-vue3-upgrade）。禁止再问 confirm:output-dir。
-本波只创建 ANALYSIS_ROOT（及必要父目录）；不要写到 workspace 根
+本波只创建 ANALYSIS_ROOT 与 CONFIG（及必要父目录）；不要写到 workspace 根
 .vue2-to-vue3-upgrade-analysis。
 pages 空 → batch_scope=full-stack。
 pages 有值 → batch_scope=page-closure（页面+闭包+共享 runtime/build；其余 non-goal）。
 
-目标 Vue = TARGET_VUE_VERSION（默认 3.5.39），不得改成 latest。
+目标 Vue = TARGET_VUE_VERSION；用户未指定时本波从 npm registry 解析当前最新
+稳定 3.x 的精确版本，写入 CONFIG 与报告，不得改成 latest 或凭记忆填版本号。
 「2. 仓画像与依赖就绪度」与「3. 推荐迁移路径」必须写出该版本。
 compat 对齐 vue / @vue/compat / @vue/compiler-sfc 同版本；direct 至少 vue 与
 @vue/compiler-sfc；SSR 再对齐 @vue/server-renderer。版本不可用或冲突：gate=frozen。
@@ -244,11 +255,21 @@ compat 对齐 vue / @vue/compat / @vue/compiler-sfc 同版本；direct 至少 vu
 host-port-direct、另一 Vue3 宿主、iframe 收编、topology_axis=host-port、
 或实施落点不是当前 workspace：停止本剧本，不要进入 Wave 2，不要加载其他剧本。
 
+画像 vue_major=3（workspace 已是/部分是 Vue3）：停止本剧本主线；只有用户显式
+要求时才产出 residual-audit 残留审计包，不得按 Vue2 基线写升级决策包。
+报告「1. 基线与假设」必须记录 repo_revision（分析绑定的 git HEAD）与
+browser_support_floor；下游各 Wave 以此判定分析是否 stale。
+
 报告「3. 推荐迁移路径」必须出现字面：
 Composition API 全仓重写：另立项，本次不评估工作量
 
 确认队列按 Skill 用 proceed:path:<id> / proceed:subsystem:<id>。
 报告与 summary 不得填写其他 Skill 名称。
+
+本波结束前写入 CONFIG（workspace、pages、target_vue_version、派生路径，
+不含批准），并向用户回显 CHANGE_ID。CHANGE_DIR 在 Wave 2 之前只是证据目录
+（没有 proposal.md 属预期，由 Wave 2 接管补齐 OpenSpec 槽位）；若用户决定
+放弃升级，应删除整个 CHANGE_DIR，避免半截目录阻塞后续变更的路径重叠检查。
 
 gate=ready 且仍是原地升：说明下一步 Wave 2，然后停止。
 gate=frozen：说明缺口，不要进入 Wave 2，然后停止。
@@ -272,6 +293,15 @@ gate=frozen：说明缺口，不要进入 Wave 2，然后停止。
 先读 ANALYSIS_ROOT/upgrade-summary.json；再打开
 ANALYSIS_ROOT/vue2-to-vue3-upgrade-report.md 的「1. 基线与假设」「3. 推荐迁移路径」，
 其他章节按 summary 点名读取。
+
+分析包时效检查（硬前提）：只读重跑 vue2-to-vue3-upgrade-impact-analysis 的
+scripts/profile_inventory.py 生成临时 inventory（不覆盖 ANALYSIS_ROOT），与
+ANALYSIS_ROOT/inventory.json 逐字段对比 repo_revision、vue_major、builder、
+ui_stack、lockfile_digests（锁文件 sha256，由脚本产出），并核对报告
+「1. 基线与假设」的 repo_revision 与 inventory 一致。脚本不可用时降级为直接
+对比 inventory.json 与当前仓库的 git HEAD、package.json vue 主版本、锁文件
+sha256，并记录降级原因。任一漂移（例如仓库已被改成 Vue3 而分析仍描述 Vue2
+基线）：判定分析 stale，停止本波，回 Wave 1 重跑，不得沿用旧决策包开规格闸门。
 batch_implementation_gate=ready 不是实施授权，也不是规格批准。
 「1. 基线与假设」Node 未知/冲突，或 build 的 Node 未 decided：停止，回 Wave 1。
 「3. 推荐迁移路径」目标 Vue ≠ TARGET_VUE_VERSION：停止，回 Wave 1，不得在 Frame 改版本。
@@ -281,7 +311,7 @@ summary.recommended_path 为 host-port-direct，或 topology 不是 single-cutov
 
 创建或恢复唯一 CHANGE_DIR（与 Wave 1 同一 CHANGE_ID）。若 ANALYSIS_ROOT
 已有定稿分析包，恢复该目录并补齐 OpenSpec 槽位，不要另建 change 或改 CHANGE_ID。
-写入 CONFIG（workspace、pages、target_vue_version、派生路径，不含批准）。
+校验并补全 Wave 1 写入的 CONFIG（缺失时按报告与用户输入重建；不含批准）。
 将分析报告与 summary 记为 external_artifacts（path+digest）。
 
 范围：pages 空 = 全 workspace；pages 有值 = 这些页面+闭包+共享 runtime/build，其余 non-goals。
@@ -292,6 +322,9 @@ non-goals 必须含：Composition API 全仓重写；生产发布/切流；compa
 quality_profiles.visual：分析 visual_acceptance_required=yes 或代码/配置出现
 UI-kit、Tailwind/reset、表格混用、scoped-style 风险时为 required；否则按证据写明不需要。
 required 时基线须在改 vue/依赖之前捕获；G9 目录 G9_ROOT。
+required 时 required_visual_states 必须至少 5 个唯一状态——下游 G9 校验器按
+证据行硬计数 ≥5；分析包不足 5 个时在规格批准前补足并写入已批准 spec，
+不得留到执行期（那时基线窗口已关闭）。
 
 通过规格闸门：只问一次范围批准。然后停止。下一步 Wave 3。
 ```
@@ -321,8 +354,29 @@ engines、CI、Docker/devcontainer、部署 builder 与 Corepack/packageManager�
 删除条件与缓存隔离。不得只改开发者本机 Node。
 
 visual=required 时：基线捕获发生在升级之前；每个 required sample/state 映射到任务；G9 路径为 G9_ROOT。
+基线可行性前置：必须先有任务证明旧 app 能在某个可用 lane 启动（老 Node 仓即
+temporary-dual-node 的旧 lane）；若证明不可启动，须显式二选一并写入任务——
+用预生产/生产环境捕获替代基线，或把「无基线」记为 blocking residual 并回
+Wave 2 重议 visual 契约。不允许 baseline_status 悬空滑过。
 
-实现闸门只问一次（High 附代价/风险/回滚摘要）。go 必须绑定当前 artifact_revision 与仓库 revision。然后停止。下一步 Wave 4。
+交互断言清单：以 inventory 的 source_impact_signals.signals（model_option /
+native_modifier / transition_component 等）与 v-model 消费点映射为候选，生成
+逐点交互验证任务（每个消费点一条「输入→状态回写」断言，最小组件测试或
+脚本化浏览器检查），写入 tasks 与验证命令，不留给执行期自拟冒烟范围。
+source_impact_signals.truncated=true 或页面闭包超出扫描面时，先补一次全量
+检索再生成清单，不得把截断结果当完备清单。
+
+回滚演练任务：计划中必须有一条命名验证——在临时 worktree checkout 升级前
+revision，用旧 lane frozen install + build 证明回滚路径可用，产出机器证据。
+worktree 能力不可用时任务须写明降级方案（临时目录 clone / detached checkout）；
+两者都不可行则记 non-blocking residual（写明 owner 与补救计划）。
+
+人工前置核对：Wave 5 功能冒烟所需的后端/Mock、测试账号与权限、验证码或
+二次验证的处理方式、稳定测试数据——本波逐项确认可用，或写成计划前置任务；
+缺口不得拖到 Wave 5 才暴露。
+
+实现闸门只问一次（High 附代价/风险/回滚摘要，并把回滚演练所需的临时
+worktree/git 操作授权一并在此询问）。go 必须绑定当前 artifact_revision 与仓库 revision。然后停止。下一步 Wave 4。
 ```
 
 ## 5. Wave 4：Delivery Execute
@@ -338,6 +392,8 @@ visual=required 时：基线捕获发生在升级之前；每个 required sample
 visual=required 时，计划中必须有基线任务；基线须在本波首次依赖/代码 mutation 前捕获
 并绑定当时 revision，而不是要求 Wave 3 已执行基线。
 
+首次 mutation 前检查 git status：工作区不干净时停止，让用户显式处置
+（commit/stash/纳入范围），否则基线与 handoff 的 revision 绑定不可复现。
 首次 install 前打印实际 node -v 与 package manager 版本；不满足已批准 target range 时停止。
 优先 frozen install；禁止用仓库拒绝的包管理器。现在可以安装依赖并运行已命名配方。
 按 tasks.md 纵向实施。实施后、Fresh Verification 前重新 index_repository，刷新 Codebase Memory 索引。
@@ -355,9 +411,17 @@ visual=required：升级后写 delivery-visual-evidence/v1 到 G9_ROOT 并校验
 结束时输出 verification、G9、独立审查、rollback 与 handoff path/revision。
 Node 证据须含：当前基线、目标 Node 下升级前兼容性（或为何不适用）、目标 Node frozen
 install/build/test、声明面一致性；临时双 Node 未满足删除条件时记 residual。
+回滚演练：执行计划中的回滚演练任务（临时 worktree + 升级前 revision +
+旧 lane frozen install/build），证据写入 verification。worktree 授权应已随
+实现 go 一并取得，缺失则先补授权再执行；worktree 能力不可用时按计划降级
+（临时目录 clone / detached checkout），仍不可行则记 non-blocking residual
+（写明 owner 与补救计划），不得越权执行未授权 git 操作。
 写 verification.md 与 verified handoff（overall_status=verified，
 archive.status=deferred_to_openspec）。Delivery verified ≠ 仓内 verified。
-不要声称仓内 verified。G9 未过则留在本波。说明下一步 Wave 5，然后停止。
+不要声称仓内 verified。G9 未过则留在本波；连续 2 次 G9 fail 且无新修复方向时，
+不要原地重试，按 alignment_backflow 回 Wave 2 重议 required_states 或 non-goals。
+visual/G9 的 required 状态不得在本波降级；降级只能走 Wave 2 重新批准并记 DR。
+说明下一步 Wave 5，然后停止。
 ```
 
 ## 6. Wave 5：独立功能验证
@@ -391,13 +455,25 @@ vue resolved version 必须仍等于 TARGET_VUE_VERSION；适用的
 功能冒烟（pages 空=全仓代表入口/路由；pages 有值=这些页面+闭包）：
 已批准验收场景、登录后主路径、路由切换、列表/表单/弹层等规格点名交互。
 同时记录 Vue runtime 控制台：error 与升级相关 warning（compat / filters /
-已移除实例 API 等）不得无处置。不得用测试已绿代替未执行的场景。
+已移除实例 API 等）不得无处置。控制台结论必须落盘为
+EVIDENCE_ROOT/console-evidence.json（每个冒烟路由一行：route、error 数、
+升级相关 warning 数、处置状态 resolved/accepted-residual），不接受只在会话
+文字里"声称无异常"。error 记 accepted-residual 必须经用户显式批准并记录
+批准语句；不得自行接受运行时 error。交互断言（Wave 3 从 inventory 生成的
+v-model 回写等逐点检查）必须逐条执行并记录结果。不得用测试已绿代替未执行的场景。
 
 visual=required：按当前 revision 重新校验 G9_ROOT 的 delivery-visual-evidence/v1。
 基线仍是升级前捕获；必要时刷新 current/diff，不得改应用代码。
 validator 未过或 revision 不匹配：停止，回 Wave 4。
 
-pass：对照通用头仓内 verified 条件后才能声称仓内 verified。仓内 verified ≠ 生产完成。
+写本波 handoff 前，先把 Wave 4 的 verified handoff 复制留存为
+EVIDENCE_ROOT/handoff-wave4.json（只读归档），本波 handoff 的
+previous_handoff_id 指向它——handoff.json 是覆盖写，不归档就无法区分前置证据。
+
+pass：对照通用头仓内 verified 条件逐条核对，并把结论落盘
+EVIDENCE_ROOT/inrepo-verification.md（逐条核对结果、console-evidence 与交互
+断言指针、G9 与 named_validations 结果、绑定当前 revision）后，才能声称仓内
+verified。仓内 verified ≠ 生产完成。
 仍不 archive/commit/push/PR/部署。然后停止。
 fail：按 alignment_backflow 输出，不要改代码，返回：
 规格/验收→Wave 2；任务/验证命令/回滚→Wave 3；实现、测试、G9 或功能回归→Wave 4。
@@ -413,10 +489,13 @@ fail：按 alignment_backflow 输出，不要改代码，返回：
 | ---------------------------------------- | ------------------------------ |
 | workspace / 拓扑选错，或应走 host-port           | Wave 1；必要时改 A→B 剧本             |
 | 分析报告目标 Vue 版本错误、不可用或证据不足             | Wave 1                           |
+| 分析包 repo_revision 与当前仓库漂移（分析 stale）      | Wave 1                           |
+| workspace 实为已（部分）升级完成的 Vue3 仓            | 停止主线；residual-audit 或结束     |
 | 目标、验收、行为 parity、视觉是否 required、pages 范围错误 | Wave 2 规格批准                    |
 | CONFIG / 已批准规格中的 target_vue_version 不一致      | Wave 2                           |
 | 配方拆分、回滚、基线时机、任务范围错误                      | Wave 3 Plan                    |
 | 已批准范围内的实现、测试、G9 或功能回归                   | Wave 4 Execute                 |
+| 连续 2 次 G9 fail 且无新修复方向（重议 required_states / non-goals） | Wave 2 规格批准          |
 | Wave 5 发现 Delivery 未 verified 或证据 stale | Wave 4 Execute                 |
 | OpenSpec / Memory 硬前提失败                  | 停在当前 Delivery Wave，按三行报告恢复后再继续 |
 | 分析 gate 仍 frozen 却进入 Wave 2              | 回 Wave 1                       |
@@ -435,18 +514,29 @@ Verification，并重新执行完整 Wave 5；不得用 Wave 4 旧 pass 声称�
 
 ## 8. 完成判定
 
-与独立会话通用头边界一致，供通读本文的人核对。
+权威清单是「Wave 2–5 追加」粘贴块里的仓内 verified 条件（Wave 5 对照的就是
+那份）；本章是同一清单的展开版，供通读本文的人核对，两处不一致时以通用头
+为准并修复本章。
 只有以下全部满足，才能声称本 change 仓内 `verified`：
 
 - 分析包 `analysis_status=complete`，且交接时 `batch_implementation_gate=ready`；
 - 路径仍是原地升（`compat-big-bang` 或已记录的 `direct-vue3`），不是 host-port；
-- `vue` resolved version 等于 TARGET_VUE_VERSION（默认 `3.5.39`），且适用的
+- `vue` resolved version 等于 TARGET_VUE_VERSION（CONFIG 记录的精确版本），且适用的
   `@vue/compat` / `@vue/compiler-sfc` / `@vue/server-renderer` 与其完全一致；
 - OpenSpec 规格批准与实现 go 绑定当前 artifact_revision 与仓库 revision；
 - 权威任务全部完成；Wave 4 Fresh Verification 与（High）独立审查通过；
 - Wave 5 在全新会话对当前 revision 重跑 named_validations、规格场景与升级后
   功能冒烟，且不混用 Wave 4 旧 pass；
-- `visual=required` 时 Delivery G9 `final_visual_result=pass`；
+- `visual=required` 时 Delivery G9 `final_visual_result=pass`；required 状态
+  从 Wave 2 批准起未被任何后续 Wave 单方降级（降级须回 Wave 2 重批 + DR）；
+- 分析报告「1. 基线与假设」`repo_revision` 与升级前基线 revision 链条一致
+  （Wave 2 时效检查通过）；
+- 回滚演练证据存在（升级前 revision 在旧 lane frozen install/build 通过），
+  或按已批准降级记为 non-blocking residual；
+- `console-evidence.json` 存在且无未处置的 error / 升级相关 warning
+  （error 记 accepted-residual 须有用户显式批准记录）；交互断言清单逐条有结果；
+- `EVIDENCE_ROOT/inrepo-verification.md` 存在、逐条核对通用头条件并绑定当前
+  revision；Wave 4 verified handoff 已归档为 `handoff-wave4.json`；
 - Composition 全仓重写仍在 non-goals；
 - 目标 Node 范围与工具链精确版本有证据；Fresh Verification 使用受支持 Node；
   local/CI/container/deploy/package-manager 声明一致，或已批准的临时双 Node residual

@@ -37,6 +37,8 @@
 - 入口：workspace
 - lockfile：`package-lock.json`（样例；若缺失须写「无 lockfile」且 handoff 保持 frozen）
 - lockfile_status: present
+- repo_revision: `3f2a1b7c9d0e`（git HEAD，样例；分析包绑定此仓库状态）
+- browser_support_floor: 无 browserslist 配置；Vite 默认 modern target（不含 IE11），实施前须确认浏览器基线
 - evidence_as_of: 2026-08-01
 - 报告路径（解析结果）：见状态表 `report_path`
 - 假设与限制：单仓画像；不实施、不执行 codemod
@@ -98,7 +100,7 @@
 - primary_sample: 登录后主列表的搜索区 + Element 表格
 - secondary_sample: not_applicable（未发现第二表格栈）
 - baseline_status: required-before-implementation
-- required_visual_states: search-default, table-empty, table-data, cell-popper
+- required_visual_states: search-default, table-empty, table-data, cell-popper, icon-toolbar
 - recommended_next_action: run_visual_review
 
 ## 6. 风险分级
@@ -149,6 +151,12 @@
 | `Vue.prototype.$*` / `this.$*` 定义与消费点 | 待逐一登记 |
 | `globalProperties` / `provide/inject` 迁移目标 | 待逐一登记 |
 | lockfile 缺失或未解析 | lockfile_status=present（样例 package-lock.json） |
+| `model:` 选项（自定义 v-model prop/event） | 待精确扫描（区分父级 v-model 消费的活选项与显式绑定的死选项） |
+| `.native` / keyCode 修饰符 | 待精确扫描 |
+| `emits` 声明与事件双触发 | 待逐组件核对未声明 emit 的 fallthrough 双触发风险 |
+| `Vue.component` / `Vue.directive` / `Vue.mixin` 全局注册与指令钩子改名 | 待精确扫描 |
+| `<transition>` 过渡类名（v-enter → v-enter-from） | 待扫描 transition 组件与相关 CSS 类 |
+| 静默语义变更（v-if/v-for 优先级、v-bind 顺序、watch 数组、data 浅合并、attr coercion） | 同元素 v-if+v-for 待扫描；其余列入实施期核对 |
 
 - 过滤器与 `$listeners` 的静态命中数待补精确扫描
 - Element Plus 视觉回归范围待产品确认

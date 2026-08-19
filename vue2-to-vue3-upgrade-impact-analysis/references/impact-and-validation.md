@@ -9,9 +9,23 @@
 3. Bounded source search via `profile_inventory.py`: filters / `Vue.filter`,
    `$listeners`, `.sync`, `new Vue(`, `Vue.use`, `slot-scope` / legacy `slot=`,
    event bus, router `addRoutes` / `*`, lifecycle destroy hooks,
-   `Vue.prototype.$*` definitions/consumers, `globalProperties`, and packages
-   registered through `Vue.use`. Also complete §10 `人工补搜检查` for residual
-   gaps and non-`vue-*` blockers (`tui-editor`, internal plugins, editors, etc.).
+   `Vue.prototype.$*` definitions/consumers, `globalProperties`, packages
+   registered through `Vue.use`, and the silent-break family: `.native` /
+   keyCode modifiers, component `model:` option, `Vue.component` /
+   `Vue.directive` / `Vue.mixin` global registration, `Vue.extend` /
+   `Vue.observable` / `propsData`, `<transition>` usage, AMD-style async
+   component factories, and same-element `v-for`+`v-if`. Also complete §10
+   `人工补搜检查` for residual gaps and non-`vue-*` blockers (`tui-editor`,
+   internal plugins, editors, etc.).
+
+   **Silent-break rule:** `model_option` hits must be split into live options
+   (a parent consumes the component via `v-model` — Vue3 silently rebinds to
+   `modelValue` and the write-back chain goes dead; mark blocker) and dead
+   options (parents bind the prop explicitly; low). `.native`, transition
+   class renames, missing `emits`, `v-bind` order, watch-on-array and mixin
+   data shallow merge all keep build and lint green — they must be closed by
+   the fixed §10 rows plus interaction-level validations named in §8, never
+   by "build passed".
 4. Official docs URLs for the exact interval / library major — start from
    `official-docs-index.md` (EOL + two-layer modification model + canonical
    hubs + high-signal checklist), then fetch the linked page; do not invent
@@ -55,6 +69,20 @@ on the proposed target Node before Vue dependency changes (when feasible);
 frozen install + build/test on the target Node; and alignment of every declared
 Node surface after implementation.
 
+## Browser support floor and build entries
+
+§1 must state `browser_support_floor:` from browserslist/`.browserslistrc`
+evidence (or an explicit "no config + Vite modern default, decision needed").
+Vue 3 drops IE11 and Vite's default build target is modern browsers; an
+enterprise floor below that makes `@vitejs/plugin-legacy` (or path rejection)
+a `build`-subsystem decision, not an implementation-stage surprise.
+
+Multi-page workspaces must carry the inventory `build_entries` evidence
+(`vue.config.js` `pages`, custom entry globs, `public/*.html`, `main*` files)
+into the `build` decision: every entry maps to a Vite `rollupOptions.input`
+row and is a candidate for visual sample selection. A dropped entry is a
+silently missing build surface.
+
 ## Validation matrix guidance
 
 §8 table headers (required): `命名配方 | 实施期命令 | 失败证明什么 | 证据状态`.
@@ -78,14 +106,33 @@ editor/tree/DAG CSS. Inventory at least:
 
 - legacy `/deep/`, `>>>`, `::v-deep`, structural and Element-internal selectors;
 - actual global CSS entry/cascade order and theme variable roots;
+- UI-kit icon system migration (element-ui font icons `el-icon-*` →
+  Element Plus SVG icon components; string `:icon` props stop rendering,
+  `.el-icon-*` CSS selectors go dead) — a mandatory trigger, not optional;
+- UI-kit component value contracts that shift silently (e.g. Element Plus
+  checkbox/radio `:label`→`:value` deprecation, date-picker `value-format`
+  defaults, removed `medium` size);
+- transition class renames (`v-enter`→`v-enter-from`): animations fail
+  silently with a green build — include animated states when present;
+- mount container DOM change (Vue3 no longer replaces the host el;
+  `#app > *` style selectors may shift);
+- SCSS `@import` → `@use` semantics when the build migration rewrites
+  `prependData`/`additionalData` (namespace isolation can drop globals);
 - Tailwind prefix/Preflight/important/content/safelist and dynamic classes;
 - primary search + table page and secondary table when mixed;
 - Teleport/append target, overflow/z-index and theme inheritance;
-- baseline status and required visual states.
+- baseline status and required visual states — on a UI-kit migration the
+  required states must cover icon states, navigation states and popper
+  triggers, not only table/dialog states.
 
 Write these as the §5 `ui_visual_risk` block defined by `report-contract.md`.
 Keep it self-contained: record required visual states and a generic next action;
 do not require, invoke, or name another Skill.
+
+When `visual_acceptance_required=yes`, name **at least 5 unique required states**
+(e.g. default, empty, data, popper/overlay, icon/toolbar). Downstream visual
+gates hard-count evidence rows with a floor of five; naming fewer states fails
+only after the pre-upgrade baseline window has already closed.
 
 ## Out of scope work
 

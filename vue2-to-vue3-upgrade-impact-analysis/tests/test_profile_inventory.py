@@ -170,6 +170,61 @@ class ProfileInventoryTests(unittest.TestCase):
             self.assertEqual(mounts["$http"]["consumer_samples"], ["src/Feature.vue"])
             self.assertFalse(mounts["$http"]["unresolved_consumer"])
 
+    def test_detects_silent_vue3_break_signals_and_repo_anchor(self) -> None:
+        pkg = {"name": "silent-web", "dependencies": {"vue": "2.7.16"}}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "package.json").write_text(json.dumps(pkg), encoding="utf-8")
+            (root / ".browserslistrc").write_text("> 1%\nnot ie 11\n", encoding="utf-8")
+            git_refs = root / ".git" / "refs" / "heads"
+            git_refs.mkdir(parents=True)
+            (root / ".git" / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
+            (git_refs / "main").write_text("3f2a1b7c9d0e\n", encoding="utf-8")
+            deployment = root / "deployment"
+            deployment.mkdir()
+            (deployment / "Dockerfile").write_text("FROM node:10.23.1\n", encoding="utf-8")
+            src = root / "src"
+            src.mkdir()
+            (src / "FilterBox.vue").write_text(
+                "<template>\n"
+                '<div><el-input @keyup.enter.native="go" @keyup.13="go" />\n'
+                '<li v-for="item in list" v-if="item.ok">{{ item }}</li>\n'
+                "<transition name=\"fade\"><div /></transition></div>\n"
+                "</template>\n"
+                "<script>\n"
+                "export default {\n"
+                "  model: { prop: 'value', event: 'update:model' },\n"
+                "}\n"
+                "Vue.component('x-box', {})\n"
+                "Vue.directive('focus', {})\n"
+                "Vue.mixin({})\n"
+                "const Lazy = resolve => require(['./Lazy.vue'], resolve)\n"
+                "</script>\n",
+                encoding="utf-8",
+            )
+            data = self._run_profile(root)
+            signals = data["source_impact_signals"]["signals"]
+            for key in (
+                "native_modifier",
+                "keycode_modifier",
+                "model_option",
+                "global_component_register",
+                "global_directive_register",
+                "global_mixin_register",
+                "transition_component",
+                "async_component_legacy",
+                "v_for_with_v_if",
+            ):
+                self.assertGreaterEqual(signals.get(key, 0), 1, key)
+            self.assertEqual(data["repo_revision"], "3f2a1b7c9d0e")
+            self.assertEqual(data["browserslist"], ["> 1%", "not ie 11"])
+            self.assertEqual(data["browserslist_source"], ".browserslistrc")
+            node_paths = [
+                item["path"]
+                for item in data["node_contract_evidence"]["config_declarations"]
+            ]
+            self.assertIn("deployment/Dockerfile", node_paths)
+
     def test_marks_malformed_package_lock_unparsed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -181,6 +236,8 @@ class ProfileInventoryTests(unittest.TestCase):
             data = self._run_profile(root)
             self.assertEqual(data["lockfile_status"], "unparsed")
             self.assertTrue(data["lockfile_errors"])
+            digest = data["lockfile_digests"]["package-lock.json"]
+            self.assertRegex(digest, r"^[0-9a-f]{64}$")
 
     def test_profiles_multiple_source_roots_and_vant_ui(self) -> None:
         pkg = {

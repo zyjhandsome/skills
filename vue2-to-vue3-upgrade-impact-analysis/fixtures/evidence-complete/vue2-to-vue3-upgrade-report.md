@@ -37,6 +37,8 @@
 - 入口：workspace
 - lockfile：`package-lock.json`（示例）
 - lockfile_status: present
+- repo_revision: `3f2a1b7c9d0e`（git HEAD，样例；分析包绑定此仓库状态）
+- browser_support_floor: 无 browserslist 配置；Vite 默认 modern target（不含 IE11），已在 build 决策中确认
 - evidence_as_of: 2026-08-01
 - 报告路径（解析结果）：见状态表 `report_path`
 - 假设与限制：决策已确认；实施另授权
@@ -96,7 +98,7 @@
 - primary_sample: 登录后主列表的搜索区 + Element 表格
 - secondary_sample: not_applicable（未发现第二表格栈）
 - baseline_status: required-before-implementation
-- required_visual_states: search-default, table-empty, table-data, cell-popper
+- required_visual_states: search-default, table-empty, table-data, cell-popper, icon-toolbar
 - recommended_next_action: run_visual_review
 
 ## 6. 风险分级
@@ -145,5 +147,11 @@
 | `Vue.prototype.$*` / `this.$*` 定义与消费点 | 已登记定义与消费者 |
 | `globalProperties` / `provide/inject` 迁移目标 | 已登记迁移目标 |
 | lockfile 缺失或未解析 | 有 lockfile |
+| `model:` 选项（自定义 v-model prop/event） | 已扫描：2 处活选项列入 core-vue 影响面 |
+| `.native` / keyCode 修饰符 | 已扫描：6 处 `.native` 列入影响面 |
+| `emits` 声明与事件双触发 | 已核对：无未声明 emit 的双触发风险 |
+| `Vue.component` / `Vue.directive` / `Vue.mixin` 全局注册与指令钩子改名 | 已扫描：3 处全局组件注册列入影响面 |
+| `<transition>` 过渡类名（v-enter → v-enter-from） | 已扫描：无 transition 组件使用 |
+| 静默语义变更（v-if/v-for 优先级、v-bind 顺序、watch 数组、data 浅合并、attr coercion） | 已扫描：同元素 v-if+v-for 无命中；其余列入实施期核对 |
 
 - 无阻塞缺口；实施需另授权

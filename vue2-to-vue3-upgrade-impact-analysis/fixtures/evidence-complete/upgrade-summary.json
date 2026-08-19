@@ -41,7 +41,7 @@
   "blockers": [],
   "high_risks": ["core-vue", "router", "ui", "build"],
   "ui_visual_risk": {
-    "required_states": ["search-default", "table-empty", "table-data", "cell-popper"],
+    "required_states": ["search-default", "table-empty", "table-data", "cell-popper", "icon-toolbar"],
     "recommended_next_action": "run_visual_review"
   },
   "next_action": "analysis_complete",

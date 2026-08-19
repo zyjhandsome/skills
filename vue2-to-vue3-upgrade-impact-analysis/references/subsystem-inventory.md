@@ -7,7 +7,7 @@ Every workspace packet must classify these subsystems. Missing detection →
 |---|---|---|
 | `core-vue` | `vue` major/version, SFC compiler | `vue@3` + `@vue/compiler-sfc` |
 | `router` | `vue-router` | `vue-router@4`（主迁移目标；v5 为后续可选线，见 official-docs-index） |
-| `build` | Vue CLI / Webpack / Vite | Vite (`vite` + `@vitejs/plugin-vue`) — **must upgrade with Vue** |
+| `build` | Vue CLI / Webpack / Vite; multi-entry evidence (`build_entries`: `pages`, entry globs, `public/*.html`); browser floor (browserslist → Vite target / `@vitejs/plugin-legacy`) | Vite (`vite` + `@vitejs/plugin-vue`) — **must upgrade with Vue**; every entry maps to a Vite input |
 | `store` | Vuex / Pinia / both | Pinia preferred; Vuex 4 acceptable bridge |
 | `ui` | Element UI / Ant Design Vue 1.x / Vuetify 2 / other | Matching Vue3 library (e.g. Element Plus) |
 | `test` | `@vue/test-utils`, Jest/Vitest, E2E | test-utils v2 + Vitest/Jest Vue3 config |

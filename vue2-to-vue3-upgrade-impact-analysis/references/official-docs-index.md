@@ -82,6 +82,12 @@ page; do not invent Element Plus URLs for them.
 Use while mapping impact and completing report §10 `人工补搜检查`. Map each
 hit to a fact (inventory / source sample) or explicit evidence gap.
 
+**Closure rule (mandatory):** every row whose inventory key is `—` has no
+machine scanner — it MUST therefore appear as a dedicated row in report §10
+`人工补搜检查` with a substantive answer. A checklist row that is neither
+machine-scanned nor manually answered is a contract violation, not an
+acceptable omission. This closes the "index knows, nobody checks" gap.
+
 | Signal / API | Inventory key (if any) | Official page |
 |---|---|---|
 | Global API → `createApp` (`new Vue`, `Vue.use`, …) | `new_vue`, `vue_use` | https://v3-migration.vuejs.org/breaking-changes/global-api |
@@ -93,16 +99,25 @@ hit to a fact (inventory / source sample) or explicit evidence gap.
 | `$children` removed | `children_removed` | https://v3-migration.vuejs.org/breaking-changes/children |
 | Event bus `$on` / `$off` / `$once` removed | `event_bus` | https://v3-migration.vuejs.org/breaking-changes/events-api |
 | Functional components | `functional_component` | https://v3-migration.vuejs.org/breaking-changes/functional-components |
-| Async components → `defineAsyncComponent` | — | https://v3-migration.vuejs.org/breaking-changes/async-components |
-| `emits` option | — | https://v3-migration.vuejs.org/breaking-changes/emits-option |
+| Async components → `defineAsyncComponent` | `async_component_legacy`（AMD 式工厂；`components:` 内 `() => import()` 需人工核对） | https://v3-migration.vuejs.org/breaking-changes/async-components |
+| `emits` option（未声明 emit 走 fallthrough 双触发） | — | https://v3-migration.vuejs.org/breaking-changes/emits-option |
+| Component `model:` option → `modelValue`（静默失效，双向绑定哑火） | `model_option` | https://v3-migration.vuejs.org/breaking-changes/v-model |
 | Render function `h` / API | — | https://v3-migration.vuejs.org/breaking-changes/render-function-api |
 | `$attrs` includes `class` / `style` | — | https://v3-migration.vuejs.org/breaking-changes/attrs-includes-class-style |
-| `v-if` + `v-for` precedence | — | https://v3-migration.vuejs.org/breaking-changes/v-if-v-for |
-| `.native` modifier removed | — | https://v3-migration.vuejs.org/breaking-changes/v-on-native-modifier-removed |
-| keyCode modifiers removed | — | https://v3-migration.vuejs.org/breaking-changes/keycode-modifiers |
+| `v-if` + `v-for` precedence（Vue3 反转为 v-if 先） | `v_for_with_v_if` | https://v3-migration.vuejs.org/breaking-changes/v-if-v-for |
+| `.native` modifier removed（静默失效） | `native_modifier` | https://v3-migration.vuejs.org/breaking-changes/v-on-native-modifier-removed |
+| keyCode modifiers removed | `keycode_modifier` | https://v3-migration.vuejs.org/breaking-changes/keycode-modifiers |
+| Global registration (`Vue.component` / `Vue.directive` / `Vue.mixin`) → app instance | `global_component_register`, `global_directive_register`, `global_mixin_register` | https://v3-migration.vuejs.org/breaking-changes/global-api |
+| Custom directive hook renames (`bind`→`beforeMount`, `inserted`→`mounted`, …) | — | https://v3-migration.vuejs.org/breaking-changes/custom-directives |
+| Transition class renames (`v-enter`→`v-enter-from`; 动画静默失效) | `transition_component`（组件命中后须人工核对 CSS 类名） | https://v3-migration.vuejs.org/breaking-changes/transition |
+| `v-bind` merge order（后写覆盖，Vue2 相反） | — | https://v3-migration.vuejs.org/breaking-changes/v-bind |
+| Watch on arrays（需 `deep` 才触发变更） | — | https://v3-migration.vuejs.org/breaking-changes/watch |
+| Attribute coercion（枚举属性 / `false` 不再移除） | — | https://v3-migration.vuejs.org/breaking-changes/attribute-coercion |
+| Mixin data merge is shallow | — | https://v3-migration.vuejs.org/breaking-changes/data-option |
+| `Vue.extend` / `Vue.observable` / `propsData` removed | `vue_extend`, `vue_observable`, `props_data_option` | https://v3-migration.vuejs.org/breaking-changes/global-api |
 | Lifecycle / vnode hook renames (`beforeDestroy`→`beforeUnmount`, …) | `destroy_lifecycle` | https://v3-migration.vuejs.org/breaking-changes/vnode-lifecycle-events |
 | `$set` / `$delete` / `Vue.set` removed | `set_delete_removed` | https://v3-migration.vuejs.org/breaking-changes/ (Removed APIs) |
-| Mount no longer replaces host el | — | https://v3-migration.vuejs.org/breaking-changes/mount-changes |
+| Mount no longer replaces host el（容器 DOM 结构变化，`#app > *` 选择器受影响） | — | https://v3-migration.vuejs.org/breaking-changes/mount-changes |
 | Router `addRoutes` / `path: '*'` | `router_add_routes`, `router_wildcard` | https://router.vuejs.org/guide/migration/ |
 
 ## Citation habit

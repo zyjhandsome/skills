@@ -51,8 +51,10 @@ def validate(data: Any, raw_size: int) -> list[str]:
             errors.append("ui_visual_risk is required when visual acceptance is required")
         else:
             states = visual.get("required_states")
-            if not isinstance(states, list) or not states or len(states) > 20:
-                errors.append("ui_visual_risk.required_states must contain 1..20 items")
+            # Downstream visual gates (e.g. delivery-visual-evidence/v1) hard-require
+            # at least five unique required-state evidence rows.
+            if not isinstance(states, list) or len(states) < 5 or len(states) > 20:
+                errors.append("ui_visual_risk.required_states must contain 5..20 items")
             action = visual.get("recommended_next_action")
             if not isinstance(action, str) or PLACEHOLDER.match(action.strip()):
                 errors.append("ui_visual_risk.recommended_next_action is required")

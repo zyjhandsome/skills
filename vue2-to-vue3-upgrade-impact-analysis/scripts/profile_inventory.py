@@ -8,6 +8,7 @@ upgrades, executes project scripts, or edits the analyzed workspace.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -66,6 +67,24 @@ SOURCE_PATTERNS = {
     ),
     "global_properties_assignment": re.compile(
         r"\b[A-Za-z_$][\w$]*\.config\.globalProperties(?:\.\$[A-Za-z_$][\w$]*|\[\s*['\"]\$[A-Za-z_$][\w$]*['\"]\s*\])\s*="
+    ),
+    # Silent Vue3 breaks with weak or no build/lint fingerprints.
+    "native_modifier": re.compile(r"\.native\b"),
+    "keycode_modifier": re.compile(
+        r"(?:@|v-on:)[\w-]+(?:\.[\w-]+)*\.\d{1,3}\b|\bVue\.config\.keyCodes\b"
+    ),
+    "model_option": re.compile(r"(?m)^\s*model\s*:\s*\{"),
+    "global_component_register": re.compile(r"\bVue\.component\s*\("),
+    "global_directive_register": re.compile(r"\bVue\.directive\s*\("),
+    "global_mixin_register": re.compile(r"\bVue\.mixin\s*\("),
+    "vue_extend": re.compile(r"\bVue\.extend\s*\("),
+    "vue_observable": re.compile(r"\bVue\.observable\s*\("),
+    "props_data_option": re.compile(r"\bpropsData\b"),
+    "transition_component": re.compile(r"<transition(?:-group)?\b"),
+    "async_component_legacy": re.compile(r"\bresolve\s*=>\s*require\s*\("),
+    "v_for_with_v_if": re.compile(
+        r"<[^>]{0,300}?v-for=[^>]{0,300}?v-if=|<[^>]{0,300}?v-if=[^>]{0,300}?v-for=",
+        re.S,
     ),
 }
 SCRIPT_SETUP_ATTR = re.compile(r"<script\b[^>]*\bsetup\b", re.I)
@@ -138,6 +157,40 @@ def node_contract_evidence(root: Path, pkg: dict) -> dict:
     for directory in (root / ".github" / "workflows", root / ".devcontainer"):
         if directory.is_dir():
             candidates.extend(path for path in directory.rglob("*") if path.is_file())
+    # Node contracts often live outside root-level fixed names, e.g.
+    # deployment/Dockerfile or .cloudbuild/build.yml. Bounded recursive scan.
+    ci_file_name = re.compile(r"^(dockerfile|jenkinsfile)", re.I)
+    ci_dir_hints = {
+        "ci", "cicd", "build", "builds", "deploy", "deployment", "deployments",
+        "pipeline", "pipelines", "cloudbuild", "circleci", "docker", "container",
+        "containers", "k8s", "kubernetes", "infra",
+    }
+
+    def collect_ci_files(directory: Path, depth: int) -> None:
+        if depth > 3 or len(candidates) > 400:
+            return
+        try:
+            children = sorted(directory.iterdir(), key=lambda item: item.name.lower())
+        except OSError:
+            return
+        for child in children:
+            if child.name in SKIP_DIRS or child.name == ".git":
+                continue
+            if child.is_dir():
+                collect_ci_files(child, depth + 1)
+                continue
+            if not child.is_file():
+                continue
+            in_ci_dir = any(
+                part.lower().lstrip(".") in ci_dir_hints
+                for part in child.relative_to(root).parts[:-1]
+            )
+            if ci_file_name.match(child.name) or (
+                child.name.lower().endswith((".yml", ".yaml")) and in_ci_dir
+            ):
+                candidates.append(child)
+
+    collect_ci_files(root, 0)
     declarations: list[dict[str, object]] = []
     seen: set[Path] = set()
     for path in candidates:
@@ -171,6 +224,160 @@ def node_contract_evidence(root: Path, pkg: dict) -> dict:
         "config_declarations": declarations,
         "known_green_baseline": None,
         "note": "declarations are contract signals; they do not prove a green build",
+    }
+
+
+def read_repo_revision(root: Path) -> str | None:
+    """Read the current git HEAD commit by file inspection; never invokes git."""
+    current = root
+    git_dir: Path | None = None
+    for _ in range(4):
+        candidate = current / ".git"
+        if candidate.is_dir():
+            git_dir = candidate
+            break
+        if candidate.is_file():
+            try:
+                text = candidate.read_text(encoding="utf-8", errors="ignore").strip()
+            except OSError:
+                return None
+            if text.startswith("gitdir:"):
+                git_dir = (current / text.split(":", 1)[1].strip()).resolve()
+            break
+        if current.parent == current:
+            break
+        current = current.parent
+    if git_dir is None or not git_dir.is_dir():
+        return None
+    try:
+        head = (git_dir / "HEAD").read_text(encoding="utf-8", errors="ignore").strip()
+    except OSError:
+        return None
+    if not head.startswith("ref:"):
+        return head or None
+    ref = head.split(":", 1)[1].strip()
+    try:
+        ref_path = git_dir / ref
+        if ref_path.is_file():
+            value = ref_path.read_text(encoding="utf-8", errors="ignore").strip()
+            return value or None
+        packed = git_dir / "packed-refs"
+        if packed.is_file():
+            for line in packed.read_text(encoding="utf-8", errors="ignore").splitlines():
+                if line.endswith(f" {ref}"):
+                    return line.split(" ", 1)[0]
+    except OSError:
+        return None
+    return None
+
+
+def read_browserslist(root: Path, pkg: dict) -> dict:
+    """Record the declared browser support floor; resolving targets is Stage B."""
+    value = pkg.get("browserslist")
+    if isinstance(value, list):
+        return {
+            "entries": [str(item) for item in value],
+            "source": "package.json#browserslist",
+        }
+    if isinstance(value, dict):
+        flat: list[str] = []
+        for env_entries in value.values():
+            if isinstance(env_entries, list):
+                flat.extend(str(item) for item in env_entries)
+            elif isinstance(env_entries, str):
+                flat.append(env_entries)
+        if flat:
+            return {"entries": flat, "source": "package.json#browserslist"}
+    rc = root / ".browserslistrc"
+    if rc.is_file():
+        try:
+            lines = rc.read_text(encoding="utf-8", errors="ignore").splitlines()
+        except OSError:
+            lines = []
+        entries = [
+            line.strip()
+            for line in lines
+            if line.strip() and not line.strip().startswith(("#", "["))
+        ]
+        if entries:
+            return {"entries": entries, "source": ".browserslistrc"}
+    return {"entries": [], "source": None}
+
+
+def pnpm_lock_versions(lockfiles: list[str], package_names: set[str]) -> dict[str, str]:
+    """Best-effort resolved versions from pnpm-lock.yaml (v6 and v9 shapes)."""
+    lock = next((Path(item) for item in lockfiles if Path(item).name == "pnpm-lock.yaml"), None)
+    if not lock:
+        return {}
+    try:
+        text = lock.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return {}
+    versions: dict[str, str] = {}
+    for name in package_names:
+        escaped = re.escape(name)
+        match = re.search(rf"(?m)^\s*['\"]?/?{escaped}@(\d[^:'\"(\s]*)", text)
+        if not match:
+            match = re.search(rf"(?m)^\s*['\"]?/{escaped}/(\d[^:_'\"\s]*)", text)
+        if match:
+            versions[name] = match.group(1)
+    return versions
+
+
+def yarn_lock_versions(lockfiles: list[str], package_names: set[str]) -> dict[str, str]:
+    """Best-effort resolved versions from yarn.lock (classic and berry shapes)."""
+    lock = next((Path(item) for item in lockfiles if Path(item).name == "yarn.lock"), None)
+    if not lock:
+        return {}
+    try:
+        text = lock.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return {}
+    versions: dict[str, str] = {}
+    for name in package_names:
+        escaped = re.escape(name)
+        match = re.search(
+            rf"(?ms)^\"?{escaped}@[^\n]*:\r?\n(?:[ \t]+[^\n]*\n)*?[ \t]+version:?\s*\"?([0-9][^\s\"]*)\"?",
+            text,
+        )
+        if match:
+            versions[name] = match.group(1)
+    return versions
+
+
+def build_entry_evidence(root: Path, source_roots: list[Path]) -> dict:
+    """List multi-entry build candidates that drive Vite input mapping and G9 samples."""
+    vue_config = root / "vue.config.js"
+    pages_configured = False
+    if vue_config.is_file():
+        try:
+            pages_configured = bool(
+                re.search(
+                    r"(?m)^\s*pages\s*:",
+                    vue_config.read_text(encoding="utf-8", errors="ignore"),
+                )
+            )
+        except OSError:
+            pass
+    html_files: list[str] = []
+    public = root / "public"
+    if public.is_dir():
+        html_files = sorted(
+            path.relative_to(root).as_posix() for path in public.rglob("*.html")
+        )[:20]
+    entry_files: list[str] = []
+    for source_root in source_roots:
+        for pattern in ("main*.js", "main*.ts"):
+            entry_files.extend(
+                path.relative_to(root).as_posix()
+                for path in source_root.rglob(pattern)
+                if not any(part in SKIP_DIRS for part in path.parts)
+            )
+    return {
+        "vue_config_pages_detected": pages_configured,
+        "public_html_files": html_files,
+        "entry_file_candidates": sorted(set(entry_files))[:20],
+        "note": "multi-entry evidence for build input mapping; not a build proof",
     }
 
 
@@ -274,6 +481,18 @@ def package_lock_versions(lockfiles: list[str], package_names: set[str]) -> dict
             if name not in versions and isinstance(meta, dict) and meta.get("version"):
                 versions[name] = str(meta["version"])
     return versions
+
+
+def lockfile_digests(lockfiles: list[str]) -> dict[str, str]:
+    """sha256 per lockfile so downstream staleness checks share one digest definition."""
+    digests: dict[str, str] = {}
+    for item in lockfiles:
+        path = Path(item)
+        try:
+            digests[path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
+        except OSError:
+            digests[path.name] = "unreadable"
+    return digests
 
 
 def assess_lockfiles(lockfiles: list[str]) -> dict:
@@ -479,6 +698,13 @@ def profile(root: Path) -> dict:
     lockfiles = find_lockfiles(root)
     lockfile_state = assess_lockfiles(lockfiles)
     resolved = package_lock_versions(lockfiles, set(deps))
+    resolved_source = "package-lock.json" if resolved else None
+    if not resolved:
+        resolved = pnpm_lock_versions(lockfiles, set(deps))
+        resolved_source = "pnpm-lock.yaml" if resolved else None
+    if not resolved:
+        resolved = yarn_lock_versions(lockfiles, set(deps))
+        resolved_source = "yarn.lock" if resolved else None
     peer_vue_specs = package_peer_vue_specs(root, lockfiles, set(deps))
     source_roots = discover_source_roots(root)
     source_impact = scan_source(root, source_roots)
@@ -524,9 +750,11 @@ def profile(root: Path) -> dict:
         for name in ("element-ui", "element-plus", "ant-design-vue", "vuetify", "vant")
         if name in deps
     ]
+    browserslist_info = read_browserslist(root, pkg)
     return {
         "project_root": str(root.resolve()),
         "profile_as_of": date.today().isoformat(),
+        "repo_revision": read_repo_revision(root),
         "package_name": pkg.get("name"),
         "package_manager_pin": package_manager,
         "node_pins": {
@@ -551,6 +779,11 @@ def profile(root: Path) -> dict:
         "lockfiles": lockfiles,
         "lockfile_status": lockfile_state["status"],
         "lockfile_errors": lockfile_state["errors"],
+        "lockfile_digests": lockfile_digests(lockfiles),
+        "resolved_versions_source": resolved_source,
+        "browserslist": browserslist_info["entries"],
+        "browserslist_source": browserslist_info["source"],
+        "build_entries": build_entry_evidence(root, source_roots),
         "related_packages": related,
         "source_impact_signals": source_impact,
     }

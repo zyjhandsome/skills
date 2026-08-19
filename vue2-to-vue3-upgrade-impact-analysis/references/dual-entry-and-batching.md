@@ -33,11 +33,24 @@ Skip already-Vue3 workspaces unless the caller asks for re-audit.
 | One Vue2 SPA; this workspace **is** the app being upgraded | `workspace` + in-place (`compat-big-bang` / `direct-vue3`) |
 | Same git repo contains a Vue2 app **and** an already-Vue3 host (packages, apps, or iframe target) | `host-port` with two roots (`source_root` = Vue2 workspace, `implementation_target` = Vue3 host). Do **not** recommend `compat-big-bang` |
 | Two git repos, iframe / 微前端收编 | `host-port` (same dual-root packet) |
+| Target workspace itself is **already on Vue 3** (`vue_major=3`), or manifests say Vue3 while a caller/report describes a Vue2 baseline | Stop, or explicit `entry_mode: residual-audit` — never a Vue2-baseline upgrade packet |
 | Many Vue2 workspaces, no host chosen | `inventory` first; human picks a batch |
 
 If inventory or the current repo tree shows a distinct Vue3 host workspace,
 switch `entry_kind` to `host-port` before Wave 1 path confirmation. An in-place
 preset with `topology_axis: host-port` is invalid.
+
+## Already-Vue3 / partially-upgraded target (residual-audit)
+
+Profile `vue_major=3` on the analysis target means there is no Vue2 baseline
+to upgrade. Do not force the standard template: either stop with
+`analysis_status=blocked`（非 Vue2 仓）, or — when the caller explicitly wants
+it — declare `entry_mode: residual-audit` in §1 and produce a residual list
+(leftover Vue2-only APIs, dead build configs, silent-break hits) plus a §8
+validation matrix, without recommending an upgrade path action. A `complete`
+packet over a `vue_major=3` inventory without `residual-audit` fails the
+validator. Partial upgrades (Vue3 manifest + widespread Vue2 source hits) are
+residual-audit by default.
 
 ## Batch identity
 

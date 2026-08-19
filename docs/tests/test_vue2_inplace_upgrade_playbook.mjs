@@ -59,7 +59,9 @@ assert.ok(playbook.includes("vue2-page-migration-playbook.md"), "host-port must 
 assert.ok(!/可(?:偏|走)?\s*Quick|否则可\s*Quick|Quick\s*直接\s*execute/i.test(corpus), "docs must not offer a Quick bypass");
 assert.ok(!/mode=execute|migrate execute/i.test(playbook), "inplace playbook must not invoke migrate execute");
 assert.ok(!playbook.includes("expected_model="), "inplace playbook must stay host-neutral (no Claude Code model pins)");
-assert.ok(playbook.includes("GLM 5.2"), "inplace playbook may run entirely on GLM 5.2");
+assert.ok(playbook.includes("单一模型"), "inplace playbook must run a single model end to end without naming one");
+assert.ok(playbook.includes("不按波换模型"), "inplace playbook must forbid per-wave model switching");
+assert.ok(!playbook.includes("3.5.39"), "playbook must not hardcode a Vue patch version (resolve at analysis time)");
 assert.ok(!playbook.includes("frontend-ui-stack-visual-parity"), "inplace playbook must not mention the visual-parity skill");
 
 /**
@@ -198,6 +200,25 @@ for (const [name, wave] of inplaceWaves) {
     `${name} paste block must not require the sibling playbook as input`
   );
 }
+
+// Cross-contract facts the playbook references must stay real upstream.
+assert.ok(wave2Prompt.includes("lockfile_digests"), "Wave 2 staleness check must use the inventory lockfile_digests producer, not an invented lock digest");
+assert.ok(wave2Prompt.includes("profile_inventory.py"), "Wave 2 staleness check must name the analysis script path");
+assert.ok(wave2Prompt.includes("5 个唯一状态"), "Wave 2 must top visual states up to the downstream G9 floor of five before spec approval");
+assert.ok(wave3Prompt.includes("truncated"), "Wave 3 interaction assertions must guard against a truncated inventory scan");
+assert.ok(wave3Prompt.includes("worktree"), "Wave 3 must plan the rollback-rehearsal worktree authorization and fallback");
+assert.ok(wave4Prompt.includes("worktree"), "Wave 4 rollback rehearsal must carry the worktree authorization/fallback rules");
+assert.ok(wave5Prompt.includes("inrepo-verification.md"), "Wave 5 must persist the in-repo verified verdict as an artifact");
+assert.ok(wave5Prompt.includes("handoff-wave4.json"), "Wave 5 must archive the Wave 4 handoff before overwriting handoff.json");
+
+// The header checklist is authoritative; section 8 must not diverge from it again.
+const section8 = playbook.slice(playbook.indexOf("## 8. 完成判定"));
+for (const needle of ["回滚演练", "console-evidence", "inrepo-verification.md", "交互断言"]) {
+  assert.ok(headerFences[1].includes(needle), `header verified checklist must include ${needle}`);
+  assert.ok(section8.includes(needle), `section 8 verified checklist must include ${needle}`);
+}
+const backflow = section(playbook, "## 7. 失败回流", "## 8. 完成判定");
+assert.ok(backflow.includes("连续 2 次 G9 fail"), "backflow table must route the double G9 failure escalation to Wave 2");
 
 assert.ok(usage.includes("vue2-to-vue3-inplace-upgrade-playbook.md"), "usage must point at the inplace playbook");
 assert.ok(usage.includes("openspec/changes/vue2-to-vue3-inplace-<SLUG>/evidence/vue2-to-vue3-upgrade"), "usage must document the playbook analysis path under the change dir");

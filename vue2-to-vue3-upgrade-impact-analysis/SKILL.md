@@ -82,7 +82,10 @@ build variant × scope** (A→B: workspace=A; scope often `page-closure`).
 1. Preflight; resolve workspace (ask if multiple). Exit `5` → `blocked`.
 2. Light inventory (`scripts/profile_inventory.py`). Cover
    `references/subsystem-inventory.md`. Record `lockfile_status`
-   `present|absent|unparsed`; gate stays `frozen` unless `present`.
+   `present|absent|unparsed`; gate stays `frozen` unless `present`. Bind the
+   packet to `repo_revision` and state `browser_support_floor` (§1 anchors).
+   `vue_major=3` → stop or explicit `entry_mode: residual-audit`; never write
+   a Vue2-baseline packet over an already-Vue3 workspace.
 3. Build the Node compatibility matrix from current pins/`engines`/CI/container
    evidence and the **exact selected target versions** of the build, test, SSR,
    and package-manager toolchain. Do not call this a universal “Vue 3 minimum”:

@@ -97,6 +97,12 @@ NODE_BASELINE_FIELDS = (
     "node_compatibility_status",
     "node_transition_strategy",
 )
+# Always-required §1 anchor fields: the packet must bind to a repo state and
+# state a browser support floor (value may be an evidenced unknown).
+BASELINE_ANCHOR_FIELDS = (
+    "repo_revision",
+    "browser_support_floor",
+)
 PATH_IDS = {
     "compat-big-bang",
     "direct-vue3",
@@ -199,6 +205,19 @@ MANUAL_GAP_ITEMS = (
     ("legacy global prototype mount", ("Vue.prototype",)),
     ("global mount migration target", ("globalProperties", "provide/inject")),
     ("lockfile reproducibility", ("lockfile",)),
+    # Silent Vue3 breaks: build/lint stay green while behavior degrades.
+    ("component v-model model option", ("model 选项", "model:")),
+    ("native/keyCode modifiers", (".native", "keyCode")),
+    ("emits declaration double-fire", ("emits",)),
+    (
+        "global registration APIs and directive hooks",
+        ("Vue.component", "Vue.directive", "Vue.mixin", "全局注册"),
+    ),
+    ("transition class rename", ("v-enter", "过渡类名", "transition 类名")),
+    (
+        "silent semantics family",
+        ("v-if/v-for", "静默语义", "attr coercion"),
+    ),
 )
 CHECKLIST_PLACEHOLDERS = {"", "-", "—", "todo", "待填", "待填写"}
 VALIDATION_PLACEHOLDERS = CHECKLIST_PLACEHOLDERS | {"tbd", "待补", "n/a", "na"}
@@ -392,6 +411,16 @@ def validate_ui_visual_risk(
         match = re.search(rf"(?im)^\s*[-*]?\s*{re.escape(marker)}\s*(.+)$", impact_block)
         if not match or match.group(1).strip().lower() in {"", "-", "tbd", "todo", "待补"}:
             result.error(f"§5 ui_visual_risk missing substantive {marker}")
+            continue
+        if marker == "required_visual_states:" and visual_required == "yes":
+            states = [item.strip() for item in match.group(1).split(",") if item.strip()]
+            # Downstream visual gates hard-require at least five unique state rows;
+            # fewer than five here fails only after the baseline window has closed.
+            if len(set(states)) < 5:
+                result.error(
+                    "§5 required_visual_states needs at least 5 unique states when "
+                    "visual_acceptance_required=yes"
+                )
 
 
 def path_matches_report(value: str, report: Path) -> bool:
@@ -510,6 +539,27 @@ def parse_node_matrix(baseline: str, result: ReportResult) -> dict[str, str]:
             "§1 unknown Node matrix requires "
             "node_transition_strategy=undecided|blocked"
         )
+    return values
+
+
+def parse_baseline_anchor_fields(baseline: str, result: ReportResult) -> dict[str, str]:
+    """§1 must bind the packet to a repo revision and a browser support floor."""
+    values: dict[str, str] = {}
+    for name in BASELINE_ANCHOR_FIELDS:
+        match = re.search(
+            rf"(?im)^\s*[-*]?\s*`?{re.escape(name)}`?\s*[:：]\s*(.+?)\s*$",
+            baseline,
+        )
+        if not match:
+            result.error(f"§1 missing structured {name}:")
+            continue
+        value = match.group(1).strip().strip("`").strip()
+        if not value or re.fullmatch(r"(?:<[^>]+>|tbd|todo|待补|待填)", value, re.I):
+            result.error(
+                f"§1 {name} must contain a concrete value or an evidenced unknown"
+            )
+            continue
+        values[name] = value
     return values
 
 
@@ -878,6 +928,7 @@ def validate_report(path: Path) -> ReportResult:
         result.error("§1 must state lockfile status (e.g. path present, or 无 lockfile)")
     lock_status = parse_lockfile_status(baseline, result)
     node_matrix = parse_node_matrix(baseline, result)
+    parse_baseline_anchor_fields(baseline, result)
     parse_evidence_as_of_baseline(baseline, status.get("evidence_as_of"), result)
 
     path_block = sections.get("推荐迁移路径", "")
@@ -1229,15 +1280,43 @@ def validate_bundle_artifacts(report: Path, result: ReportResult) -> None:
         else:
             if not isinstance(inventory, dict):
                 result.error(f"{INVENTORY_NAME} root must be an object")
-            elif inventory.get("lockfile_status") not in LOCKFILE_STATUSES:
-                result.error(
-                    f"{INVENTORY_NAME} lockfile_status must be one of {sorted(LOCKFILE_STATUSES)}"
+            else:
+                if inventory.get("lockfile_status") not in LOCKFILE_STATUSES:
+                    result.error(
+                        f"{INVENTORY_NAME} lockfile_status must be one of {sorted(LOCKFILE_STATUSES)}"
+                    )
+                elif report_lock and inventory.get("lockfile_status") != report_lock:
+                    result.error(
+                        f"{INVENTORY_NAME} lockfile_status={inventory.get('lockfile_status')!r} "
+                        f"does not match report {report_lock!r}"
+                    )
+                baseline_block = sections.get("基线与假设", "")
+                revision_match = re.search(
+                    r"(?im)^\s*[-*]?\s*`?repo_revision`?\s*[:：]\s*(.+?)\s*$",
+                    baseline_block,
                 )
-            elif report_lock and inventory.get("lockfile_status") != report_lock:
-                result.error(
-                    f"{INVENTORY_NAME} lockfile_status={inventory.get('lockfile_status')!r} "
-                    f"does not match report {report_lock!r}"
-                )
+                inventory_revision = inventory.get("repo_revision")
+                if (
+                    isinstance(inventory_revision, str)
+                    and inventory_revision
+                    and revision_match
+                    and inventory_revision not in revision_match.group(1)
+                ):
+                    result.error(
+                        f"{INVENTORY_NAME} repo_revision={inventory_revision!r} does not "
+                        f"match report §1 repo_revision {revision_match.group(1)!r} "
+                        "(stale analysis packet)"
+                    )
+                if (
+                    inventory.get("vue_major") == "3"
+                    and status.get("analysis_status") == "complete"
+                    and "residual-audit" not in report_text
+                ):
+                    result.error(
+                        f"{INVENTORY_NAME} vue_major=3: workspace is already on Vue 3; "
+                        "a complete packet must declare residual-audit entry mode "
+                        "or stay blocked instead of describing a Vue2 baseline"
+                    )
 
 
 def validate_evidence_dir(evidence_dir: Path) -> list[ReportResult]:

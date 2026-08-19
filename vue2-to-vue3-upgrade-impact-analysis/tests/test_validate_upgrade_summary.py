@@ -52,6 +52,14 @@ class ValidateUpgradeSummaryTests(unittest.TestCase):
         errors = MODULE.validate(self.data, self.raw_size)
         self.assertTrue(any("needs_choice" in e for e in errors))
 
+    def test_rejects_fewer_than_five_required_states(self) -> None:
+        # Downstream visual gates hard-count >=5 required-state evidence rows.
+        self.data["ui_visual_risk"]["required_states"] = [
+            "search-default", "table-empty", "table-data", "cell-popper",
+        ]
+        errors = MODULE.validate(self.data, self.raw_size)
+        self.assertTrue(any("5..20" in e for e in errors))
+
     def test_ready_requires_lockfile_present(self) -> None:
         self.data["lockfile_status"] = "absent"
         errors = MODULE.validate(self.data, self.raw_size)

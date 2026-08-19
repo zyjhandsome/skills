@@ -83,6 +83,25 @@ High/blocker 与每个 `required_for_path=yes` 均为 `decided`（`deferred` 只
 `frozen`。
 §1 可复述 `evidence_as_of`；若复述则必须与状态表一致。
 
+§1 还必须出现以下两个锚点字段（校验器强制，禁止占位）：
+
+- `repo_revision:` 分析时刻的 git HEAD commit（无 git 时写关键文件 digest 并注明）。
+  分析包只对该仓库状态有效；下游在消费本包前必须重跑画像并比对
+  `repo_revision` / `vue_major` / `builder` / `ui_stack`，漂移即判定分析 stale、
+  回炉重跑，不得沿用旧包。`inventory.json` 的 `repo_revision` 与 §1 不一致时
+  校验器直接报错（stale analysis packet）。
+- `browser_support_floor:` browserslist / `.browserslistrc` 原文，或明确写
+  「无配置 + Vite 默认 modern target 需决策」。Vue 3 不支持 IE11、Vite 默认
+  target 为现代浏览器；企业内网旧浏览器约束可一票否决 direct 路径，必须在
+  `build` 子系统决策中给出 target / `@vitejs/plugin-legacy` 结论。
+
+**已是 Vue3 的入口规则：** 画像 `vue_major` 为 `3`（或大面积 Vue3 源码与 Vue2
+基线描述矛盾）时，不得按 Vue2 基线模板产出 `complete` 报告。只允许二选一：
+`analysis_status=blocked` 并声明「非 Vue2 仓」，或显式进入 `entry_mode:
+residual-audit`（残留审计：只出残留清单 + 验证矩阵，不再推荐迁移路径三轴的
+升级动作）。`inventory.json` `vue_major=3` 而报告 `complete` 且未声明
+`residual-audit` 时，校验器报错。
+
 §1 还必须分别记录当前与目标 Node 契约，禁止只写“Node 18 PASS”或笼统的
 “Vue3 最低 Node”：
 
@@ -147,7 +166,9 @@ High/blocker 与每个 `required_for_path=yes` 均为 `decided`（`deferred` 只
 - `primary_sample:`
 - `secondary_sample:`（不适用时写有依据的 `not_applicable`）
 - `baseline_status:`
-- `required_visual_states:`
+- `required_visual_states:`（`visual_acceptance_required: yes` 时至少列 **5 个唯一状态**，
+  逗号分隔；下游视觉门禁按状态行硬计数 ≥5，少于 5 会在基线窗口关闭后才失败。
+  summary 的 `ui_visual_risk.required_states` 同样要求 5..20 项）
 - `recommended_next_action:`（通用动作，不得填写其他 Skill 名称）
 
 仅写“做视觉回归”不合规。无触发器时可写
@@ -162,6 +183,14 @@ High/blocker 与每个 `required_for_path=yes` 均为 `decided`（`deferred` 只
 - `Vue.prototype.$*` 定义与 `this.$*` 消费点（独立行）
 - 对应的 `app.config.globalProperties` 或 `provide/inject` 迁移目标（独立行）
 - lockfile 缺失或未解析时的版本复现风险
+- `model:` 选项（自定义 v-model；必须区分父级 v-model 消费的「活」选项与
+  显式 `:prop` 绑定的「死」选项，活选项标 blocker——Vue3 下静默失效不报错）
+- `.native` / keyCode 修饰符（Vue3 移除后静默失效，build 不报错）
+- `emits` 声明与事件双触发（未声明 emit 走 attrs fallthrough 触发两次）
+- `Vue.component` / `Vue.directive` / `Vue.mixin` 全局注册与自定义指令钩子改名
+- `<transition>` 过渡类名（`v-enter` → `v-enter-from`；动画静默失效）
+- 静默语义变更族（v-if/v-for 优先级、v-bind 合并顺序、watch 数组、
+  mixin data 浅合并、attribute coercion）
 
 上述每一项必须有**独立行**与非空实质结果；禁止一行打包全部项，禁止仅写
 `已声明` / `已检查` / `已核对` / `ok` 等空泛词。
