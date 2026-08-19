@@ -112,8 +112,7 @@ Wave 粘贴块只补充本波 Skill、应已存在的上游工件、增量门禁
 默认（仅 CONFIG 不存在且用户未覆盖时使用）：
 - workspace = 当前本地仓库 / workspace（含待升级的 package.json）
 - pages = 空 → 全 workspace（batch_scope=full-stack）
-- target_vue_version = 未指定时，由 Wave 1 从 npm registry 解析当前最新稳定
-  3.x 的**精确版本**写入 CONFIG 与报告（钉精确补丁号；禁止写 latest）
+- target_vue_version = 3.5.39（钉精确补丁号；禁止写 latest）
 
 可选覆盖（需要时才写）：
 pages = <路由或文件，多个用逗号或换行；填写则 batch_scope=page-closure>
@@ -246,9 +245,10 @@ Delivery 固定三行报告停止，不降级。
 pages 空 → batch_scope=full-stack。
 pages 有值 → batch_scope=page-closure（页面+闭包+共享 runtime/build；其余 non-goal）。
 
-目标 Vue = TARGET_VUE_VERSION；用户未指定时本波从 npm registry 解析当前最新
-稳定 3.x 的精确版本，写入 CONFIG 与报告，不得改成 latest 或凭记忆填版本号。
-「2. 仓画像与依赖就绪度」与「3. 推荐迁移路径」必须写出该版本。
+目标 Vue = TARGET_VUE_VERSION；用户未覆盖时固定为 3.5.39，写入 CONFIG 与报告，
+不得改成 latest、不得改成「当前最新 3.x」、不得凭记忆填其他版本号。
+本波可向 npm registry 核验 3.5.39 是否可解析，但不得因此改成其他版本。
+「2. 仓画像与依赖就绪度」与「3. 推荐迁移路径」必须写出 3.5.39（或用户覆盖的精确版本）。
 compat 对齐 vue / @vue/compat / @vue/compiler-sfc 同版本；direct 至少 vue 与
 @vue/compiler-sfc；SSR 再对齐 @vue/server-renderer。版本不可用或冲突：gate=frozen。
 
