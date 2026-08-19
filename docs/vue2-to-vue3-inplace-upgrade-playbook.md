@@ -112,8 +112,9 @@ Wave 粘贴块只补充本波 Skill、应已存在的上游工件、增量门禁
 默认（仅 CONFIG 不存在且用户未覆盖时使用）：
 - workspace = 当前本地仓库 / workspace（含待升级的 package.json）
 - pages = 空 → 全 workspace（batch_scope=full-stack）
-- target_vue_version = Wave 1 从 registry 解析出的 3.5.x 线最新稳定补丁号
-  （必须精确到补丁；禁止 latest / next / rc / beta；解析结果写入 CONFIG 后全程不变）
+- target_vue_version = 3.5.39
+  （已精确到补丁；禁止 latest / next / rc / beta；Wave 1 校验该版本在 registry
+  可解析后写入 CONFIG，其后全程不变）
 
 可选覆盖（需要时才写）：
 pages = <路由或文件，多个用逗号或换行；填写则 batch_scope=page-closure>
@@ -149,7 +150,7 @@ CONFIG 已记录旧分析路径时沿用，不要并行维护 workspace 根
 - 单仓原地升。pages 只收窄本 change，不是 A→B host-port，也不是页面闭包迁入。
 - 默认行为 parity；保留 Options API。Composition API 全仓重写另立项。
 - Vue 3.6 / Vapor mode 不在本轮范围。3.6 线目前只有预发布，任何 rc/beta 都不得
-  进入本次升级；本轮目标固定在 3.5.x 的精确补丁号。
+  进入本次升级；本轮目标固定在 3.5.x 的精确补丁号（默认 3.5.39）。
 - 仅 Wave 4（delivery-execute-verify）可修改应用代码并安装依赖、运行命名配方；
   Wave 1–3 与 Wave 5 对应用代码只读。分析阶段 Name, never run。
 - Wave 5 可启动/停止干净服务、重跑验证、刷新 Codebase Memory 索引与 G9 证据；
@@ -259,10 +260,11 @@ Delivery 固定三行报告停止，不降级。
 pages 空 → batch_scope=full-stack。
 pages 有值 → batch_scope=page-closure（页面+闭包+共享 runtime/build；其余 non-goal）。
 
-目标 Vue = TARGET_VUE_VERSION。用户未覆盖时，本波向 npm registry 解析 3.5.x 线的
-最新稳定补丁号，钉成精确版本写入 CONFIG 与报告；不得写 latest、不得写「当前最新
-3.x」、不得凭记忆填版本号、不得落到 3.6 线的任何预发布（alpha/beta/rc）。
-解析失败或该线不可用时停下询问用户，不得自行改钉其他版本。
+目标 Vue = TARGET_VUE_VERSION。用户未覆盖时固定为 3.5.39；本波向 npm registry
+校验该精确版本可解析后写入 CONFIG 与报告；不得写 latest、不得写「当前最新
+3.x」、不得凭记忆改填其他版本号、不得落到 3.6 线的任何预发布（alpha/beta/rc）。
+校验失败或该版本不可用时停下询问用户，不得自行改钉其他版本（包括 3.5.x 线的
+其他补丁）。
 「2. 仓画像与依赖就绪度」与「3. 推荐迁移路径」必须写出该精确补丁号。
 CONFIG 一旦记录，后续各 Wave 一律沿用，不得因为上游发了新补丁而漂移。
 compat 对齐 vue / @vue/compat / @vue/compiler-sfc 同版本；direct 至少 vue 与
