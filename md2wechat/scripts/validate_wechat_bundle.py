@@ -8,6 +8,8 @@ import re
 import sys
 from pathlib import Path
 
+from paths import pair_stem, source_stem
+
 RATIO = 2.35
 RATIO_TOL = 0.02
 SOURCE_OMIT_H2 = {"文章元数据", "核心导读", "目录", "延伸术语表", "自检报告"}
@@ -86,13 +88,17 @@ def validate_html(path: Path, profile: str = "auto") -> list[str]:
     if article.count("元数据抓取时间") or article.count(">文章元数据<"):
         errors.append("FORBIDDEN: 文章元数据 table/section leaked")
 
-    # Source footer may include a concise "edited, non-verbatim" disclosure.
+    # 来源与说明只保留原文
     footer = ""
     fm = re.search(r">来源与说明<.*$", article, flags=re.S)
     if fm:
         footer = fm.group(0)
         if "不代表" in footer or "非官方中文完整整理" in footer:
             errors.append("FORBIDDEN: long disclaimer in source footer")
+        if not re.search(r"原文：", footer):
+            errors.append("MISSING: 原文 in 来源与说明")
+        if re.search(r"视频：|查看原视频|非逐字稿|href=", footer, flags=re.I):
+            errors.append("FORBIDDEN: 来源与说明 must contain only 原文")
 
     if resolved_profile == "full":
         has_dialogue = bool(re.search(r">对谈实录<", article))
@@ -195,10 +201,40 @@ def validate_coverage(source: Path, audit: Path, profile: str) -> list[str]:
         )
 
     if profile == "editorial" and ("对谈人物" in src_text or "演讲" in src_text):
-        # The edited article should disclose that quotations and sequencing are not verbatim.
         if "非逐字稿" not in audit_text:
             errors.append("AUDIT MISSING: non-verbatim editorial disclosure")
 
+    return errors
+
+
+def extract_h1(article: str) -> str:
+    m = re.search(r"<h1\b[^>]*>(.*?)</h1>", article, flags=re.S | re.I)
+    if not m:
+        return ""
+    return re.sub(r"<[^>]+>", "", m.group(1)).strip()
+
+
+def validate_deliverable_names(
+    html: Path, cover: Path | None, source: Path | None = None
+) -> list[str]:
+    errors: list[str] = []
+    hp = pair_stem(html)
+    if not hp or hp[1] != "公众号文章" or html.suffix.lower() != ".html":
+        errors.append("HTML filename must be {原文文件名}_公众号文章.html")
+        return errors
+    if source is not None:
+        expected = source_stem(source)
+        if hp[0] != expected:
+            errors.append(
+                f"HTML stem must match source filename: {hp[0]} != {expected}"
+            )
+    if cover is None:
+        return errors
+    cp = pair_stem(cover)
+    if not cp or cp[1] != "公众号封面" or cover.suffix.lower() != ".png":
+        errors.append("cover filename must be {原文文件名}_公众号封面.png")
+    elif cp[0] != hp[0]:
+        errors.append("cover filename stem must match 公众号文章.html")
     return errors
 
 
@@ -251,15 +287,12 @@ def main(argv: list[str] | None = None) -> int:
     errors.extend(validate_html(args.html, profile=args.profile))
 
     resolved_profile, han_chars, minutes = article_metrics(args.html, profile=args.profile)
-    if (args.source is None) != (args.audit is None):
-        errors.append("coverage validation requires both --source and --audit")
-    elif args.source is not None and args.audit is not None:
-        errors.extend(validate_coverage(args.source, args.audit, resolved_profile))
-        if resolved_profile == "editorial":
-            article = extract_article(args.html.read_text(encoding="utf-8"))
-            source_text = args.source.read_text(encoding="utf-8")
-            if ("对谈人物" in source_text or "演讲" in source_text) and "非逐字稿" not in article:
-                errors.append("MISSING: reader-facing non-verbatim editorial disclosure")
+    errors.extend(validate_deliverable_names(args.html, args.cover, args.source))
+    if args.audit is not None:
+        if args.source is None:
+            errors.append("coverage validation requires --source with --audit")
+        else:
+            errors.extend(validate_coverage(args.source, args.audit, resolved_profile))
 
     if args.cover:
         if not args.cover.is_file():

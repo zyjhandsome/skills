@@ -12,7 +12,17 @@ The article should behave as one argument, not a transcript archive. Prefer this
 4. Separate implications for organizations and individuals.
 5. A closing decision rule or action.
 
-Four to seven body sections usually gives enough navigation without turning the audio into repeated menu announcements. This is a judgment range, not a hard quota.
+Four to seven body sections usually gives enough navigation without turning the audio into repeated menu announcements. This is a judgment range, not a hard quota. Talks longer than about 90 minutes, or sources with eight or more reader-facing H2s, may need eight to ten body sections. Completeness means every source H2 still has a recognizable claim, one mechanism or example, and its material boundary — not that the article is short.
+
+Length is a function of source density, not a badge of editorial quality:
+
+| Source | Default editorial length | Why |
+|---|---|---|
+| Talk or essay under 30 minutes | about 2,000–4,000 汉字 | One argument, few branches |
+| 30–90 minutes, or 5–8 H2s | about 4,000–6,000 汉字 | Merge repeated layers, keep reusable judgments |
+| Over 90 minutes, or ≥8 H2s | about 5,000–8,000 汉字 | Do not collapse independently reusable insights into slogans |
+
+If the knowledge base already extracted a section as its own note, that judgment is not “secondary color.” Keep it, with its mechanism, even after merging the insight/analysis/dialogue layers.
 
 ## Seven review dimensions
 
@@ -35,9 +45,10 @@ Four to seven body sections usually gives enough navigation without turning the 
 ### 3. Editorial value
 
 - Choose one central promise and make every section advance it.
-- Merge repeated insight/analysis/dialogue material instead of preserving the source order.
-- Keep an example only when it explains a mechanism or makes the conclusion memorable.
+- Merge repeated insight/analysis/dialogue material instead of preserving the source order. Do not merge away a distinct judgment just to hit a section quota.
+- Keep an example when it explains a mechanism, makes the conclusion memorable, or is already a reusable insight in the source. Cutting the only mechanism turns a claim into a slogan.
 - Preserve useful tension; do not flatten a nuanced discussion into motivational slogans.
+- After the draft, check whether a careful reader could reconstruct each source H2’s core claim. If not, the article is incomplete even if it “reads well.”
 
 ### 4. Credibility
 
@@ -64,7 +75,7 @@ Four to seven body sections usually gives enough navigation without turning the 
 - Inline styles only inside the copied article.
 - Editorial body normally contains no native tables.
 - Visual hierarchy must survive loss of class names and page-level CSS.
-- Cover text stays in the center safe band for 2.35:1 crop.
+- Cover text is centered on the 2.35:1 crop with no white plate: title on top, speakers below. Title must match the article H1. Cover filename follows the source file, not the H1.
 
 ## Suggested editorial draft shape
 

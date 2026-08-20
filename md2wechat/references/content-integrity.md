@@ -15,7 +15,9 @@ Ignore metadata, table of contents, glossary, self-check and production notes. D
 
 ## Decide coverage explicitly
 
-Create `{stem}_公众号内容审计.md` before final delivery. Its coverage table must contain every source H2 exactly once.
+Create a coverage inventory before writing. Do not save `*_公众号内容审计.md` as a deliverable. If a working audit file is needed for validation, write it to a temp directory and delete it after the HTML and cover pass.
+
+The coverage table must contain every source H2 exactly once.
 
 Allowed decisions:
 
@@ -25,6 +27,8 @@ Allowed decisions:
 - `删除`: the core claim is absent; explain why it is outside the title promise.
 
 `full` mode may not use `删减` or `删除` for reader-facing body sections. `editorial` may, but the reason must be editorial rather than “篇幅有限”.
+
+For sources with eight or more reader-facing H2s, or talks longer than about 90 minutes, prefer `保留` or `合并`. Use `删除` only when the claim is outside the title promise. Use `删减` only after the core claim, one necessary mechanism or example, and the material boundary are already in the article. If a sentence could stand as its own knowledge-base note, it is not secondary.
 
 ## Required audit format
 
@@ -49,7 +53,7 @@ Allowed decisions:
 - 重要删除：逐项列出；没有则写“无”。
 ```
 
-Do not put the audit inside the pasted WeChat article. It is a production artifact for review.
+Do not put the audit inside the pasted WeChat article, and do not leave it next to the source as a deliverable.
 
 ## Article integrity checks
 
@@ -73,12 +77,10 @@ Do not put the audit inside the pasted WeChat article. It is a production artifa
 
 ### Reader-facing provenance
 
-For edited interviews or talks, include a concise note such as:
+Attribute oral claims in the body. 来源与说明 only contains `原文：{原标题}` — no video URL, date parenthesis, or “非逐字稿” note.
 
-> 本文根据公开对谈编辑整理，非逐字稿；观点归属对谈嘉宾。
-
-Keep operational details such as crawler failures or ASR tooling out of the article unless they materially affect reliability. If automatic transcription materially limits quote accuracy, avoid long direct quotations and disclose that the text is edited rather than verbatim.
+Keep operational details such as crawler failures or ASR tooling out of the article unless they materially affect reliability. If automatic transcription materially limits quote accuracy, avoid long direct quotations.
 
 ## Validation meaning
 
-The deterministic validator checks that every source H2 appears in the audit and that required audit fields exist. A human or model must still judge whether the mapping and reasons are truthful. Never report “content complete” based only on exit code 0.
+The deterministic validator checks HTML, that 来源与说明 contains only 原文, and that the cover/HTML filenames match the source filename plus suffix. A human or model must still judge whether coverage is truthful. Never report “content complete” based only on exit code 0.

@@ -9,6 +9,8 @@ import re
 import sys
 from pathlib import Path
 
+from paths import article_html_name
+
 C = {
     "bg": "#FAFAF7",
     "text": "#1A1A1A",
@@ -358,36 +360,15 @@ def strip_editor_notes(text: str) -> str:
 
 
 def source_footer(meta: dict[str, str]) -> str:
-    """Reader-facing source lines plus an optional concise editorial disclosure."""
+    """来源与说明 only keeps 原文. No date, video, URL, or editorial note."""
     title = bare(meta.get("原标题", "") or meta.get("标题", ""))
-    date = public_date(bare(meta.get("发布时间", "")))
-    link = bare(meta.get("内容链接", "") or meta.get("视频链接", "") or meta.get("链接", ""))
-    edit_note = strip_editor_notes(bare(meta.get("编辑说明", "")))
     line1 = "原文：" + (title if title else "（见正文来源）")
-    if date:
-        line1 += f"（{date}）"
-    if link and re.match(r"^https?://", link):
-        line2_html = (
-            f'视频：<a href="{esc(link)}" style="color:{C["accent_strong"]};'
-            f'text-decoration:underline;">查看原视频</a>'
-        )
-    else:
-        line2_html = "视频：" + esc(link if link else "（未提供链接）")
-    note_html = (
-        f'<p style="margin:6px 0 0;padding:0;font-size:13px;line-height:1.65;'
-        f'color:{C["subtle"]};">{inline_md_raw(edit_note)}</p>'
-        if edit_note
-        else ""
-    )
     return (
         f'<section style="margin:28px 0 0;padding:16px 0 0;border-top:1px solid {C["border"]};">'
         f'<p style="margin:0 0 8px;padding:0;font-size:13px;font-weight:600;'
         f'color:{C["muted"]};">来源与说明</p>'
-        f'<p style="margin:0 0 6px;padding:0;font-size:13px;line-height:1.65;'
-        f'color:{C["subtle"]};">{esc(line1)}</p>'
         f'<p style="margin:0;padding:0;font-size:13px;line-height:1.65;'
-        f'color:{C["subtle"]};">{line2_html}</p>'
-        f"{note_html}"
+        f'color:{C["subtle"]};">{esc(line1)}</p>'
         f"</section>"
     )
 
@@ -612,13 +593,12 @@ def parse_md(md: str, mode: str = "auto") -> tuple[str, list[str], str]:
 
 def wrap(title: str, body_parts: list[str], mode: str = "full") -> str:
     article = "\n".join(body_parts)
-    doc_label = "公众号文章" if mode == "editorial" else "公众号完整版"
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{esc(title)}｜{doc_label}</title>
+  <title>{esc(title)}｜公众号文章</title>
   <style>
     body {{ margin: 0; background: #efeee8; font-family: {FONT}; color: #1a1a1a; }}
     .howto {{ max-width: 720px; margin: 0 auto; padding: 20px 16px 8px; font-size: 14px; line-height: 1.6; color: #4a4a45; }}
@@ -643,16 +623,8 @@ def wrap(title: str, body_parts: list[str], mode: str = "full") -> str:
 """
 
 
-def default_out_path(src: Path, mode: str = "full") -> Path:
-    stem = src.name
-    for suffix in ("_整理文档.md", "_公众号成稿.md", ".md"):
-        if stem.endswith(suffix):
-            stem = stem[: -len(suffix)]
-            break
-    else:
-        stem = src.stem
-    label = "公众号文章" if mode == "editorial" else "公众号完整版"
-    return src.with_name(f"{stem}_{label}.html")
+def default_out_path(src: Path) -> Path:
+    return src.with_name(article_html_name(src))
 
 
 def _self_test() -> None:
@@ -675,17 +647,15 @@ def _self_test() -> None:
             "原标题": "Garry Tan: Own Your Intelligence",
             "发布时间": "2026-08-07（YouTube 页面口径；YC Root Access 文稿页标注 Aug 06, 2026）",
             "内容链接": "https://www.youtube.com/watch?v=eRrc1pUY5oU",
-        }
-    )
-    assert "页面口径" not in foot and "用户提供" not in foot
-    foot_with_note = source_footer(
-        {
-            "原标题": "Talk",
-            "内容链接": "https://example.com/talk",
             "编辑说明": "本文根据公开对谈编辑整理，非逐字稿；观点归属对谈嘉宾。",
         }
     )
-    assert "非逐字稿" in foot_with_note and "观点归属" in foot_with_note
+    assert "原文：Garry Tan: Own Your Intelligence" in foot
+    assert "视频" not in foot and "非逐字稿" not in foot
+    assert "http" not in foot and "2026-08-07" not in foot
+    assert default_out_path(Path("20260803 刘润×吴军_整理文档.md")).name == (
+        "20260803 刘润×吴军_整理文档_公众号文章.html"
+    )
     editorial = """# Test\n\n## 开场\n\n> 一句话。\n\n正文。\n"""
     _, editorial_parts, detected = parse_md(editorial, mode="auto")
     assert detected == "editorial"
@@ -718,7 +688,7 @@ def main(argv: list[str] | None = None) -> int:
 
     title, parts, mode = parse_md(src.read_text(encoding="utf-8"), mode=args.mode)
     html_out = wrap(title, parts, mode=mode)
-    out = args.out or default_out_path(src, mode=mode)
+    out = args.out or default_out_path(src)
     out.write_text(html_out, encoding="utf-8")
     print(f"Wrote {out} ({len(html_out)} chars, mode={mode})")
     return 0

@@ -32,22 +32,20 @@ description: >-
 
 ## Outputs
 
-`editorial` 默认与源文件同目录产出：
+与源文件同目录，两种模式都只交付这两个文件。文件名与原文文件名一致，只加后缀：
 
 ```text
-{stem}_公众号成稿.md
-{stem}_公众号内容审计.md
-{stem}_公众号文章.html
-{stem}_公众号封面_2.35x1.png
+{原文文件名去扩展名}_公众号文章.html
+{原文文件名去扩展名}_公众号封面.png
 ```
 
-`full` 默认产出：
+例如 `20260803 刘润×吴军！…_整理文档.md` 对应 `…_整理文档_公众号文章.html` 与 `…_整理文档_公众号封面.png`。
 
-```text
-{stem}_公众号内容审计.md
-{stem}_公众号完整版.html
-{stem}_公众号封面_2.35x1.png
-```
+从临时成稿生成 HTML 时，必须 `--out` 到上述原文文件名，不能用成稿或 H1 另起名。
+
+不要留下 `*_公众号成稿.md`、`*_公众号内容审计.md`、`*_公众号完整版.html`、`*_公众号封面_2.35x1.png`。成稿和覆盖审计只作内部工作：可写在临时目录，校验通过后删除。只删本次写入的临时文件，不得删除目录里其他篇目已有的公众号文件。
+
+封面图上的标题必须与 HTML 的 H1 相同（可按冒号折成两行，不得另写金句）。文字水平垂直居中嵌入画面：标题在上，人物在下。不要白色底牌、色块或胶囊；只叠字。封面**文件名**跟原文走，不跟 H1 走。
 
 ## Workflow
 
@@ -55,33 +53,36 @@ description: >-
 
 以 `*_整理文档.md` 为内容源；只有 HTML 时，先寻找同名 Markdown，找不到再谨慎提取正文并披露这一降级。同名 HTML 也可用于提取用户明确要求保留的图。先判断受众、原稿信息密度、可验证边界和最值得承诺的一条主线。用户没有指定读者时，从标题、栏目和原稿语气合理推断，不必停下来提问。
 
-写作前列出源稿每个正文 H2 的核心结论、关键证据、限定/反方和行动含义。在 `*_公众号内容审计.md` 中逐节标记 `保留 / 合并 / 删减 / 删除`；任何删减或删除都要说明为什么不影响标题承诺。
+写作前列出源稿每个正文 H2 的核心结论、关键证据、限定/反方和行动含义，并完成覆盖判断（`保留 / 合并 / 删减 / 删除`）。审计表不要写成交付文件。
 
 ### 2. Edit the content
 
-`editorial`：先生成 `*_公众号成稿.md`。文章应有一条标题承诺、一个能独立听懂的开场、清晰的章节推进和行动性收束。合并重复的“洞察/解析/实录”，把对话改为叙述，只保留少量不可替代的短引语。表格改为口语化结论；链接、来源和复杂数字不要打断正文播报。正文主动提出的问题必须在本节或后文明确回答，不能只靠暗示闭环。
+`editorial`：先在临时目录写公众号成稿 Markdown，再生成 HTML。文章应有一条标题承诺、一个能独立听懂的开场、清晰的章节推进和行动性收束。合并重复的“洞察/解析/实录”，把对话改为叙述，只保留少量不可替代的短引语。压缩的是重复层和过程噪音，不是可独立成条的判断；每条源稿 H2 的核心结论、一条必要机制或例子、以及会改变力度的限定，都要还能被读出来。长对谈（约 90 分钟以上或 ≥8 个正文 H2）默认写 5,000–8,000 字、8–10 节，而不是压成口号集。表格改为口语化结论；链接、来源和复杂数字不要打断正文播报。正文主动提出的问题必须在本节或后文明确回答，不能只靠暗示闭环。
 
-`full`：保留原稿主体和三层结构；删除目录、术语表、自检、抓取流水、编辑注及冗长免责声明。
+`full`：保留原稿主体和三层结构；删除目录、术语表、自检、抓取流水、编辑注及冗长免责声明。输出文件名仍是 `{原文文件名}_公众号文章.html`。
 
-共同要求：不得把简介中的问题写成嘉宾说过的结论；口述数字和观点要明确归于讲者，未核实内容不要升级成事实。区分短引语与编辑概括；访谈、演讲类精编稿在元数据加入简短“编辑说明”，向读者披露非逐字稿和观点归属。
+共同要求：不得把简介中的问题写成嘉宾说过的结论；口述数字和观点要明确归于讲者，未核实内容不要升级成事实。区分短引语与编辑概括。观点归属写在正文里；来源与说明只保留「原文：{原标题}」，不要视频链接、日期括注或编辑说明。
 
 ### 3. Build paste-ready HTML
 
 使用绝对路径，避免依赖当前目录：
 
 ```powershell
-python "$env:USERPROFILE\.cursor\skills\md2wechat\scripts\build_wechat_html.py" "<公众号成稿.md>" --mode editorial --out "<公众号文章.html>"
+python "$env:USERPROFILE\.cursor\skills\md2wechat\scripts\build_wechat_html.py" "<成稿或整理文档.md>" --mode editorial
 python "$env:USERPROFILE\.cursor\skills\md2wechat\scripts\build_wechat_html.py" "<整理文档.md>" --mode full
 ```
+
+默认输出 `{原文文件名}_公众号文章.html`，与源文件同目录。从临时成稿构建时必须 `--out` 到该路径。
 
 复制区域 `#wechat-article` 内必须全是内联样式，不依赖 class、外链 CSS、JavaScript 或 Mermaid。正文表格在 `editorial` 中改写为句子；`full` 中 ≤4 列转内联表，≥5 列转卡片。只有用户明确要求保留 Mermaid/流程图时，才从同名 HTML 或源码渲染为 PNG，再以普通图片插入；不得保留 Mermaid 源码。
 
 ### 4. Make the cover
 
-首图目标 2.35:1，默认 1175×500。画面应有单一隐喻、明确视觉中心和移动端安全区；文字尽量短。先生成宽幅图，再裁切：
+首图目标 2.35:1，默认 1175×500。画面应有单一隐喻、明确视觉中心。封面只嵌入文字，水平垂直居中：标题在上，人物在下；不要白色底色、色块或描边底牌。文字颜色用深字（`#1A1A1A`）和人物强调色（`#A85533`）。先生成宽幅图，再裁切，再用叠字脚本：
 
 ```powershell
-python "$env:USERPROFILE\.cursor\skills\md2wechat\scripts\make_cover_235.py" "<generated.png>" --out "<stem>_公众号封面_2.35x1.png"
+python "$env:USERPROFILE\.cursor\skills\md2wechat\scripts\make_cover_235.py" "<generated.png>" --out "<原文文件名>_公众号封面.png"
+python "$env:USERPROFILE\.cursor\skills\md2wechat\scripts\overlay_cover_text.py" "<原文文件名>_公众号封面.png" --title "<H1>" --people "<人物>"
 ```
 
 裁切和封面校验需要 Pillow。先确认当前 Python 能执行 `from PIL import Image`；缺失时使用已有的工作区 Python 运行时或在当前环境安装 Pillow，不得跳过封面校验。
@@ -89,11 +90,10 @@ python "$env:USERPROFILE\.cursor\skills\md2wechat\scripts\make_cover_235.py" "<g
 ### 5. Validate before delivery
 
 ```powershell
-python "$env:USERPROFILE\.cursor\skills\md2wechat\scripts\validate_wechat_bundle.py" "<公众号文章.html>" --profile editorial --source "<整理文档.md>" --audit "<公众号内容审计.md>" --cover "<cover.png>"
-python "$env:USERPROFILE\.cursor\skills\md2wechat\scripts\validate_wechat_bundle.py" "<公众号完整版.html>" --profile full --source "<整理文档.md>" --audit "<公众号内容审计.md>" --cover "<cover.png>"
+python "$env:USERPROFILE\.cursor\skills\md2wechat\scripts\validate_wechat_bundle.py" "<原文文件名>_公众号文章.html" --cover "<原文文件名>_公众号封面.png" --source "<整理文档.md>"
 ```
 
-必须修到退出码为 0。校验器只能确认覆盖清单齐全，不能代替语义判断。还要人工检查：只听音频是否能理解指代和转折；只扫标题、每节首段和金句是否能复述主线；标题是否兑现；显式问题是否逐一回答；每个重要判断是否能区分“事实、讲者观点、编辑推论”；审计表中的删减理由是否成立。
+必须修到退出码为 0。校验器检查 HTML、来源页脚是否只有原文、封面比例，以及封面/HTML 文件名是否与原文文件名同茎。覆盖完整性仍要人工判断。还要检查：只听音频是否能理解指代和转折；只扫标题、每节首段和金句是否能复述主线；标题是否兑现；显式问题是否逐一回答；每个重要判断是否能区分“事实、讲者观点、编辑推论”。交付前删除临时成稿和审计文件。
 
 ### 6. Hand off
 
@@ -102,11 +102,18 @@ python "$env:USERPROFILE\.cursor\skills\md2wechat\scripts\validate_wechat_bundle
 ## Non-negotiable anti-patterns
 
 - 把原稿逐段换皮，却称为“公众号成稿”
-- 为了短而删除限定词、来源边界或相反观点
+- 把 2 小时对谈压成口号集，却称为“成稿”
+- 为了短而删除限定词、来源边界、相反观点，或唯一能让结论成立的机制/例子
 - 未做逐节覆盖审计，却声称“内容完整”
 - 在正文提出问题，后文没有明确回答
 - 用表格、括号注释、裸链接和连续 speaker 标签组织需要播报的正文
 - 标题同时塞入四五个议题，正文没有单一回答
 - 用工具效率代替读者价值，只报告“压缩了多少字”
 - 封面给 16:9 或 1:1，却标成 2.35:1
+- 封面或 HTML 文件名与原文文件名不一致（应用后缀，不得改用 H1）
+- 封面上的字与文章 H1 不一致
+- 封面文字加白色底牌、胶囊或色块；文字不在画面正中
+- 把成稿、审计留在源目录当交付件
+- 清目录时删掉其他篇目已有的公众号文件
+- 来源与说明里写视频链接、日期括注或编辑说明
 - 把 md2html 整页或 Mermaid 源码直接粘进公众号
