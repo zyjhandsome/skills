@@ -197,6 +197,41 @@ def render_steps(lines):
     return steps
 
 
+def extract_md_tables(body):
+    """Return [(heading, table_lines), ...] for markdown tables in a section body.
+
+    heading is the nearest preceding '### ' title (or ''). The first table in
+    文章元数据 is the source table; later ones (e.g. 官方章节索引) stay attached.
+    """
+    tables, heading, i = [], "", 0
+    while i < len(body):
+        line = body[i]
+        if line.startswith("### "):
+            heading = line[4:].strip()
+            i += 1
+            continue
+        if line.strip().startswith("|"):
+            chunk = []
+            while i < len(body):
+                cur = body[i]
+                if cur.strip().startswith("|"):
+                    chunk.append(cur)
+                    i += 1
+                    continue
+                if cur.strip() == "":
+                    nxt = next((x for x in body[i + 1 :] if x.strip()), "")
+                    if nxt.startswith("|"):
+                        i += 1
+                        continue
+                break
+            if chunk:
+                tables.append((heading, chunk))
+            heading = ""
+            continue
+        i += 1
+    return tables
+
+
 def render_content_section(title, body):
     sid = slugify(title)
     subs = split_subsections(body)
@@ -222,6 +257,27 @@ def render_content_section(title, body):
         )
         steps = render_steps(subs["对谈实录"])
         out.append('<div class="timeline">\n%s\n</div>' % "\n".join(steps))
+
+    # 争辩型访谈：先声后解（原声交锋 → 语境与释义 → 未决问题）
+    if "原声交锋" in subs:
+        out.append(
+            '<h3 id="%s-clash" class="layer-heading layer-clash">原声交锋</h3>' % sid
+        )
+        steps = render_steps(subs["原声交锋"])
+        out.append('<div class="timeline">\n%s\n</div>' % "\n".join(steps))
+    if "语境与释义" in subs:
+        out.append(
+            '<h3 id="%s-context" class="layer-heading layer-context">语境与释义</h3>' % sid
+        )
+        out.append("\n".join(render_blocks(subs["语境与释义"])))
+    if "未决问题" in subs:
+        out.append(
+            '<h3 id="%s-open" class="layer-heading layer-open">未决问题</h3>\n'
+            '<div class="callout callout-warn section-open">\n'
+            '  <svg class="callout-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-warn"/></svg>\n'
+            '  <div class="callout-body">\n%s\n  </div>\n'
+            "</div>" % (sid, "\n".join(render_blocks(subs["未决问题"])))
+        )
     return "\n".join(out), sid, count_cjk(" ".join(body))
 
 
@@ -250,7 +306,8 @@ def build(md_path, out_path):
         if title in SKIP_TITLES:
             continue
         if title == "文章元数据":
-            tbl_lines = [l for l in body if l.strip().startswith("|")]
+            meta_tables = extract_md_tables(body)
+            tbl_lines = meta_tables[0][1] if meta_tables else []
             for r in [split_row(l) for l in tbl_lines][2:]:
                 if len(r) >= 2:
                     meta[strip_md(r[0])] = r[1]
@@ -266,13 +323,17 @@ def build(md_path, out_path):
                 bio_body = blockquote_text(q, strip_label=True)
             continue
         if title == "核心导读":
+            raw_quote = blockquote_text(body)
+            lm = re.match(r"^\*\*([^*]+)\*\*[：:]\s*", raw_quote)
+            quote_label = lm.group(1).strip() if lm else ""
             quote = blockquote_text(body, strip_label=True)
             rest = [l for l in body if not l.strip().startswith(">")]
             paras = paragraphs(rest)
+            hl_class = "highlight highlight-conflict" if quote_label == "核心冲突" else "highlight"
             intro_html = (
                 '<h2 id="核心导读">核心导读</h2>\n\n'
-                '<div class="highlight">\n  <p>%s</p>\n</div>\n\n%s'
-                % (inline(quote), "\n\n".join(paras))
+                '<div class="%s">\n  <p>%s</p>\n</div>\n\n%s'
+                % (hl_class, inline(quote), "\n\n".join(paras))
             )
             subtitle = strip_md(re.split(r"[；。]", quote)[0]).strip()
             if subtitle and not subtitle.endswith("。"):
@@ -320,20 +381,25 @@ def build(md_path, out_path):
         )
         cjk_total += count_cjk(bio_body)
 
-    # ---- metadata collapsible (table only; bio already at top) ----
-    meta_lines = []
+    # ---- metadata collapsible (source table + optional extra tables) ----
+    meta_tables = []
     for title, body in sections:
         if title == "文章元数据":
-            meta_lines = [l for l in body if l.strip().startswith("|")]
+            meta_tables = extract_md_tables(body)
             break
     metadata_html = ""
-    if meta_lines:
+    if meta_tables:
+        inner = ['<div class="table-wrap">%s</div>' % render_table(meta_tables[0][1])]
+        for heading, tlines in meta_tables[1:]:
+            if heading:
+                inner.append("<h3>%s</h3>" % inline(heading))
+            inner.append('<div class="table-wrap">%s</div>' % render_table(tlines))
         metadata_html = (
             '<details class="collapsible meta-panel" id="文章元数据">\n'
             "  <summary>文章元数据与来源</summary>\n"
             '  <div class="collapsible-body">\n'
-            '<div class="table-wrap">%s</div>\n'
-            "  </div>\n</details>" % render_table(meta_lines)
+            "%s\n"
+            "  </div>\n</details>" % "\n".join(inner)
         )
 
     # ---- assemble content ----
@@ -368,7 +434,9 @@ def build(md_path, out_path):
     toc_html = "\n".join(toc)
 
     # ---- header fields ----
-    activity = strip_md(meta.get("活动", "") or meta.get("节目", ""))
+    activity = strip_md(
+        meta.get("活动", "") or meta.get("节目", "") or meta.get("节目名称", "")
+    )
     activity_short = re.split(r"——|—|--", activity)[0].strip()
     # Prefer 核心人物; fall back to 对谈人物 / 讲者 (common in podcast notes)
     people_raw = (
