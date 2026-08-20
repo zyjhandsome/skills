@@ -2,7 +2,8 @@
 name: md2html-lecture
 description: >-
   Convert a content-structuring "_整理文档.md" (对谈三层结构: 文章元数据 / 核心导读 / 多个
-  ## 小节 each with 核心洞察·深度解析·对谈实录 / 延伸术语表 / 自检报告) into the
+  ## 小节 each with 核心洞察·深度解析·对谈实录, or the debate variant
+  原声交锋·语境与释义·未决问题 / 延伸术语表 / 自检报告) into the
   styled, single-file Claude-orange HTML used in this repo's output/ folder.
   Use when asked to turn one of these整理文档 Markdown files into HTML, or to
   batch-convert files under output/ to the lecture HTML format.
@@ -24,6 +25,8 @@ metadata panel.
 ## Files
 
 - `scripts/build_html.py` — the converter (run it; do not rewrite it).
+- `scripts/batch_upgrade_dir.py` — re-convert a directory of already-published
+  notes against the current template, preserving hand-added Mermaid diagrams.
 - `assets/template.html` — the full HTML scaffold (CSS/JS + placeholders). Edit
   this only to change the global design; the script injects content into it.
 
@@ -84,7 +87,7 @@ needs a better fit:
 | `doc-title` / `<title>` | `# 标题` | verbatim |
 | `doc-eyebrow` | 文稿结构 / 人物数 | "对谈笔记" or "整理笔记" |
 | `doc-subtitle` | 核心导读 `> 全文论点` (first clause) | trim if awkward |
-| meta source line | 活动/原标题短名 + 核心人物/对谈人物/讲者 | e.g. "On Purpose · A × B" |
+| meta source line | 活动/节目/节目名称 短名 + 核心人物/对谈人物/讲者 | e.g. "On Purpose · A × B" |
 | meta date | 发布时间 | |
 | reading time | CJK chars ÷ 300 | estimate |
 
@@ -94,7 +97,8 @@ needs a better fit:
 - [ ] 10/N sections present; TOC lists only lvl-2 (no 洞察/解析/实录 sub-links)
 - [ ] No stray "<p>---</p>"; 目录 section dropped
 - [ ] 人物/讲者背景 (if present) opens the article as an info callout before 核心导读
-- [ ] 延伸术语表 and 文章元数据 render as collapsed <details> at the end
+- [ ] 延伸术语表 and 文章元数据 render as collapsed <details> at the end; extra
+      metadata tables keep their own <h3> heading inside the panel
 - [ ] 自检报告 is a hidden <h2> + collapsed <details>
 - [ ] Mermaid diagrams render (open the file in a browser)
 - [ ] Dark mode: toggle theme — no flash on reload; callouts / highlight / strong chips /
@@ -111,8 +115,10 @@ The converter assumes the content-structuring 对谈三层 format:
 ```markdown
 # 标题
 ## 文章元数据
-| 项目 | 内容 |            ← table; 内容链接 cell holds the source URL
+| 项目 | 内容 |            ← first table = source table (内容链接 cell holds the URL)
 | ...
+### 官方章节索引           ← optional extra tables keep their own heading
+| 时间 | 章节 |
 > **人物背景**：...        ← or **讲者背景**；lifted to article opening
 ## 核心导读
 > **全文论点**：...        ← becomes the highlight box (label stripped)
@@ -125,6 +131,12 @@ The converter assumes the content-structuring 对谈三层 format:
 段落…
 ### 对谈实录
 **讲者**：「台词」          ← each line becomes a timeline step
+### 原声交锋               ← 争辩型 only: timeline of the clashing quotes
+**讲者**：「台词」
+### 语境与释义             ← 争辩型 only: prose unpacking the clash
+段落…
+### 未决问题               ← 争辩型 only: warning callout
+段落…
 ## 延伸术语表              ← table → collapsed <details>
 ## 自检报告                ← table → hidden heading + collapsed <details>
 ```
@@ -137,6 +149,30 @@ Expected subsections for 对谈三层 notes: `核心洞察` / `深度解析` / `
 no dialogue worth quoting; the converter simply skips a missing layer (do not invent
 an empty timeline). Generic-template notes may use `## 关键语录与交锋时刻` instead
 of per-section 实录; that section renders as a normal content block if present.
+
+### 争辩型访谈的第二组分层
+
+When the interview is an argument rather than an explanation, a section may use
+`原声交锋` / `语境与释义` / `未决问题` instead of (or alongside) the three
+standard layers — the converter renders whichever layers are present, in the
+order 核心洞察 → 深度解析 → 对谈实录 → 原声交锋 → 语境与释义 → 未决问题:
+
+| Subsection | Renders as | Badge |
+|---|---|---|
+| `原声交锋` | timeline, same shape as 对谈实录 | 交锋 |
+| `语境与释义` | plain prose blocks | 释义 |
+| `未决问题` | warning callout | 未决 |
+
+`核心导读` can open with `> **核心冲突**：…` instead of `> **全文论点**：…`;
+the highlight box then carries a 核心冲突 pill. Use it when the thesis is the
+disagreement itself.
+
+### 文章元数据 with more than one table
+
+The first table is the source table: it feeds the header fields and the
+collapsible panel. Any further table under its own `### ` heading (a chapter
+index, a timeline of releases) is kept and rendered below the source table with
+that heading intact, instead of being merged into one flat table.
 
 ### Placement of 人物背景 / 讲者背景
 
@@ -186,3 +222,16 @@ The template already encodes earlier review decisions — keep them when editing
 To convert several files, run the script once per `.md`. Then do the Mermaid +
 header pass per file. Do not auto-add diagrams in batch — that step needs
 per-file judgment.
+
+To re-publish notes that were already converted, after the template or the
+converter changed:
+
+```bash
+python ".cursor/skills/md2html-lecture/scripts/batch_upgrade_dir.py" "<notes-dir>"
+```
+
+It walks `<notes-dir>` for `*_整理文档.html` files that still have a sibling
+`.md`, saves each hand-added `<figure class="diagram">` under the `<h2>` it
+follows, re-runs the converter, and puts those diagrams back. `--glob` changes
+the filename pattern and `--build` points at another converter; both default
+sensibly. It never invents a diagram, so a section that had none stays plain.
