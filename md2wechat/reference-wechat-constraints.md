@@ -7,7 +7,9 @@
 3. **No** JavaScript, SVG sprite refs, localStorage theme toggles.
 4. Prefer `section` / `p` / `h1–h3` / `strong` / `span` / `a` / `img`.
 5. Lists (`ul`/`ol`) are flaky → prefer numbered paragraphs.
-6. Body **GFM tables**: convert; never leave `| col |` as `<p>`.
+6. Body **GFM tables**: never leave `| col |` as `<p>`.
+   - `editorial` mode → rewrite the comparison as sentences so audio listeners receive the conclusion.
+   - `full` mode → convert as follows.
    - ≤4 columns → `<table cellspacing="0" cellpadding="0">` with **inline styles on every `td`**. Use `td` for header row too (`th` is often stripped/restyled).
    - ≥5 columns → stacked cards (`section` + labeled `p`); native tables overflow on phone.
    - Header row: accent-soft `#FBEEE6` / accent-strong text; body: white + border `#E5E4DC`.

@@ -11,11 +11,16 @@ Source:
 Outputs:
 
 ```
+…_公众号成稿.md
+…_公众号内容审计.md
+…_公众号文章.html
 …_公众号完整版.html
 …_公众号封面_2.35x1.png
 ```
 
-## Default omit / keep (from production trial)
+Use the first two for `editorial`; use `公众号完整版.html` only when the user asks to keep the complete source structure.
+
+## Full-mode omit / keep (from production trial)
 
 **Keep:** H1, 人物背景, 核心导读, all body sections with 核心洞察 / 深度解析 / 对谈实录 labels, short 来源（原文 + 视频）.
 

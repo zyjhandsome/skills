@@ -190,7 +190,9 @@ _SPEAKER_QUOTE = re.compile(
 
 
 def render_body_line(line: str, *, size: str = "15px", color: str | None = None) -> str:
-    raw = strip_bq(line.strip()) if line.strip().startswith(">") else line.strip()
+    if line.strip().startswith(">"):
+        return insight_card(strip_bq(line.strip()))
+    raw = line.strip()
     m = _SPEAKER_QUOTE.match(raw)
     if m:
         return dialogue_card(m.group(1), m.group(2))
@@ -356,14 +358,27 @@ def strip_editor_notes(text: str) -> str:
 
 
 def source_footer(meta: dict[str, str]) -> str:
-    """Keep only first two source lines: 原文 + 视频/内容链接."""
+    """Reader-facing source lines plus an optional concise editorial disclosure."""
     title = bare(meta.get("原标题", "") or meta.get("标题", ""))
     date = public_date(bare(meta.get("发布时间", "")))
     link = bare(meta.get("内容链接", "") or meta.get("视频链接", "") or meta.get("链接", ""))
+    edit_note = strip_editor_notes(bare(meta.get("编辑说明", "")))
     line1 = "原文：" + (title if title else "（见正文来源）")
     if date:
         line1 += f"（{date}）"
-    line2 = "视频：" + (link if link else "（未提供链接）")
+    if link and re.match(r"^https?://", link):
+        line2_html = (
+            f'视频：<a href="{esc(link)}" style="color:{C["accent_strong"]};'
+            f'text-decoration:underline;">查看原视频</a>'
+        )
+    else:
+        line2_html = "视频：" + esc(link if link else "（未提供链接）")
+    note_html = (
+        f'<p style="margin:6px 0 0;padding:0;font-size:13px;line-height:1.65;'
+        f'color:{C["subtle"]};">{inline_md_raw(edit_note)}</p>'
+        if edit_note
+        else ""
+    )
     return (
         f'<section style="margin:28px 0 0;padding:16px 0 0;border-top:1px solid {C["border"]};">'
         f'<p style="margin:0 0 8px;padding:0;font-size:13px;font-weight:600;'
@@ -371,7 +386,8 @@ def source_footer(meta: dict[str, str]) -> str:
         f'<p style="margin:0 0 6px;padding:0;font-size:13px;line-height:1.65;'
         f'color:{C["subtle"]};">{esc(line1)}</p>'
         f'<p style="margin:0;padding:0;font-size:13px;line-height:1.65;'
-        f'color:{C["subtle"]};">{esc(line2)}</p>'
+        f'color:{C["subtle"]};">{line2_html}</p>'
+        f"{note_html}"
         f"</section>"
     )
 
@@ -395,7 +411,12 @@ def subtitle_from_meta(meta: dict[str, str]) -> str:
     return venue
 
 
-def parse_md(md: str) -> tuple[str, list[str]]:
+def parse_md(md: str, mode: str = "auto") -> tuple[str, list[str], str]:
+    if mode == "auto":
+        mode = "full" if re.search(r"^### 核心洞察\s*$", md, flags=re.M) else "editorial"
+    if mode not in {"full", "editorial"}:
+        raise ValueError(f"Unknown mode: {mode}")
+    body_size = "16px" if mode == "editorial" else "15px"
     lines = md.splitlines()
     out: list[str] = []
     meta: dict[str, str] = {}
@@ -477,7 +498,7 @@ def parse_md(md: str) -> tuple[str, list[str]]:
                         out.append(tbl)
                         i = ni
                         continue
-                    out.append(p(lines[i].strip()))
+                    out.append(p(lines[i].strip(), size=body_size))
                     i += 1
                 skip_blank()
                 continue
@@ -540,10 +561,10 @@ def parse_md(md: str) -> tuple[str, list[str]]:
                                 continue
                             mnum = re.match(r"^(\d+)\.\s+(.+)$", lines[i].strip())
                             if mnum:
-                                out.append(p(f"{mnum.group(1)}. {mnum.group(2)}", mb="8px"))
+                                out.append(p(f"{mnum.group(1)}. {mnum.group(2)}", size=body_size, mb="8px"))
                                 i += 1
                                 continue
-                            out.append(p(lines[i].strip()))
+                            out.append(p(lines[i].strip(), size=body_size))
                             i += 1
                         skip_blank()
                         continue
@@ -557,7 +578,7 @@ def parse_md(md: str) -> tuple[str, list[str]]:
                             out.append(tbl)
                             i = ni
                             continue
-                        out.append(render_body_line(lines[i]))
+                        out.append(render_body_line(lines[i], size=body_size))
                         i += 1
                     continue
 
@@ -569,7 +590,7 @@ def parse_md(md: str) -> tuple[str, list[str]]:
                     out.append(tbl)
                     i = ni
                     continue
-                out.append(render_body_line(lines[i]))
+                out.append(render_body_line(lines[i], size=body_size))
                 i += 1
             continue
 
@@ -586,17 +607,18 @@ def parse_md(md: str) -> tuple[str, list[str]]:
         else ""
     )
     out.append(source_footer(meta))
-    return title, [x for x in out if x]
+    return title, [x for x in out if x], mode
 
 
-def wrap(title: str, body_parts: list[str]) -> str:
+def wrap(title: str, body_parts: list[str], mode: str = "full") -> str:
     article = "\n".join(body_parts)
+    doc_label = "公众号文章" if mode == "editorial" else "公众号完整版"
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{esc(title)}｜公众号完整版</title>
+  <title>{esc(title)}｜{doc_label}</title>
   <style>
     body {{ margin: 0; background: #efeee8; font-family: {FONT}; color: #1a1a1a; }}
     .howto {{ max-width: 720px; margin: 0 auto; padding: 20px 16px 8px; font-size: 14px; line-height: 1.6; color: #4a4a45; }}
@@ -621,15 +643,16 @@ def wrap(title: str, body_parts: list[str]) -> str:
 """
 
 
-def default_out_path(src: Path) -> Path:
+def default_out_path(src: Path, mode: str = "full") -> Path:
     stem = src.name
-    for suffix in ("_整理文档.md", ".md"):
+    for suffix in ("_整理文档.md", "_公众号成稿.md", ".md"):
         if stem.endswith(suffix):
             stem = stem[: -len(suffix)]
             break
     else:
         stem = src.stem
-    return src.with_name(f"{stem}_公众号完整版.html")
+    label = "公众号文章" if mode == "editorial" else "公众号完整版"
+    return src.with_name(f"{stem}_{label}.html")
 
 
 def _self_test() -> None:
@@ -655,6 +678,18 @@ def _self_test() -> None:
         }
     )
     assert "页面口径" not in foot and "用户提供" not in foot
+    foot_with_note = source_footer(
+        {
+            "原标题": "Talk",
+            "内容链接": "https://example.com/talk",
+            "编辑说明": "本文根据公开对谈编辑整理，非逐字稿；观点归属对谈嘉宾。",
+        }
+    )
+    assert "非逐字稿" in foot_with_note and "观点归属" in foot_with_note
+    editorial = """# Test\n\n## 开场\n\n> 一句话。\n\n正文。\n"""
+    _, editorial_parts, detected = parse_md(editorial, mode="auto")
+    assert detected == "editorial"
+    assert any("border:1px solid" in part for part in editorial_parts)
     print("self-test OK")
 
 
@@ -662,6 +697,12 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("markdown", type=Path, nargs="?", help="Path to *_整理文档.md")
     ap.add_argument("--out", type=Path, default=None, help="Output HTML path")
+    ap.add_argument(
+        "--mode",
+        choices=("auto", "editorial", "full"),
+        default="auto",
+        help="editorial article or complete three-layer conversion",
+    )
     ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args(argv)
     if args.self_test:
@@ -675,11 +716,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: not found: {src}", file=sys.stderr)
         return 2
 
-    title, parts = parse_md(src.read_text(encoding="utf-8"))
-    html_out = wrap(title, parts)
-    out = args.out or default_out_path(src)
+    title, parts, mode = parse_md(src.read_text(encoding="utf-8"), mode=args.mode)
+    html_out = wrap(title, parts, mode=mode)
+    out = args.out or default_out_path(src, mode=mode)
     out.write_text(html_out, encoding="utf-8")
-    print(f"Wrote {out} ({len(html_out)} chars)")
+    print(f"Wrote {out} ({len(html_out)} chars, mode={mode})")
     return 0
 
 

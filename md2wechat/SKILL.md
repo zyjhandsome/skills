@@ -1,142 +1,112 @@
 ---
 name: md2wechat
 description: >-
-  Convert 整理文档 Markdown/HTML into WeChat Official Account paste-ready HTML
-  (full inline styles) plus a 2.35:1 cover PNG. Use when the user mentions
-  微信公众号, 公众号排版, md2wechat, 公众号完整版, 封面 2.35, or publishing
-  an Obsidian/md2html lecture note to WeChat.
+  Turn 整理文档 Markdown into an edited WeChat Official Account article,
+  paste-ready inline HTML, and a 2.35:1 cover. Use when existing Markdown,
+  HTML, lecture notes, interviews or整理文档 need 微信公众号改写、排版或播报优化.
+  Distinguish an editorial article from a complete-format conversion. Do not
+  route unrelated from-scratch writing here when no source material exists.
 ---
 
-# /md2wechat
+# md2wechat
 
-把「对谈三层」类整理文档变成**可粘贴进微信公众号编辑器**的 HTML，并产出 **2.35:1** 封面图。
+把整理文档变成真正适合公众号发布的内容，而不只是把 Markdown 换成带样式的 HTML。
 
-上游通常是 content-structuring / md2html 产出的 `*_整理文档.md`（及可选 `*_整理文档.html`）。**不要**把 md2html 网页原样粘进公众号（外链 CSS/JS/class/Mermaid 会失效）。
+公众号同时是阅读媒介和收听媒介。默认优化手机扫读、连续播报、可信度、转发意愿和粘贴稳定性；用户明确要求“完整版/完整保留/只排版”时，才保留原稿的完整三层结构。
 
-## Skill files
+## Choose the mode
 
-| File | Role |
-|------|------|
-| [reference-wechat-constraints.md](reference-wechat-constraints.md) | 微信 HTML/CSS 白名单与粘贴坑 |
-| [examples.md](examples.md) | 输入输出命名与默认取舍对照 |
-| [scripts/build_wechat_html.py](scripts/build_wechat_html.py) | MD → 公众号内联 HTML |
-| [scripts/make_cover_235.py](scripts/make_cover_235.py) | 任意封面图 → 精确 2.35:1 PNG |
-| [scripts/validate_wechat_bundle.py](scripts/validate_wechat_bundle.py) | 产物自检（须通过再交付） |
+| User intent | Mode | Result |
+|---|---|---|
+| “生成/改写成公众号文章”“更易读/易听” | `editorial`（默认） | 先写公众号成稿 Markdown，再生成 HTML；围绕一条主线删重、合并、转述 |
+| “公众号完整版”“完整保留”“只排版” | `full` | 保留正文信息与“核心洞察/深度解析/对谈实录”三层，只删除元数据噪音 |
 
-**先读本 SKILL，再按需读 reference；生成后必须跑 validate。**
+不要用 `full` 冒充“成稿”，也不要在用户要求完整保留时擅自压缩。
 
-## Outputs (next to source)
+## Read as needed
 
+- 两种模式都必须读 [references/content-integrity.md](references/content-integrity.md)，先完成内容覆盖审计，再交付。
+- 做 `editorial` 时，必须读 [references/editorial-and-audio.md](references/editorial-and-audio.md)。
+- 处理微信 HTML、表格或粘贴问题时，读 [reference-wechat-constraints.md](reference-wechat-constraints.md)。
+- 查看命名和封面提示词时，读 [examples.md](examples.md)。
+
+## Outputs
+
+`editorial` 默认与源文件同目录产出：
+
+```text
+{stem}_公众号成稿.md
+{stem}_公众号内容审计.md
+{stem}_公众号文章.html
+{stem}_公众号封面_2.35x1.png
 ```
-{stem}_公众号完整版.html          # 可复制正文（内联样式）
-{stem}_公众号封面_2.35x1.png      # 1175×500（或等比例）
+
+`full` 默认产出：
+
+```text
+{stem}_公众号内容审计.md
+{stem}_公众号完整版.html
+{stem}_公众号封面_2.35x1.png
 ```
-
-可选：`wechat-diagrams/*.png`（Mermaid 转图后嵌入）。
-
-## Default content policy（公众号版）
-
-| 区块 | 默认 |
-|------|------|
-| H1 标题 + 核心导读（全文论点与导读段） | **保留** |
-| 正文各节洞察 / 深度解析 / 对谈实录 | **完整保留**（不压成精读摘要） |
-| 「核心洞察」「深度解析」「对谈实录」标题 | **保留**（扫读分层；去掉会像一整墙字） |
-| 正文 GFM 表格 | **转成微信可粘贴表**：≤4 列用内联 `<table>`（每个 `td` 写 style；表头也用 `td`）；≥5 列改成卡片行。禁止残留 `\| col \|` 段落 |
-| 文章元数据表 | **去掉**；只留「人物背景」卡片 |
-| 目录 | **去掉** |
-| 延伸术语表 | **去掉** |
-| 自检报告 | **去掉** |
-| 过程说明 / 流水账 | **去掉**。副标题、人物卡、来源脚注、粘贴正文都不要出现：用户提供字幕/逐字稿、次要核对、浏览器 MCP、WebFetch 降级、页面口径 vs 文稿标注、元数据抓取时间、`[编者注]`。这些只属于整理文档元数据，不是给读者看的 |
-| 文末「来源与说明」 | **只留前两项读者向信息**：原文标题 + **干净日期**（`2026-08-07`，不要括注口径对照）+ 视频或内容链接 |
-| 页眉副标题 | 只用 **讲者/对谈人物 + 公开场次**（如 `Garry Tan · Y Combinator · Startup School 2026`）。不要「完整整理版｜微信排版」；**禁止**把「内容来源」整格（含转写/核对流水）截断后当副标题 |
-| 预览页 howto | **只留粘贴步骤**（选中米色卡片 → 复制 → 粘贴编辑器）。不要把本表 keep/omit 政策写进 HTML |
-| Mermaid / 流程图 | 微信不能原生跑。**默认不嵌入**；仅当用户明确要求「保留流程图/Mermaid」时，从 sibling `*_整理文档.html` 导出 PNG 再 `<img>` 嵌入 |
-
-用户另有指示时覆盖上表。
 
 ## Workflow
 
-Copy and track:
+### 1. Resolve and diagnose
 
-```
-md2wechat Progress:
-- [ ] 1 Resolve source (.md required; .html optional for Mermaid)
-- [ ] 2 Build WeChat HTML (inline styles)
-- [ ] 3 Cover 2.35:1
-- [ ] 4 Validate bundle
-- [ ] 5 Hand off paste / publish steps
-```
+以 `*_整理文档.md` 为内容源；只有 HTML 时，先寻找同名 Markdown，找不到再谨慎提取正文并披露这一降级。同名 HTML 也可用于提取用户明确要求保留的图。先判断受众、原稿信息密度、可验证边界和最值得承诺的一条主线。用户没有指定读者时，从标题、栏目和原稿语气合理推断，不必停下来提问。
 
-### 1 — Resolve source
+写作前列出源稿每个正文 H2 的核心结论、关键证据、限定/反方和行动含义。在 `*_公众号内容审计.md` 中逐节标记 `保留 / 合并 / 删减 / 删除`；任何删减或删除都要说明为什么不影响标题承诺。
 
-1. Prefer `*_整理文档.md` as content source.
-2. If user only gives `.html`, recover sibling `.md`; if missing, extract text carefully and say so.
-3. Confirm title (H1) and 2–3 cover keywords (e.g. 内部罗盘 / 机甲歌利亚).
+### 2. Edit the content
 
-### 2 — Build WeChat HTML
+`editorial`：先生成 `*_公众号成稿.md`。文章应有一条标题承诺、一个能独立听懂的开场、清晰的章节推进和行动性收束。合并重复的“洞察/解析/实录”，把对话改为叙述，只保留少量不可替代的短引语。表格改为口语化结论；链接、来源和复杂数字不要打断正文播报。正文主动提出的问题必须在本节或后文明确回答，不能只靠暗示闭环。
 
-Prefer **absolute path** to the skill script (cwd-independent):
+`full`：保留原稿主体和三层结构；删除目录、术语表、自检、抓取流水、编辑注及冗长免责声明。
 
-```bash
-python "%USERPROFILE%\.cursor\skills\md2wechat\scripts\build_wechat_html.py" "<path-to>_整理文档.md"
+共同要求：不得把简介中的问题写成嘉宾说过的结论；口述数字和观点要明确归于讲者，未核实内容不要升级成事实。区分短引语与编辑概括；访谈、演讲类精编稿在元数据加入简短“编辑说明”，向读者披露非逐字稿和观点归属。
+
+### 3. Build paste-ready HTML
+
+使用绝对路径，避免依赖当前目录：
+
+```powershell
+python "$env:USERPROFILE\.cursor\skills\md2wechat\scripts\build_wechat_html.py" "<公众号成稿.md>" --mode editorial --out "<公众号文章.html>"
+python "$env:USERPROFILE\.cursor\skills\md2wechat\scripts\build_wechat_html.py" "<整理文档.md>" --mode full
 ```
 
-On failure (missing Python / script error): fix the environment first; only hand-author HTML if the script cannot be unblocked and you still follow the same policy + inline-style rules.
+复制区域 `#wechat-article` 内必须全是内联样式，不依赖 class、外链 CSS、JavaScript 或 Mermaid。正文表格在 `editorial` 中改写为句子；`full` 中 ≤4 列转内联表，≥5 列转卡片。只有用户明确要求保留 Mermaid/流程图时，才从同名 HTML 或源码渲染为 PNG，再以普通图片插入；不得保留 Mermaid 源码。
 
-Or implement the same rules by hand if the script cannot run:
+### 4. Make the cover
 
-1. Wrap copyable body in `#wechat-article` with **all styles inline** (no `<style>` dependency inside the copied region; preview chrome outside is OK).
-2. Theme tokens (md2html terracotta): bg `#FAFAF7`, accent `#D97757`, accent-strong `#A85533`, soft `#FBEEE6`, border `#E5E4DC`.
-3. Structure each section: `h2` → `h3 核心洞察` + insight card → `h3 深度解析` + paragraphs → `h3 对谈实录` + speaker cards.
-4. Font stack: system + PingFang SC / Microsoft YaHei (no Google Fonts in paste body).
-5. Add short howto **above** the fold (outside `#wechat-article`): select beige card → copy → paste into 公众号编辑器 → mobile preview. **Do not** put keep/omit policy, Mermaid notes, or pipeline status into howto or the paste body.
+首图目标 2.35:1，默认 1175×500。画面应有单一隐喻、明确视觉中心和移动端安全区；文字尽量短。先生成宽幅图，再裁切：
 
-Details: [reference-wechat-constraints.md](reference-wechat-constraints.md).
-
-### 3 — Cover 2.35:1
-
-WeChat 首图常用 **2.35:1**。GenerateImage 无该比例时：
-
-1. `GenerateImage` 用最接近的宽幅（`16:9`），构图把标题放在**垂直安全中带**（上下可能被裁）。
-2. Prompt：暖米色底、赤陶强调色、与标题金句一致；忌紫霓虹赛博风、忌堆叠 Logo。
-3. 裁切导出：
-
-```bash
-python scripts/make_cover_235.py "<generated.png>" --out "<stem>_公众号封面_2.35x1.png"
+```powershell
+python "$env:USERPROFILE\.cursor\skills\md2wechat\scripts\make_cover_235.py" "<generated.png>" --out "<stem>_公众号封面_2.35x1.png"
 ```
 
-默认导出 **1175×500**（精确 2.35）。
+裁切和封面校验需要 Pillow。先确认当前 Python 能执行 `from PIL import Image`；缺失时使用已有的工作区 Python 运行时或在当前环境安装 Pillow，不得跳过封面校验。
 
-### 4 — Validate (mandatory)
+### 5. Validate before delivery
 
-```bash
-python scripts/validate_wechat_bundle.py "<stem>_公众号完整版.html" --cover "<stem>_公众号封面_2.35x1.png"
+```powershell
+python "$env:USERPROFILE\.cursor\skills\md2wechat\scripts\validate_wechat_bundle.py" "<公众号文章.html>" --profile editorial --source "<整理文档.md>" --audit "<公众号内容审计.md>" --cover "<cover.png>"
+python "$env:USERPROFILE\.cursor\skills\md2wechat\scripts\validate_wechat_bundle.py" "<公众号完整版.html>" --profile full --source "<整理文档.md>" --audit "<公众号内容审计.md>" --cover "<cover.png>"
 ```
 
-Fix until exit 0. Do not deliver a failing bundle.
+必须修到退出码为 0。校验器只能确认覆盖清单齐全，不能代替语义判断。还要人工检查：只听音频是否能理解指代和转折；只扫标题、每节首段和金句是否能复述主线；标题是否兑现；显式问题是否逐一回答；每个重要判断是否能区分“事实、讲者观点、编辑推论”；审计表中的删减理由是否成立。
 
-### 5 — Hand off
+### 6. Hand off
 
-告诉用户：
+告诉用户打开 HTML，复制米色卡片内的正文，粘贴到公众号编辑器，上传 2.35:1 封面并手机预览。没有公众号登录态时停在这里；群发或发表必须由用户确认。
 
-1. 浏览器打开 `*_公众号完整版.html`
-2. 复制米色卡片内正文 → 粘贴公众号编辑器
-3. 上传 `*_公众号封面_2.35x1.png` 为封面
-4. 手机预览；**群发/发表由用户确认**
+## Non-negotiable anti-patterns
 
-**不要假装已代发。** 无公众号 MCP/登录态时，停在「需用户登录授权」；用户说已登录后再给逐步核对清单。
-
-## Anti-patterns
-
-- 把 md2html 整页（外链字体、侧栏 TOC、主题切换、Mermaid `<pre>`）当公众号稿
-- 默认大幅删正文「精读压缩」（除非用户明确要精读）
-- 去掉「核心洞察 / 深度解析」分层却声称更易读
-- 封面只给 16:9 / 1:1 却标成 2.35:1
-- 文末堆免责声明与术语表拖垮完读率
-- 把整理流水账写进公众号：`用户提供完整字幕转写`、`次要核对`、`浏览器 MCP 不可用`、`YouTube 页面口径`、`内容来源` 整格当副标题
-- 预览 HTML 的 howto 第二段复述 skill 取舍政策（读者/粘贴时不需要）
-
-## Related skills
-
-- Upstream notes: `content-structuring` / lecture pipeline
-- Web reading page: `md2html` / `md2html-lecture`（网页精读；**不是**公众号粘贴稿）
+- 把原稿逐段换皮，却称为“公众号成稿”
+- 为了短而删除限定词、来源边界或相反观点
+- 未做逐节覆盖审计，却声称“内容完整”
+- 在正文提出问题，后文没有明确回答
+- 用表格、括号注释、裸链接和连续 speaker 标签组织需要播报的正文
+- 标题同时塞入四五个议题，正文没有单一回答
+- 用工具效率代替读者价值，只报告“压缩了多少字”
+- 封面给 16:9 或 1:1，却标成 2.35:1
+- 把 md2html 整页或 Mermaid 源码直接粘进公众号
