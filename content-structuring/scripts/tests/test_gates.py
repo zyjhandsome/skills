@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Gate regression tests for content-structuring scripts (v5.28)."""
+"""Gate regression tests for content-structuring scripts (v5.29)."""
 
 from __future__ import annotations
 
@@ -92,6 +92,13 @@ def test_fixture_dialogue_4d_ok() -> None:
     assert cp.returncode == 0, out + err
 
 
+def test_fixture_adversarial_4d_ok() -> None:
+    cp = run([sys.executable, str(NORM), str(FIX / "adversarial-interview.md"), "--check"])
+    out = (cp.stdout or b"").decode("utf-8", errors="replace")
+    err = (cp.stderr or b"").decode("utf-8", errors="replace")
+    assert cp.returncode == 0, out + err
+
+
 def test_fixture_dialogue_4c_ok() -> None:
     cp = run([sys.executable, str(CHECK4C), str(FIX / "dialogue-three-layer.md")])
     out = (cp.stdout or b"").decode("utf-8", errors="replace")
@@ -107,12 +114,59 @@ def test_fixture_stock_4c_hits() -> None:
     assert "super bullish" in out or "operationalize" in out or "refine" in out
 
 
+def test_4c_allows_rag_and_capitalized_harness_only() -> None:
+    text = """# T
+
+## 第一节
+
+检索增强生成（RAG）用于召回。Harness 是产品名，但普通 harness 仍应中文化。
+"""
+    with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as f:
+        f.write(text)
+        path = Path(f.name)
+    try:
+        cp = run([sys.executable, str(CHECK4C), str(path)])
+        out = (cp.stdout or b"").decode("utf-8", errors="replace")
+        err = (cp.stderr or b"").decode("utf-8", errors="replace")
+        assert cp.returncode != 0, out + err
+        assert out.lower().count("harness") == 2, out
+        assert "RAG" not in out, out
+    finally:
+        path.unlink(missing_ok=True)
+
+
+def test_4c_ignores_code_fences_links_and_urls() -> None:
+    text = """# T
+
+[Towards infinite context windows](https://example.com/context)
+
+```text
+tokens of context
+```
+
+正文已中文化。
+"""
+    with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as f:
+        f.write(text)
+        path = Path(f.name)
+    try:
+        cp = run([sys.executable, str(CHECK4C), str(path)])
+        out = (cp.stdout or b"").decode("utf-8", errors="replace")
+        err = (cp.stderr or b"").decode("utf-8", errors="replace")
+        assert cp.returncode == 0, out + err
+    finally:
+        path.unlink(missing_ok=True)
+
+
 def main() -> int:
     tests = [
         test_4d_detects_hr_with_blank_line,
         test_fixture_dialogue_4d_ok,
+        test_fixture_adversarial_4d_ok,
         test_fixture_dialogue_4c_ok,
         test_fixture_stock_4c_hits,
+        test_4c_allows_rag_and_capitalized_harness_only,
+        test_4c_ignores_code_fences_links_and_urls,
     ]
     failed = 0
     for t in tests:

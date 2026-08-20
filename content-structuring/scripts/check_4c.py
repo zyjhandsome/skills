@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Lightweight 4c lexicon scan for content-structuring outputs (spec v5.28).
+"""Lightweight 4c lexicon scan for content-structuring outputs (spec v5.29).
 
 - Greps the unified lexicon against narrative-ish Markdown
 - Ignores metadata「原标题」cells, glossary proper-noun column heuristically
@@ -31,7 +31,6 @@ LEXICON = [
     r"oneshot",
     r"one-shot",
     r"flaky",
-    r"\bRAG\b",
     r"\bbuilder\b",
     r"\brefine\b",
     r"\bholistic\b",
@@ -72,16 +71,34 @@ ALLOW_PHRASES = [
     r"\bComposer\b",
     r"\bCanvas\b",
     r"\bSubagents?\b",
+    r"\bRAG\b",  # allowed abbreviation; first-use Chinese expansion is a separate manual gate
+]
+
+# Official names whose capitalization matters. Lowercase generic uses remain actionable.
+CASE_SENSITIVE_ALLOW_PHRASES = [
+    r"\bHarness\b",
+    r"\bCraft Conference\b",
+    r"\bBehind the Craft\b",
+    r"\bCraft Ventures\b",
+    r"\bBeyond Vibe Coding\b",
+    r"\bHow to build your own harness\b",
+    r"\b(?:Uber|OpenAI) Agent Builder\b",
 ]
 
 # Strip parenthetical Latin/ASCII terms: （dogfooding） or (dogfooding)
 PAREN_EN = re.compile(
     r"[（(]\s*[A-Za-z][A-Za-z0-9_./+#-]*(?:\s+[A-Za-z][A-Za-z0-9_./+#-]*)*\s*[）)]"
 )
+MARKDOWN_LINK_DEST = re.compile(r"(?<=\])\([^\n)]*\)")
+RAW_URL = re.compile(r"https?://\S+")
 
 
 def _mask_allowed(text: str) -> str:
     out = text
+    out = MARKDOWN_LINK_DEST.sub(lambda m: " " * len(m.group(0)), out)
+    out = RAW_URL.sub(lambda m: " " * len(m.group(0)), out)
+    for pat in CASE_SENSITIVE_ALLOW_PHRASES:
+        out = re.sub(pat, lambda m: " " * len(m.group(0)), out)
     for pat in ALLOW_PHRASES:
         out = re.sub(pat, lambda m: " " * len(m.group(0)), out, flags=re.IGNORECASE)
     out = PAREN_EN.sub(lambda m: " " * len(m.group(0)), out)
@@ -93,7 +110,15 @@ def _strip_excluded_regions(text: str) -> str:
     lines = text.splitlines()
     kept: list[str] = []
     skipping = False
+    in_fence = False
     for line in lines:
+        if re.match(r"^\s*```", line):
+            in_fence = not in_fence
+            kept.append("")
+            continue
+        if in_fence:
+            kept.append("")
+            continue
         title_m = re.match(r"^##\s+(.+)$", line)
         if title_m:
             title = title_m.group(1).strip()
