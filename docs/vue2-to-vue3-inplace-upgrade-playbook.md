@@ -147,6 +147,11 @@ CONFIG 已记录旧分析路径时沿用，不要并行维护 workspace 根
   会指向非预期版本：vue 的 rc 现指向 3.6.0-rc.4（Vapor 预发布），vue-router 的
   next 反而指向五年前的 4.0.13，而其 latest 已是 v5 主版本——裸装 vue-router 会
   解析到 5.x 而不是 4.x。安装目标 major 必须显式钉死，并在报告或任务里留下依据。
+- 任何 install 之前先打印 NODE_ENV 与 npm config get production（yarn/pnpm 用等价
+  配置项）。任一为 production / true 时 install 会静默跳过 devDependencies，构建
+  与 lint 的 bin 随之缺失，报错表现为「命令不存在」而不指向环境；此时必须显式
+  NODE_ENV=development 或 --include=dev 重装，并把该处置写进本波证据。这条对
+  Wave 4 的实施安装和 Wave 5 的 frozen install 同样适用。
 - 单仓原地升。pages 只收窄本 change，不是 A→B host-port，也不是页面闭包迁入。
 - 默认行为 parity；保留 Options API。Composition API 全仓重写另立项。
 - Vue 3.6 / Vapor mode 不在本轮范围。3.6 线目前只有预发布，任何 rc/beta 都不得
@@ -185,6 +190,11 @@ vue 的 resolved version 必须等于 TARGET_VUE_VERSION；路径涉及
 @vue/compat / @vue/compiler-sfc / @vue/server-renderer 时，这些包的
 resolved version 必须完全一致。manifest 是否保留范围符号遵循已批准规格，
 但 lock 不得漂到其他 Vue 版本。
+框架与构建链同批替换时锁文件 digest 必然变化，这不等于漂移：漂移的判据是适用包
+resolved version 不等值或出现其他 Vue major，不是 digest 不变。凡以「digest 未变」
+表述的复用条件（如不重复安装）只用于判断是否需要再装，不得反过来当作漂移证据。
+G9 与控制台采集脚本自身的工具链依赖（无头浏览器驱动等）不计入应用锁文件的
+digest 判定，也不得为了采集把它们写进应用 dependencies。
 @vue/compat 的 peer 是精确版本而非范围，补丁号对不上会在安装期直接失败或告警，
 不会静默漂移——按硬约束对待，不要只靠事后核对 resolved version。
 
@@ -204,8 +214,10 @@ revision；权威任务完成；Wave 4 已写出绑定当前 revision 的 Delive
 与 verified handoff；Wave 4 Fresh Verification 与 High 独立审查通过；Wave 5 在
 全新会话对当前 revision 重跑 named_validations、规格场景与升级后功能冒烟，且不
 混用 Wave 4 旧 pass；visual=required 时 G9 pass 且 required 状态未被任何 Wave
-单方降级；回滚演练证据存在（升级前 revision 在旧 lane frozen install/build 通过）；
-console-evidence.json 无未处置 error（error 记 accepted-residual 须用户显式批准）；
+单方降级（assessment_mode / diff_policy / structural_parity_metrics 仍是 Wave 2
+已批准的值，current 与基线同 capture_conditions）；回滚演练证据存在（升级前
+revision 在旧 lane frozen install/build 通过）；console-evidence.json 按每路由
+fresh page 口径采集且无未处置 error（error 记 accepted-residual 须用户显式批准）；
 交互断言清单逐条有结果；结论落盘 EVIDENCE_ROOT/inrepo-verification.md；
 Vue resolved version 与 TARGET_VUE_VERSION 一致；Composition 全仓重写仍在
 non-goals；无 blocking residual。仍不 archive/commit/push/PR/部署。
@@ -356,6 +368,24 @@ required 时 required_visual_states 必须至少 5 个唯一状态——下游 G
 证据行硬计数 ≥5；分析包不足 5 个时在规格批准前补足并写入已批准 spec，
 不得留到执行期（那时基线窗口已关闭）。
 
+required 时已批准 spec 还须同时写明下列四项，缺一不得通过规格闸门。它们定义 G9
+的判据本身，留到执行期再定等于让 Wave 4 单方定义验收标准：
+- assessment_mode：strict_parity 或 consistency_review（G9 证据的必填枚举）。
+  UI-kit 整体更换（如 element-ui→element-plus）存在原生视觉系统差异，可以选
+  consistency_review，但必须在本波声明并写明理由；Wave 4 不得自行改写该值。
+- diff_policy：逐类列出哪些差异属 allowed native adjustment（例如弹层挂载点变化、
+  空数据下分页隐藏），哪些属 forbidden failure。未归类的差异按 failure 处置。
+- structural_parity_metrics：哪些结构计数是 parity 判据，哪些属数据依赖态、允许
+  随后端数据缺失漂移。白名单之外的计数差异一律按 failure 处置。
+- capture_conditions：基线与升级后必须同条件采集——同 serve 方式、同端口策略、
+  后端可用性一致、同 locale/timezone/theme。条件不一致时 404、SecurityError
+  之类的差异无法区分是环境还是升级回归，G9 结论不成立。
+
+required 状态若属数据驱动（loading、pagination populated、tree-expanded 等），
+允许以「component-shell parity + 绑定后续真实后端验证任务」记 accepted-residual，
+但该分层必须在本波声明并写入已批准 spec，且以基线在同条件下同样只能取到
+component-shell 为前提。Wave 5 不得临时发明分层来兜底。
+
 通过规格闸门：只问一次范围批准。然后停止。下一步 Wave 3。
 ```
 
@@ -388,6 +418,10 @@ engines、CI、Docker/devcontainer、部署 builder 与 Corepack/packageManager�
 删除条件与缓存隔离。不得只改开发者本机 Node。
 
 visual=required 时：基线捕获发生在升级之前；每个 required sample/state 映射到任务；G9 路径为 G9_ROOT。
+基线任务须把已批准 spec 的 capture_conditions 固定成可复现的命令与参数（serve 方式、
+端口策略、后端可用性、locale/timezone/theme）并记入证据，Wave 4/5 的 current 采集
+复用同一条件。条件无法复现时按「无基线」处置，回 Wave 2 重议视觉契约，不得改条件后
+硬比。
 基线可行性前置：必须先有任务证明旧 app 能在某个可用 lane 启动（老 Node 仓即
 temporary-dual-node 的旧 lane）；若证明不可启动，须显式二选一并写入任务——
 用预生产/生产环境捕获替代基线，或把「无基线」记为 blocking residual 并回
@@ -430,7 +464,9 @@ visual=required 时，计划中必须有基线任务；基线须在本波首次�
 
 首次 mutation 前检查 git status：工作区不干净时停止，让用户显式处置
 （commit/stash/纳入范围），否则基线与 handoff 的 revision 绑定不可复现。
-首次 install 前打印实际 node -v 与 package manager 版本；不满足已批准 target range 时停止。
+首次 install 前打印实际 node -v、package manager 版本、NODE_ENV 与
+npm config get production；node 不满足已批准 target range 时停止，production
+环境噪声按固定边界处置后再装。
 优先 frozen install；禁止用仓库拒绝的包管理器。现在可以安装依赖并运行已命名配方。
 按 tasks.md 纵向实施。实施后、Fresh Verification 前重新 index_repository，刷新 Codebase Memory 索引。
 lock digest 未变化不重复安装。
@@ -441,6 +477,12 @@ TARGET_VUE_VERSION；适用的 @vue/compat、@vue/compiler-sfc、@vue/server-ren
 
 visual=required：升级后写 delivery-visual-evidence/v1 到 G9_ROOT 并校验。
 外部分析只作 external_artifacts path/digest，不能代替 G9 final_visual_result=pass。
+assessment_mode、diff_policy、structural_parity_metrics 与 capture_conditions
+一律取已批准 spec 的值填写，本波不得新定或改写——改写等同单方降级 required 状态，
+须按 alignment_backflow 回 Wave 2。current 采集必须复用基线的 capture_conditions。
+
+本波若采集 Vue runtime 控制台证据，采集口径必须与 Wave 5 一致（每路由独立
+fresh page），否则两波计数不可比，还要额外解释差异。
 
 不要 archive OpenSpec，不要 commit/push/PR，除非用户在本波之后另授权。
 
@@ -479,7 +521,8 @@ Plan/Execute 工件、CONFIG；visual=required 时含 G9_ROOT 且 final_visual_r
 
 按当前 revision 启动干净 dev/preview（不要复用 Wave 4 残留进程）。
 lock digest 未变化不重复安装；Node/包管理器或 lock 变化时 frozen install。
-首次启动前打印实际 node -v 与包管理器版本；不满足已批准 target range 时停止。
+首次启动前打印实际 node -v、包管理器版本、NODE_ENV 与 npm config get production；
+node 不满足已批准 target range 时停止，production 环境噪声按固定边界处置后再装。
 
 必须在本会话重跑并阅读完整输出：
 - ANALYSIS_ROOT/upgrade-summary.json 的 named_validations
@@ -494,12 +537,19 @@ vue resolved version 必须仍等于 TARGET_VUE_VERSION；适用的
 已移除实例 API 等）不得无处置。控制台结论必须落盘为
 EVIDENCE_ROOT/console-evidence.json（每个冒烟路由一行：route、error 数、
 升级相关 warning 数、处置状态 resolved/accepted-residual），不接受只在会话
-文字里"声称无异常"。error 记 accepted-residual 必须经用户显式批准并记录
-批准语句；不得自行接受运行时 error。交互断言（Wave 3 从 inventory 生成的
+文字里"声称无异常"。采集口径固定为每路由独立 fresh page：每条路由新开页面再挂
+监听，用完关闭。不得用单页面连续跳转累积监听——那会把同一条错误重复计入多条
+路由，计数虚高且与 Wave 4 的证据不可比。
+error 记 accepted-residual 必须经用户显式批准并记录批准语句；
+不得自行接受运行时 error。交互断言（Wave 3 从 inventory 生成的
 v-model 回写等逐点检查）必须逐条执行并记录结果。不得用测试已绿代替未执行的场景。
 
 visual=required：按当前 revision 重新校验 G9_ROOT 的 delivery-visual-evidence/v1。
-基线仍是升级前捕获；必要时刷新 current/diff，不得改应用代码。
+基线仍是升级前捕获；必要时刷新 current/diff，不得改应用代码。刷新时必须复用已批准
+spec 的 capture_conditions；assessment_mode、diff_policy 与 structural_parity_metrics
+取已批准值，本波不得放宽。数据依赖态按 Wave 2 已声明的分层判定；spec 未声明分层、
+本波才发现某 required 状态在当前条件下只能取到 component-shell 的，按 fail 回流
+Wave 2，不得当场记 accepted-residual。
 validator 未过或 revision 不匹配：停止，回 Wave 4。
 
 写本波 handoff 前，先把 Wave 4 的 verified handoff 复制留存为
@@ -528,6 +578,7 @@ fail：按 alignment_backflow 输出，不要改代码，返回：
 | 分析包 repo_revision 与当前仓库漂移（分析 stale）      | Wave 1                           |
 | workspace 实为已（部分）升级完成的 Vue3 仓            | 停止主线；residual-audit 或结束     |
 | 目标、验收、行为 parity、视觉是否 required、pages 范围错误 | Wave 2 规格批准                    |
+| 视觉契约缺项或需放宽（assessment_mode、diff_policy、结构 parity 白名单、capture_conditions、数据依赖态分层） | Wave 2 规格批准 |
 | CONFIG / 已批准规格中的 target_vue_version 不一致      | Wave 2                           |
 | 配方拆分、回滚、基线时机、任务范围错误                      | Wave 3 Plan                    |
 | 已批准范围内的实现、测试、G9 或功能回归                   | Wave 4 Execute                 |
@@ -565,12 +616,16 @@ Verification，并重新执行完整 Wave 5；不得用 Wave 4 旧 pass 声称�
   功能冒烟，且不混用 Wave 4 旧 pass；
 - `visual=required` 时 Delivery G9 `final_visual_result=pass`；required 状态
   从 Wave 2 批准起未被任何后续 Wave 单方降级（降级须回 Wave 2 重批 + DR）；
+  `assessment_mode` / `diff_policy` / `structural_parity_metrics` 仍是 Wave 2
+  已批准的值，基线与 current 使用同一 `capture_conditions`；数据依赖态的
+  accepted-residual 只在 Wave 2 已声明该分层时成立；
 - 分析报告「1. 基线与假设」`repo_revision` 与升级前基线 revision 链条一致
   （Wave 2 时效检查通过）；
 - 回滚演练证据存在（升级前 revision 在旧 lane frozen install/build 通过），
   或按已批准降级记为 non-blocking residual；
-- `console-evidence.json` 存在且无未处置的 error / 升级相关 warning
-  （error 记 accepted-residual 须有用户显式批准记录）；交互断言清单逐条有结果；
+- `console-evidence.json` 存在、按每路由独立 fresh page 口径采集，且无未处置的
+  error / 升级相关 warning（error 记 accepted-residual 须有用户显式批准记录）；
+  交互断言清单逐条有结果；
 - `EVIDENCE_ROOT/inrepo-verification.md` 存在、逐条核对通用头条件并绑定当前
   revision；Wave 4 verified handoff 已归档为 `handoff-wave4.json`；
 - Composition 全仓重写仍在 non-goals；

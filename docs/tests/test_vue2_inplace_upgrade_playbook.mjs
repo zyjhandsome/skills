@@ -61,7 +61,12 @@ assert.ok(!/mode=execute|migrate execute/i.test(playbook), "inplace playbook mus
 assert.ok(!playbook.includes("expected_model="), "inplace playbook must stay host-neutral (no Claude Code model pins)");
 assert.ok(playbook.includes("单一模型"), "inplace playbook must run a single model end to end without naming one");
 assert.ok(playbook.includes("不按波换模型"), "inplace playbook must forbid per-wave model switching");
-assert.ok(!/\b3\.5\.\d+\b/.test(playbook), "playbook must not hardcode a Vue patch version (resolve at analysis time)");
+const vuePatchPins = [...new Set([...playbook.matchAll(/\b3\.5\.\d+\b/g)].map((match) => match[0]))];
+assert.ok(vuePatchPins.length <= 1, `playbook must carry at most one Vue patch pin, found: ${vuePatchPins.join(", ")}`);
+if (vuePatchPins.length === 1) {
+  assert.ok(playbook.includes(`target_vue_version = ${vuePatchPins[0]}`), "a pinned Vue patch is only allowed as the target_vue_version default");
+  assert.ok(/registry[\s\S]{0,40}可解析/.test(playbook), "the pinned default must still be registry-validated in Wave 1 before it reaches CONFIG");
+}
 assert.ok(!playbook.includes("frontend-ui-stack-visual-parity"), "inplace playbook must not mention the visual-parity skill");
 
 /**
