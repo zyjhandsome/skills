@@ -33,18 +33,24 @@ Do not leave 成稿、审计、完整版 HTML，or `*_公众号封面_2.35x1.png
 
 ## Cover prompt skeleton
 
-Cover text is embedded in the image center: H1 title on top, speakers underneath, no white background. Filename = `{原文文件名}_公众号封面.png`.
+Do **not** ask the image model to draw the title. The generated scene must stay wordless; `overlay_cover_text.py` is the only source of type (serif terracotta title, hairline, tracked people line). Filename = `{原文文件名}_公众号封面.png`.
 
 ```
-Ultra-wide WeChat cover for 2.35:1 crop. Cream #FAFAF7 background,
-terracotta #D97757 accents. Leave the vertical and horizontal center
-clear for later text. No captions, no logos, no purple neon, no white
-text plates in the generated scene.
+Ultra-wide WeChat cover illustration for a 2.35:1 crop. Cream #FAFAF7
+background, terracotta #D97757 accents. Put the metaphor on the LEFT and
+RIGHT sides. Keep the exact vertical and horizontal CENTER empty — a large
+quiet cream field with no objects — for later typography.
+
+Absolutely no text, no letters, no Chinese characters, no numbers, no
+arrows, no UI, no logos, no captions, no watermarks, no white plates,
+no purple neon.
 ```
 
-After crop, overlay text only (no plate):
+After crop, overlay the real H1 (never a punchier rewrite):
 
 ```bash
 python scripts/make_cover_235.py generated.png --out "{原文文件名}_公众号封面.png"
 python scripts/overlay_cover_text.py "{原文文件名}_公众号封面.png" --title "{H1}" --people "{人物}"
 ```
+
+Target type (already encoded in the overlay script): title `#A85533` 华文中宋 with tracking; people `#B09480` sans with wider tracking; a short hairline between them. Do not switch back to Microsoft YaHei + `#1A1A1A`.
