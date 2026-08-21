@@ -30,7 +30,7 @@
 - current_node_contract: `>=18`（package.json engines + CI）
 - current_node_evidence: `engines.node >=18` 为声明；CI Node 18 build 为已知绿色基线
 - target_node_requirement: `^18.0.0 || >=20.0.0`
-- target_node_sources: `vue@3.5.41 → no engines.node; vite@5.4.19 → ^18.0.0 || >=20.0.0; https://registry.npmjs.org/vite/5.4.19`
+- target_node_sources: `vue@3.5.39 → no engines.node; vite@5.4.19 → ^18.0.0 || >=20.0.0; https://registry.npmjs.org/vite/5.4.19`
 - node_compatibility_status: compatible
 - node_transition_strategy: same-node
 - 构建变体 / 批次范围：`default` / `full-stack`
