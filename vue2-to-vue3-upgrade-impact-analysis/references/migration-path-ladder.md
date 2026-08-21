@@ -25,6 +25,13 @@ the human wants a non-default axis mix.
 | `microfrontend-coexist` | `compat` or `direct-vue3` + build as needed + `coexist` | Cannot cut over one shell; need per-module migration / long-lived dual deploy |
 | `deferred-inventory-only` | (axes optional / `n/a`) | Multi-repo scan only; human deferred all workspaces |
 
+`residual-audit` is deliberately **absent from the ladder**: it is not a way to
+reach Vue3, it is what to do when the target is already there and the previous
+migration left residue. It plans no cutover, so it takes no axis preset and no
+target-Node resolution, and it must never be offered as an alternative to an
+upgrade path. Entry rules: `dual-entry-and-batching.md`; menu:
+`next-action-choice-menus.md` §A; packet shape: `report-contract.md`.
+
 ## UI-kit cutover staging (required when the kit changes)
 
 The three axes describe the runtime, the build and the topology. They do not

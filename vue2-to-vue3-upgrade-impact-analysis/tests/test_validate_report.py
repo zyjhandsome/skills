@@ -1003,6 +1003,42 @@ class ValidateReportTests(unittest.TestCase):
             self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
             self.assertIn("at least 3 unique", result.stdout + result.stderr)
 
+    def test_rejects_ui_kit_swap_without_slot_content_shape(self) -> None:
+        # A renamed slot and a slot whose content root type is constrained are
+        # two different risks; the second one survives build, lint and a visual
+        # diff, so the block has to carry it explicitly.
+        body = (FIXTURES / "valid-report.md").read_text(encoding="utf-8")
+        body = re.sub(r"(?m)^- slot_content_shape:.*\n", "", body)
+        with tempfile.TemporaryDirectory() as tmp:
+            result = self._probe_report(body, tmp)
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertIn("slot_content_shape", result.stdout + result.stderr)
+
+    def test_rejects_missing_router_silent_to_throw_checklist_row(self) -> None:
+        # Router 4 reports what Router 3 swallowed: the removed suppression and
+        # the newly validated required params are per-call-site closures.
+        body = (FIXTURES / "valid-report.md").read_text(encoding="utf-8")
+        body = re.sub(r"(?m)^\| router 导航静默变抛错.*\n", "", body)
+        with tempfile.TemporaryDirectory() as tmp:
+            result = self._probe_report(body, tmp)
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertIn(
+                "router navigation silent-to-throw", result.stdout + result.stderr
+            )
+
+    def test_rejects_missing_target_deprecation_checklist_row(self) -> None:
+        # Migrating onto an already-deprecated target API is invisible to build
+        # and to screenshots, and only shows up as per-mount console noise.
+        body = (FIXTURES / "valid-report.md").read_text(encoding="utf-8")
+        body = re.sub(r"(?m)^\| 目标依赖弃用告警面.*\n", "", body)
+        with tempfile.TemporaryDirectory() as tmp:
+            result = self._probe_report(body, tmp)
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertIn(
+                "target dependency deprecation surface",
+                result.stdout + result.stderr,
+            )
+
     def test_rejects_ui_kit_swap_without_cutover_staging(self) -> None:
         body = (FIXTURES / "valid-report.md").read_text(encoding="utf-8")
         body = re.sub(r"(?m)^- ui_cutover_staging:.*\n", "", body)

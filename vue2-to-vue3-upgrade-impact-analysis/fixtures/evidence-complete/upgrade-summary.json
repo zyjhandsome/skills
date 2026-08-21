@@ -76,7 +76,8 @@
       "dialog-visible-write-back",
       "pagination-page-change",
       "select-popper-teleport",
-      "table-size-enum-applies"
+      "table-size-enum-applies",
+      "popover-reference-element-root"
     ]
   },
   "next_action": "analysis_complete",

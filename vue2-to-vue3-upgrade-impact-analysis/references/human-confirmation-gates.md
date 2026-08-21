@@ -18,6 +18,12 @@ Path ids: see `migration-path-ladder.md` (`compat-big-bang`, `direct-vue3`,
 id; §3 must also state the three axes (`runtime_axis` / `build_axis` /
 `topology_axis`).
 
+`residual-audit` is a sixth id that is **not** on that ladder: it plans no
+cutover and is offered only on an already-Vue3 target, as the only proceed token
+in its own menu (`next-action-choice-menus.md` §A). Its packet still passes
+through Wave 1 confirmation — `proceed:path:residual-audit` verbatim — and then
+through Wave 2+ for whatever cleanup subsystems it puts in scope.
+
 Subsystem ids: see `subsystem-inventory.md`. Rows with `required_for_path=yes`
 must enter the queue when `in_scope`.
 
@@ -54,6 +60,8 @@ Never paste draft and wait for「继续/放行」— **ask now**.
 |---|---|
 | 「继续 / 放行 / 全部放行 / 别再问了 / 全部纳入」 | **Not** a proceed token. Re-prompt the current wave with verbatim options. Do not set `decided`. |
 | Exact `proceed:path:<id>` / `proceed:subsystem:<id>` / `defer` / `other` | Record into `人工答复` and regenerate |
+| `proceed:subsystem:<id>,<id>,…` with every id spelled out and currently `ready` | Accept as one answer per named id: own queue transition, own Decision Record. Unnamed ids stay askable |
+| Same form containing `all` / `*` / `全部`, an unknown id, or a non-`ready` id | Reject the **whole** token — never apply the valid part — and re-show the menu |
 | Ambiguous mix | Ask once to pick a single verbatim token per unit |
 
 Never infer Wave-1 path `decided` from blanket language, then skip or auto-answer Wave 2.
@@ -65,7 +73,10 @@ Never infer Wave-1 path `decided` from blanket language, then skip or auto-answe
 3. After path answer recorded, regenerate; open Wave 2 for every High/blocker
    / `required_for_path=yes` `ready` subsystem in one wave.
 4. `other` keeps unit askable until a final answer.
-5. No blanket「全部 proceed」.
+5. No blanket「全部 proceed」. An enumerated
+   `proceed:subsystem:<id>,<id>` is not blanket language — the ids are the
+   consent — but it is only valid after each named unit was shown with its risk
+   and recipe.
 6. Record answers into `decision-records/`; regenerate; Agent-review → `complete`.
 7. On complete banner: remind `batch_implementation_gate=ready` = handoff only;
    `implementation_readiness=not_assessed`; implementation needs separate auth.

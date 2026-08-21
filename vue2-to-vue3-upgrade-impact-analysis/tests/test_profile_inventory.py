@@ -317,6 +317,56 @@ class ProfileInventoryTests(unittest.TestCase):
                 "source_cjs_export", {row["signal"] for row in rows}
             )
 
+    def test_locates_removed_silence_and_trigger_slot_candidates(self) -> None:
+        # The inverse of a silent break: Router 3 swallowed navigation failures
+        # and ignored missing required params, so the upgrade turns latent
+        # defects into first-load throws. Trigger slots add a content-shape
+        # constraint that no rename can see.
+        pkg = {
+            "name": "silence-web",
+            "dependencies": {"vue": "2.7.16", "vue-router": "3.6.5", "element-ui": "2.15.14"},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "package.json").write_text(json.dumps(pkg), encoding="utf-8")
+            src = root / "src"
+            (src / "router").mkdir(parents=True)
+            (src / "router" / "index.js").write_text(
+                "const routerPush = VueRouter.prototype.push\n"
+                "VueRouter.prototype.replace = function replace(location) {\n"
+                "  return routerPush.call(this, location).catch(error => error)\n"
+                "}\n",
+                encoding="utf-8",
+            )
+            (src / "App.vue").write_text(
+                "<template>\n"
+                '  <el-popover><el-autocomplete slot="reference" v-model="q" /></el-popover>\n'
+                "</template>\n"
+                "<script>\n"
+                "export default {\n"
+                "  methods: {\n"
+                "    init() { this.$router.replace({ name: 'class' }) },\n"
+                "  },\n"
+                "}\n"
+                "</script>\n",
+                encoding="utf-8",
+            )
+
+            data = self._run_profile(root)
+
+            signals = data["source_impact_signals"]["signals"]
+            for key in (
+                "router_error_suppression",
+                "router_named_target",
+                "ui_trigger_slot_target",
+            ):
+                self.assertGreaterEqual(signals.get(key, 0), 1, key)
+            rows = data["source_impact_signals"]["interaction_assertion_candidates"]["rows"]
+            located = {(row["signal"], row["file"]) for row in rows}
+            self.assertIn(("router_error_suppression", "src/router/index.js"), located)
+            self.assertIn(("router_named_target", "src/App.vue"), located)
+            self.assertIn(("ui_trigger_slot_target", "src/App.vue"), located)
+
     def test_interaction_candidates_empty_without_source_roots(self) -> None:
         pkg = {"name": "no-src", "dependencies": {"vue": "2.7.16"}}
         with tempfile.TemporaryDirectory() as tmp:

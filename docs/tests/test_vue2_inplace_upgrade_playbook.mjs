@@ -66,7 +66,21 @@ assert.ok(vuePatchPins.length <= 1, `playbook must carry at most one Vue patch p
 if (vuePatchPins.length === 1) {
   assert.ok(playbook.includes(`target_vue_version = ${vuePatchPins[0]}`), "a pinned Vue patch is only allowed as the target_vue_version default");
   assert.ok(/registry[\s\S]{0,40}可解析/.test(playbook), "the pinned default must still be registry-validated in Wave 1 before it reaches CONFIG");
+  // A pin the agent may not change will go stale, so the doc has to say when it
+  // was checked and must never let the agent present it as today's latest.
+  assert.ok(
+    new RegExp(`核对于\\s*\\d{4}-\\d{2}-\\d{2}[\\s\\S]{0,60}${vuePatchPins[0].replace(/\./g, "\\.")}`).test(playbook),
+    "the pinned default must cite the date it was checked together with that same version"
+  );
+  assert.ok(
+    playbook.includes("不得把这个钉说成"),
+    "the playbook must forbid presenting the frozen pin as the current latest patch"
+  );
 }
+assert.ok(
+  /entry_mode: residual-audit[\s\S]{0,80}不进 Wave 2/.test(playbook),
+  "the §0.3 handoff table must route a residual-audit packet away from Frame"
+);
 assert.ok(!playbook.includes("frontend-ui-stack-visual-parity"), "inplace playbook must not mention the visual-parity skill");
 
 /**

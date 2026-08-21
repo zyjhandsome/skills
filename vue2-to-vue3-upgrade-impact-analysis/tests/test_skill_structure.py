@@ -218,6 +218,43 @@ class SkillStructureTests(unittest.TestCase):
         ):
             self.assertTrue((fixture / name).is_file(), name)
 
+    def test_residual_audit_is_reachable_through_the_confirmation_menus(self) -> None:
+        # A path id that only the validator and the fixtures know about cannot be
+        # reached: the agent would have to invent the menu item it offers.
+        menus = (ROOT / "references" / "next-action-choice-menus.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("proceed:path:residual-audit", menus)
+        # ...and it must stay off the upgrade menu, which is the whole point.
+        upgrade_menu = menus[: menus.index("proceed:path:residual-audit")]
+        self.assertNotIn("residual-audit", upgrade_menu)
+
+        gates = (ROOT / "references" / "human-confirmation-gates.md").read_text(
+            encoding="utf-8"
+        )
+        ladder = (ROOT / "references" / "migration-path-ladder.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("residual-audit", gates)
+        self.assertIn("residual-audit", ladder)
+
+    def test_enumerated_subsystem_batch_is_allowed_but_blanket_is_not(self) -> None:
+        menus = (ROOT / "references" / "next-action-choice-menus.md").read_text(
+            encoding="utf-8"
+        )
+        gates = (ROOT / "references" / "human-confirmation-gates.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("proceed:subsystem:<id>,<id>", menus)
+        for token in ("all", "*", "全部"):
+            self.assertIn(token, menus)
+        self.assertIn("proceed:subsystem:<id>,<id>", gates)
+        # Rejecting the whole token is what keeps a batch from half-applying.
+        self.assertIn("whole", gates)
+        # Enumerated ids are consent; blanket language still is not.
+        self.assertIn("全部放行", menus)
+        self.assertIn("全部放行", gates)
+
 
 if __name__ == "__main__":
     unittest.main()

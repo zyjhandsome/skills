@@ -250,6 +250,9 @@ High/blocker 与每个 `required_for_path=yes` 均为 `decided`（`deferred` 只
 - `enum_renames:`（size / type 等枚举取值改名或删除，旧值静默失效）
 - `event_contract:`（`update:<prop>` 事件名、payload、`emits` 声明与双触发）
 - `slot_contract:`（插槽名与作用域参数结构）
+- `slot_content_shape:`（插槽**内容形状**约束：触发型插槽对唯一子节点的根类型有要求，
+  与改名无关。放组件型根时构建与视觉都不报，只在运行时报 non-element root node
+  且转发 ref 失效）
 - `required_behavior_assertions:`（逗号分隔，**至少 3 条唯一断言**；每条对应 §8 一行
   交互级验证。下限只是防止用一行敷衍，真正的义务是每个非 `not_applicable` 的类别
   都要产出断言）
@@ -282,6 +285,12 @@ summary 的 `ui_behavior_contract.required_assertions` 必须同时给出（3..2
 - dev 与 build 运行面差异（源码内 CJS、`require.context`、多入口 URL 形态、
   `base`/`publicPath`、env 分支）：两条运行面各自的验证归属必须写明，
   不得以其一代替另一条
+- router 导航静默变抛错（旧版 `push`/`replace` 的 prototype 吞错覆写与 `.catch`
+  吞错在新版失效；按 name 跳转缺必填参数由静默变抛错）：吞错覆写掩盖的失败面与
+  逐调用点的必填参数核对都要写明，这是**静默被移除**而非被引入的一族
+- 目标依赖弃用告警面（迁移后落在目标大版本**已弃用**的 API 上；样式/构建工具
+  自身的弃用告警）：构建与截图都看不见，只在控制台按 mount / 按编译刷量，
+  处置口径见 `impact-and-validation.md` 的控制台分类
 
 上述每一项必须有**独立行**与非空实质结果；禁止一行打包全部项，禁止仅写
 `已声明` / `已检查` / `已核对` / `ok` 等空泛词。

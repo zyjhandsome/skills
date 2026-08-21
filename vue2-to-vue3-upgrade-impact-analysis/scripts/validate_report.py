@@ -234,6 +234,16 @@ MANUAL_GAP_ITEMS = (
     # Dev server and production build are two runtime faces with different module
     # resolution and entry/URL topology; one can stay green while the other breaks.
     ("dev vs build runtime lane", ("运行面", "require.context", "dev 与 build")),
+    # The inverse of a silent break: code that was already wrong and was being
+    # muffled. Router 3 prototype patches and `.catch` swallows hid navigation
+    # rejections that Router 4 reports, and missing required params go from
+    # ignored to thrown — usually on a bootstrap navigation, i.e. a blank page.
+    ("router navigation silent-to-throw", ("导航静默变抛错", "Missing required param")),
+    # Migrating *onto* an API the target major already deprecates is invisible to
+    # build and to screenshots, and shows up as per-mount console noise at the
+    # scale of the call sites a codemod touched. Style/build tooling has the same
+    # clock (a working `@import` that is already deprecated).
+    ("target dependency deprecation surface", ("弃用告警面", "目标依赖弃用面")),
 )
 MARKER_PLACEHOLDERS = {"", "-", "—", "tbd", "todo", "待补", "待填", "待填写"}
 # A UI kit that is replaced or majored shifts behavior contracts (mount timing,
@@ -245,6 +255,11 @@ UI_BEHAVIOR_MARKERS = (
     "enum_renames:",
     "event_contract:",
     "slot_contract:",
+    # Slot *names* migrating is not the same risk as what a slot is allowed to
+    # contain: trigger/reference slots in the new kit apply directives to their
+    # single child, which requires an element-rooted node. A component-rooted
+    # child keeps the build green and only warns at runtime.
+    "slot_content_shape:",
     "required_behavior_assertions:",
 )
 UI_STAGING_VALUES = {"with-runtime", "after-runtime"}

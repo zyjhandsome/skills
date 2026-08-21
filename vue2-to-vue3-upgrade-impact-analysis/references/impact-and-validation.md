@@ -20,9 +20,10 @@
    and non-`vue-*` blockers (`tui-editor`, internal plugins, editors, etc.).
 
    **Interaction assertion candidates:** counts plus five samples per signal are
-   not a closure. `source_impact_signals.interaction_assertion_candidates`
+   not a closure.    `source_impact_signals.interaction_assertion_candidates`
    locates every `model_option`, `native_modifier`, `keycode_modifier`,
-   `transition_component`, `sync_modifier` and `options_filters_access` hit
+   `transition_component`, `sync_modifier`, `options_filters_access`,
+   `router_error_suppression` and `router_named_target` hit
    with file, line and excerpt, bounded by its own
    `cap` and `truncated` flag (separate from the file-scan `truncated`). Each
    row needs an interaction-level check named in §8; `truncated: true` means the
@@ -57,6 +58,29 @@
    Vue3 removes the entry altogether, so those sites throw at runtime with no
    static fingerprint. Treat pipe rewrites and object-access rewrites as two
    separate closures.
+
+   **Silence can also break in the other direction.** The family above is about
+   working code going quiet. The inverse is code that was *already* wrong and was
+   being muffled, where the upgrade removes the muffler and a latent defect
+   becomes a hard failure on first load. Two router shapes carry it, and the
+   `router_error_suppression` / `router_named_target` candidates locate them:
+
+   - **A prototype patch that swallows navigation rejections.** The Router 3 era
+     answer to redundant-navigation noise was to overwrite
+     `VueRouter.prototype.push/replace` with a version that catches and discards
+     the rejection. Router 4 has no such prototype to overwrite, so the patch
+     silently stops applying — every rejection the app was throwing away for
+     years now surfaces at once. The same applies to any `.catch(() => {})` on a
+     navigation call. Inventory the patch *and* what it was hiding; deleting the
+     patch is a one-line change whose blast radius is the entire route table.
+   - **Required params are validated instead of ignored.** Navigating by name
+     without the params the path pattern requires is silent in Router 3 and
+     **throws** in Router 4. Combined with the swallowing patch above, such a
+     call can have been broken since the day it was written, and it typically
+     sits in app bootstrap, so the first symptom after cutover is a blank page
+     rather than a broken link. Every name-target `push`/`replace` needs its
+     params checked against the route definition — this is a per-call-site
+     closure, not a codemod.
 4. Official docs URLs for the exact interval / library major — start from
    `official-docs-index.md` (EOL + two-layer modification model + canonical
    hubs + high-signal checklist), then fetch the linked page; do not invent
@@ -179,6 +203,41 @@ baseline window closes at the first dependency or source mutation, exactly like
 the visual baseline, so it costs nothing extra when captured in the same pass
 and cannot be recovered afterwards at the same revision.
 
+### Which console output carries a disposal obligation
+
+Define the obligation by **emitter**, never by an enumerated list of remembered
+message texts: a list of strings is read as exhaustive, and every warning
+outside it gets filed as pre-existing noise by whoever wants the gate to pass.
+Classify each distinct message by where it comes from:
+
+| Emitter | Examples | Why it is upgrade-relevant |
+|---|---|---|
+| Vue core runtime | compat-mode warnings, removed instance APIs, `Runtime directive used on component with non-element root node`, failed component/prop resolution | the framework stating that a construct no longer holds |
+| The target UI kit itself | the kit's own deprecation helper firing on every mount of a migrated component (a `type` enum value, a renamed slot) | you migrated *onto* an API the new major already deprecates — see below |
+| Build / style toolchain | style-compiler `@import` deprecation (re-emitted per compile and amplified when injected via `additionalData`), plugin/loader deprecations | the new toolchain's own removal clock, and the highest-volume class |
+| Application code | app-level warn/error | may be pre-existing — the baseline decides, not the reader |
+
+Rules:
+
+- Anything **absent from `console-baseline` is a regression candidate**
+  regardless of emitter, and anything present in it is pre-existing only for
+  the same message class, not for the same page.
+- Count distinct message classes; do not sample. A per-mount warning is one
+  class with a large count. Volume is not severity and severity is not volume,
+  so a screenful of one deprecation must not be allowed to bury one error.
+- **Deprecated on arrival.** A codemod maps an old API to the target's nearest
+  equivalent, and that equivalent is sometimes already deprecated in the target
+  major. The result is a whole class of warnings that no app-level review will
+  attribute to the migration. Treat it as codemod residue (see
+  `named-migration-recipes.md`): expect one call site per warning, and dispose
+  the class in one pass instead of chasing instances.
+- Exactly three legal dispositions: **rewrite** to the non-deprecated API;
+  **config-silenced**, meaning a scoped suppression of one *named* deprecation
+  id in build config (the style compiler's deprecation-silencing option is the
+  common case) recorded with that id, the reason, and the condition that removes
+  it; or **accepted-residual** with an owner. Blanket console filtering,
+  wrapping `console.*`, and any suppression of errors are never legal.
+
 ## Browser support floor and build entries
 
 §1 must state `browser_support_floor:` from browserslist/`.browserslistrc`
@@ -229,7 +288,12 @@ editor/tree/DAG CSS. Inventory at least:
 - mount container DOM change (Vue3 no longer replaces the host el;
   `#app > *` style selectors may shift);
 - SCSS `@import` → `@use` semantics when the build migration rewrites
-  `prependData`/`additionalData` (namespace isolation can drop globals);
+  `prependData`/`additionalData`: namespace isolation can drop globals, which is
+  the visual half. The other half is not visual at all — `@import` is deprecated
+  in current Dart Sass, so keeping it (which is what a working style build does)
+  emits a deprecation per compile unit, multiplied by every file the injected
+  preamble reaches. That half belongs to the console taxonomy above and is
+  disposed there, not by a screenshot;
 - Tailwind prefix/Preflight/important/content/safelist and dynamic classes;
 - primary search + table page and secondary table when mixed;
 - Teleport/append target, overflow/z-index and theme inheritance;
@@ -275,6 +339,16 @@ Inventory at least:
   declarations turn into attrs fallthrough and double-fire; payload shapes
   change per component.
 - **Slot contract.** Slot names and scoped-slot parameter shapes.
+- **Slot content shape.** Independent of names: what a slot is allowed to
+  *contain*. Trigger/reference slots (popover, tooltip, dropdown) in modern kits
+  route their single child through a directive that clones the child VNode, which
+  requires an **element-rooted** node. Passing a component whose own root is
+  another component compiles, renders, and diffs identically, then warns
+  `Runtime directive used on component with non-element root node` at runtime
+  while ref forwarding — and therefore popper positioning — silently fails. A
+  mechanical slot rename cannot see this: the name is already correct. Inventory
+  every trigger slot whose direct child is a component tag rather than a plain
+  element, and assert the trigger interaction, not just the render.
 
 Close each with an interaction-level assertion in §8 and mirror the list into
 `ui_behavior_contract.required_assertions` (3..20) so a summary-only consumer

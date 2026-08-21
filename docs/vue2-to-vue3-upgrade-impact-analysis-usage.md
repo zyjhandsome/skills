@@ -83,7 +83,7 @@ forbid_source_mutation: yes
 | 场景 | 你怎么答 |
 |---|---|
 | Wave 1 路径 | `proceed:path:compat-big-bang` / `proceed:path:direct-vue3` / `proceed:path:host-port-direct` / `proceed:path:microfrontend-coexist` / `defer` / `other` |
-| Wave 2+ 子系统 | `proceed:subsystem:<id>` / `defer` / `other` |
+| Wave 2+ 子系统 | `proceed:subsystem:<id>` / `defer` / `other`；也可一次答多个**列举**的 id：`proceed:subsystem:core-vue,router,ui,build`（不接受 `all` / `*` / `全部`；含未知或未 ready 的 id 则整条作废重问） |
 | 多仓候选 | 选 `workspace_id`（可多选）或 `defer` |
 | 无 lockfile | 先补 lock 再求 `ready`；否则最多 `complete` + `frozen` |
 | 推荐变成 host-port / 仓内已有 Vue3 宿主 | 停原地升；改走页面迁入剧本 |
@@ -91,6 +91,13 @@ forbid_source_mutation: yes
 
 这里的 **Wave 是确认队列的批次**（先路径、后子系统），和剧本里 Wave 1–5 的会话
 阶段不是一回事。剧本 Wave 1 整个装的就是本 Skill 的全部 Wave。
+
+`proceed:path:residual-audit` 只在画像显示 workspace 已是 Vue3 时出现，且那一轮
+只有它和 `defer` 两个选项——它不是升级路径，不会混进升级菜单当备选。
+
+贴剧本跑时，目标 Vue 版本用的是剧本通用头里那个**核对日期已知的固定钉**，它随
+时间必然落后于 registry 最新补丁；要装别的补丁，须自己在通用头写出精确版本号。
+单独跑本 Skill 时不吃这个钉，按当天 registry 解析。
 
 单仓 Vue2 SPA 默认推荐 `compat-big-bang`（`compat` + `vite` + `single-cutover`）。  
 同一 git 仓里「Vue2 应用 + 已有 Vue3 宿主」不是原地升，应按 `host-port`。  

@@ -61,6 +61,29 @@ SOURCE_PATTERNS = {
     "functional_component": re.compile(r"\bfunctional\s*:\s*true\b"),
     "router_add_routes": re.compile(r"\.addRoutes\s*\("),
     "router_wildcard": re.compile(r"path\s*:\s*['\"]\*['\"]"),
+    # Router 3 code routinely muffled navigation rejections, either by
+    # overwriting the router prototype or by catching and discarding. Router 4
+    # has no such prototype and reports failures, so removing the muffler
+    # exposes every defect it was hiding — starting on first load.
+    "router_error_suppression": re.compile(
+        r"\b(?:[A-Za-z_$][\w$]*)?Router\.prototype\.(?:push|replace)\s*=|"
+        r"\.(?:push|replace)\s*\([^\n]{0,200}\)\s*\.catch\s*\("
+    ),
+    # Navigating by name with missing required params is silent in Router 3 and
+    # throws in Router 4; each call site must be checked against its route.
+    "router_named_target": re.compile(
+        r"\.(?:push|replace)\s*\(\s*\{[^}]{0,300}?\bname\s*:"
+    ),
+    # Trigger/reference slots route their single child through a directive that
+    # requires an element-rooted node. A component child keeps build, render and
+    # screenshots identical while ref forwarding — and popper positioning — dies.
+    # Both the legacy attribute shape and the migrated template shape are
+    # candidates whose child root type must be resolved by hand.
+    "ui_trigger_slot_target": re.compile(
+        r"""<[A-Za-z][\w.-]*\b[^>]{0,300}?\bslot\s*=\s*['"](?:reference|trigger)['"]"""
+        r"""|<template\b[^>]{0,160}?(?:#|v-slot:)(?:reference|trigger)\b[^>]{0,160}?>\s*<[A-Za-z][\w.-]*""",
+        re.S,
+    ),
     "event_bus": re.compile(r"\.\$(?:on|off|once)\s*\("),
     "vue_prototype_assignment": re.compile(
         r"\bVue\.prototype(?:\.\$[A-Za-z_$][\w$]*|\[\s*['\"]\$[A-Za-z_$][\w$]*['\"]\s*\])\s*="
@@ -110,6 +133,14 @@ INTERACTION_ASSERTION_SIGNALS = (
     # the argument name must be re-resolved against the target kit's own prop.
     "sync_modifier",
     "options_filters_access",
+    # Silence removed rather than introduced: these two are latent defects that
+    # the old router hid and the new one reports, so the closure is per call
+    # site (which route, which params) and cannot come from a codemod.
+    "router_error_suppression",
+    "router_named_target",
+    # Needs the child's root type resolved against the target kit, which no
+    # regex can decide.
+    "ui_trigger_slot_target",
 )
 INTERACTION_CANDIDATE_CAP = 200
 INTERACTION_EXCERPT_LIMIT = 160

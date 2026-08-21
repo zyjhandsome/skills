@@ -107,11 +107,12 @@ build variant × scope** (A→B: workspace=A; scope often `page-closure`).
    out of scope. Complete §10 人工补搜检查. Register every `Vue.prototype.$*`
    and `globalProperties` / `provide/inject` target. UI/CSS triggers → full
    `ui_visual_risk` block; a UI-kit `replace`/`needs-major` additionally needs
-   `### ui_behavior_contract` + `ui_cutover_staging:` — mount timing and
-   prop/enum renames are invisible to the build *and* to the visual diff. Dev
-   server and production build are **two runtime lanes**: one named validation
-   each, green on one proves nothing about the other. Any baseline capture also
-   needs a `console-baseline`, or noise and regression cannot be separated.
+   `### ui_behavior_contract` + `ui_cutover_staging:` — mount timing, prop/enum
+   renames and trigger-slot content shape are invisible to the build *and* to the
+   visual diff. Dev and build are **two runtime lanes**: one named validation
+   each. Any capture also needs a `console-baseline`, whose disposal duty is keyed
+   by emitter (framework / target kit / toolchain), never by a remembered message
+   list; and removing an error-swallowing shim makes latent defects fail on load.
 7. Draft packet + Decision Records (path + High/blocker /
    `required_for_path=yes`).
 8. Confirmation queue (`references/human-confirmation-gates.md`): Wave 1 path;

@@ -113,6 +113,7 @@
 - enum_renames: size / type 枚举按 B 组件库取值重写，旧值在 B 侧不被识别且不报错
 - event_contract: `update:<prop>` 事件名随 B 侧 prop 名变化；迁入组件逐个显式声明 emits
 - slot_contract: `slot=` / `slot-scope` → `#name` / `v-slot`，作用域参数结构按 B 组件文档逐点核对
+- slot_content_shape: B 侧触发型插槽（popover / tooltip / dropdown 的 `reference` 面）对唯一子节点的根类型有要求，A 侧迁入的组件型根须逐处核对，构建绿不构成证据
 - required_behavior_assertions: drawer-open-mounts-child, dialog-visible-write-back, pagination-page-change, select-popper-teleport, table-size-enum-applies
 
 ## 6. 风险分级
@@ -167,3 +168,5 @@
 | `.sync` 修饰符与目标 UI 库 prop 身份 | 闭包内待精确扫描；改写到 B 时按宿主 UI 库实际 prop 重解析，不沿用 A 侧 prop 名 |
 | `$options.filters` 过滤器对象访问 | 闭包内待精确扫描（管道之外的调用点，B 侧无该入口） |
 | dev 与 build 运行面差异（源码 CJS、`require.context`、多入口 URL 形态） | 按 B 宿主工具链核对；两条运行面各需独立验证 |
+| router 导航静默变抛错（旧 `push/replace` 吞错覆写；按 name 跳转缺必填参数） | A 侧吞错覆写不随迁入；迁入路由按 B 宿主路由表逐点核对必填参数 |
+| 目标依赖弃用告警面（迁移后落在目标大版本已弃用 API；样式/构建工具自身弃用告警） | 按 B 宿主的组件库与样式编译器弃用清单核对，命中项走 console 处置协议 |

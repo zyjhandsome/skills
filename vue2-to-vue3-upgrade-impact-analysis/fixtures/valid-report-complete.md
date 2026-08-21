@@ -109,7 +109,8 @@
 - enum_renames: size `mini` → `small`、`medium` → `default`；已登记 9 处 `size="mini"`，旧值不被识别且不报错
 - event_contract: `update:<prop>` 事件名随 prop 改名同步变化；3 个组件未声明 emits，存在 attrs fallthrough 双触发风险
 - slot_contract: `slot=` / `slot-scope` → `#name` / `v-slot`；el-table 列插槽作用域参数按 Element Plus 文档逐列核对
-- required_behavior_assertions: drawer-open-mounts-child, dialog-visible-write-back, pagination-page-change, select-popper-teleport, table-size-enum-applies
+- slot_content_shape: el-popover / el-tooltip 的 `reference` 触发插槽要求元素型根节点；已登记 3 处 `#reference` 内直接放组件，构建仍绿、运行时报 non-element root node 且弹层定位失效
+- required_behavior_assertions: drawer-open-mounts-child, dialog-visible-write-back, pagination-page-change, select-popper-teleport, table-size-enum-applies, popover-reference-element-root
 
 ## 6. 风险分级
 
@@ -166,5 +167,7 @@
 | `.sync` 修饰符与目标 UI 库 prop 身份 | 已扫描：11 处，其中 7 处绑在 element-ui 组件上，须按 Element Plus 实际 prop 重解析 |
 | `$options.filters` 过滤器对象访问 | 已扫描：3 处对象访问调用点，独立于管道写法列入 core-vue 影响面 |
 | dev 与 build 运行面差异（源码 CJS、`require.context`、多入口 URL 形态） | 已扫描：src 内 2 处 `module.exports`、单入口无 `require.context`；两条运行面各列一条验证 |
+| router 导航静默变抛错（旧 `push/replace` 吞错覆写；按 name 跳转缺必填参数） | 已扫描：1 处 prototype 吞错覆写、5 处按 name 跳转，其中 1 处启动期跳转缺必填参数，Router 4 下会抛错 |
+| 目标依赖弃用告警面（迁移后落在目标大版本已弃用 API；样式/构建工具自身弃用告警） | 已核对目标 UI 库弃用清单：11 处落在已弃用 API 上按 mount 刷告警；样式编译器前置注入的弃用告警一并纳入 console 处置 |
 
 - 无阻塞缺口；实施需另授权

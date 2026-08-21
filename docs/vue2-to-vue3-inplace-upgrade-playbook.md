@@ -77,6 +77,7 @@ workspace：停止原地升，改走 A→B 剧本。不要在本剧本里继续 
 | ------------------------------------------------------------------------------- | ------------------------------ |
 | `next_action: analysis_complete` 且 `batch_implementation_gate=ready`            | Wave 2 Frame                   |
 | 同上但 gate=`frozen`                                                               | 停在分析；补 lock / 未决 High 后再交接     |
+| 状态表 `entry_mode: residual-audit`（或 `recommended_path: residual-audit`）         | **不进 Wave 2 Frame**，无论 gate 是否 ready：它是残留清理包而不是原地升规格。本剧本主线到此结束，清理另立项 |
 | `visual_acceptance_required=yes` 且 `recommended_next_action: run_visual_review` | Wave 3 把基线+G9 写入任务；Wave 4 做 G9 |
 | `recommended_path: host-port-direct`                                            | 改走 A→B 剧本                      |
 | 报告「3. 推荐迁移路径」字面 `Composition API 全仓重写：另立项`                                     | 本 change 的 non-goal            |
@@ -112,12 +113,14 @@ Wave 粘贴块只补充本波 Skill、应已存在的上游工件、增量门禁
 默认（仅 CONFIG 不存在且用户未覆盖时使用）：
 - workspace = 当前本地仓库 / workspace（含待升级的 package.json）
 - pages = 空 → 全 workspace（batch_scope=full-stack）
-- target_vue_version = 3.5.39
+- target_vue_version = 3.5.41
   （已精确到补丁；禁止 latest / next / rc / beta；Wave 1 校验该版本在 registry
   可解析后写入 CONFIG，其后全程不变）
-  该默认钉核对于 2026-08-21，当时 3.5.x 线最新补丁即为此值。Wave 1 发现 3.5.x
+  该默认钉核对于 2026-08-21（当时 `vue@latest` = 3.5.41）。Wave 1 发现 3.5.x
   线已前移时，只**提示用户**可以覆盖并继续用本默认值；agent 不得自行改钉——
   静默漂移会让同一 CHANGE_ID 的各波装到不同补丁上。
+  同时不得把这个钉说成"当前最新"：它是一个**核对日期已知的固定值**，随时间必然
+  落后。要装最新补丁，只能由用户在通用头显式写出那个精确补丁号。
 
 可选覆盖（需要时才写）：
 pages = <路由或文件，多个用逗号或换行；填写则 batch_scope=page-closure>
@@ -147,9 +150,10 @@ CONFIG 已记录旧分析路径时沿用，不要并行维护 workspace 根
 
 固定边界：
 - 任何包都不得用 dist-tag 解析版本（latest / next / rc / beta / edge）。dist-tag
-  会指向非预期版本：vue 的 rc 现指向 3.6.0-rc.4（Vapor 预发布），vue-router 的
+  会指向非预期版本：vue 的 rc 指向 3.6.x 预发布（Vapor 线），vue-router 的
   next 反而指向五年前的 4.0.13，而其 latest 已是 v5 主版本——裸装 vue-router 会
   解析到 5.x 而不是 4.x。安装目标 major 必须显式钉死，并在报告或任务里留下依据。
+  这些具体数字随时间变化，本行只说明 dist-tag 不可信；实际取值须当场查 registry。
 - 任何 install 之前先打印 NODE_ENV 与 npm config get production（yarn/pnpm 用等价
   配置项）。任一为 production / true 时 install 会静默跳过 devDependencies，构建
   与 lint 的 bin 随之缺失，报错表现为「命令不存在」而不指向环境；此时必须显式
@@ -158,7 +162,7 @@ CONFIG 已记录旧分析路径时沿用，不要并行维护 workspace 根
 - 单仓原地升。pages 只收窄本 change，不是 A→B host-port，也不是页面闭包迁入。
 - 默认行为 parity；保留 Options API。Composition API 全仓重写另立项。
 - Vue 3.6 / Vapor mode 不在本轮范围。3.6 线目前只有预发布，任何 rc/beta 都不得
-  进入本次升级；本轮目标固定在 3.5.x 的精确补丁号（默认 3.5.39）。
+  进入本次升级；本轮目标固定在 3.5.x 的精确补丁号（默认 3.5.41）。
 - 仅 Wave 4（delivery-execute-verify）可修改应用代码并安装依赖、运行命名配方；
   Wave 1–3 与 Wave 5 对应用代码只读。分析阶段 Name, never run。
 - Wave 5 可启动/停止干净服务、重跑验证、刷新 Codebase Memory 索引与 G9 证据；
@@ -281,7 +285,7 @@ Delivery 固定三行报告停止，不降级。
 pages 空 → batch_scope=full-stack。
 pages 有值 → batch_scope=page-closure（页面+闭包+共享 runtime/build；其余 non-goal）。
 
-目标 Vue = TARGET_VUE_VERSION。用户未覆盖时固定为 3.5.39；本波向 npm registry
+目标 Vue = TARGET_VUE_VERSION。用户未覆盖时固定为 3.5.41；本波向 npm registry
 校验该精确版本可解析后写入 CONFIG 与报告；不得写 latest、不得写「当前最新
 3.x」、不得凭记忆改填其他版本号、不得落到 3.6 线的任何预发布（alpha/beta/rc）。
 校验失败或该版本不可用时停下询问用户，不得自行改钉其他版本（包括 3.5.x 线的
@@ -430,6 +434,9 @@ visual=no 影响）：
   启动，此时按「无基线」记 residual 并在本波显式批准）；
 - 采集范围为 Wave 5 功能冒烟将覆盖的路由集合，采集口径与 Wave 4/5 一致
   （每路由独立 fresh page），采集条件复用同一份 capture_conditions；
+- 采集内容为控制台**全量输出**（error 与 warning 全量、按消息类去重计数），不得只
+  采 error 或只采某份白名单 warning：基线里没采到的类别，Wave 5 就无法判定它是
+  regression 还是本来就有，只能当噪声滑过；
 - 存在 dev 运行面时基线必须**两条运行面各采一次**，Wave 5 按同一运行面逐条对比。
 基线在升级前 revision 采集，窗口与视觉基线同时关闭；事后无法在同一 revision 补采。
 
@@ -512,6 +519,14 @@ sync_modifier 行须区分绑在自有组件上还是绑在本次同批替换的
 可能已改名为 `modelValue`），且断言点落在「弹层/抽屉真正打开并挂载出子组件」，
 而不只是变量被置为 true——这类错配 build 与 lint 全绿，症状出现在远处的 $refs。
 options_filters_access 行逐点断言运行期调用不抛错（与模板管道是两处独立改写面）。
+router_error_suppression 与 router_named_target 行是**静默被移除**而非引入：前者的
+任务必须包含「删掉旧 `push`/`replace` 的吞错覆写与 `.catch` 吞错」，并断言它原先
+掩盖的导航失败已逐条暴露且处置；后者对每个按 name 的跳转断言参数齐备（新版路由对
+缺必填参数由静默改为抛错，且此类跳转常在启动路径上，首现症状是白屏而不是坏链接）。
+ui_trigger_slot_target 行断言触发型插槽（popover / tooltip / dropdown 的 reference
+面）的唯一子节点是元素型根：目标库对该子节点挂指令，放组件型根时构建、渲染与截图
+全部一致，只在运行期告警且转发 ref 失效、弹层定位错乱——断言点是「触发交互后弹层
+出现且位置正确」，不是「页面渲染出来了」。
 summary.recipe_constraints 里有 overlaps_with 的配方对，必须额外生成一条**交集**
 验证任务，不能用任一配方自身的任务顶替。
 ui_behavior_contract.required_assertions 逐条生成行为验证任务（弹层打开后子组件确实
@@ -630,10 +645,17 @@ vue resolved version 必须仍等于 TARGET_VUE_VERSION；适用的
 已批准验收场景、登录后主路径、路由切换、列表/表单/弹层等规格点名交互。
 每条运行面各跑一遍同一份冒烟清单——dev 与 build 的模块解析、入口/URL 形态、
 env 分支都不同，一条运行面的通过不构成另一条的证据。
-同时记录 Vue runtime 控制台：error 与升级相关 warning（compat / filters /
-已移除实例 API 等）不得无处置。控制台结论必须落盘为
+同时记录控制台全量输出：error 与升级相关 warning 不得无处置。**「升级相关」按
+发出方判定，不按记得住的消息清单判定**——四类发出方全部在内：Vue 框架自身
+（compat、filters、已移除实例 API、指令用在非元素根组件上等）、目标 UI 库自身的
+弃用告警（迁移后落在目标大版本已弃用的 API 上，按 mount 刷量）、构建/样式工具链
+自身的弃用告警（样式编译器 `@import` 等，按编译刷量）、以及**基线里没有的任何
+消息**（不论发出方，先按 regression 处置）。按消息类去重计数，不抽样：一条按 mount
+刷屏的弃用告警是一个类，量大不等于严重，也不得让它把一条 error 埋掉。
+控制台结论必须落盘为
 EVIDENCE_ROOT/console-evidence.json（每个冒烟路由 × 每条运行面一行：route、
-runtime_lane、error 数、升级相关 warning 数、处置状态 resolved/accepted-residual），
+runtime_lane、error 数、升级相关 warning 数、warning 发出方分类计数、处置状态
+resolved / config-silenced / accepted-residual），
 不接受只在会话文字里"声称无异常"。采集口径固定为每路由独立 fresh page：每条路由
 新开页面再挂监听，用完关闭。不得用单页面连续跳转累积监听——那会把同一条错误重复
 计入多条路由，计数虚高且与基线、Wave 4 的证据不可比。
@@ -641,10 +663,15 @@ runtime_lane、error 数、升级相关 warning 数、处置状态 resolved/acce
 逐条对比**，每条 error 归入 regression（基线无、升级后有）或 pre-existing（基线同
 条件下已有）。没有基线对照就把某条 error 判为「环境问题/非回归」是主张而非证据，
 不予接受。regression 一律须处置；pre-existing 记 non-blocking residual 并写明 owner。
+warning 的合法处置只有三种：改写到未弃用的 API（resolved）；`config-silenced`——在
+构建配置里**按具名弃用 id** 定点静默（样式编译器的弃用静默选项是典型），必须同时
+记下该 id、理由与解除条件；`accepted-residual` 并写明 owner。禁止全局过滤控制台、
+包裹 `console.*`，也禁止对 error 做任何静默。
 error 记 accepted-residual 必须经用户显式批准并记录批准语句；
 不得自行接受运行时 error。交互断言（Wave 3 从 inventory 生成的
-v-model 回写、`.sync` 目标 prop 身份、`$options.filters` 调用点、配方交集等逐点
-检查）必须逐条执行并记录结果。不得用测试已绿代替未执行的场景。
+v-model 回写、`.sync` 目标 prop 身份、`$options.filters` 调用点、router 导航
+（吞错覆写移除后按 name 跳转不得抛 Missing required param）、触发型插槽内容形状、
+配方交集等逐点检查）必须逐条执行并记录结果。不得用测试已绿代替未执行的场景。
 
 visual=required：按当前 revision 重新校验 G9_ROOT 的 delivery-visual-evidence/v1。
 基线仍是升级前捕获；必要时刷新 current/diff，不得改应用代码。刷新时必须复用已批准
@@ -659,14 +686,18 @@ EVIDENCE_ROOT/handoff-wave4.json（只读归档），本波 handoff 的
 previous_handoff_id 指向它——handoff.json 是覆盖写，不归档就无法区分前置证据。
 
 无论 pass 还是 fail，本波都要写一份回灌工件
-EVIDENCE_ROOT/upgrade-retrospective.md，记录本次实测到的三类事实，每条附证据指针
+EVIDENCE_ROOT/upgrade-retrospective.md，记录本次实测到的四类事实，每条附证据指针
 （文件/路由/命令）与观察日期：
 - codemod 实际产出特征（哪种改写是错的、错在哪、build/lint 为何没拦住）；
-- UI 库行为差异（懒挂载、prop / 枚举 / 事件 / 插槽契约与预期不符之处）；
-- 运行面分叉（只在 dev 或只在 build 出现的问题）。
+- UI 库行为差异（懒挂载、prop / 枚举 / 事件 / 插槽契约、插槽内容形状与预期不符之处）；
+- 运行面分叉（只在 dev 或只在 build 出现的问题）；
+- 控制台弃用面（目标 UI 库与构建/样式工具链自身的告警：哪些改写消除、哪些按具名
+  弃用 id 定点静默、哪些留 residual）。
 它不改任何 Skill，也不是本波通过条件；它是把一次实战沉淀回配方库的**唯一**合法
 来源——没有它，下一个仓会把同样的坑重踩一遍。附录性质，写明"依赖前须按当时选定
 的工具版本复核"。
+它是 **append-only** 工件：仓内 verified 之后仍可继续追加（见「9. verified 之后」），
+追加不改变本 change 的状态，也不需要重开任何波次。
 
 pass：对照通用头仓内 verified 条件逐条核对，并把结论落盘
 EVIDENCE_ROOT/inrepo-verification.md（逐条核对结果、console-evidence 与交互
@@ -747,8 +778,11 @@ Verification，并重新执行完整 Wave 5；不得用 Wave 4 旧 pass 声称�
   采集），或「无基线」已在 Wave 2 显式批准为 residual；
 - `console-evidence.json` 存在、按每路由 × 每运行面独立 fresh page 口径采集，
   已与基线同 route 同 runtime_lane 逐条对比，每条 error 归入 regression 或
-  pre-existing，且无未处置的 error / 升级相关 warning（error 记 accepted-residual
-  须有用户显式批准记录）；交互断言清单逐条有结果；
+  pre-existing，且无未处置的 error / 升级相关 warning——「升级相关」按发出方判定
+  （框架 / 目标 UI 库 / 构建与样式工具链 / 基线里没有的任何消息），不按记得住的
+  消息清单判定；warning 处置只认 resolved、`config-silenced`（具名弃用 id + 理由 +
+  解除条件）、accepted-residual（有 owner），error 记 accepted-residual
+  须有用户显式批准记录；交互断言清单逐条有结果；
 - Wave 3 记录的人工前置（后端/Mock、测试账号与权限、验证码处理、稳定数据）
   全部兑现；未兑现项不得静默滑过，须逐条进入覆盖声明并由用户显式接受；
 - 分析包含 `ui_behavior_contract` 时，`required_behavior_assertions` 逐条有执行
@@ -768,3 +802,20 @@ Verification，并重新执行完整 Wave 5；不得用 Wave 4 旧 pass 声称�
 未点名页面仍 Vue2/compat 不阻塞本 change 的 verified。
 
 此时不自动 archive、commit、push、PR、部署或生产切流。
+
+## 9. verified 之后
+
+仓内 verified 是本剧本的完成水位，**不新增运维波次**：一个开放式的"清退波次"没有
+终止条件，实际效果是让 change 永远开着。但 verified 之后用户真实使用中冒出来的问题
+需要一条合法通道，否则它们既回不到配方库、也没人认领。按性质二分，只有两条出口：
+
+| verified 之后的发现 | 出口 |
+|---|---|
+| 阻断、回归、或需要改应用代码 | 新开一个 change 走 Wave 2–5（新 `CHANGE_ID`；不得回改已 verified 的 change，也不得在无规格批准的情况下直接改代码） |
+| 非阻断的控制台噪声、弃用告警、已记 residual 的项 | 追加到 `EVIDENCE_ROOT/upgrade-retrospective.md`（append-only，带观察日期与证据指针），并作为下一个仓 Wave 1 的输入 |
+
+追加时按上面的四类事实归类，`config-silenced` 的具名弃用 id 与解除条件一并记下。
+这类发现**不表示 Wave 1–5 跑得不严**，而是分析期的建模面没覆盖到该破坏面；因此
+追加的价值在于让下一个仓的 Wave 1 把它当成已知面来扫，而不是在这个仓重开波次。
+若同一类发现在两个仓复现，那是分析 Skill 的信号或控制台分类该扩的证据，不是剧本
+该加波次的证据。

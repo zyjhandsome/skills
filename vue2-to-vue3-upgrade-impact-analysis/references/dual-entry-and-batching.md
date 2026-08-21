@@ -49,8 +49,16 @@ it — declare `entry_mode: residual-audit` in §1 and produce a residual list
 (leftover Vue2-only APIs, dead build configs, silent-break hits) plus a §8
 validation matrix, without recommending an upgrade path action. A `complete`
 packet over a `vue_major=3` inventory without `residual-audit` fails the
-validator. Partial upgrades (Vue3 manifest + widespread Vue2 source hits) are
-residual-audit by default.
+validator.
+
+Partial upgrades (Vue3 manifest + widespread Vue2 source hits) constrain the
+**shape** and nothing else: if a packet gets written for such a target, its only
+legal shape is `residual-audit` — an upgrade packet over it is invalid no matter
+who asked. That is not authorization to write one. Writing still requires the
+caller to say `proceed:path:residual-audit` verbatim (Wave 1 menu in
+`next-action-choice-menus.md` §A); absent that token the run stops at
+`analysis_status=blocked`. Shape constraint and write gate are two different
+things, and neither implies the other.
 
 ## Batch identity
 

@@ -111,6 +111,7 @@
 - enum_renames: size `mini` → `small`、`medium` → `default`；旧值不被识别且不报错
 - event_contract: `update:<prop>` 事件名随 prop 改名同步变化；未声明 emits 的组件可能走 attrs fallthrough 双触发
 - slot_contract: `slot=` / `slot-scope` → `#name` / `v-slot`，作用域插槽参数结构按 Element Plus 文档逐组件核对
+- slot_content_shape: 待实施阶段核对 el-popover / el-tooltip / el-dropdown 的 `reference` 触发插槽内容形状，元素型根是硬要求，组件型根构建仍绿但运行时报 non-element root node
 - required_behavior_assertions: drawer-open-mounts-child, dialog-visible-write-back, pagination-page-change, select-popper-teleport, table-size-enum-applies
 
 ## 6. 风险分级
@@ -170,6 +171,8 @@
 | `.sync` 修饰符与目标 UI 库 prop 身份 | 待精确扫描；element-ui 组件上的 `.sync` 须按 Element Plus 实际 prop 重解析，不得机械沿用旧 prop 名 |
 | `$options.filters` 过滤器对象访问 | 待精确扫描（管道之外的调用点，Vue3 已移除该入口） |
 | dev 与 build 运行面差异（源码 CJS、`require.context`、多入口 URL 形态） | 待扫描；两条运行面各需独立验证，不得以其一代替另一条 |
+| router 导航静默变抛错（旧 `push/replace` 吞错覆写；按 name 跳转缺必填参数） | 待逐调用点扫描；吞错覆写掩盖的失败与必填参数缺失均在 Router 4 下暴露 |
+| 目标依赖弃用告警面（迁移后落在目标大版本已弃用 API；样式/构建工具自身弃用告警） | 待按目标 UI 库与样式编译器的弃用清单核对，命中项走 console 处置协议 |
 
 - 过滤器与 `$listeners` 的静态命中数待补精确扫描
 - Element Plus 视觉回归范围待产品确认

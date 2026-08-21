@@ -97,6 +97,7 @@
 - enum_renames:（size / type 等枚举取值改名或删除）
 - event_contract:（`update:<prop>` 事件名、payload、`emits` 与双触发）
 - slot_contract:（插槽名与作用域参数结构）
+- slot_content_shape:（触发型插槽对内容根节点类型的要求，如 popover/tooltip/dropdown 的 `reference` 面要元素型根；组件型根构建仍绿、运行时报 non-element root node）
 - required_behavior_assertions:（逗号分隔，至少 3 条唯一断言，逐条对应 §8）
 
 ### residual_findings（`entry_mode: residual-audit` 时必填）
@@ -150,6 +151,8 @@
 | `.sync` 修饰符与目标 UI 库 prop 身份（同批换库时按新库实际 prop 重解析） | |
 | `$options.filters` 过滤器对象访问（与模板管道是两处独立改写面） | |
 | dev 与 build 运行面差异（源码 CJS、`require.context`、多入口 URL 形态、base、env 分支） | |
+| router 导航静默变抛错（旧版 `push/replace` 吞错覆写与 `.catch` 吞错；按 name 跳转缺必填参数） | |
+| 目标依赖弃用告警面（迁移后落在目标大版本已弃用的 API 上；样式/构建工具自身的弃用告警） | |
 
 其他未决：
 -
