@@ -14,6 +14,7 @@
   "lockfile_status": "present",
   "named_recipes": [],
   "named_validations": [],
+  "runtime_lanes": [],
   "recipe_constraints": [],
   "report_path": "<output-dir>/vue2-to-vue3-upgrade-report.md",
   "inventory_path": "<output-dir>/inventory.json",
@@ -23,6 +24,9 @@
   "ui_visual_risk": {
     "required_states": [],
     "recommended_next_action": "run_visual_review"
+  },
+  "ui_behavior_contract": {
+    "required_assertions": []
   },
   "next_action": "confirm_migration_path",
   "generated_at": "<RFC3339>"

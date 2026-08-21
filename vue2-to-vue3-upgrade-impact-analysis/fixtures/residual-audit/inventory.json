@@ -1,0 +1,60 @@
+{
+  "project_root": "/repo/legacy-portal",
+  "profile_as_of": "2026-08-21",
+  "repo_revision": "9c41de70ab52",
+  "package_name": "legacy-portal",
+  "vue_version_spec": "3.5.41",
+  "vue_major": "3",
+  "builder": "vite",
+  "store": "pinia",
+  "ui_stack": "element-plus",
+  "ui_stacks": ["element-plus"],
+  "source_roots": ["src"],
+  "lockfiles": ["/repo/legacy-portal/pnpm-lock.yaml"],
+  "lockfile_status": "present",
+  "lockfile_errors": [],
+  "related_packages": {
+    "@vue/compat": "3.5.41"
+  },
+  "source_impact_signals": {
+    "scanned_files": 3,
+    "skipped_large_files": 0,
+    "truncated": false,
+    "signals": {
+      "native_modifier": 2,
+      "options_filters_access": 3,
+      "webpack_require_context": 1
+    },
+    "samples": {
+      "native_modifier": ["src/views/OrderList.vue"],
+      "options_filters_access": ["src/utils/format.js"],
+      "webpack_require_context": ["src/components/index.js"]
+    },
+    "vue_plugin_packages": {},
+    "global_mounts": {},
+    "interaction_assertion_candidates": {
+      "cap": 200,
+      "truncated": false,
+      "rows": [
+        {
+          "signal": "options_filters_access",
+          "file": "src/utils/format.js",
+          "line": 12,
+          "match": "const fn = this.$options.filters.currency"
+        },
+        {
+          "signal": "native_modifier",
+          "file": "src/views/OrderList.vue",
+          "line": 31,
+          "match": "<el-button @click.native=\"reset\">reset</el-button>"
+        },
+        {
+          "signal": "webpack_require_context",
+          "file": "src/components/index.js",
+          "line": 3,
+          "match": "const ctx = require.context('./', true, /\\.vue$/)"
+        }
+      ]
+    }
+  }
+}

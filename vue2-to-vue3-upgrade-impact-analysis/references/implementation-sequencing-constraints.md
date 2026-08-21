@@ -7,7 +7,8 @@ needs approved scope to decide is not a constraint and does not belong here.
 
 Every named recipe in `named_recipes` gets exactly one `recipe_constraints` row
 in `upgrade-summary.json`: `id`, `after` (sequence anchors or other recipe ids),
-`atomic` (`yes` / `no`). Contract and validator rules:
+`atomic` (`yes` / `no`), and `overlaps_with` when the recipe shares call sites
+with another named recipe. Contract and validator rules:
 `report-contract.md`, `scripts/validate_upgrade_summary.py`.
 
 ## Sequence anchors
@@ -19,10 +20,11 @@ named recipe.
 |---|---|---|
 | `baseline-green` | the pre-upgrade workspace installs and builds on its current lane | §1 `current_node_contract` + a known-green build, not a declaration alone |
 | `visual-baseline` | pre-upgrade visual states are captured | only meaningful when `visual_acceptance_required: yes`; §5 `baseline_status` |
+| `console-baseline` | pre-upgrade runtime console output is captured under the same conditions as the later capture | §8 console validation; required whenever any post-cutover functional validation is named |
 | `node-lane` | the target toolchain's Node range is resolvable and selectable everywhere it is declared | §1 `target_node_requirement` + `node_transition_strategy` |
 | `first-install` | the first dependency install runs under the target lane | requires `node-lane` |
 | `runtime-cutover` | the Vue runtime has moved (alias to `@vue/compat`, or `vue@3` directly) | §3 `runtime_axis` |
-| `post-cutover` | the app boots on the Vue 3 runtime | anything only judgeable after boot |
+| `post-cutover` | the app boots on the Vue 3 runtime, on **every** lane the workspace has (dev and build) | anything only judgeable after boot |
 
 ## Constraint rules
 
@@ -31,11 +33,13 @@ named recipe.
    pins, `engines`, CI, container/devcontainer, deployment builder, and
    Corepack/`packageManager` all resolve to the target range, or a
    `temporary-dual-node` strategy defines both lanes with a switch condition.
-2. **`visual-baseline` precedes every dependency and source mutation.** The
-   baseline window closes at the first mutation and cannot be reopened at the
-   same revision. When the pre-upgrade app cannot start on any available lane,
-   that is a decision to record now (substitute capture surface, or "no
-   baseline" as a residual), not a surprise for the implementation stage.
+2. **`visual-baseline` and `console-baseline` precede every dependency and
+   source mutation.** Both baseline windows close at the first mutation and
+   cannot be reopened at the same revision. When the pre-upgrade app cannot
+   start on any available lane, that is a decision to record now (substitute
+   capture surface, or "no baseline" as a residual), not a surprise for the
+   implementation stage. A console baseline is what separates an environmental
+   error from an upgrade regression later; without it that split is an opinion.
 3. **`runtime-cutover` precedes mechanical codemods.** Codemod output is only
    reviewable against a runtime that already reports the new semantics; running
    transforms first produces diffs nobody can falsify.
@@ -59,6 +63,20 @@ named recipe.
    the option; whether a parent consumes the component through `v-model`
    (silently rebound to `modelValue`, write-back dead) is cross-file judgement
    and is closed by the §10 `人工补搜检查` row, not by the scanner.
+8. **Overlapping recipes need a declared owner.** Two recipes overlap when they
+   rewrite the same call sites — the canonical case is a Vue core codemod and a
+   UI-kit codemod both touching `.sync` / `v-model` bindings on kit components.
+   Each recipe can be individually correct and the composition still wrong,
+   because neither owns the intersection: the core codemod produces a valid Vue3
+   binding carrying the old kit's prop name, and the kit codemod never revisits
+   a binding the core codemod already rewrote. Declare the pair in
+   `overlaps_with` (mutually — a one-sided declaration is the unowned
+   intersection itself), and name **one §8 validation for the intersection**,
+   distinct from either recipe's own validation. Ordering does not fix this:
+   whichever runs second sees output the other already normalized.
+9. **Both runtime lanes are sequenced, not just one.** When the workspace has a
+   dev lane and a build lane, `post-cutover` holds only when the app boots on
+   both. A recipe validated on one lane is validated on one lane.
 
 ## Out of this stage
 

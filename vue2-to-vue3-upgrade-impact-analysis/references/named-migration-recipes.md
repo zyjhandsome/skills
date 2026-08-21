@@ -41,6 +41,51 @@ maintained equivalent whenever one covers the same interval.
 The Tool column names the **document or transform**, not the version you will
 install; installed majors are resolved per `subsystem-inventory.md`.
 
+## Recipe intersections
+
+Recipes are named per subsystem, but transforms are not partitioned by
+subsystem: two of them can rewrite the same call sites, and the defect lives in
+the intersection that neither owns. Declare every such pair in
+`recipe_constraints[].overlaps_with` (mutually) and give the intersection its
+own §8 row. Known intersection shapes:
+
+| Pair | Shared call sites | What the intersection row must prove |
+|---|---|---|
+| `gogocode-vue` × `gogocode-element` (or any core codemod × kit codemod) | `.sync` / `v-model` bindings, slot syntax, and icon props on kit components | that each rewritten binding names a prop the **target kit** actually declares — a core codemod emits `v-model:<old-prop>`, which is valid Vue3 and wrong for a renamed kit prop |
+| kit codemod × `eslint-vue3` | templates the codemod rewrote | that unresolved components and unknown elements fail lint, so codemod artifacts such as an upper-cased HTML tag (`<p>` → `<P>`, which Vue3 resolves as a component) do not reach a green build |
+| template codemod × component registration | `components` option / global registration | that every element the rewritten template references is registered — a codemod that swaps an icon or component in the template does not add the corresponding registration |
+
+## Codemod residual audit
+
+Any recipe whose Tool column is a codemod carries a standing audit obligation in
+§8, independent of the diff review. Name these as check classes, not as a bug
+list — the classes are stable, while any given tool's defects are not:
+
+- **Re-parse the output.** The transform's own output must compile and lint
+  under the target toolchain, including template identifier casing and
+  unresolved components.
+- **Rewrites are partial by default.** For every API the codemod handles in one
+  syntactic form, check the other forms (template pipe vs `$options.filters`
+  object access; `.sync` vs explicit `:prop` + `@update:prop`).
+- **Cross-file effects are out of a codemod's reach.** Registration, parent
+  bindings and prop identity in another package are not visible to an AST
+  transform over a single file.
+- **Codemod output is not evidence of behavior.** A green build over
+  codemod-rewritten source proves the transform produced parseable code, nothing
+  more; the interaction assertions still have to run.
+
+Observed defects from real runs may be appended below this section as a dated,
+evidence-linked appendix. They are hints, not a checklist: verify against the
+tool version actually selected before relying on any of them.
+
+**Admission rule for that appendix.** Accept an entry only when it carries a
+concrete evidence pointer — the file or route where it was observed, the command
+that exposed it, and the observation date — plus the tool version in use at the
+time. Reject anything sourced from recollection, from a summary that no longer
+names where it happened, or from another project's hearsay: an appendix of
+unverifiable folklore makes packets longer without making any of them safer, and
+readers cannot tell which lines still apply.
+
 Example phrasing in packet:
 
 > 命名配方：`vue-compat` + `gogocode-element`（URL…）。**本技能不执行。**

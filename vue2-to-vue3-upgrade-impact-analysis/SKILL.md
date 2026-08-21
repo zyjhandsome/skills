@@ -5,10 +5,10 @@ description: >
   frontend workspace, a multi-repo inventory, or an A→B path/axes decision.
   Use when assessing Vue2→Vue3 impact, @vue/compat vs direct Vue3, Vue
   CLI/Webpack→Vite, Router 4, Vuex/Pinia, Element UI→Plus, or blocking plugins.
+  Also use when auditing what a previous Vue3 migration left behind.
   Do not use when one page is already chosen for native hosting and the caller
   needs revision-bound behavior, visual, permission, or rollback evidence —
-  that belongs to migrate-vue2-pages-to-vue3-host. Ends at analysis_status
-  complete; never implements or runs codemods.
+  that belongs to migrate-vue2-pages-to-vue3-host.
 ---
 
 # Vue 2 → Vue 3 Upgrade Impact Analysis
@@ -69,7 +69,9 @@ build variant × scope** (A→B: workspace=A; scope often `page-closure`).
 ## Default recommended path
 
 - **In-place:** `compat-big-bang` (`compat` + `vite` + `single-cutover`) unless
-  evidence favors `direct-vue3` or coexistence.
+  evidence favors `direct-vue3` or coexistence. Deviating to in-place
+  `direct-vue3` requires a §3 `default_path_deviation:` line naming what compat
+  would have absorbed and which validations take over.
 - **A→B / 并入 / iframe 收编:** `host-port-direct` (`direct-vue3` +
   `existing-vite` + `host-port`). §1 needs `source_root`,
   `implementation_target`, `forbid_source_mutation: yes`. Compat is **not**
@@ -84,8 +86,9 @@ build variant × scope** (A→B: workspace=A; scope often `page-closure`).
    `references/subsystem-inventory.md`. Record `lockfile_status`
    `present|absent|unparsed`; gate stays `frozen` unless `present`. Bind the
    packet to `repo_revision` and state `browser_support_floor` (§1 anchors).
-   `vue_major=3` → stop or explicit `entry_mode: residual-audit`; never write
-   a Vue2-baseline packet over an already-Vue3 workspace.
+   `vue_major=3` → stop, or declare status `entry_mode: residual-audit` and use
+   the residual packet shape in `references/report-contract.md`; never write a
+   Vue2-baseline packet over an already-Vue3 workspace.
 3. Build the Node compatibility matrix from current pins/`engines`/CI/container
    evidence and the **exact selected target versions** of the build, test, SSR,
    and package-manager toolchain. Do not call this a universal “Vue 3 minimum”:
@@ -103,7 +106,12 @@ build variant × scope** (A→B: workspace=A; scope often `page-closure`).
    `references/official-docs-index.md`. Fact vs inference. Composition rewrite
    out of scope. Complete §10 人工补搜检查. Register every `Vue.prototype.$*`
    and `globalProperties` / `provide/inject` target. UI/CSS triggers → full
-   `ui_visual_risk` block (not a one-liner).
+   `ui_visual_risk` block; a UI-kit `replace`/`needs-major` additionally needs
+   `### ui_behavior_contract` + `ui_cutover_staging:` — mount timing and
+   prop/enum renames are invisible to the build *and* to the visual diff. Dev
+   server and production build are **two runtime lanes**: one named validation
+   each, green on one proves nothing about the other. Any baseline capture also
+   needs a `console-baseline`, or noise and regression cannot be separated.
 7. Draft packet + Decision Records (path + High/blocker /
    `required_for_path=yes`).
 8. Confirmation queue (`references/human-confirmation-gates.md`): Wave 1 path;
@@ -112,14 +120,16 @@ build variant × scope** (A→B: workspace=A; scope often `page-closure`).
 9. Stop. Do not open implementation plans.
 
 「继续 / 全部放行 / 别再问了 / 全部纳入」**≠** proceed token. Re-prompt
-verbatim `proceed:path:…` / `proceed:subsystem:…` menus.
+verbatim `proceed:path:…` / `proceed:subsystem:…` menus. Wave here = a
+confirmation-queue batch, never a session phase of some calling playbook.
 
 ## Output
 
-1. Explicit `--output-dir` in the invocation **is** confirmation — do not
-   also ask `confirm:output-dir`. Else candidate
-   `<project-root>/.vue2-to-vue3-upgrade-analysis` after
-   `confirm:output-dir`. Until confirmed: read-only.
+1. Explicit `--output-dir` **is** confirmation — do not also ask
+   `confirm:output-dir`. The candidate
+   `<project-root>/.vue2-to-vue3-upgrade-analysis` (after `confirm:output-dir`)
+   is standalone-only: a caller that owns an evidence root must pass
+   `--output-dir`. Until confirmed: read-only.
 2. Bundle: `vue2-to-vue3-upgrade-report.md`, `upgrade-summary.json` (≤12 KiB),
    `inventory.json` when profiled, `decision-records/*.md`.
 3. Multi-batch:
@@ -174,13 +184,15 @@ when every other Skill folder is absent.
 ## References
 
 **Minimum load (every run):** `references/environment-preflight.md`,
-`references/subsystem-inventory.md`, `references/human-confirmation-gates.md`.
+`references/subsystem-inventory.md`, `references/human-confirmation-gates.md`;
+plus `references/report-contract.md` before writing any packet — the validator
+enforces fields listed only there.
 
 **On demand:** `references/dual-entry-and-batching.md`,
 `references/migration-path-ladder.md`, `references/impact-and-validation.md`,
 `references/implementation-sequencing-constraints.md`,
 `references/official-docs-index.md`, `references/named-migration-recipes.md`,
 `references/common-upgrade-patterns.md`,
-`references/next-action-choice-menus.md`, `references/report-contract.md`,
+`references/next-action-choice-menus.md`,
 `references/decision-record-schema.md`, `templates/decision-packet.md`,
 `templates/decision-record.md`, `scripts/`, `fixtures/`.

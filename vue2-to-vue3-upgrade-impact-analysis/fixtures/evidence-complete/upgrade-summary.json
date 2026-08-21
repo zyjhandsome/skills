@@ -15,6 +15,7 @@
   "named_recipes": [
     "vue-compat",
     "webpack-to-vite",
+    "gogocode-vue",
     "gogocode-element",
     "manual-router4",
     "manual-pinia-or-vuex4",
@@ -23,15 +24,32 @@
   "named_validations": [
     "vue-compat: alias vue to @vue/compat then build; fail = missing migration build",
     "webpack-to-vite: vite build; fail = non-zero exit",
+    "gogocode-vue: template/API codemod output reviewed per directory; fail = .sync, filters or removed instance APIs rewritten wrongly",
     "gogocode-element: primary form/table pages render; fail = Element Plus mapping missing",
+    "gogocode-vue x gogocode-element: on the same overlay files, open/change/close each dialog and assert parent write-back; fail = .sync became v-model:<old-kit-prop> and the binding is dead while build and lint stay green",
     "manual-router4: login redirect and 404 catch-all; fail = Router 4 history/wildcard break",
     "manual-pinia-or-vuex4: Vuex 4 install and store smoke; fail = store injection break",
-    "eslint-vue3: Vue3 lint rules; fail = leftover Vue2 API"
+    "eslint-vue3: Vue3 lint rules; fail = leftover Vue2 API",
+    "lane:dev dev server boots and every entry route resolves; fail = source CJS or MPA URL break invisible to the build",
+    "lane:build production build + static serve smoke; fail = base/publicPath or entry break invisible to dev",
+    "console-baseline: pre-upgrade console capture per route per lane, same capture_conditions; fail = regression vs pre-existing cannot be split later"
   ],
+  "runtime_lanes": ["dev", "build"],
   "recipe_constraints": [
     { "id": "webpack-to-vite", "after": ["node-lane"], "atomic": "yes" },
     { "id": "vue-compat", "after": ["first-install"], "atomic": "yes" },
-    { "id": "gogocode-element", "after": ["runtime-cutover"], "atomic": "no" },
+    {
+      "id": "gogocode-vue",
+      "after": ["runtime-cutover"],
+      "atomic": "no",
+      "overlaps_with": ["gogocode-element"]
+    },
+    {
+      "id": "gogocode-element",
+      "after": ["gogocode-vue"],
+      "atomic": "no",
+      "overlaps_with": ["gogocode-vue"]
+    },
     { "id": "manual-router4", "after": ["runtime-cutover"], "atomic": "yes" },
     { "id": "manual-pinia-or-vuex4", "after": ["runtime-cutover"], "atomic": "yes" },
     { "id": "eslint-vue3", "after": ["gogocode-element", "manual-router4"], "atomic": "no" }
@@ -51,6 +69,15 @@
   "ui_visual_risk": {
     "required_states": ["search-default", "table-empty", "table-data", "cell-popper", "icon-toolbar"],
     "recommended_next_action": "run_visual_review"
+  },
+  "ui_behavior_contract": {
+    "required_assertions": [
+      "drawer-open-mounts-child",
+      "dialog-visible-write-back",
+      "pagination-page-change",
+      "select-popper-teleport",
+      "table-size-enum-applies"
+    ]
   },
   "next_action": "analysis_complete",
   "generated_at": "2026-08-04T10:00:00+08:00"

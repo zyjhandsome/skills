@@ -40,6 +40,7 @@ DECISION_RECORDS_DIR = "decision-records"
 SUMMARY_NAME = "upgrade-summary.json"
 INVENTORY_NAME = "inventory.json"
 
+ENTRY_MODES = {"upgrade", "residual-audit"}
 STATUS_ENUMS = {
     "analysis_status": {"partial", "blocked", "complete"},
     "decision_status": {"needs_choice", "not_needed", "decided"},
@@ -52,6 +53,11 @@ OPTIONAL_STATUS_ENUMS = {
     "schema": {"vue3-upgrade-report/v1"},
     "producer": {"vue2-to-vue3-upgrade-impact-analysis"},
     "visual_acceptance_required": {"yes", "no"},
+}
+# Value-checked only when present; absence means the default `upgrade` mode, so
+# every packet written before residual audit existed stays valid.
+SOFT_STATUS_ENUMS = {
+    "entry_mode": ENTRY_MODES,
 }
 OPTIONAL_STATUS_TEXT = {"summary_path"}
 STATUS_HEADERS = ("字段", "取值")
@@ -109,6 +115,7 @@ PATH_IDS = {
     "host-port-direct",
     "microfrontend-coexist",
     "deferred-inventory-only",
+    "residual-audit",
 }
 # Preset constraints from migration-path-ladder.md (build_axis may vary).
 PATH_AXIS_CONSTRAINTS: dict[str, dict[str, str]] = {
@@ -218,7 +225,42 @@ MANUAL_GAP_ITEMS = (
         "silent semantics family",
         ("v-if/v-for", "静默语义", "attr coercion"),
     ),
+    # `.sync` → `v-model:<arg>` is the correct Vue3 rewrite, yet the argument is the
+    # old UI kit's prop name. When the kit is replaced in the same upgrade the prop
+    # must be re-resolved against the new kit, or the binding goes dead build-green.
+    ("sync modifier target prop identity", (".sync", "sync 修饰符")),
+    # Codemods rewrite the `| filter` pipe and leave object-access call sites alone.
+    ("options filters object access", ("$options.filters", "过滤器对象访问")),
+    # Dev server and production build are two runtime faces with different module
+    # resolution and entry/URL topology; one can stay green while the other breaks.
+    ("dev vs build runtime lane", ("运行面", "require.context", "dev 与 build")),
 )
+MARKER_PLACEHOLDERS = {"", "-", "—", "tbd", "todo", "待补", "待填", "待填写"}
+# A UI kit that is replaced or majored shifts behavior contracts (mount timing,
+# prop/enum identity, event payloads) that stay invisible to build and to visual diff.
+UI_BEHAVIOR_READINESS = {"replace", "needs-major"}
+UI_BEHAVIOR_MARKERS = (
+    "mount_timing:",
+    "prop_renames:",
+    "enum_renames:",
+    "event_contract:",
+    "slot_contract:",
+    "required_behavior_assertions:",
+)
+UI_STAGING_VALUES = {"with-runtime", "after-runtime"}
+RESIDUAL_AUDIT_PATH_ID = "residual-audit"
+# A residual audit inspects an already-Vue3 workspace; it proposes no cutover,
+# so it is exempt from the upgrade-path machinery and carries these instead.
+RESIDUAL_FINDING_MARKERS = (
+    "compat_shims_present:",
+    "codemod_artifacts:",
+    "silent_break_residues:",
+    "runtime_lane_residues:",
+    "required_cleanup_assertions:",
+)
+# Paths that plan no cutover: no axis preset, no target-node resolution, no
+# recipe/lane/console-baseline apparatus.
+NON_CUTOVER_PATH_IDS = {"deferred-inventory-only", RESIDUAL_AUDIT_PATH_ID}
 CHECKLIST_PLACEHOLDERS = {"", "-", "—", "todo", "待填", "待填写"}
 VALIDATION_PLACEHOLDERS = CHECKLIST_PLACEHOLDERS | {"tbd", "待补", "n/a", "na"}
 RECIPE_SKIP = {"name", "never", "run"}
@@ -356,7 +398,13 @@ def parse_status(text: str) -> tuple[dict[str, str], list[str]]:
     end = start + next_heading.start() if next_heading else len(text)
     rows, errors = parse_table(text[start:end], STATUS_HEADERS)
     values: dict[str, str] = {}
-    allowed_keys = set(STATUS_ENUMS) | set(OPTIONAL_STATUS_ENUMS) | OPTIONAL_STATUS_TEXT | {"report_path", "evidence_as_of"}
+    allowed_keys = (
+        set(STATUS_ENUMS)
+        | set(OPTIONAL_STATUS_ENUMS)
+        | set(SOFT_STATUS_ENUMS)
+        | OPTIONAL_STATUS_TEXT
+        | {"report_path", "evidence_as_of"}
+    )
     for row in rows:
         key, value = row
         if key in values:
@@ -376,6 +424,10 @@ def parse_status(text: str) -> tuple[dict[str, str], list[str]]:
         if not value:
             errors.append(f"missing status field: {key}")
         elif value not in allowed:
+            errors.append(f"invalid {key}={value!r}; allowed={sorted(allowed)}")
+    for key, allowed in SOFT_STATUS_ENUMS.items():
+        value = values.get(key)
+        if value and value not in allowed:
             errors.append(f"invalid {key}={value!r}; allowed={sorted(allowed)}")
     summary_path = values.get("summary_path", "").strip().strip("`")
     if not summary_path or summary_path.lower() in {"tbd", "todo", "null", "none"}:
@@ -421,6 +473,143 @@ def validate_ui_visual_risk(
                     "§5 required_visual_states needs at least 5 unique states when "
                     "visual_acceptance_required=yes"
                 )
+
+
+def ui_kit_changes(subsystems: list[dict[str, str]]) -> bool:
+    """True when the `ui` subsystem swaps or majors its kit in this upgrade."""
+    return any(
+        row.get("id") == "ui"
+        and row.get("scope_status") == "in_scope"
+        and row.get("readiness") in UI_BEHAVIOR_READINESS
+        for row in subsystems
+    )
+
+
+def _marker_value(block: str, marker: str) -> str | None:
+    match = re.search(rf"(?im)^\s*[-*]?\s*`?{re.escape(marker)}`?\s*(.+)$", block)
+    if not match:
+        return None
+    value = match.group(1).strip()
+    return None if value.lower() in MARKER_PLACEHOLDERS else value
+
+
+def validate_ui_behavior_contract(
+    subsystems: list[dict[str, str]], impact_block: str, result: "ReportResult"
+) -> None:
+    """A kit swap shifts behavior contracts that no visual diff can see.
+
+    Lazy-mounted overlays, renamed props, renamed enum values and changed event
+    payloads all keep the build green and the screenshots comparable while the
+    interaction is dead, so they need their own §5 block and their own assertions.
+    """
+    if not ui_kit_changes(subsystems):
+        return
+    if not re.search(r"(?m)^###\s+ui_behavior_contract\s*$", impact_block):
+        result.error(
+            "§5 UI-kit replacement/major requires ### ui_behavior_contract "
+            "(behavior shifts are not covered by ui_visual_risk)"
+        )
+        return
+    for marker in UI_BEHAVIOR_MARKERS:
+        value = _marker_value(impact_block, marker)
+        if value is None:
+            result.error(f"§5 ui_behavior_contract missing substantive {marker}")
+            continue
+        if marker == "required_behavior_assertions:":
+            items = {item.strip() for item in value.split(",") if item.strip()}
+            if len(items) < 3:
+                result.error(
+                    "§5 required_behavior_assertions needs at least 3 unique "
+                    "assertions; each maps to a §8 interaction-level row"
+                )
+
+
+def validate_ui_cutover_staging(
+    subsystems: list[dict[str, str]], path_block: str, result: "ReportResult"
+) -> None:
+    """Whether the kit moves with the runtime or after it is the blast-radius lever."""
+    if not ui_kit_changes(subsystems):
+        return
+    value = _marker_value(path_block, "ui_cutover_staging:")
+    if value is None:
+        result.error(
+            "§3 UI-kit replacement/major requires ui_cutover_staging: "
+            f"{sorted(UI_STAGING_VALUES)}"
+        )
+        return
+    # Take the leading token so a trailing rationale (often in full-width
+    # parentheses, with no space before it) does not become part of the value.
+    token = re.match(r"[A-Za-z0-9_-]+", value.strip().lstrip("`"))
+    staging = token.group(0) if token else value.strip()
+    if staging not in UI_STAGING_VALUES:
+        result.error(
+            f"§3 invalid ui_cutover_staging {staging!r}; allowed={sorted(UI_STAGING_VALUES)}"
+        )
+
+
+def validate_residual_audit(
+    entry_mode: str,
+    recommended_path: str | None,
+    impact_block: str,
+    result: "ReportResult",
+) -> None:
+    """`residual-audit` must be a writable branch, not just a permitted word.
+
+    An already-Vue3 workspace has no cutover to plan, so the packet swaps the
+    upgrade-path apparatus for an inventory of what the previous migration left
+    behind — and that inventory is only useful if it names cleanup assertions.
+    """
+    if entry_mode != "residual-audit":
+        if recommended_path == RESIDUAL_AUDIT_PATH_ID:
+            result.error(
+                f"§3 推荐路径 id {RESIDUAL_AUDIT_PATH_ID!r} requires status "
+                "entry_mode: residual-audit"
+            )
+        return
+    if recommended_path and recommended_path != RESIDUAL_AUDIT_PATH_ID:
+        result.error(
+            f"entry_mode=residual-audit requires §3 推荐路径 id "
+            f"{RESIDUAL_AUDIT_PATH_ID!r}, not {recommended_path!r} "
+            "(a residual audit proposes no migration path)"
+        )
+    if not re.search(r"(?m)^###\s+residual_findings\s*$", impact_block):
+        result.error(
+            "§5 entry_mode=residual-audit requires ### residual_findings "
+            "(what the previous migration left behind)"
+        )
+        return
+    for marker in RESIDUAL_FINDING_MARKERS:
+        value = _marker_value(impact_block, marker)
+        if value is None:
+            result.error(f"§5 residual_findings missing substantive {marker}")
+            continue
+        if marker == "required_cleanup_assertions:":
+            items = {item.strip() for item in value.split(",") if item.strip()}
+            if len(items) < 3:
+                result.error(
+                    "§5 required_cleanup_assertions needs at least 3 unique "
+                    "assertions; each maps to a §8 row"
+                )
+
+
+def validate_default_path_deviation(
+    axes: dict[str, str], path_block: str, result: "ReportResult"
+) -> None:
+    """Single-repo in-place defaults to compat; overriding it must be argued.
+
+    `direct-vue3` in place removes the compat layer that would otherwise absorb
+    the silent-failure family, so the packet has to say what it is giving up.
+    """
+    if axes.get("topology_axis") != "single-cutover":
+        return
+    if axes.get("runtime_axis") != "direct-vue3":
+        return
+    if _marker_value(path_block, "default_path_deviation:") is None:
+        result.error(
+            "§3 in-place runtime_axis=direct-vue3 deviates from the compat-big-bang "
+            "default and requires a substantive default_path_deviation line "
+            "(what the default would have absorbed, and why it is not needed here)"
+        )
 
 
 def path_matches_report(value: str, report: Path) -> bool:
@@ -650,7 +839,7 @@ def parse_axes(path_block: str, result: ReportResult) -> dict[str, str]:
 def validate_path_axis_consistency(
     path_id: str, axes: dict[str, str], result: ReportResult
 ) -> None:
-    if path_id == "deferred-inventory-only":
+    if path_id in NON_CUTOVER_PATH_IDS:
         return
     constraints = PATH_AXIS_CONSTRAINTS.get(path_id)
     if not constraints:
@@ -962,7 +1151,16 @@ def validate_report(path: Path) -> ReportResult:
     gap_block = sections.get("未决问题与证据缺口", "")
     validate_manual_gap_checklist(gap_block, result)
 
+    entry_mode = status.get("entry_mode") or "upgrade"
+    validate_residual_audit(
+        entry_mode, recommended_path, sections.get("分层影响分析", ""), result
+    )
+
     subsystems = parse_subsystems(sections.get("子系统影响清单", ""), result)
+    validate_ui_behavior_contract(subsystems, sections.get("分层影响分析", ""), result)
+    validate_ui_cutover_staging(subsystems, path_block, result)
+    if entry_mode != "residual-audit":
+        validate_default_path_deviation(axes, path_block, result)
     validate_validation_matrix(sections.get("验证矩阵", ""), subsystems, result)
     queue = parse_queue(sections.get("确认队列", ""), result)
     queue_by_unit = {row["unit"]: row for row in queue}
@@ -1027,7 +1225,7 @@ def validate_report(path: Path) -> ReportResult:
     )
     if (
         analysis == "complete"
-        and recommended_path != "deferred-inventory-only"
+        and recommended_path not in NON_CUTOVER_PATH_IDS
         and (target_node_unknown or node_status == "unknown")
     ):
         result.error(
@@ -1150,6 +1348,41 @@ def declared_file_matches(value: str, expected: Path) -> bool:
         return False
 
 
+def validate_overlap_rows(
+    summary: dict, validation_block: str, result: "ReportResult"
+) -> None:
+    """A declared codemod intersection needs its own §8 row.
+
+    Two recipes that rewrite the same call sites can each be individually
+    correct and jointly wrong. Either recipe's own validation row passes while
+    the composed result is broken, so the pair has to be validated as a pair.
+    """
+    constraints = summary.get("recipe_constraints")
+    if not isinstance(constraints, list):
+        return
+    rows, _ = parse_table(validation_block, VALIDATION_HEADERS)
+    row_recipe_sets = [set(extract_recipe_ids(row[0])) for row in rows if row]
+    pairs: set[tuple[str, str]] = set()
+    for item in constraints:
+        if not isinstance(item, dict):
+            continue
+        recipe_id = str(item.get("id", "")).strip()
+        overlaps = item.get("overlaps_with")
+        if not recipe_id or not isinstance(overlaps, list):
+            continue
+        for other in overlaps:
+            other_id = str(other).strip()
+            if other_id and other_id != recipe_id:
+                pairs.add(tuple(sorted((recipe_id, other_id))))
+    for left, right in sorted(pairs):
+        if not any({left, right} <= ids for ids in row_recipe_sets):
+            result.error(
+                f"§8 missing an intersection row for overlapping recipes "
+                f"{left} × {right}; each recipe's own row can pass while the "
+                "composed rewrite is broken"
+            )
+
+
 def validate_bundle_artifacts(report: Path, result: ReportResult) -> None:
     """Validate the standalone bundle and report/summary/inventory agreement."""
     bundle_dir = report.parent
@@ -1197,6 +1430,7 @@ def validate_bundle_artifacts(report: Path, result: ReportResult) -> None:
         "visual_acceptance_required": status.get("visual_acceptance_required"),
         "recommended_path": report_path_id,
         "lockfile_status": report_lock,
+        "entry_mode": status.get("entry_mode"),
     }
     for field_name, report_value in comparisons.items():
         if report_value is not None and summary.get(field_name) != report_value:
@@ -1204,6 +1438,8 @@ def validate_bundle_artifacts(report: Path, result: ReportResult) -> None:
                 f"{SUMMARY_NAME} {field_name}={summary.get(field_name)!r} "
                 f"does not match report {report_value!r}"
             )
+
+    validate_overlap_rows(summary, sections.get("验证矩阵", ""), result)
 
     summary_axes = summary.get("axes")
     if isinstance(summary_axes, dict):
@@ -1224,6 +1460,14 @@ def validate_bundle_artifacts(report: Path, result: ReportResult) -> None:
     for _sid, scope, _risk, _readiness, _required, recipe, _note in subsystem_rows:
         if scope == "in_scope":
             report_recipes.update(extract_recipe_ids(recipe))
+    if re.search(
+        r"(?m)^###\s+ui_behavior_contract\s*$", sections.get("分层影响分析", "")
+    ) and not isinstance(summary.get("ui_behavior_contract"), dict):
+        result.error(
+            f"report declares §5 ui_behavior_contract but {SUMMARY_NAME} carries no "
+            "ui_behavior_contract.required_assertions for downstream planning"
+        )
+
     summary_recipe_values = summary.get("named_recipes")
     if isinstance(summary_recipe_values, list) and all(
         isinstance(item, str) for item in summary_recipe_values
@@ -1307,15 +1551,25 @@ def validate_bundle_artifacts(report: Path, result: ReportResult) -> None:
                         f"match report §1 repo_revision {revision_match.group(1)!r} "
                         "(stale analysis packet)"
                     )
+                report_entry_mode = status.get("entry_mode") or "upgrade"
                 if (
                     inventory.get("vue_major") == "3"
                     and status.get("analysis_status") == "complete"
-                    and "residual-audit" not in report_text
+                    and report_entry_mode != "residual-audit"
                 ):
                     result.error(
                         f"{INVENTORY_NAME} vue_major=3: workspace is already on Vue 3; "
-                        "a complete packet must declare residual-audit entry mode "
+                        "a complete packet must set status entry_mode: residual-audit "
                         "or stay blocked instead of describing a Vue2 baseline"
+                    )
+                if (
+                    report_entry_mode == "residual-audit"
+                    and inventory.get("vue_major") not in (None, "", "3")
+                ):
+                    result.error(
+                        f"entry_mode=residual-audit but {INVENTORY_NAME} "
+                        f"vue_major={inventory.get('vue_major')!r}: a residual audit "
+                        "only applies to an already-Vue3 workspace"
                     )
 
 

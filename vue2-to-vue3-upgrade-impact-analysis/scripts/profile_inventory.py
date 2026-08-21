@@ -53,6 +53,9 @@ SOURCE_PATTERNS = {
     "destroy_lifecycle": re.compile(r"\b(?:beforeDestroy|destroyed)\b"),
     "filters_option": re.compile(r"\bfilters\s*:"),
     "vue_filter_register": re.compile(r"\bVue\.filter\s*\("),
+    # Object-access filter call sites. Codemods that rewrite the `| filter` pipe
+    # routinely leave these untouched, and Vue3 drops `$options.filters` entirely.
+    "options_filters_access": re.compile(r"\$options\.filters\b"),
     "slot_scope": re.compile(r"\bslot-scope\b"),
     "slot_attr_legacy": re.compile(r"""(?:^|\s)slot\s*=\s*['"][^'"]+['"]"""),
     "functional_component": re.compile(r"\bfunctional\s*:\s*true\b"),
@@ -86,14 +89,27 @@ SOURCE_PATTERNS = {
         r"<[^>]{0,300}?v-for=[^>]{0,300}?v-if=|<[^>]{0,300}?v-if=[^>]{0,300}?v-for=",
         re.S,
     ),
+    # Dev lane vs build lane divergence: source-level CommonJS resolves through the
+    # rollup commonjs plugin in a production build but not through the dev server's
+    # native-ESM pipeline, so one lane stays green while the other fails at boot.
+    "source_cjs_export": re.compile(
+        r"(?m)\bmodule\.exports\b|^\s*exports\.[A-Za-z_$][\w$]*\s*="
+    ),
+    "webpack_require_context": re.compile(r"\brequire\.context\s*\("),
 }
 # Signals whose Vue3 breakage is invisible to build and lint: every hit needs an
-# interaction-level assertion, so counts and five samples are not enough evidence.
+# interaction-level or runtime-level assertion of its own, so counts and five
+# samples are not enough evidence.
 INTERACTION_ASSERTION_SIGNALS = (
     "model_option",
     "native_modifier",
     "keycode_modifier",
     "transition_component",
+    # `.sync` is mechanically rewritable to `v-model:<arg>`, but when the bound
+    # component belongs to a UI kit that is being replaced in the same upgrade,
+    # the argument name must be re-resolved against the target kit's own prop.
+    "sync_modifier",
+    "options_filters_access",
 )
 INTERACTION_CANDIDATE_CAP = 200
 INTERACTION_EXCERPT_LIMIT = 160

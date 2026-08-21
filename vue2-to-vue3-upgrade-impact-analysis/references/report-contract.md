@@ -59,19 +59,34 @@ High/blocker 与每个 `required_for_path=yes` 均为 `decided`（`deferred` 只
 | 字段 | 取值 |
 |---|---|
 | `lockfile_status` | `present` / `absent` / `unparsed`（与 §1 一致；`ready` 时必须 `present`） |
-| `named_recipes` | 配方 id 字符串数组（≤20）。`complete` 且路径不是 `deferred-inventory-only` 时非空 |
-| `named_validations` | 实施期验证短句数组（≤20）。`complete` 时非空，且能对应 `named_recipes` |
-| `recipe_constraints` | 对象数组（≤20）：`id` / `after` / `atomic`。`complete` 且 `named_recipes` 非空时必填 |
+| `entry_mode` | 可选 `upgrade`（缺省）/ `residual-audit`；与 `recommended_path` 双向一致 |
+| `named_recipes` | 配方 id 字符串数组（≤20）。`complete` 且路径不是 `deferred-inventory-only` / `residual-audit` 时非空 |
+| `named_validations` | 实施期验证短句数组（≤20）。`complete` 时非空，且能对应 `named_recipes`；每条运行面各需一条带 `lane:<name>` 标记的验证；提出了代码改动时必须有一条含 `console-baseline` |
+| `runtime_lanes` | 运行面数组，取值 `dev` / `build` / `preview` / `ssr`。提出了代码改动（`named_recipes` 非空）时必填非空 |
+| `ui_behavior_contract` | 可选对象；报告 §5 写了该块时必填。`required_assertions` 为 3..20 条具体断言 |
+| `recipe_constraints` | 对象数组（≤20）：`id` / `after` / `atomic`，可选 `overlaps_with`。`complete` 且 `named_recipes` 非空时必填 |
 | `next_action` | `complete` → `analysis_complete`；`needs_choice` 不得用 `analysis_complete` |
 
 `recipe_constraints` 记录**顺序与原子性**，不是任务排期：
 
 - `id` 必须与 `named_recipes` 一一对应（不多不少，不重复）
-- `after` 每项只能是保留锚点 `baseline-green` / `visual-baseline` / `node-lane` /
-  `first-install` / `runtime-cutover` / `post-cutover`，或另一个 `named_recipes` id；
+- `after` 每项只能是保留锚点 `baseline-green` / `visual-baseline` /
+  `console-baseline` / `node-lane` / `first-install` / `runtime-cutover` /
+  `post-cutover`，或另一个 `named_recipes` id；
   禁止自引用，recipe→recipe 边禁止成环
 - `atomic`：`yes` 表示该配方没有可停留的中间态（必须整体落地或整体回退），
   `no` 表示可按目录/模块分批并逐批 review diff
+- `overlaps_with`：可选字符串数组，声明与本配方**改写同一批调用点**的其他
+  `named_recipes` id（典型：Vue core codemod × UI 库 codemod 同时命中 `.sync` /
+  `v-model` 绑定）。声明必须**双向对称**（A 写了 B，B 也必须写 A）——单边声明
+  正是它要消除的那个无主交叉点。校验器拒绝非对称声明、自引用和未命名配方。
+  凡声明了 `overlaps_with`，§8 必须为该交集单列一行验证，不能用任一配方自身的
+  验证行顶替
+
+```json
+{ "id": "gogocode-element", "after": ["runtime-cutover"], "atomic": "no",
+  "overlaps_with": ["gogocode-vue"] }
+```
 
 约束的判定依据见 `implementation-sequencing-constraints.md`。本阶段只描述顺序，
 不产出任务、责任人或工作量。
@@ -110,10 +125,32 @@ High/blocker 与每个 `required_for_path=yes` 均为 `decided`（`deferred` 只
 
 **已是 Vue3 的入口规则：** 画像 `vue_major` 为 `3`（或大面积 Vue3 源码与 Vue2
 基线描述矛盾）时，不得按 Vue2 基线模板产出 `complete` 报告。只允许二选一：
-`analysis_status=blocked` 并声明「非 Vue2 仓」，或显式进入 `entry_mode:
-residual-audit`（残留审计：只出残留清单 + 验证矩阵，不再推荐迁移路径三轴的
-升级动作）。`inventory.json` `vue_major=3` 而报告 `complete` 且未声明
-`residual-audit` 时，校验器报错。
+`analysis_status=blocked` 并声明「非 Vue2 仓」，或按下面的残留审计形态产出。
+`inventory.json` `vue_major=3` 而报告 `complete` 且状态表未写
+`entry_mode: residual-audit` 时，校验器报错。
+
+### residual-audit（残留审计形态）
+
+已是 Vue3 的仓没有 cutover 可规划，所以本形态把「升级路径机器」换成「上一轮迁移
+留下了什么」。它是一条**可写**的路，不是只被允许提及的词：
+
+- 状态表加一行 `entry_mode | residual-audit`。该字段缺省即 `upgrade`，所以此前
+  写的所有升级包依然合法；写了就必须与路径 id 双向一致。
+- §3 `推荐路径 id：residual-audit`。该 id 不吃三轴 preset（现有三轴照写，但描述的是
+  **当前观测到的现状**，不是提议的切换），也不要求 `default_path_deviation`。
+- §1 的 Node 矩阵照写，但 `analysis_status=complete` 不再要求解析出目标 Node
+  ——本形态不提议更换工具链。
+- §5 必须出现 `### residual_findings`，五个标记均非占位：
+  `compat_shims_present:`（compat alias / `compatConfig` 是否仍在生效，warning 是否
+  已分类）、`codemod_artifacts:`（上一轮 codemod 的错误改写特征，以及 build/lint
+  为何没拦住）、`silent_break_residues:`（`.sync` 产物 prop 身份、`$options.filters`
+  对象访问、`.native`、枚举改名等静默失效残留）、`runtime_lane_residues:`（只在
+  dev 或只在 build 暴露的残留）、`required_cleanup_assertions:`（≥3 条唯一断言，
+  逐条对应 §8）。
+- 免除只针对「不提议代码改动」。一旦 `named_recipes` 非空（即本包提出了清理动作），
+  `recipe_constraints` / `runtime_lanes` / `console-baseline` 命名验证与升级包**同等
+  要求**——清理同样要落到两条运行面上，同样需要清理前的控制台基线做对照。
+- 金样例：`fixtures/residual-audit/`（报告 + summary + inventory + 决策记录）。
 
 §1 还必须分别记录当前与目标 Node 契约，禁止只写“Node 18 PASS”或笼统的
 “Vue3 最低 Node”：
@@ -151,12 +188,27 @@ residual-audit`（残留审计：只出残留清单 + 验证矩阵，不再推�
 章节「3. 推荐迁移路径」必须出现字面：`Composition API 全仓重写：另立项，本次不评估工作量`。
 章节「3」必须出现 `推荐路径 id：<path-id>`，且 `<path-id>` ∈
 `compat-big-bang` / `direct-vue3` / `host-port-direct` / `microfrontend-coexist` /
-`deferred-inventory-only`。
+`deferred-inventory-only` / `residual-audit`（最后一个仅限
+`entry_mode: residual-audit`）。
 章节「3」必须出现三轴标记（取值见 `migration-path-ladder.md`）：
 
 - `runtime_axis:` `compat` / `direct-vue3`
 - `build_axis:` `vite` / `cli5-webpack5` / `existing-vite`
 - `topology_axis:` `single-cutover` / `coexist` / `host-port`
+
+§4 的 `ui` 行为 `in_scope` 且就绪度是 `replace` 或 `needs-major` 时（UI 库整体替换
+或大版本跨越），章节「3」必须额外出现：
+
+- `ui_cutover_staging:` `with-runtime`（UI 库与 runtime 同批切换）或 `after-runtime`
+  （runtime 先切、UI 库单独成步）。这不是排期，而是爆炸半径的主导变量：同批切换时
+  Vue core 改写与 UI 库改写会落在同一批调用点上，两个各自正确的改写合起来可能是错的
+  （见 `named-migration-recipes.md` 的 Recipe intersections）。校验器只认这两个取值，
+  取值后的中文理由可直接续写。
+
+`topology_axis: single-cutover` 且 `runtime_axis: direct-vue3` 时（单仓原地升但推翻了
+`compat-big-bang` 默认），章节「3」必须额外出现 `default_path_deviation:`，写明默认
+路径本可吸收什么（compat 对 `.sync`、filters、已移除实例 API 等静默失效族的兜底）、
+为什么本次不需要或不值得，以及改由什么验证承接。禁止占位。
 
 三轴须与 path preset 一致（例如 `compat-big-bang` ⇒ `runtime_axis: compat` +
 `topology_axis: single-cutover`；`host-port-direct` ⇒ `runtime_axis: direct-vue3` +
@@ -187,6 +239,24 @@ residual-audit`（残留审计：只出残留清单 + 验证矩阵，不再推�
 仅写“做视觉回归”不合规。无触发器时可写
 `visual_acceptance_required: no`，但须保留可审计的证据理由。
 
+§4 的 `ui` 行为 `in_scope` 且就绪度是 `replace` 或 `needs-major` 时，§5 还必须含
+`### ui_behavior_contract`，与 `ui_visual_risk` **并列而不是合并**——懒挂载、prop 改名、
+枚举改名、事件契约变化都是视觉 diff 看不见、build 也不报的行为破坏，放进视觉块等于
+用截图去验证一件截图验证不了的事。以下标记非空（不适用时写带依据的
+`not_applicable`）：
+
+- `mount_timing:`（新库是否延迟/懒挂载子树，`$refs` 何时可用）
+- `prop_renames:`（值契约改名，如 `visible` → `modelValue`、`:label` → `:value`）
+- `enum_renames:`（size / type 等枚举取值改名或删除，旧值静默失效）
+- `event_contract:`（`update:<prop>` 事件名、payload、`emits` 声明与双触发）
+- `slot_contract:`（插槽名与作用域参数结构）
+- `required_behavior_assertions:`（逗号分隔，**至少 3 条唯一断言**；每条对应 §8 一行
+  交互级验证。下限只是防止用一行敷衍，真正的义务是每个非 `not_applicable` 的类别
+  都要产出断言）
+
+summary 的 `ui_behavior_contract.required_assertions` 必须同时给出（3..20 条），
+否则下游只读 summary 时看不到这些断言。
+
 章节「3」或「7」附近必须出现：`Name, never run`，**或**同时出现「命名配方」与「不执行」（二者缺一不可；仅有「命名配方」表头不算）。
 章节「10」必须出现字面：`人工补搜检查`，并勾选/回答下列项（即使 profile 已扫描）：
 
@@ -204,6 +274,14 @@ residual-audit`（残留审计：只出残留清单 + 验证矩阵，不再推�
 - `<transition>` 过渡类名（`v-enter` → `v-enter-from`；动画静默失效）
 - 静默语义变更族（v-if/v-for 优先级、v-bind 合并顺序、watch 数组、
   mixin data 浅合并、attribute coercion）
+- `.sync` 修饰符与目标 UI 库 prop 身份（`:p.sync` → `v-model:p` 是正确的 Vue3
+  改写，但 `p` 是**旧库**的 prop 名；同批替换 UI 库时必须按新库实际 prop 重解析，
+  否则绑定编译通过却写不进任何 prop，常表现为子树不挂载、`$refs` 取不到）
+- `$options.filters` 对象访问调用点（与模板管道 `| filter` 是两处独立改写面，
+  codemod 通常只处理管道）
+- dev 与 build 运行面差异（源码内 CJS、`require.context`、多入口 URL 形态、
+  `base`/`publicPath`、env 分支）：两条运行面各自的验证归属必须写明，
+  不得以其一代替另一条
 
 上述每一项必须有**独立行**与非空实质结果；禁止一行打包全部项，禁止仅写
 `已声明` / `已检查` / `已核对` / `ok` 等空泛词。

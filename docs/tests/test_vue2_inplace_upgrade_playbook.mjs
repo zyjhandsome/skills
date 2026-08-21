@@ -117,7 +117,13 @@ assert.ok(wave4.includes("G9"), "Wave 4 must close visual via Delivery G9");
 
 assert.ok(wave5.includes("显式使用 delivery-execute-verify"), "Wave 5 must reuse Execute in verify-only mode");
 assert.ok(wave5.includes("不得修改应用代码"), "Wave 5 must remain application-code read-only");
-assert.ok(wave5.includes("干净") && wave5.includes("dev/preview"), "Wave 5 must start a clean runtime rather than reuse Wave 4 processes");
+assert.ok(wave5.includes("干净"), "Wave 5 must start a clean runtime rather than reuse Wave 4 processes");
+assert.ok(
+  wave5.includes("dev server") && wave5.includes("build 产物静态 serve"),
+  "Wave 5 must cover both runtime lanes, not a single dev/preview run"
+);
+assert.ok(wave5.includes("console-baseline.json"), "Wave 5 console findings must be diffed against the pre-upgrade baseline");
+assert.ok(wave5.includes("upgrade-retrospective.md"), "Wave 5 must persist the recipe feedback artifact");
 assert.ok(wave5.includes("named_validations"), "Wave 5 must re-run analysis named validations");
 assert.ok(wave5.includes("仓内 verified ≠ 生产完成"), "Wave 5 must not claim production complete");
 assert.ok(wave5.includes("不要改代码") || wave5.includes("不要在本波修复"), "Wave 5 must backflow defects instead of fixing them");

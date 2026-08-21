@@ -31,18 +31,24 @@ Agent 体检环境 → 画像 workspace → 推荐路径三维 → 当场按确�
 
 ## 2. 最短上手提示词
 
-**单仓原地升（只分析）：**
+先决定输出目录，再抄提示词——这一步选错，Wave 2 会到空目录里找分析包。
+
+| 你接下来要做什么 | `--output-dir` 写哪 |
+|---|---|
+| 之后要按原地升剧本改代码、做到仓内 `verified` | `<workspace>/openspec/changes/vue2-to-vue3-inplace-<SLUG>/evidence/vue2-to-vue3-upgrade` |
+| 只要一份决策包，不接剧本 | `<前端 workspace>/.vue2-to-vue3-upgrade-analysis` |
+
+**单仓原地升（要接剧本，推荐）：**
 
 ```text
 用 vue2-to-vue3-upgrade-impact-analysis 做 Vue2→Vue3 升级影响分析。
 只出决策包，不改代码、不跑 codemod。
 项目：<前端 workspace 绝对路径>
---output-dir <前端 workspace>/.vue2-to-vue3-upgrade-analysis
+--output-dir <workspace>/openspec/changes/vue2-to-vue3-inplace-<SLUG>/evidence/vue2-to-vue3-upgrade
 ```
 
-若接下来会按原地升剧本做到仓内 `verified`，把 `--output-dir` 改成剧本默认的
-`<workspace>/openspec/changes/vue2-to-vue3-inplace-<SLUG>/evidence/vue2-to-vue3-upgrade`，
-不要再写一份到 workspace 根。
+**单仓一次性分析（不接剧本）：** 同上，把 `--output-dir` 换成
+`<前端 workspace>/.vue2-to-vue3-upgrade-analysis`。两个目录不要同时维护。
 
 **多仓巡检：**
 
@@ -81,6 +87,10 @@ forbid_source_mutation: yes
 | 多仓候选 | 选 `workspace_id`（可多选）或 `defer` |
 | 无 lockfile | 先补 lock 再求 `ready`；否则最多 `complete` + `frozen` |
 | 推荐变成 host-port / 仓内已有 Vue3 宿主 | 停原地升；改走页面迁入剧本 |
+| workspace 本身已是 Vue3 | 要么就此打住，要么 `proceed:path:residual-audit` 出残留审计包（不写 Vue2 基线） |
+
+这里的 **Wave 是确认队列的批次**（先路径、后子系统），和剧本里 Wave 1–5 的会话
+阶段不是一回事。剧本 Wave 1 整个装的就是本 Skill 的全部 Wave。
 
 单仓 Vue2 SPA 默认推荐 `compat-big-bang`（`compat` + `vite` + `single-cutover`）。  
 同一 git 仓里「Vue2 应用 + 已有 Vue3 宿主」不是原地升，应按 `host-port`。  

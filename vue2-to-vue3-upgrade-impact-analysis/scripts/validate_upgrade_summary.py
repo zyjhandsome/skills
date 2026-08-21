@@ -23,11 +23,21 @@ ENUMS = {
     "lockfile_status": {"present", "absent", "unparsed"},
 }
 RECIPE_ID = re.compile(r"^[A-Za-z][A-Za-z0-9_-]*$")
+ENTRY_MODES = {"upgrade", "residual-audit"}
+RESIDUAL_AUDIT_PATH_ID = "residual-audit"
+# Paths that plan no cutover: no recipes, no runtime lanes, no console baseline.
+NON_CUTOVER_PATH_IDS = {"deferred-inventory-only", RESIDUAL_AUDIT_PATH_ID}
+# Dev server and production build are separate runtime faces with different module
+# resolution, entry/URL topology and env handling. Each declared lane needs its own
+# named validation; green on one lane is not evidence about another.
+RUNTIME_LANES = {"dev", "build", "preview", "ssr"}
+CONSOLE_BASELINE_TOKEN = "console-baseline"
 # Fixed implementation-stage phase order. A recipe may only be sequenced after one
 # of these anchors or after another named recipe.
 SEQUENCE_ANCHORS = (
     "baseline-green",
     "visual-baseline",
+    "console-baseline",
     "node-lane",
     "first-install",
     "runtime-cutover",
@@ -62,6 +72,106 @@ def first_cycle(edges: dict[str, list[str]]) -> list[str]:
     return []
 
 
+def collect_overlaps(
+    item: dict, recipe_id: str, recipes: list[str], overlaps: dict[str, set[str]]
+) -> list[str]:
+    """Validate one recipe's `overlaps_with` list and record it for the symmetry check.
+
+    Two recipes overlap when they rewrite the same call sites (for example a Vue
+    core codemod and a UI-kit codemod both touching `.sync` bindings). The field is
+    optional, but a declared overlap must name a real recipe and must be mutual —
+    a one-sided declaration is exactly the unowned intersection it exists to close.
+    """
+    errors: list[str] = []
+    overlaps.setdefault(recipe_id, set())
+    value = item.get("overlaps_with")
+    if value is None:
+        return errors
+    if not isinstance(value, list) or not all(isinstance(entry, str) for entry in value):
+        errors.append(f"recipe_constraints[{recipe_id}].overlaps_with must be a string array")
+        return errors
+    cleaned = [entry.strip() for entry in value]
+    unknown = sorted({entry for entry in cleaned if entry not in set(recipes)})
+    if unknown:
+        errors.append(
+            f"recipe_constraints[{recipe_id}].overlaps_with must reference a named recipe: "
+            + ", ".join(unknown)
+        )
+    if recipe_id in cleaned:
+        errors.append(f"recipe_constraints[{recipe_id}].overlaps_with must not reference itself")
+    overlaps[recipe_id] = {entry for entry in cleaned if entry != recipe_id}
+    return errors
+
+
+def check_overlap_symmetry(overlaps: dict[str, set[str]]) -> list[str]:
+    errors: list[str] = []
+    for recipe_id, declared in sorted(overlaps.items()):
+        for other in sorted(declared):
+            if other in overlaps and recipe_id not in overlaps[other]:
+                errors.append(
+                    f"recipe_constraints overlaps_with must be mutual: {recipe_id} declares "
+                    f"{other} but {other} does not declare {recipe_id}"
+                )
+    return errors
+
+
+def validate_runtime_lanes(data: Any, validations: list[Any], required: bool) -> list[str]:
+    """Every declared runtime lane needs a validation that names it."""
+    errors: list[str] = []
+    value = data.get("runtime_lanes")
+    if value is None:
+        if required:
+            errors.append("complete summary requires runtime_lanes")
+        return errors
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        errors.append("runtime_lanes must be a string array")
+        return errors
+    lanes = [item.strip() for item in value]
+    unknown = sorted({lane for lane in lanes if lane not in RUNTIME_LANES})
+    if unknown:
+        errors.append(
+            f"runtime_lanes must be one of {sorted(RUNTIME_LANES)}: " + ", ".join(unknown)
+        )
+    if required and not lanes:
+        errors.append("complete summary requires at least one runtime lane")
+    blob = " ".join(str(item) for item in validations)
+    # Match an explicit `lane:<name>` tag. Bare lane words such as "build" occur in
+    # almost every validation sentence and would make the check vacuous.
+    missing = [
+        lane for lane in lanes if lane in RUNTIME_LANES and f"lane:{lane}" not in blob
+    ]
+    if missing:
+        errors.append(
+            "named_validations must tag one validation `lane:<name>` per runtime lane: "
+            + ", ".join(sorted(set(missing)))
+        )
+    return errors
+
+
+def validate_ui_behavior_contract(data: Any) -> list[str]:
+    """Optional block; when present it must carry real assertions.
+
+    A kit swap shifts mount timing, prop identity and enum values — none of which a
+    visual diff can see — so the assertions live here, not in `ui_visual_risk`.
+    """
+    value = data.get("ui_behavior_contract")
+    if value is None:
+        return []
+    if not isinstance(value, dict):
+        return ["ui_behavior_contract must be an object"]
+    assertions = value.get("required_assertions")
+    if (
+        not isinstance(assertions, list)
+        or not 3 <= len(assertions) <= 20
+        or not all(
+            isinstance(item, str) and item.strip() and not PLACEHOLDER.match(item.strip())
+            for item in assertions
+        )
+    ):
+        return ["ui_behavior_contract.required_assertions must contain 3..20 concrete items"]
+    return []
+
+
 def validate_recipe_constraints(data: Any, recipes: list[str], status: Any) -> list[str]:
     errors: list[str] = []
     value = data.get("recipe_constraints")
@@ -74,6 +184,7 @@ def validate_recipe_constraints(data: Any, recipes: list[str], status: Any) -> l
         return errors
     allowed_after = set(SEQUENCE_ANCHORS) | set(recipes)
     edges: dict[str, list[str]] = {}
+    overlaps: dict[str, set[str]] = {}
     seen: list[str] = []
     for item in value:
         if not isinstance(item, dict):
@@ -101,7 +212,9 @@ def validate_recipe_constraints(data: Any, recipes: list[str], status: Any) -> l
         if recipe_id in cleaned:
             errors.append(f"recipe_constraints[{recipe_id}].after must not reference itself")
         edges[recipe_id] = [entry for entry in cleaned if entry in set(recipes)]
-    duplicates = sorted({item for item in seen if seen.count(item) > 1})
+        errors.extend(collect_overlaps(item, recipe_id, recipes, overlaps))
+    errors.extend(check_overlap_symmetry(overlaps))
+    duplicates = sorted({entry for entry in seen if seen.count(entry) > 1})
     if duplicates:
         errors.append("recipe_constraints ids must be unique: " + ", ".join(duplicates))
     if recipes:
@@ -118,6 +231,38 @@ def validate_recipe_constraints(data: Any, recipes: list[str], status: Any) -> l
     cycle = first_cycle(edges)
     if cycle:
         errors.append("recipe_constraints after edges must not form a cycle: " + " -> ".join(cycle))
+    return errors
+
+
+def validate_entry_mode(data: Any, path: Any) -> list[str]:
+    """`residual-audit` is a different product, so it must be declared as one.
+
+    Absent means `upgrade`, which keeps every pre-existing packet valid; the mode
+    and the recommended path have to agree in both directions so a residual audit
+    cannot be smuggled in under an upgrade path id or vice versa.
+    """
+    errors: list[str] = []
+    mode = data.get("entry_mode")
+    if mode is None:
+        if path == RESIDUAL_AUDIT_PATH_ID:
+            errors.append(
+                f"recommended_path={RESIDUAL_AUDIT_PATH_ID} requires "
+                "entry_mode=residual-audit"
+            )
+        return errors
+    if mode not in ENTRY_MODES:
+        errors.append(f"entry_mode must be one of {sorted(ENTRY_MODES)}")
+        return errors
+    if mode == "residual-audit" and path != RESIDUAL_AUDIT_PATH_ID:
+        errors.append(
+            f"entry_mode=residual-audit requires recommended_path="
+            f"{RESIDUAL_AUDIT_PATH_ID}, not {path!r}"
+        )
+    if mode == "upgrade" and path == RESIDUAL_AUDIT_PATH_ID:
+        errors.append(
+            f"recommended_path={RESIDUAL_AUDIT_PATH_ID} requires "
+            "entry_mode=residual-audit"
+        )
     return errors
 
 
@@ -170,7 +315,8 @@ def validate(data: Any, raw_size: int) -> list[str]:
     decision = data.get("decision_status")
     gate = data.get("batch_implementation_gate")
     path = data.get("recommended_path")
-    if status == "complete" and path != "deferred-inventory-only" and not recipes:
+    errors.extend(validate_entry_mode(data, path))
+    if status == "complete" and path not in NON_CUTOVER_PATH_IDS and not recipes:
         errors.append("complete summary requires named_recipes")
     if status == "complete" and not validations:
         errors.append("complete summary requires named_validations")
@@ -187,6 +333,22 @@ def validate(data: Any, raw_size: int) -> list[str]:
             errors.append(
                 "named_validations must mention each named_recipes id: " + ", ".join(missing)
             )
+    # The verification apparatus is keyed to proposed code mutations, not to the
+    # path label: a residual audit that names cleanup recipes still has to say
+    # which runtime lanes verify them and that a console baseline exists.
+    substantive = status == "complete" and (
+        path not in NON_CUTOVER_PATH_IDS or bool(recipes)
+    )
+    errors.extend(validate_runtime_lanes(data, validations, substantive))
+    if substantive and not any(
+        CONSOLE_BASELINE_TOKEN in str(item) for item in validations
+    ):
+        errors.append(
+            "named_validations must name a console-baseline capture; without a "
+            "pre-upgrade console capture under the same conditions, environmental "
+            "noise and upgrade regressions cannot be told apart afterwards"
+        )
+    errors.extend(validate_ui_behavior_contract(data))
     errors.extend(
         validate_recipe_constraints(
             data, [item.strip() for item in recipes if isinstance(item, str)], status

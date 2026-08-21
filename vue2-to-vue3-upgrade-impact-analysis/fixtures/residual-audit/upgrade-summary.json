@@ -1,0 +1,63 @@
+{
+  "schema": "vue3-upgrade-summary/v1",
+  "producer": "vue2-to-vue3-upgrade-impact-analysis",
+  "analysis_status": "complete",
+  "decision_status": "decided",
+  "batch_implementation_gate": "ready",
+  "entry_mode": "residual-audit",
+  "recommended_path": "residual-audit",
+  "axes": {
+    "runtime": "direct-vue3",
+    "build": "existing-vite",
+    "topology": "single-cutover"
+  },
+  "visual_acceptance_required": "yes",
+  "lockfile_status": "present",
+  "named_recipes": [
+    "residual-compat-removal",
+    "residual-sync-prop-reresolve"
+  ],
+  "named_validations": [
+    "residual-compat-removal: drop the @vue/compat alias, then boot dev and build and read the console; fail = the compat layer was still absorbing unmigrated call sites",
+    "residual-sync-prop-reresolve: open each overlay, change a value, close it, assert parent write-back; fail = the codemod prop name does not match the current kit contract",
+    "residual-compat-removal x residual-sync-prop-reresolve: same overlay files, compat removed first then prop re-resolved, assert both steps; fail = the intersection defect stays hidden",
+    "lane:dev dev server boots and every entry route resolves; fail = require.context or MPA URL residue invisible to the build",
+    "lane:build production build + static serve smoke; fail = rollup rejects require.context or the second entry 404s only here",
+    "console-baseline: pre-cleanup console capture per route per lane, same capture_conditions; fail = the 37 compat warnings cannot be split from cleanup regressions afterwards"
+  ],
+  "runtime_lanes": ["dev", "build"],
+  "recipe_constraints": [
+    {
+      "id": "residual-compat-removal",
+      "after": ["console-baseline"],
+      "atomic": "yes",
+      "overlaps_with": ["residual-sync-prop-reresolve"]
+    },
+    {
+      "id": "residual-sync-prop-reresolve",
+      "after": ["residual-compat-removal"],
+      "atomic": "no",
+      "overlaps_with": ["residual-compat-removal"]
+    }
+  ],
+  "report_path": "fixtures/residual-audit/vue2-to-vue3-upgrade-report.md",
+  "inventory_path": "fixtures/residual-audit/inventory.json",
+  "decision_records": [
+    "fixtures/residual-audit/decision-records/migration-path__residual-audit.md",
+    "fixtures/residual-audit/decision-records/subsystem__core-vue.md"
+  ],
+  "blockers": [],
+  "high_risks": ["core-vue"],
+  "ui_visual_risk": {
+    "required_states": [
+      "search-default",
+      "table-empty",
+      "table-data",
+      "dialog-open",
+      "cell-popper"
+    ],
+    "recommended_next_action": "run_visual_review"
+  },
+  "next_action": "analysis_complete",
+  "generated_at": "2026-08-21T11:00:00+08:00"
+}

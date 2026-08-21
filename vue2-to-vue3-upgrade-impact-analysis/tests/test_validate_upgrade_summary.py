@@ -100,6 +100,103 @@ class ValidateUpgradeSummaryTests(unittest.TestCase):
         errors = MODULE.validate(self.data, self.raw_size)
         self.assertTrue(any("atomic must be yes or no" in e for e in errors))
 
+    def test_recipe_constraints_accept_console_baseline_anchor(self) -> None:
+        self.data["recipe_constraints"][0]["after"] = ["node-lane", "console-baseline"]
+        self.assertEqual([], MODULE.validate(self.data, self.raw_size))
+
+    def test_overlaps_with_must_reference_a_named_recipe(self) -> None:
+        self.data["recipe_constraints"][0]["overlaps_with"] = ["gogocode-vue"]
+        errors = MODULE.validate(self.data, self.raw_size)
+        self.assertTrue(any("overlaps_with must reference" in e for e in errors))
+
+    def test_overlaps_with_must_be_mutual(self) -> None:
+        # A one-sided declaration is the unowned codemod intersection itself.
+        self.data["recipe_constraints"][0]["overlaps_with"] = ["gogocode-element"]
+        errors = MODULE.validate(self.data, self.raw_size)
+        self.assertTrue(any("must be mutual" in e for e in errors))
+
+    def test_overlaps_with_accepts_mutual_declaration(self) -> None:
+        self.data["recipe_constraints"][0]["overlaps_with"] = ["gogocode-element"]
+        self.data["recipe_constraints"][2]["overlaps_with"] = ["webpack-to-vite"]
+        self.assertEqual([], MODULE.validate(self.data, self.raw_size))
+
+    def test_overlaps_with_rejects_self_reference(self) -> None:
+        self.data["recipe_constraints"][0]["overlaps_with"] = ["webpack-to-vite"]
+        errors = MODULE.validate(self.data, self.raw_size)
+        self.assertTrue(any("overlaps_with must not reference itself" in e for e in errors))
+
+    def test_complete_requires_runtime_lanes(self) -> None:
+        del self.data["runtime_lanes"]
+        errors = MODULE.validate(self.data, self.raw_size)
+        self.assertTrue(any("requires runtime_lanes" in e for e in errors))
+
+    def test_each_runtime_lane_needs_a_tagged_validation(self) -> None:
+        self.data["runtime_lanes"] = ["dev", "build", "ssr"]
+        errors = MODULE.validate(self.data, self.raw_size)
+        self.assertTrue(any("lane:<name>" in e and "ssr" in e for e in errors))
+
+    def test_rejects_unknown_runtime_lane(self) -> None:
+        self.data["runtime_lanes"] = ["staging"]
+        errors = MODULE.validate(self.data, self.raw_size)
+        self.assertTrue(any("runtime_lanes must be one of" in e for e in errors))
+
+    def test_complete_requires_console_baseline_validation(self) -> None:
+        self.data["named_validations"] = [
+            item for item in self.data["named_validations"] if "console-baseline" not in item
+        ]
+        errors = MODULE.validate(self.data, self.raw_size)
+        self.assertTrue(any("console-baseline" in e for e in errors))
+
+    def test_ui_behavior_contract_requires_three_assertions(self) -> None:
+        self.data["ui_behavior_contract"] = {"required_assertions": ["a", "b"]}
+        errors = MODULE.validate(self.data, self.raw_size)
+        self.assertTrue(any("required_assertions must contain 3..20" in e for e in errors))
+
+    def test_ui_behavior_contract_accepts_concrete_assertions(self) -> None:
+        self.data["ui_behavior_contract"] = {
+            "required_assertions": [
+                "drawer-open-mounts-child",
+                "dialog-visible-write-back",
+                "pagination-page-change",
+            ]
+        }
+        self.assertEqual([], MODULE.validate(self.data, self.raw_size))
+
+    def test_residual_audit_summary_fixture_is_valid(self) -> None:
+        raw = (ROOT / "fixtures" / "residual-audit" / "upgrade-summary.json").read_bytes()
+        data = json.loads(raw)
+        self.assertEqual([], MODULE.validate(data, len(raw)))
+        self.assertEqual(data["entry_mode"], "residual-audit")
+        self.assertEqual(data["recommended_path"], "residual-audit")
+
+    def test_residual_audit_path_requires_residual_entry_mode(self) -> None:
+        self.data["recommended_path"] = "residual-audit"
+        errors = MODULE.validate(self.data, self.raw_size)
+        self.assertTrue(any("entry_mode=residual-audit" in e for e in errors))
+
+    def test_residual_entry_mode_requires_residual_path(self) -> None:
+        self.data["entry_mode"] = "residual-audit"
+        errors = MODULE.validate(self.data, self.raw_size)
+        self.assertTrue(any("requires recommended_path" in e for e in errors))
+
+    def test_rejects_unknown_entry_mode(self) -> None:
+        self.data["entry_mode"] = "cleanup"
+        errors = MODULE.validate(self.data, self.raw_size)
+        self.assertTrue(any("entry_mode must be one of" in e for e in errors))
+
+    def test_residual_audit_naming_recipes_still_needs_lanes_and_baseline(self) -> None:
+        # Exemption is keyed to proposed mutations, not to the path label: a
+        # cleanup that names recipes must still say how it is verified.
+        raw = (ROOT / "fixtures" / "residual-audit" / "upgrade-summary.json").read_bytes()
+        data = json.loads(raw)
+        del data["runtime_lanes"]
+        data["named_validations"] = [
+            item for item in data["named_validations"] if "console-baseline" not in item
+        ]
+        errors = MODULE.validate(data, len(raw))
+        self.assertTrue(any("requires runtime_lanes" in e for e in errors))
+        self.assertTrue(any("console-baseline" in e for e in errors))
+
     def test_recipe_constraints_optional_while_partial(self) -> None:
         raw = (ROOT / "templates" / "upgrade-summary.json").read_bytes()
         data = json.loads(raw)

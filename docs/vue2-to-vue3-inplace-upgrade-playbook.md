@@ -115,6 +115,9 @@ Wave 粘贴块只补充本波 Skill、应已存在的上游工件、增量门禁
 - target_vue_version = 3.5.39
   （已精确到补丁；禁止 latest / next / rc / beta；Wave 1 校验该版本在 registry
   可解析后写入 CONFIG，其后全程不变）
+  该默认钉核对于 2026-08-21，当时 3.5.x 线最新补丁即为此值。Wave 1 发现 3.5.x
+  线已前移时，只**提示用户**可以覆盖并继续用本默认值；agent 不得自行改钉——
+  静默漂移会让同一 CHANGE_ID 的各波装到不同补丁上。
 
 可选覆盖（需要时才写）：
 pages = <路由或文件，多个用逗号或换行；填写则 batch_scope=page-closure>
@@ -216,9 +219,15 @@ revision；权威任务完成；Wave 4 已写出绑定当前 revision 的 Delive
 混用 Wave 4 旧 pass；visual=required 时 G9 pass 且 required 状态未被任何 Wave
 单方降级（assessment_mode / diff_policy / structural_parity_metrics 仍是 Wave 2
 已批准的值，current 与基线同 capture_conditions）；回滚演练证据存在（升级前
-revision 在旧 lane frozen install/build 通过）；console-evidence.json 按每路由
-fresh page 口径采集且无未处置 error（error 记 accepted-residual 须用户显式批准）；
-交互断言清单逐条有结果；结论落盘 EVIDENCE_ROOT/inrepo-verification.md；
+revision 在旧 lane frozen install/build 通过）；存在 dev 运行面时 dev 与 build
+两条运行面各自独立跑过完整冒烟并各有证据；console-evidence.json 按每路由 ×
+每运行面 fresh page 口径采集，且已与 console-baseline.json 同 route 同 runtime_lane
+逐条对比、每条 error 归入 regression 或 pre-existing 并无未处置项（error 记
+accepted-residual 须用户显式批准）；交互断言清单逐条有结果；Wave 3 记录的人工前置
+（后端/Mock、测试账号与权限、稳定数据）全部兑现，未兑现项已逐条列入
+inrepo-verification.md 的覆盖声明并经用户显式接受；结论落盘
+EVIDENCE_ROOT/inrepo-verification.md，其中含覆盖声明（跑了哪些运行面、哪些路由、
+哪些已批准交互未被实际执行及原因）；
 Vue resolved version 与 TARGET_VUE_VERSION 一致；Composition 全仓重写仍在
 non-goals；无 blocking residual。仍不 archive/commit/push/PR/部署。
 ```
@@ -276,7 +285,8 @@ pages 有值 → batch_scope=page-closure（页面+闭包+共享 runtime/build�
 校验该精确版本可解析后写入 CONFIG 与报告；不得写 latest、不得写「当前最新
 3.x」、不得凭记忆改填其他版本号、不得落到 3.6 线的任何预发布（alpha/beta/rc）。
 校验失败或该版本不可用时停下询问用户，不得自行改钉其他版本（包括 3.5.x 线的
-其他补丁）。
+其他补丁）。registry 显示 3.5.x 线已有更新补丁时，把「默认钉 vs 线上最新」作为
+一行提示回显给用户，由用户决定是否覆盖；未覆盖就继续用默认钉，不得自行更换。
 「2. 仓画像与依赖就绪度」与「3. 推荐迁移路径」必须写出该精确补丁号。
 CONFIG 一旦记录，后续各 Wave 一律沿用，不得因为上游发了新补丁而漂移。
 compat 对齐 vue / @vue/compat / @vue/compiler-sfc 同版本；direct 至少 vue 与
@@ -292,7 +302,14 @@ host-port-direct、另一 Vue3 宿主、iframe 收编、topology_axis=host-port�
 或实施落点不是当前 workspace：停止本剧本，不要进入 Wave 2，不要加载其他剧本。
 
 画像 vue_major=3（workspace 已是/部分是 Vue3）：停止本剧本主线；只有用户显式
-要求时才产出 residual-audit 残留审计包，不得按 Vue2 基线写升级决策包。
+要求时才产出残留审计包——按分析 Skill 报告契约的 residual-audit 形态写
+（状态表 entry_mode: residual-audit + 「3.」推荐路径 id: residual-audit +
+「5.」residual_findings），不得按 Vue2 基线写升级决策包。残留审计不接本剧本
+Wave 2，清理另行立项。
+
+确认队列里的 Wave 1 / Wave 2+ 是分析 Skill 的**提问批次**（先路径、后子系统），
+与本剧本 Wave 1–5 的会话阶段不是同一套编号；本剧本 Wave 1 覆盖该 Skill 的全部
+提问批次。
 报告「1. 基线与假设」必须记录 repo_revision（分析绑定的 git HEAD）与
 browser_support_floor；下游各 Wave 以此判定分析是否 stale。
 
@@ -300,9 +317,34 @@ browser_support_floor；下游各 Wave 以此判定分析是否 stale。
 Composition API 全仓重写：另立项，本次不评估工作量
 
 summary 必须给出 recipe_constraints：每个命名配方一行 after（保留锚点或另一配方 id）
-与 atomic；inventory 必须含 source_impact_signals.interaction_assertion_candidates
-（逐点定位 model_option / native_modifier / keycode_modifier / transition_component）。
+与 atomic；两个命名配方改写同一批调用点时（典型：Vue core codemod × UI 库 codemod
+同时命中 `.sync` / `v-model` 绑定）双向写出 overlaps_with，并在报告「8. 验证矩阵」
+为该交集单列一行验证。inventory 必须含
+source_impact_signals.interaction_assertion_candidates（逐点定位 model_option /
+native_modifier / keycode_modifier / transition_component / sync_modifier /
+options_filters_access）。
 candidates.truncated=true 说明清单不完备，须在本波补一次全量检索或写入证据缺口。
+
+运行面必须拆成两条：dev server 与 build 产物是两套模块解析、入口/URL 形态与 env
+处理，一条绿不构成另一条的证据。报告须记录本 workspace 实际存在哪些运行面，
+多入口（MPA）证据既落到 rollupOptions.input 也落到 dev URL 形态；summary 的
+runtime_lanes 逐条列出，named_validations 每条运行面各有一行 lane:<name> 验证。
+
+UI 库整体替换或跨大版本时（「4. 子系统影响清单」的 ui 行 in_scope 且就绪度
+replace / needs-major），
+报告「3.」必须写出 ui_cutover_staging（with-runtime / after-runtime），「5.」必须写出
+与 ui_visual_risk 并列的 ui_behavior_contract（mount_timing / prop_renames /
+enum_renames / event_contract / slot_contract / required_behavior_assertions，
+断言至少 3 条），summary 同步给出 ui_behavior_contract.required_assertions。
+懒挂载、prop 改名、枚举改名这些是视觉 diff 看不见、build 也不报的行为破坏，
+不得并进视觉块用截图顶替。
+若把单仓原地升的路径定为 direct-vue3（推翻 compat-big-bang 默认），
+「3.」必须写出 default_path_deviation：默认路径本可吸收什么（compat 对 .sync、
+filters、已移除实例 API 等静默失效族的兜底）、为何本次不需要或不值得、
+改由哪些命名验证承接。
+凡命名了 cutover 之后的功能验证，就必须同时命名 console-baseline：升级前 revision
+在与升级后**同一采集条件**下的控制台输出。缺这条基线，事后无法区分环境噪声与
+升级回归，只能靠主张。
 
 确认队列按 Skill 用 proceed:path:<id> / proceed:subsystem:<id>。
 报告与 summary 不得填写其他 Skill 名称。
@@ -377,9 +419,24 @@ required 时已批准 spec 还须同时写明下列四项，缺一不得通过�
   空数据下分页隐藏），哪些属 forbidden failure。未归类的差异按 failure 处置。
 - structural_parity_metrics：哪些结构计数是 parity 判据，哪些属数据依赖态、允许
   随后端数据缺失漂移。白名单之外的计数差异一律按 failure 处置。
-- capture_conditions：基线与升级后必须同条件采集——同 serve 方式、同端口策略、
-  后端可用性一致、同 locale/timezone/theme。条件不一致时 404、SecurityError
-  之类的差异无法区分是环境还是升级回归，G9 结论不成立。
+- capture_conditions：基线与升级后必须同条件采集——同运行面（dev / build 产物静态
+  serve，二者不可互替）、同端口策略、后端可用性一致、同 locale/timezone/theme。
+  条件不一致时 404、SecurityError 之类的差异无法区分是环境还是升级回归，
+  G9 结论不成立。
+
+visual 是否 required，本波都必须批准一份控制台基线契约（与 G9 分开，不受
+visual=no 影响）：
+- console_baseline_required 固定 yes（除非有证据说明升级前 app 在任何 lane 都无法
+  启动，此时按「无基线」记 residual 并在本波显式批准）；
+- 采集范围为 Wave 5 功能冒烟将覆盖的路由集合，采集口径与 Wave 4/5 一致
+  （每路由独立 fresh page），采集条件复用同一份 capture_conditions；
+- 存在 dev 运行面时基线必须**两条运行面各采一次**，Wave 5 按同一运行面逐条对比。
+基线在升级前 revision 采集，窗口与视觉基线同时关闭；事后无法在同一 revision 补采。
+
+分析包含 ui_behavior_contract 时（UI 库整体替换/跨大版本），
+required_behavior_assertions 逐条进入已批准 spec 的验收场景，与视觉 required 状态
+分开列。这些是行为契约（懒挂载与 $refs 时机、prop / 枚举改名、事件契约），
+G9 pass 不构成它们的证据，也不得被 visual=no 顺带豁免。
 
 required 状态若属数据驱动（loading、pagination populated、tree-expanded 等），
 允许以「component-shell parity + 绑定后续真实后端验证任务」记 accepted-residual，
@@ -399,8 +456,10 @@ component-shell 为前提。Wave 5 不得临时发明分层来兜底。
 应已存在：已批准 Frame 规格、分析 path+digest、Frame handoff。缺失或批准失效则回 Wave 2。
 先读 CONFIG；target_vue_version 或派生路径与通用头不一致时停止，回 Wave 2。
 只读 ANALYSIS_ROOT/upgrade-summary.json（named_recipes / named_validations /
-recipe_constraints）与 ANALYSIS_ROOT/inventory.json 的
+runtime_lanes / recipe_constraints / ui_behavior_contract）与
+ANALYSIS_ROOT/inventory.json 的
 source_impact_signals.interaction_assertion_candidates。
+summary 有 ui_behavior_contract 时，另读报告「5.」的 ui_behavior_contract 块取详情。
 需要某条决策时再打开 ANALYSIS_ROOT/decision-records 下对应文件。
 同时只读已批准 spec。
 
@@ -418,10 +477,25 @@ engines、CI、Docker/devcontainer、部署 builder 与 Corepack/packageManager�
 删除条件与缓存隔离。不得只改开发者本机 Node。
 
 visual=required 时：基线捕获发生在升级之前；每个 required sample/state 映射到任务；G9 路径为 G9_ROOT。
-基线任务须把已批准 spec 的 capture_conditions 固定成可复现的命令与参数（serve 方式、
+基线任务须把已批准 spec 的 capture_conditions 固定成可复现的命令与参数（运行面、
 端口策略、后端可用性、locale/timezone/theme）并记入证据，Wave 4/5 的 current 采集
 复用同一条件。条件无法复现时按「无基线」处置，回 Wave 2 重议视觉契约，不得改条件后
 硬比。
+
+控制台基线任务（独立于 visual，按已批准的控制台基线契约生成）：在首次依赖/代码
+mutation 之前，对升级前 revision 按批准的路由集合与运行面逐条采集，落盘
+EVIDENCE_ROOT/console-baseline.json，字段与 console-evidence.json 同构并多一列
+runtime_lane。该任务必须排在所有 install 与配方任务之前——窗口与视觉基线同时关闭。
+
+控制台采集器全仓唯一：本波生成的任何控制台相关任务，都必须复用同一个采集器与同一
+口径（每路由独立 fresh page，逐路由 runtime_lane 标注），不得另写第二套采集脚本或
+另一种口径（例如单页面连续跳转累积监听）。口径分叉会让基线、Wave 4 与 Wave 5 三份
+计数互不可比，还要额外解释差异。
+
+运行面覆盖：存在 dev 运行面时，任务必须同时覆盖 dev 与 build 两条运行面，
+逐条写明该任务在哪条运行面上验证；不得用一条运行面的绿代替另一条。
+分析报告「10.」运行面差异行点名的证据（源码内 CJS、require.context、多入口 URL
+形态、base/publicPath、env 分支）逐项生成验证任务。
 基线可行性前置：必须先有任务证明旧 app 能在某个可用 lane 启动（老 Node 仓即
 temporary-dual-node 的旧 lane）；若证明不可启动，须显式二选一并写入任务——
 用预生产/生产环境捕获替代基线，或把「无基线」记为 blocking residual 并回
@@ -433,6 +507,16 @@ source_impact_signals.interaction_assertion_candidates.rows 为准，逐行生�
 写入 tasks 与验证命令，不留给执行期自拟冒烟范围。model_option 行须按报告
 「10. 未决问题与证据缺口」人工补搜检查里的 live/dead 结论区分：live（父级用
 v-model 消费）为必做断言，dead 可降级。
+sync_modifier 行须区分绑在自有组件上还是绑在本次同批替换的 UI 库组件上：后者的
+断言必须验证改写后的 prop 名是**目标库实际声明的 prop**（旧库的 `visible` 在新库
+可能已改名为 `modelValue`），且断言点落在「弹层/抽屉真正打开并挂载出子组件」，
+而不只是变量被置为 true——这类错配 build 与 lint 全绿，症状出现在远处的 $refs。
+options_filters_access 行逐点断言运行期调用不抛错（与模板管道是两处独立改写面）。
+summary.recipe_constraints 里有 overlaps_with 的配方对，必须额外生成一条**交集**
+验证任务，不能用任一配方自身的任务顶替。
+ui_behavior_contract.required_assertions 逐条生成行为验证任务（弹层打开后子组件确实
+挂载、`$refs` 可用、prop 回写生效、枚举生效、事件不双触发），与视觉任务分开列；
+这些断言不得由 G9 顶替。
 candidates.truncated=true、source_impact_signals.truncated=true 或页面闭包超出
 扫描面时，先补一次全量检索再生成清单，不得把截断结果当完备清单。
 
@@ -481,8 +565,16 @@ assessment_mode、diff_policy、structural_parity_metrics 与 capture_conditions
 一律取已批准 spec 的值填写，本波不得新定或改写——改写等同单方降级 required 状态，
 须按 alignment_backflow 回 Wave 2。current 采集必须复用基线的 capture_conditions。
 
-本波若采集 Vue runtime 控制台证据，采集口径必须与 Wave 5 一致（每路由独立
-fresh page），否则两波计数不可比，还要额外解释差异。
+控制台基线：若计划中的 console-baseline 任务尚未执行，必须在本波首次依赖/代码
+mutation 之前执行并落盘 EVIDENCE_ROOT/console-baseline.json；首次 mutation 之后
+才发现基线缺失的，按 alignment_backflow 回 Wave 2 重议控制台基线契约，不得在升级
+后的 revision 上补采充数。
+本波若采集 Vue runtime 控制台证据，采集口径必须与基线和 Wave 5 完全一致（每路由
+独立 fresh page，逐行标注 runtime_lane），否则三份计数不可比，还要额外解释差异。
+
+存在 dev 运行面时，本波结束前必须证明应用在 **dev 与 build 两条运行面上都能启动
+并进入主路径**，两条各留证据。只跑通一条即宣布实施完成属未完成：两条运行面的模块
+解析、入口/URL 形态与 env 处理都不同，一条绿不构成另一条的证据。
 
 不要 archive OpenSpec，不要 commit/push/PR，除非用户在本波之后另授权。
 
@@ -519,7 +611,10 @@ Plan/Execute 工件、CONFIG；visual=required 时含 G9_ROOT 且 final_visual_r
 不要采信 Wave 4 会话结论或旧 pass 日志。以当前磁盘工件 + 本会话新跑命令为准。
 图谱 revision 与当前仓库不一致时先 index_repository，再取证。
 
-按当前 revision 启动干净 dev/preview（不要复用 Wave 4 残留进程）。
+按当前 revision 启动干净服务（不要复用 Wave 4 残留进程）。运行面是**两条**，不是
+二选一：workspace 存在 dev 运行面时，dev server 与 build 产物静态 serve 各跑一遍，
+每条独立启动、独立采证。只跑其中一条不构成本波通过，也不得在结论里把一条运行面的
+结果表述为整体 verified。
 lock digest 未变化不重复安装；Node/包管理器或 lock 变化时 frozen install。
 首次启动前打印实际 node -v、包管理器版本、NODE_ENV 与 npm config get production；
 node 不满足已批准 target range 时停止，production 环境噪声按固定边界处置后再装。
@@ -533,16 +628,23 @@ vue resolved version 必须仍等于 TARGET_VUE_VERSION；适用的
 
 功能冒烟（pages 空=全仓代表入口/路由；pages 有值=这些页面+闭包）：
 已批准验收场景、登录后主路径、路由切换、列表/表单/弹层等规格点名交互。
+每条运行面各跑一遍同一份冒烟清单——dev 与 build 的模块解析、入口/URL 形态、
+env 分支都不同，一条运行面的通过不构成另一条的证据。
 同时记录 Vue runtime 控制台：error 与升级相关 warning（compat / filters /
 已移除实例 API 等）不得无处置。控制台结论必须落盘为
-EVIDENCE_ROOT/console-evidence.json（每个冒烟路由一行：route、error 数、
-升级相关 warning 数、处置状态 resolved/accepted-residual），不接受只在会话
-文字里"声称无异常"。采集口径固定为每路由独立 fresh page：每条路由新开页面再挂
-监听，用完关闭。不得用单页面连续跳转累积监听——那会把同一条错误重复计入多条
-路由，计数虚高且与 Wave 4 的证据不可比。
+EVIDENCE_ROOT/console-evidence.json（每个冒烟路由 × 每条运行面一行：route、
+runtime_lane、error 数、升级相关 warning 数、处置状态 resolved/accepted-residual），
+不接受只在会话文字里"声称无异常"。采集口径固定为每路由独立 fresh page：每条路由
+新开页面再挂监听，用完关闭。不得用单页面连续跳转累积监听——那会把同一条错误重复
+计入多条路由，计数虚高且与基线、Wave 4 的证据不可比。
+控制台结果必须与 EVIDENCE_ROOT/console-baseline.json **按同 route + 同 runtime_lane
+逐条对比**，每条 error 归入 regression（基线无、升级后有）或 pre-existing（基线同
+条件下已有）。没有基线对照就把某条 error 判为「环境问题/非回归」是主张而非证据，
+不予接受。regression 一律须处置；pre-existing 记 non-blocking residual 并写明 owner。
 error 记 accepted-residual 必须经用户显式批准并记录批准语句；
 不得自行接受运行时 error。交互断言（Wave 3 从 inventory 生成的
-v-model 回写等逐点检查）必须逐条执行并记录结果。不得用测试已绿代替未执行的场景。
+v-model 回写、`.sync` 目标 prop 身份、`$options.filters` 调用点、配方交集等逐点
+检查）必须逐条执行并记录结果。不得用测试已绿代替未执行的场景。
 
 visual=required：按当前 revision 重新校验 G9_ROOT 的 delivery-visual-evidence/v1。
 基线仍是升级前捕获；必要时刷新 current/diff，不得改应用代码。刷新时必须复用已批准
@@ -555,6 +657,16 @@ validator 未过或 revision 不匹配：停止，回 Wave 4。
 写本波 handoff 前，先把 Wave 4 的 verified handoff 复制留存为
 EVIDENCE_ROOT/handoff-wave4.json（只读归档），本波 handoff 的
 previous_handoff_id 指向它——handoff.json 是覆盖写，不归档就无法区分前置证据。
+
+无论 pass 还是 fail，本波都要写一份回灌工件
+EVIDENCE_ROOT/upgrade-retrospective.md，记录本次实测到的三类事实，每条附证据指针
+（文件/路由/命令）与观察日期：
+- codemod 实际产出特征（哪种改写是错的、错在哪、build/lint 为何没拦住）；
+- UI 库行为差异（懒挂载、prop / 枚举 / 事件 / 插槽契约与预期不符之处）；
+- 运行面分叉（只在 dev 或只在 build 出现的问题）。
+它不改任何 Skill，也不是本波通过条件；它是把一次实战沉淀回配方库的**唯一**合法
+来源——没有它，下一个仓会把同样的坑重踩一遍。附录性质，写明"依赖前须按当时选定
+的工具版本复核"。
 
 pass：对照通用头仓内 verified 条件逐条核对，并把结论落盘
 EVIDENCE_ROOT/inrepo-verification.md（逐条核对结果、console-evidence 与交互
@@ -579,6 +691,12 @@ fail：按 alignment_backflow 输出，不要改代码，返回：
 | workspace 实为已（部分）升级完成的 Vue3 仓            | 停止主线；residual-audit 或结束     |
 | 目标、验收、行为 parity、视觉是否 required、pages 范围错误 | Wave 2 规格批准                    |
 | 视觉契约缺项或需放宽（assessment_mode、diff_policy、结构 parity 白名单、capture_conditions、数据依赖态分层） | Wave 2 规格批准 |
+| 分析缺 `ui_behavior_contract` / `ui_cutover_staging` / `default_path_deviation` | Wave 1 |
+| 行为断言未进已批准 spec，或被当作 G9 的一部分顺带豁免 | Wave 2 规格批准 |
+| 控制台基线缺失、条件不可复现，或首次 mutation 后才发现未采 | Wave 2 规格批准（重议控制台基线契约，不得在升级后 revision 补采） |
+| 任务另起第二套控制台采集器或另一种口径 | Wave 3 Plan |
+| 运行面覆盖不全（只验证了 dev 或只验证了 build 产物） | Wave 3 Plan 补任务；已实施则 Wave 4 补跑另一条运行面 |
+| Wave 3 人工前置未兑现，导致已批准交互无法执行 | Wave 3 Plan；确实不可得时回 Wave 2 重议验收范围 |
 | CONFIG / 已批准规格中的 target_vue_version 不一致      | Wave 2                           |
 | 配方拆分、回滚、基线时机、任务范围错误                      | Wave 3 Plan                    |
 | 已批准范围内的实现、测试、G9 或功能回归                   | Wave 4 Execute                 |
@@ -623,11 +741,23 @@ Verification，并重新执行完整 Wave 5；不得用 Wave 4 旧 pass 声称�
   （Wave 2 时效检查通过）；
 - 回滚演练证据存在（升级前 revision 在旧 lane frozen install/build 通过），
   或按已批准降级记为 non-blocking residual；
-- `console-evidence.json` 存在、按每路由独立 fresh page 口径采集，且无未处置的
-  error / 升级相关 warning（error 记 accepted-residual 须有用户显式批准记录）；
-  交互断言清单逐条有结果；
-- `EVIDENCE_ROOT/inrepo-verification.md` 存在、逐条核对通用头条件并绑定当前
-  revision；Wave 4 verified handoff 已归档为 `handoff-wave4.json`；
+- 存在 dev 运行面时，dev 与 build 两条运行面各自独立启动、各跑过完整功能冒烟
+  并各留证据；不得以其一代替另一条，也不得把一条运行面的结果表述为整体结论；
+- `console-baseline.json` 存在（升级前 revision、同 capture_conditions、同口径
+  采集），或「无基线」已在 Wave 2 显式批准为 residual；
+- `console-evidence.json` 存在、按每路由 × 每运行面独立 fresh page 口径采集，
+  已与基线同 route 同 runtime_lane 逐条对比，每条 error 归入 regression 或
+  pre-existing，且无未处置的 error / 升级相关 warning（error 记 accepted-residual
+  须有用户显式批准记录）；交互断言清单逐条有结果；
+- Wave 3 记录的人工前置（后端/Mock、测试账号与权限、验证码处理、稳定数据）
+  全部兑现；未兑现项不得静默滑过，须逐条进入覆盖声明并由用户显式接受；
+- 分析包含 `ui_behavior_contract` 时，`required_behavior_assertions` 逐条有执行
+  结果；G9 pass 不构成这些行为断言的证据；
+- `EVIDENCE_ROOT/inrepo-verification.md` 存在、逐条核对通用头条件、含覆盖声明
+  （运行面、路由集合、未实际执行的已批准交互及原因）并绑定当前 revision；
+  Wave 4 verified handoff 已归档为 `handoff-wave4.json`；
+  `EVIDENCE_ROOT/upgrade-retrospective.md` 已写出（回灌工件，非通过条件，但缺失
+  意味着本次实战经验不会沉淀）；
 - Composition 全仓重写仍在 non-goals；
 - 目标 Node 范围与工具链精确版本有证据；Fresh Verification 使用受支持 Node；
   local/CI/container/deploy/package-manager 声明一致，或已批准的临时双 Node residual

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 import tempfile
@@ -968,6 +969,79 @@ class ValidateReportTests(unittest.TestCase):
             self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
             self.assertIn("source_root:", result.stdout + result.stderr)
 
+    def _probe_report(self, body: str, tmp: str) -> subprocess.CompletedProcess[str]:
+        report = Path(tmp) / "vue2-to-vue3-upgrade-report.md"
+        body = body.replace("| report_path | fixtures |", f"| report_path | {tmp} |")
+        body = body.replace(
+            "| summary_path | fixtures/upgrade-summary.json |",
+            f"| summary_path | {Path(tmp).as_posix()}/upgrade-summary.json |",
+        )
+        report.write_text(body, encoding="utf-8")
+        return self._run(str(report))
+
+    def test_rejects_ui_kit_swap_without_behavior_contract(self) -> None:
+        body = (FIXTURES / "valid-report.md").read_text(encoding="utf-8")
+        start = body.index("### ui_behavior_contract")
+        end = body.index("## 6. 风险分级", start)
+        body = body[:start] + body[end:]
+        with tempfile.TemporaryDirectory() as tmp:
+            result = self._probe_report(body, tmp)
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertIn("ui_behavior_contract", result.stdout + result.stderr)
+
+    def test_rejects_fewer_than_three_behavior_assertions(self) -> None:
+        body = (FIXTURES / "valid-report.md").read_text(encoding="utf-8")
+        body = body.replace(
+            "- required_behavior_assertions: drawer-open-mounts-child, "
+            "dialog-visible-write-back, pagination-page-change, "
+            "select-popper-teleport, table-size-enum-applies",
+            "- required_behavior_assertions: drawer-open-mounts-child, "
+            "dialog-visible-write-back",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            result = self._probe_report(body, tmp)
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertIn("at least 3 unique", result.stdout + result.stderr)
+
+    def test_rejects_ui_kit_swap_without_cutover_staging(self) -> None:
+        body = (FIXTURES / "valid-report.md").read_text(encoding="utf-8")
+        body = re.sub(r"(?m)^- ui_cutover_staging:.*\n", "", body)
+        with tempfile.TemporaryDirectory() as tmp:
+            result = self._probe_report(body, tmp)
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertIn("ui_cutover_staging", result.stdout + result.stderr)
+
+    def test_rejects_inplace_direct_vue3_without_default_deviation(self) -> None:
+        # Single-repo in-place defaults to compat-big-bang; dropping the compat
+        # layer has to be argued, not silently preset.
+        body = (FIXTURES / "valid-report.md").read_text(encoding="utf-8")
+        body = body.replace("推荐路径 id：`compat-big-bang`", "推荐路径 id：`direct-vue3`")
+        body = body.replace("- runtime_axis: compat", "- runtime_axis: direct-vue3")
+        body = body.replace(
+            "| `compat-big-bang` | path |", "| `direct-vue3` | path |"
+        ).replace("proceed:path:compat-big-bang", "proceed:path:direct-vue3")
+        with tempfile.TemporaryDirectory() as tmp:
+            result = self._probe_report(body, tmp)
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertIn("default_path_deviation", result.stdout + result.stderr)
+
+    def test_accepts_inplace_direct_vue3_with_default_deviation(self) -> None:
+        body = (FIXTURES / "valid-report.md").read_text(encoding="utf-8")
+        body = body.replace("推荐路径 id：`compat-big-bang`", "推荐路径 id：`direct-vue3`")
+        body = body.replace(
+            "- runtime_axis: compat",
+            "- runtime_axis: direct-vue3\n"
+            "- default_path_deviation: 放弃 compat 对 .sync / filters 静默失效族的兜底，"
+            "改由逐点交互断言覆盖；理由是 compat 移除期债务大于收益",
+        )
+        body = body.replace(
+            "| `compat-big-bang` | path |", "| `direct-vue3` | path |"
+        ).replace("proceed:path:compat-big-bang", "proceed:path:direct-vue3")
+        with tempfile.TemporaryDirectory() as tmp:
+            result = self._probe_report(body, tmp)
+            combined = result.stdout + result.stderr
+            self.assertNotIn("default_path_deviation", combined)
+
     def test_rejects_validation_matrix_missing_named_recipe(self) -> None:
         body = (FIXTURES / "valid-report.md").read_text(encoding="utf-8")
         body = body.replace(
@@ -985,6 +1059,168 @@ class ValidateReportTests(unittest.TestCase):
             result = self._run(str(report))
             self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
             self.assertIn("gogocode-element", result.stdout + result.stderr)
+
+    def test_golden_complete_fixture_demonstrates_a_codemod_intersection(self) -> None:
+        # The golden sample teaches by example: if it never declares an
+        # intersection, agents learn that omitting one is acceptable.
+        summary = json.loads(
+            (FIXTURES / "evidence-complete" / "upgrade-summary.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        declared = {
+            item["id"]: set(item.get("overlaps_with", []))
+            for item in summary["recipe_constraints"]
+        }
+        pairs = [
+            (left, right)
+            for left, others in declared.items()
+            for right in others
+            if left in declared.get(right, set())
+        ]
+        self.assertTrue(pairs, "golden fixture must show a mutual overlaps_with pair")
+
+    def test_rejects_declared_overlap_without_intersection_row(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp)
+            self._copy_complete_evidence(target)
+            report = target / "vue2-to-vue3-upgrade-report.md"
+            body = report.read_text(encoding="utf-8")
+            body = re.sub(
+                r"(?m)^\| `gogocode-vue` × `gogocode-element` \|.*\n", "", body
+            )
+            report.write_text(body, encoding="utf-8")
+            result = self._run("--evidence-dir", str(target))
+            combined = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 3, combined)
+            self.assertIn("intersection row", combined)
+
+    def _copy_residual_evidence(self, target: Path) -> Path:
+        shutil.copytree(FIXTURES / "residual-audit", target, dirs_exist_ok=True)
+        report = target / "vue2-to-vue3-upgrade-report.md"
+        body = report.read_text(encoding="utf-8")
+        body = body.replace(
+            "| report_path | fixtures/residual-audit |",
+            f"| report_path | {target.resolve()} |",
+        ).replace(
+            "| summary_path | fixtures/residual-audit/upgrade-summary.json |",
+            f"| summary_path | {(target / 'upgrade-summary.json').resolve()} |",
+        )
+        report.write_text(body, encoding="utf-8")
+        summary_path = target / "upgrade-summary.json"
+        data = json.loads(summary_path.read_text(encoding="utf-8"))
+        data["report_path"] = str(report.resolve())
+        data["inventory_path"] = str((target / "inventory.json").resolve())
+        data["decision_records"] = [
+            str((target / "decision-records" / name).resolve())
+            for name in sorted(
+                item.name for item in (target / "decision-records").glob("*.md")
+            )
+        ]
+        summary_path.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        return report
+
+    def test_residual_audit_evidence_dir_passes(self) -> None:
+        # An already-Vue3 workspace must have a writable branch, not just a
+        # permitted word: the whole bundle has to validate in residual mode.
+        result = self._run("--evidence-dir", str(FIXTURES / "residual-audit"))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_residual_audit_requires_entry_mode_declaration(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp)
+            report = self._copy_residual_evidence(target)
+            body = report.read_text(encoding="utf-8").replace(
+                "| entry_mode | residual-audit |\n", ""
+            )
+            report.write_text(body, encoding="utf-8")
+            result = self._run("--evidence-dir", str(target))
+            combined = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 3, combined)
+            self.assertIn("entry_mode", combined)
+
+    def test_residual_audit_path_id_requires_residual_entry_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp)
+            report = self._copy_residual_evidence(target)
+            body = report.read_text(encoding="utf-8").replace(
+                "| entry_mode | residual-audit |", "| entry_mode | upgrade |"
+            )
+            report.write_text(body, encoding="utf-8")
+            result = self._run("--evidence-dir", str(target))
+            combined = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 3, combined)
+            self.assertIn("entry_mode: residual-audit", combined)
+
+    def test_residual_audit_requires_residual_findings_block(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp)
+            report = self._copy_residual_evidence(target)
+            body = report.read_text(encoding="utf-8")
+            start = body.index("### residual_findings")
+            end = body.index("## 6. 风险分级", start)
+            report.write_text(body[:start] + body[end:], encoding="utf-8")
+            result = self._run("--evidence-dir", str(target))
+            combined = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 3, combined)
+            self.assertIn("residual_findings", combined)
+
+    def test_residual_audit_requires_three_cleanup_assertions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp)
+            report = self._copy_residual_evidence(target)
+            body = report.read_text(encoding="utf-8")
+            body = re.sub(
+                r"(?m)^- required_cleanup_assertions:.*$",
+                "- required_cleanup_assertions: dialog-visible-write-back, "
+                "compat-warning-count-zero",
+                body,
+            )
+            report.write_text(body, encoding="utf-8")
+            result = self._run("--evidence-dir", str(target))
+            combined = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 3, combined)
+            self.assertIn("required_cleanup_assertions", combined)
+
+    def test_residual_audit_rejected_on_vue2_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp)
+            self._copy_residual_evidence(target)
+            inventory_path = target / "inventory.json"
+            inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
+            inventory["vue_major"] = "2"
+            inventory_path.write_text(
+                json.dumps(inventory, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            result = self._run("--evidence-dir", str(target))
+            combined = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 3, combined)
+            self.assertIn("already-Vue3 workspace", combined)
+
+    def test_already_vue3_workspace_rejects_upgrade_mode_packet(self) -> None:
+        # The pre-existing guard must key on the declared mode, not on the word
+        # "residual-audit" appearing anywhere in the prose.
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp)
+            self._copy_complete_evidence(target)
+            inventory_path = target / "inventory.json"
+            inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
+            inventory["vue_major"] = "3"
+            inventory_path.write_text(
+                json.dumps(inventory, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            report = target / "vue2-to-vue3-upgrade-report.md"
+            report.write_text(
+                report.read_text(encoding="utf-8")
+                + "\n附注：如需 residual-audit 请另开分析。\n",
+                encoding="utf-8",
+            )
+            result = self._run("--evidence-dir", str(target))
+            combined = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 3, combined)
+            self.assertIn("entry_mode: residual-audit", combined)
 
 
 if __name__ == "__main__":

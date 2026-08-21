@@ -60,6 +60,7 @@
 - runtime_axis: compat
 - build_axis: vite
 - topology_axis: single-cutover
+- ui_cutover_staging: after-runtime（compat 让 element-ui 在 Vue3 运行时下先继续工作，UI 库替换单独成步，缩小爆炸半径）
 - 理由：单仓可切流；依赖含 Element UI 与 CLI，需仓内 compat 清 warning，构建必须同升
 - 备选路径：`direct-vue3`（表面太大，不推荐）
 - Composition API 全仓重写：另立项，本次不评估工作量
@@ -102,6 +103,15 @@
 - baseline_status: required-before-implementation
 - required_visual_states: search-default, table-empty, table-data, cell-popper, icon-toolbar
 - recommended_next_action: run_visual_review
+
+### ui_behavior_contract
+
+- mount_timing: 待实施阶段核对 Element Plus 弹层（el-dialog / el-drawer）按 modelValue 懒挂载，子组件在打开前不存在；先取 `$refs` 再打开的调用点须改为打开后 nextTick
+- prop_renames: `visible` → `modelValue`；checkbox/radio `:label` → `:value`（待逐点扫描调用面）
+- enum_renames: size `mini` → `small`、`medium` → `default`；旧值不被识别且不报错
+- event_contract: `update:<prop>` 事件名随 prop 改名同步变化；未声明 emits 的组件可能走 attrs fallthrough 双触发
+- slot_contract: `slot=` / `slot-scope` → `#name` / `v-slot`，作用域插槽参数结构按 Element Plus 文档逐组件核对
+- required_behavior_assertions: drawer-open-mounts-child, dialog-visible-write-back, pagination-page-change, select-popper-teleport, table-size-enum-applies
 
 ## 6. 风险分级
 
@@ -157,6 +167,9 @@
 | `Vue.component` / `Vue.directive` / `Vue.mixin` 全局注册与指令钩子改名 | 待精确扫描 |
 | `<transition>` 过渡类名（v-enter → v-enter-from） | 待扫描 transition 组件与相关 CSS 类 |
 | 静默语义变更（v-if/v-for 优先级、v-bind 顺序、watch 数组、data 浅合并、attr coercion） | 同元素 v-if+v-for 待扫描；其余列入实施期核对 |
+| `.sync` 修饰符与目标 UI 库 prop 身份 | 待精确扫描；element-ui 组件上的 `.sync` 须按 Element Plus 实际 prop 重解析，不得机械沿用旧 prop 名 |
+| `$options.filters` 过滤器对象访问 | 待精确扫描（管道之外的调用点，Vue3 已移除该入口） |
+| dev 与 build 运行面差异（源码 CJS、`require.context`、多入口 URL 形态） | 待扫描；两条运行面各需独立验证，不得以其一代替另一条 |
 
 - 过滤器与 `$listeners` 的静态命中数待补精确扫描
 - Element Plus 视觉回归范围待产品确认

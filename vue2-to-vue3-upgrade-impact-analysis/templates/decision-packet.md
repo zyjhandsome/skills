@@ -13,6 +13,7 @@
 | implementation_readiness | not_assessed |
 | behavior_parity_required | yes / no |
 | network_mode | online / offline / partial |
+| entry_mode | upgrade（缺省，可省略该行）/ residual-audit（仓已是 Vue3 时的残留审计） |
 | report_path | 实际报告目录（禁止单独 `.`） |
 | evidence_as_of | YYYY-MM-DD |
 | schema | vue3-upgrade-report/v1 |
@@ -55,10 +56,12 @@
 
 ## 3. 推荐迁移路径
 
-- 推荐路径 id：`compat-big-bang` / `direct-vue3` / `host-port-direct` / `microfrontend-coexist` / …
+- 推荐路径 id：`compat-big-bang` / `direct-vue3` / `host-port-direct` / `microfrontend-coexist` / `residual-audit`（仅 entry_mode=residual-audit） / …
 - runtime_axis: compat / direct-vue3
 - build_axis: vite / cli5-webpack5 / existing-vite
 - topology_axis: single-cutover / coexist / host-port
+- ui_cutover_staging: with-runtime / after-runtime（`ui` 为 replace / needs-major 时必填）
+- default_path_deviation:（单仓原地升且 runtime_axis=direct-vue3 时必填：默认 compat 本可吸收什么、为何不需要、改由什么验证承接）
 - 理由：
 - 备选路径：
 - Composition API 全仓重写：另立项，本次不评估工作量
@@ -86,6 +89,23 @@
 - baseline_status:
 - required_visual_states:
 - recommended_next_action: run_visual_review / include_in_implementation_validation / no_action
+
+### ui_behavior_contract（`ui` 为 replace / needs-major 时必填）
+
+- mount_timing:（新库是否懒挂载子树，`$refs` 何时可用）
+- prop_renames:（值契约改名，如 `visible` → `modelValue`）
+- enum_renames:（size / type 等枚举取值改名或删除）
+- event_contract:（`update:<prop>` 事件名、payload、`emits` 与双触发）
+- slot_contract:（插槽名与作用域参数结构）
+- required_behavior_assertions:（逗号分隔，至少 3 条唯一断言，逐条对应 §8）
+
+### residual_findings（`entry_mode: residual-audit` 时必填）
+
+- compat_shims_present:（compat alias / compatConfig 是否仍生效，warning 是否已分类）
+- codemod_artifacts:（上一轮 codemod 的错误改写特征，build/lint 为何没拦住）
+- silent_break_residues:（`.sync` 产物 prop 身份、`$options.filters` 对象访问、`.native`、枚举改名等）
+- runtime_lane_residues:（只在 dev 或只在 build 暴露的残留）
+- required_cleanup_assertions:（逗号分隔，至少 3 条唯一断言，逐条对应 §8）
 
 ## 6. 风险分级
 
@@ -127,6 +147,9 @@
 | `Vue.component` / `Vue.directive` / `Vue.mixin` 全局注册与指令钩子改名 | |
 | `<transition>` 过渡类名（v-enter → v-enter-from） | |
 | 静默语义变更（v-if/v-for 优先级、v-bind 顺序、watch 数组、data 浅合并、attr coercion） | |
+| `.sync` 修饰符与目标 UI 库 prop 身份（同批换库时按新库实际 prop 重解析） | |
+| `$options.filters` 过滤器对象访问（与模板管道是两处独立改写面） | |
+| dev 与 build 运行面差异（源码 CJS、`require.context`、多入口 URL 形态、base、env 分支） | |
 
 其他未决：
 -

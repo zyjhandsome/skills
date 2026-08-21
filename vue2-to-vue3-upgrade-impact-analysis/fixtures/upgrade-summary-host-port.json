@@ -20,8 +20,11 @@
   "named_validations": [
     "manual-adapt-to-host: B-native SFC mounts; fail = iframe still required",
     "manual-router4-on-host: host route opens page; fail = 404 or leftover A router",
-    "map-ui-to-host: search+table vs A baseline; fail = host UI mapping missing"
+    "map-ui-to-host: search+table vs A baseline; fail = host UI mapping missing",
+    "lane:dev host B dev server renders the ported page; fail = dev-only resolution break",
+    "lane:build host B production build + static serve smoke; fail = build-only base/entry break"
   ],
+  "runtime_lanes": ["dev", "build"],
   "recipe_constraints": [
     { "id": "manual-adapt-to-host", "after": ["baseline-green"], "atomic": "no" },
     { "id": "manual-router4-on-host", "after": ["manual-adapt-to-host"], "atomic": "yes" },

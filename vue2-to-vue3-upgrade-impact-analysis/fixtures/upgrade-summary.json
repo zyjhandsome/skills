@@ -22,8 +22,12 @@
     "vue-compat: alias vue to @vue/compat then build; fail = missing migration build",
     "webpack-to-vite: vite build; fail = non-zero exit",
     "gogocode-element: primary form/table pages render; fail = Element Plus mapping missing",
-    "manual-router4: login redirect and 404 catch-all; fail = Router 4 history/wildcard break"
+    "manual-router4: login redirect and 404 catch-all; fail = Router 4 history/wildcard break",
+    "lane:dev dev server boots and每个入口路由可达; fail = source CJS or MPA URL break invisible to the build",
+    "lane:build production build + static serve smoke; fail = base/publicPath or entry break invisible to dev",
+    "console-baseline: pre-upgrade console capture per route per lane, same capture_conditions; fail = regression vs pre-existing cannot be split later"
   ],
+  "runtime_lanes": ["dev", "build"],
   "recipe_constraints": [
     { "id": "webpack-to-vite", "after": ["node-lane"], "atomic": "yes" },
     { "id": "vue-compat", "after": ["first-install"], "atomic": "yes" },

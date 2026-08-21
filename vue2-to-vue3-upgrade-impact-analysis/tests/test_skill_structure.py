@@ -188,6 +188,36 @@ class SkillStructureTests(unittest.TestCase):
         self.assertEqual(len(target_lines), 1)
         self.assertNotEqual(prototype_lines[0], target_lines[0])
 
+    def test_residual_audit_is_a_writable_shape_not_just_a_permitted_word(self) -> None:
+        # SKILL.md allows `entry_mode: residual-audit`; the contract, the
+        # template and a golden fixture have to make it actually writable.
+        contract = (ROOT / "references" / "report-contract.md").read_text(
+            encoding="utf-8"
+        )
+        for token in (
+            "entry_mode",
+            "residual-audit",
+            "residual_findings",
+            "required_cleanup_assertions",
+            "compat_shims_present",
+            "runtime_lane_residues",
+        ):
+            self.assertIn(token, contract, token)
+
+        template = (ROOT / "templates" / "decision-packet.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("### residual_findings", template)
+        self.assertIn("| entry_mode |", template)
+
+        fixture = ROOT / "fixtures" / "residual-audit"
+        for name in (
+            "vue2-to-vue3-upgrade-report.md",
+            "upgrade-summary.json",
+            "inventory.json",
+        ):
+            self.assertTrue((fixture / name).is_file(), name)
+
 
 if __name__ == "__main__":
     unittest.main()

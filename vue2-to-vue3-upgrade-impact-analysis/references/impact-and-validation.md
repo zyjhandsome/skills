@@ -14,14 +14,16 @@
    keyCode modifiers, component `model:` option, `Vue.component` /
    `Vue.directive` / `Vue.mixin` global registration, `Vue.extend` /
    `Vue.observable` / `propsData`, `<transition>` usage, AMD-style async
-   component factories, and same-element `v-for`+`v-if`. Also complete §10
-   `人工补搜检查` for residual gaps and non-`vue-*` blockers (`tui-editor`,
-   internal plugins, editors, etc.).
+   component factories, same-element `v-for`+`v-if`, `$options.filters` object
+   access, and the runtime-lane family (`module.exports` / `exports.x` inside
+   source, `require.context`). Also complete §10 `人工补搜检查` for residual gaps
+   and non-`vue-*` blockers (`tui-editor`, internal plugins, editors, etc.).
 
    **Interaction assertion candidates:** counts plus five samples per signal are
    not a closure. `source_impact_signals.interaction_assertion_candidates`
-   locates every `model_option`, `native_modifier`, `keycode_modifier` and
-   `transition_component` hit with file, line and excerpt, bounded by its own
+   locates every `model_option`, `native_modifier`, `keycode_modifier`,
+   `transition_component`, `sync_modifier` and `options_filters_access` hit
+   with file, line and excerpt, bounded by its own
    `cap` and `truncated` flag (separate from the file-scan `truncated`). Each
    row needs an interaction-level check named in §8; `truncated: true` means the
    list is incomplete and must be re-scanned before it is treated as complete.
@@ -36,6 +38,25 @@
    data shallow merge all keep build and lint green — they must be closed by
    the fixed §10 rows plus interaction-level validations named in §8, never
    by "build passed".
+
+   **`.sync` carries a prop name, not just a syntax.** `:p.sync="x"` →
+   `v-model:p="x"` is the correct Vue3 rewrite and is safe when the component is
+   your own. It is **not** safe when the component belongs to a UI kit that this
+   same upgrade replaces: the argument `p` is the *old* kit's prop name, and the
+   new kit may have renamed it (a dialog/drawer `visible` becoming `modelValue`
+   is the common case). The rewritten binding then compiles, lints and builds
+   clean while writing to a prop nothing reads — and because such components
+   usually gate a subtree, the visible symptom is a child that never mounts and
+   a `$refs` lookup that returns `undefined`, far from the binding. Split
+   `sync_modifier` hits by whether the target is a first-party component or a
+   kit component under replacement, and resolve the kit ones against the target
+   kit's current API before naming the assertion.
+
+   **`$options.filters` is a second call shape.** Codemods rewrite the template
+   pipe `{{ x | f }}` and routinely leave `this.$options.filters.f(x)` alone;
+   Vue3 removes the entry altogether, so those sites throw at runtime with no
+   static fingerprint. Treat pipe rewrites and object-access rewrites as two
+   separate closures.
 4. Official docs URLs for the exact interval / library major — start from
    `official-docs-index.md` (EOL + two-layer modification model + canonical
    hubs + high-signal checklist), then fetch the linked page; do not invent
@@ -112,6 +133,52 @@ on the proposed target Node before Vue dependency changes (when feasible);
 frozen install + build/test on the target Node; and alignment of every declared
 Node surface after implementation.
 
+## Dev lane and build lane are two runtime faces
+
+Treat the toolchain the same way the Node matrix is treated: as **two planes that
+must be evidenced separately**. A dev server and a production build do not share
+module resolution, entry topology, or environment handling, so "the build is
+green" is not evidence about the dev lane and vice versa. Each divergence class
+below produces a defect that is invisible on one lane and fatal on the other:
+
+| Class | Why the lanes disagree |
+|---|---|
+| Source-level CommonJS (`module.exports`, `exports.x`) | A production build passes source through the rollup commonjs transform; the dev server serves source as native ESM and the import resolves to `undefined` |
+| `require.context` | A Webpack-only API with no Vite equivalent on either lane — but it fails at different times, and a glob-import shim must be checked on both |
+| Multi-entry (MPA) URL shape | Vue CLI `pages` serves flat paths with history fallback; a Vite MPA is addressed by real HTML file paths. `rollupOptions.input` fixes the build without fixing the dev URL |
+| `base` / `publicPath` | Dev almost always serves from `/`, so a wrong `base` only appears in the built artifact |
+| Env and mode branches | `process.env` inlining, `import.meta.env`, and `NODE_ENV`-gated code take different branches per lane |
+| Dependency pre-bundling | Dev pre-bundles `node_modules` with esbuild; the build does not. A CJS-only dependency can work on exactly one lane |
+
+Obligations for the packet:
+
+- Record which lanes the workspace actually has (`dev`, `build`+static serve,
+  SSR/preview) in the `build` subsystem row, and carry the MPA entry evidence
+  into the **dev URL shape**, not only into `rollupOptions.input`.
+- §8 must name **at least one validation per lane**, and `named_validations`
+  must contain a dev-lane entry whenever a dev lane exists. A single row that
+  says "build passes" satisfies neither.
+- The runtime-lane signals (`source_cjs_export`, `webpack_require_context`) are
+  lane evidence, not interaction assertions: they belong in the §10 runtime-lane
+  row and in the `build` decision record.
+
+## Console baseline
+
+`visual-baseline` has a sibling. Runtime console output must be captured on the
+**pre-upgrade revision under the same capture conditions** as the post-upgrade
+capture, and named as a `console-baseline` sequence anchor obligation.
+
+Without it, every post-upgrade console error is arguable: a third-party editor
+throwing `SecurityError`, an analytics script timing out, a backend 404 in a
+detached environment all look exactly like upgrade regressions, and the party
+that wants the gate to pass is the one classifying them. With it, the
+regression set is a diff and the environmental set is proven pre-existing.
+
+Name it whenever the packet names any post-cutover functional validation. The
+baseline window closes at the first dependency or source mutation, exactly like
+the visual baseline, so it costs nothing extra when captured in the same pass
+and cannot be recovered afterwards at the same revision.
+
 ## Browser support floor and build entries
 
 §1 must state `browser_support_floor:` from browserslist/`.browserslistrc`
@@ -123,8 +190,10 @@ a `build`-subsystem decision, not an implementation-stage surprise.
 Multi-page workspaces must carry the inventory `build_entries` evidence
 (`vue.config.js` `pages`, custom entry globs, `public/*.html`, `main*` files)
 into the `build` decision: every entry maps to a Vite `rollupOptions.input`
-row and is a candidate for visual sample selection. A dropped entry is a
-silently missing build surface.
+row **and to a dev-server URL** (see the lane table above), and is a candidate
+for visual sample selection. A dropped entry is a silently missing build
+surface; an entry whose dev URL shape changed is a build that ships while
+nobody can open the page locally.
 
 ## Validation matrix guidance
 
@@ -152,9 +221,9 @@ editor/tree/DAG CSS. Inventory at least:
 - UI-kit icon system migration (element-ui font icons `el-icon-*` →
   Element Plus SVG icon components; string `:icon` props stop rendering,
   `.el-icon-*` CSS selectors go dead) — a mandatory trigger, not optional;
-- UI-kit component value contracts that shift silently (e.g. Element Plus
-  checkbox/radio `:label`→`:value` deprecation, date-picker `value-format`
-  defaults, removed `medium` size);
+- UI-kit component value contracts that shift silently — these belong to the
+  `ui_behavior_contract` block below, not here; list them there and keep this
+  block to what a screenshot can actually show;
 - transition class renames (`v-enter`→`v-enter-from`): animations fail
   silently with a green build — include animated states when present;
 - mount container DOM change (Vue3 no longer replaces the host el;
@@ -176,6 +245,40 @@ When `visual_acceptance_required=yes`, name **at least 5 unique required states*
 (e.g. default, empty, data, popper/overlay, icon/toolbar). Downstream visual
 gates hard-count evidence rows with a floor of five; naming fewer states fails
 only after the pre-upgrade baseline window has already closed.
+
+## Structured UI behavior contract
+
+Replacing a UI kit (or crossing its major) shifts two independent things: how it
+**looks**, and how it **behaves**. `ui_visual_risk` covers the first. The second
+needs its own §5 block, `### ui_behavior_contract`, because every item in it
+keeps the build green *and* survives a visual diff — the screenshots match
+because the broken state never renders at all.
+
+Required when §4 `ui` is `in_scope` with readiness `replace` or `needs-major`.
+Inventory at least:
+
+- **Mount timing.** Overlay components in the new kit are commonly lazy: the
+  subtree does not exist until the model value flips true. Any code that reads
+  `this.$refs.child` before opening — or immediately after setting the flag,
+  without awaiting a tick — silently gets `undefined`. The symptom surfaces far
+  from the cause, usually as a dead button rather than as an error at the
+  binding.
+- **Prop renames.** Value contracts that change identity while keeping their
+  meaning: a dialog/drawer `visible` becoming `modelValue`, checkbox/radio
+  `:label` becoming `:value`, date-picker `value-format` defaults. Combined with
+  a mechanical `.sync` rewrite these produce bindings that compile and write
+  nowhere.
+- **Enum renames.** Dropped or renamed enum values (`mini` / `medium` sizes,
+  type/status vocabularies). An unrecognized enum value is usually ignored, not
+  rejected.
+- **Event contract.** `update:<prop>` names follow prop renames; missing `emits`
+  declarations turn into attrs fallthrough and double-fire; payload shapes
+  change per component.
+- **Slot contract.** Slot names and scoped-slot parameter shapes.
+
+Close each with an interaction-level assertion in §8 and mirror the list into
+`ui_behavior_contract.required_assertions` (3..20) so a summary-only consumer
+still sees them. Contract details: `report-contract.md`.
 
 ## Out of scope work
 

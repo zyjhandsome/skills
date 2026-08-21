@@ -274,6 +274,49 @@ class ProfileInventoryTests(unittest.TestCase):
                 self.assertTrue(row["match"].strip())
                 self.assertLessEqual(len(row["match"]), 160)
 
+    def test_locates_sync_bindings_filter_access_and_runtime_lane_signals(self) -> None:
+        pkg = {"name": "lane-web", "dependencies": {"vue": "2.7.16", "element-ui": "2.15.14"}}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "package.json").write_text(json.dumps(pkg), encoding="utf-8")
+            src = root / "src"
+            src.mkdir()
+            (src / "Drawer.vue").write_text(
+                "<template>\n"
+                '  <el-drawer :visible.sync="open" />\n'
+                "</template>\n"
+                "<script>\n"
+                "export default {\n"
+                "  methods: {\n"
+                "    label(v) { return this.$options.filters.money(v) },\n"
+                "  },\n"
+                "}\n"
+                "</script>\n",
+                encoding="utf-8",
+            )
+            (src / "constant.js").write_text(
+                "module.exports = { PAGE_SIZE: 20 }\n"
+                "const views = require.context('./views', true, /\\.vue$/)\n",
+                encoding="utf-8",
+            )
+
+            data = self._run_profile(root)
+
+            signals = data["source_impact_signals"]["signals"]
+            for key in ("sync_modifier", "options_filters_access", "source_cjs_export",
+                        "webpack_require_context"):
+                self.assertGreaterEqual(signals.get(key, 0), 1, key)
+            rows = data["source_impact_signals"]["interaction_assertion_candidates"]["rows"]
+            located = {(row["signal"], row["file"], row["line"]) for row in rows}
+            # A `.sync` on a UI-kit component that is itself being replaced needs a
+            # per-hit assertion, not a count plus five samples.
+            self.assertIn(("sync_modifier", "src/Drawer.vue", 2), located)
+            self.assertIn(("options_filters_access", "src/Drawer.vue", 7), located)
+            # Runtime-lane signals are lane evidence, not interaction assertions.
+            self.assertNotIn(
+                "source_cjs_export", {row["signal"] for row in rows}
+            )
+
     def test_interaction_candidates_empty_without_source_roots(self) -> None:
         pkg = {"name": "no-src", "dependencies": {"vue": "2.7.16"}}
         with tempfile.TemporaryDirectory() as tmp:

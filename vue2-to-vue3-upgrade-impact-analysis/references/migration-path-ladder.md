@@ -25,10 +25,44 @@ the human wants a non-default axis mix.
 | `microfrontend-coexist` | `compat` or `direct-vue3` + build as needed + `coexist` | Cannot cut over one shell; need per-module migration / long-lived dual deploy |
 | `deferred-inventory-only` | (axes optional / `n/a`) | Multi-repo scan only; human deferred all workspaces |
 
+## UI-kit cutover staging (required when the kit changes)
+
+The three axes describe the runtime, the build and the topology. They do not
+describe **when the UI kit moves**, and on a workspace built on a Vue2-only kit
+that is usually the single biggest lever on blast radius. State it in §3 as
+`ui_cutover_staging:` whenever the `ui` subsystem is `in_scope` with readiness
+`replace` or `needs-major`.
+
+| Value | Meaning | Prefer when |
+|---|---|---|
+| `with-runtime` | the kit is replaced in the same step as the runtime cutover | the kit surface is small, or a compat layer cannot keep the old kit alive |
+| `after-runtime` | the runtime moves first (usually behind `@vue/compat`, old kit still mounted), the kit is replaced as a separate step | the kit surface is large, and the packet can evidence that the old kit still functions under the chosen runtime |
+
+Why it is a first-class decision rather than scheduling: with `with-runtime`, the
+Vue core rewrite and the kit rewrite land on **the same call sites**. Each
+transform can be individually correct and the composition still wrong — a core
+codemod turns `:visible.sync` into a valid Vue3 `v-model:visible` that names a
+prop the new kit no longer has. `after-runtime` separates those two rewrites so
+each has an observable, falsifiable intermediate state.
+
+The cost of `after-runtime` is real and must be recorded too: a compat layer is
+transitional debt with a removal condition, `@vue/compat` peers on an **exact**
+`vue` version, and whether the Vue2 kit actually works under compat is an
+**assumption until evidenced** — name a validation for it, do not assume it.
+
 ## Default
 
 **Single-repo in-place:** recommend `compat-big-bang` unless evidence shows
 `direct-vue3` is clearly cheaper **or** microfrontend coexistence is mandatory.
+
+**Deviating from the in-place default must be argued.** When the packet selects
+`runtime_axis: direct-vue3` with `topology_axis: single-cutover`, §3 must carry
+`default_path_deviation:` stating what the default would have absorbed (compat
+shims the silent-failure family — `.sync`, filters, removed instance APIs — so
+those breaks surface as warnings instead of as dead bindings), why that
+absorption is not needed or not worth its removal debt here, and which named
+validations take over that coverage. A preset chosen without that sentence is a
+preference, not a decision.
 
 **A→B host-port (source A read-only, implement on B):** recommend
 `host-port-direct`. Never recommend `compat-big-bang` as the primary path for
