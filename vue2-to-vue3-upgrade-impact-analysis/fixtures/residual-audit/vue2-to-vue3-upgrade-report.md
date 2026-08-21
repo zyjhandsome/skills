@@ -49,8 +49,8 @@
 
 | 包名 | 当前版本 | Vue3 就绪度 | 建议 | 证据 |
 |---|---|---|---|---|
-| `vue` | 3.5.41 | ready | 保持 | lock |
-| `@vue/compat` | 3.5.41 | ready | 清理后移除（仍在 alias 生效中） | lock + `vite.config.ts` alias |
+| `vue` | 3.5.39 | ready | 保持 | lock |
+| `@vue/compat` | 3.5.39 | ready | 清理后移除（仍在 alias 生效中） | lock + `vite.config.ts` alias |
 | `vue-router` | 4.4.5 | ready | 保持 | lock |
 | `element-plus` | 2.8.4 | ready | 保持 | lock |
 | `vite` | 5.4.19 | ready | 保持 | lock |

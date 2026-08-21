@@ -3,7 +3,7 @@
   "profile_as_of": "2026-08-21",
   "repo_revision": "9c41de70ab52",
   "package_name": "legacy-portal",
-  "vue_version_spec": "3.5.41",
+  "vue_version_spec": "3.5.39",
   "vue_major": "3",
   "builder": "vite",
   "store": "pinia",
@@ -14,7 +14,7 @@
   "lockfile_status": "present",
   "lockfile_errors": [],
   "related_packages": {
-    "@vue/compat": "3.5.41"
+    "@vue/compat": "3.5.39"
   },
   "source_impact_signals": {
     "scanned_files": 3,
