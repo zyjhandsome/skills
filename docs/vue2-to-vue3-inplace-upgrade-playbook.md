@@ -83,6 +83,90 @@ workspace：停止原地升，改走 A→B 剧本。不要在本剧本里继续 
 | 报告「3. 推荐迁移路径」字面 `Composition API 全仓重写：另立项`                                     | 本 change 的 non-goal            |
 
 
+### 0.4 用户决策清单（要你拍板的都在这里；证据可能再追加几项）
+
+本节回答三件事：**哪些点必须由你决定、建议选什么、原样回复什么**。下表是按本剧本
+已给定的输入能**预先列全**的部分；分析 Skill 还会按它当场读到的证据追加提问，那几项
+列在本节末尾——被问到它们不是 Skill 违规，是证据触发了。
+
+两套词汇按**谁来处理**划分，不按波次划分；两套都**不写进任何工件 schema**（它们只是
+聊天里的答复用词，`vue3-upgrade-report/v1`、`vue3-upgrade-summary/v1`、
+`delivery-handoff/v1` 一个字段都不新增）：
+
+- 分析 Skill 处理的：`confirm:<topic>[:<值>]`、`proceed:path:<id>`、
+  `proceed:subsystem:<id>`、`defer`、`other`。完整清单、建议项与不答的后果见该 Skill
+  的 `references/user-decision-catalog.md`。
+- 本剧本处理的：`approve:<gate>`（闸门放行）、`override:<项>:<值>`（改掉某个建议值）、
+  `resolve:` / `accept:` / `backflow:`（处置类）。
+
+Wave 1 会话里**两套同时在场**，各管各的：`override:change-id:` 与
+`override:target_vue_version:` 由粘贴块处理（分析 Skill 不认这两个词），路径、子系统
+和各项 `confirm:` 由 Skill 处理。下表第 2、10 行属前者，其余 Wave 1 行属后者。
+
+通用规则：Agent 每次提问都必须**先给建议项与理由，再列可原样复制的选项，最后说明
+选别的会怎样**。你回「继续 / 都行 / 你看着办」一律无效，Agent 必须重出菜单——这条
+是故意的：这些决策的代价都落在几周后，含糊放行等于把代价推给那时的你。
+
+#### 全流程决策表
+
+| # | Wave | 决策 | 建议项 | 你原样回复 | 选别的会怎样 |
+|---|---|---|---|---|---|
+| 1 | 1 | 输出目录 | 已由本剧本钉死为 `OUTPUT_DIR` | —（不该被问；被问了说明剧本没贴全） | — |
+| 2 | 1 | 目标 Vue 精确版本 | 沿用通用头默认钉 `3.5.39` | 要换才写 `override:target_vue_version:<精确补丁>`；不写即沿用默认钉 | registry 有更新补丁时 Agent 只提示，不得自行改钉——静默漂移会让各波装到不同补丁上 |
+| 3 | 1 | 浏览器基线 | 无 browserslist 时取 `modern` | `confirm:browser-floor:modern` | `confirm:browser-floor:legacy-plugin` 会把 `@vitejs/plugin-legacy` 拉进 `build` 子系统并可能否掉 direct 路径 |
+| 4 | 1 | Node **主版本**（落到 `.nvmrc`/CI/Docker 的那个值） | 目标区间内维护期最长的活跃 LTS | `confirm:node-target:22.12.0` | `target_node_requirement` 是区间，声明面却各只能填一个值；不选就是让各处各填各的 |
+| 5 | 1 | Node 过渡策略 | `upgrade-before-vue`（先证明旧仓能在目标 Node 跑绿，再动 Vue） | `confirm:node-strategy:upgrade-before-vue` | `temporary-dual-node` 必须同时给两条 lane 的 owner、切换与删除条件，否则永远删不掉 |
+| 6 | 1 | 迁移路径 | `compat-big-bang`（compat 兜住 `.sync`／filters／已移除实例 API 这一族静默失效） | `proceed:path:compat-big-bang` | `direct-vue3` 要求报告写出 `default_path_deviation`，并由命名验证接手 compat 本可兜底的部分 |
+| 7 | 1 | 子系统是否纳入 | 全部 `proceed`——`required_for_path=yes` 的行按定义是路径前提 | `proceed:subsystem:core-vue,router,build,ui,i18n-plugins`（先逐条看过风险与配方） | 任一行 `defer` 都会让 `batch_implementation_gate` 永远 `frozen`，进不了 Wave 2 |
+| 8 | 1 | 子系统**内部取舍**（与上一项同时问，各有各的 token） | router 装 v4；store 留 Vuex 4；UI 库 `after-runtime`；i18n 用 legacy；test 保留现有 runner | `confirm:router-major:4`、`confirm:store-target:vuex4`、`confirm:ui-staging:after-runtime`、`confirm:i18n-mode:legacy`、`confirm:blocker:<pkg>:replace`、`confirm:test-runner:keep` | 只回 `proceed:subsystem:<id>` 不构成对分叉的答复；不答则该行不得 `decided`（router / store / i18n / test 这四个分叉现在由校验器硬拦，缺 marker 直接报错）。真放着不管，实施期就由 `npm i` 替你答：裸装 `vue-router` 落到 latest（v5），迁 Pinia 会混进框架升级 |
+| 9 | 1 | 仓已是 Vue3 | `defer`（没有 Vue2 基线可升） | `defer` | `proceed:path:residual-audit` 只出残留清理包，且**不接** Wave 2，清理另立项 |
+| 10 | 1 | 已有同名 change 目录冲突 | `stop`，先人工确认那条线是否废弃 | `stop` | `override:change-id:<已存在的 id>` 恢复旧线；`override:change-id:new` 会分叉出第二条线，同一 workspace 不允许 |
+| 11 | 2 | 规格范围批准（含视觉/控制台/行为契约的全部子项） | `approve:spec`（采纳 Agent 列出的全部建议值） | `approve:spec`；要改哪项就先写若干行 `override:<项>:<值>`，最后一行再 `approve:spec` | 见下方「Wave 2 到底在批什么」——这些值定义验收判据本身，留到执行期等于让 Wave 4 自己定标准 |
+| 12 | 3 | 实现闸门 go（含回滚演练所需的临时 worktree / git 授权） | `approve:plan` | `approve:plan` | 不授权 worktree 时回滚演练降级为临时目录 clone，两者都不行则记 non-blocking residual（要有 owner） |
+| 13 | 3 | 人工前置（后端/Mock、测试账号与权限、验证码、稳定数据） | 逐项确认可用 | `prereq:<项>:ready` 或 `prereq:<项>:missing` | 缺口不报，Wave 5 才炸，那时基线窗口早已关闭 |
+| 14 | 3 | 旧 app 起不来、拿不到基线 | `override:baseline:preprod`（用预生产/生产捕获） | `override:baseline:preprod` | `override:baseline:none` 会把「无基线」记成 blocking residual 并回 Wave 2 重议视觉契约 |
+| 15 | 4 | 首次 mutation 前工作区不干净 | `resolve:workdir:stash` | `resolve:workdir:stash` | `resolve:workdir:commit` 会把你的在途改动写进历史；`resolve:workdir:include` 把它们纳入本次范围，基线 revision 随之改变 |
+| 16 | 5 | 控制台仍有 error，且被判定为非回归 | 不批准——先查清楚它为什么在 | 逐条 `accept:console-error:<route>:<消息类>`；不批准就什么都不回 | error 记 `accepted-residual` **只能**由你显式批准并留下批准语句，Agent 不得自行接受运行时 error |
+| 17 | 5 | 已批准的交互/场景**没能实际执行**（人工前置没兑现，如测试账号、后端数据） | 不接受——补齐前置再跑；确实不可得才接受 | 逐条 `accept:coverage-gap:<项>` | 不逐条接受就不能声称仓内 verified；覆盖声明里静默滑过等于把「没验过」说成「验过了」 |
+| 18 | 5 | 本波 fail 回哪一波 | 按缺陷性质，见「7. 失败回流」 | `backflow:wave2` / `backflow:wave3` / `backflow:wave4` | 回错波次会让你在没有规格授权的情况下改代码 |
+| 19 | verified 之后 | 新冒出来的问题怎么走 | 非阻断项追加到回顾工件 | `append:retrospective` 或 `open:new-change` | 不得回改已 verified 的 change，也不得无规格批准直接改代码 |
+
+第 8 项是最容易被漏掉的一类：`build` 的分叉（Vite vs cli5-webpack5）**不在**其中，
+它是路径三轴之一，由第 6 项的 path preset 决定；要非默认组合只能在第 6 项回 `other`。
+
+#### 表里没有、但可能按证据追加问你的
+
+本剧本只预先给定了输出目录、批次范围和 Vue 目标版本。下面这些在多数仓不触发，一旦
+触发 Skill 必须问；建议项与回复写法同样在 `user-decision-catalog.md` 里：
+
+| 触发条件 | 问你什么 | 建议 |
+|---|---|---|
+| 有 ≥2 个 lockfile，或 lock 与 `packageManager` 不一致 | 包管理器 / lock 归属 | 取 `packageManager` 声明的那个 |
+| registry 与官方迁移文档双双连不上 | 离线出包还是先补网络 | `defer`——离线时版本与破坏面都只能靠推断，不值得据此定路径 |
+| `ui` 就绪度 `replace`（整体换 UI 库） | 是否放宽行为 parity | 由你明确：换库时「严格 parity」是一句兑现不了的承诺，不答则 `ui` 行不得 `decided` |
+| 某包 `dist-tags.latest` 已越过迁移文档区间（vite、plugin-vue 等） | 该包钉哪个精确版本 | 钉迁移文档覆盖的那个 major 的精确版本 |
+
+被问到这四项是正常的。反过来，被问**输出目录或批次范围**才说明粘贴块没贴全。
+
+#### Wave 2 到底在批什么
+
+`approve:spec` 是**一次**提问，但它背后有一组各自独立的取值。Agent 必须在提问的同一条
+消息里把它们逐条列出来（当前值 + 建议 + 理由），你才可能知道自己批的是什么：
+
+| 项 | 建议 | 覆盖写法 |
+|---|---|---|
+| `visual` 是否 required | 分析包 `visual_acceptance_required=yes` 或出现 UI-kit / Tailwind / 表格混用 / scoped-style 风险时为 `required` | `override:visual:not-required`（须写明证据） |
+| `assessment_mode` | UI 库整体更换（如 element-ui→element-plus）取 `consistency_review`；同库内升级取 `strict_parity` | `override:assessment-mode:strict-parity` |
+| `diff_policy` | 弹层挂载点变化、空数据下分页隐藏等归 allowed native adjustment；未归类一律按 failure | `override:diff-policy:<逐类写明>` |
+| `structural_parity_metrics` | 只把与数据无关的结构计数列为 parity 判据 | `override:structural-parity:<白名单>` |
+| `capture_conditions` | 基线与升级后同运行面、同端口策略、同后端可用性、同 locale/timezone/theme | `override:capture-conditions:<写明>` |
+| `required_visual_states` | ≥5 个唯一状态（下游按证据行硬计数） | `override:visual-states:<列出>` |
+| `console_baseline_required` | 固定 `yes` | `override:console-baseline:no-baseline`（仅当升级前 app 任何 lane 都起不来） |
+| 数据依赖态分层 | 允许以 component-shell parity + 后续真实后端验证任务记 accepted-residual | `override:data-dependent-layering:no` |
+| `ui_behavior_contract` 断言 | 逐条进入已批准 spec 的验收场景，与视觉状态分开列 | 不建议覆盖：G9 pass 不构成这些断言的证据 |
+
+这些值一旦批准，Wave 4 与 Wave 5 都**不得**单方改写；要改只能回 Wave 2 重批并记 DR。
+
 ## 1. 通用输入与自动恢复协议
 
 ### 1.1 用户怎么使用
@@ -93,7 +177,7 @@ workspace：停止原地升，改走 A→B 剧本。不要在本剧本里继续 
    Wave 1：「每波必贴」+ Wave 1 块；
    Wave 2–5：「每波必贴」+「Wave 2–5 追加」+ 当前 Wave 块。
 3. 当前 Wave 完成并停止后，打开新会话粘贴下一 Wave。
-4. 用户只回答分析确认 token、规格批准和实施批准。不要手工搬运 JSON 或 digest。
+4. 用户只回答「0.4 用户决策清单」里的 token。不要手工搬运 JSON 或 digest。
 
 ### 1.2 会话通用头——按 Wave 粘贴；仅覆盖项可省略
 
@@ -107,20 +191,16 @@ Wave 粘贴块只补充本波 Skill、应已存在的上游工件、增量门禁
 全程使用单一模型；本波内不换模型。
 本会话只执行随后指定的一个 Wave；写盘校验后立即停止，不要加载或执行下一个 Skill。
 不要使用 delivery-explore，不要调用 migrate-vue2-pages-to-vue3-host。
-Wave 粘贴块只补充本波 Skill、应已存在的上游工件、增量门禁和结束产物；
-通用头已覆盖的检索、边界、回流字段、完成判定和停点不要复述。
 
 默认（仅 CONFIG 不存在且用户未覆盖时使用）：
 - workspace = 当前本地仓库 / workspace（含待升级的 package.json）
 - pages = 空 → 全 workspace（batch_scope=full-stack）
 - target_vue_version = 3.5.39
-  （已精确到补丁；禁止 latest / next / rc / beta；Wave 1 校验该版本在 registry
-  可解析后写入 CONFIG，其后全程不变）
-  该默认钉核对于 2026-08-22（用户指定精确补丁 `vue@3.5.39`）。Wave 1 发现 3.5.x
-  线已前移时，只**提示用户**可以覆盖并继续用本默认值；agent 不得自行改钉——
-  静默漂移会让同一 CHANGE_ID 的各波装到不同补丁上。
-  同时不得把这个钉说成"当前最新"：它是一个**核对日期已知的固定值**，随时间必然
-  落后。要装最新补丁，只能由用户在通用头显式写出那个精确补丁号。
+  核对于 2026-08-22 的固定钉 `vue@3.5.39`；不得把这个钉说成"当前最新"，它随时间
+  必然落后。**核对当日 registry 的 `latest` 就已经领先本钉**——落后是有意的，不是
+  没查。Wave 1 校验它在 registry 可解析后写入 CONFIG，其后全程不变；发现 3.5.x
+  线已前移只把「默认钉 vs 线上最新」回显给用户，agent 不得自行改钉——静默漂移会
+  让各波装到不同补丁上。
 
 可选覆盖（需要时才写）：
 pages = <路由或文件，多个用逗号或换行；填写则 batch_scope=page-closure>
@@ -143,17 +223,18 @@ target_vue_version = <仅在用户明确指定其他精确版本时覆盖>
 CONFIG 存在后以其中记录为准；只有本次**显式填写**的值与配置不一致时停止。
 每波开始先检索 <workspace>/openspec/changes/ 下已有的 vue2-to-vue3-inplace-*
 目录：存在且与本次派生 CHANGE_ID 不同（例如 pages 改动导致 SLUG 变化）时停止
-询问用户，不得静默派生新 CHANGE_ID 分叉第二条线。同一 workspace 同时只允许
+询问用户，不得静默派生新 CHANGE_ID 分叉第二条线。提问时给出三个原样选项：
+override:change-id:<已存在的 id>（恢复旧线，建议）、override:change-id:new
+（另开一条，需用户说明旧线如何处置）、stop。同一 workspace 同时只允许
 一个 inplace change。
 CONFIG 已记录旧分析路径时沿用，不要并行维护 workspace 根
 .vue2-to-vue3-upgrade-analysis。
 
 固定边界：
-- 任何包都不得用 dist-tag 解析版本（latest / next / rc / beta / edge）。dist-tag
-  会指向非预期版本：vue 的 rc 指向 3.6.x 预发布（Vapor 线），vue-router 的
-  next 反而指向五年前的 4.0.13，而其 latest 已是 v5 主版本——裸装 vue-router 会
-  解析到 5.x 而不是 4.x。安装目标 major 必须显式钉死，并在报告或任务里留下依据。
-  这些具体数字随时间变化，本行只说明 dist-tag 不可信；实际取值须当场查 registry。
+- 任何包都不得用 dist-tag 解析版本（latest / next / rc / beta / edge）：它们按包
+  各自维护，经常指向非预期版本（`next` 可能比 `latest` 老好几年，`latest`
+  可能已越过你要读的迁移文档区间）。安装目标 major 必须当场查 registry 显式钉死，
+  并在报告或任务里留下依据。
 - 任何 install 之前先打印 NODE_ENV 与 npm config get production（yarn/pnpm 用等价
   配置项）。任一为 production / true 时 install 会静默跳过 devDependencies，构建
   与 lint 的 bin 随之缺失，报错表现为「命令不存在」而不指向环境；此时必须显式
@@ -161,8 +242,7 @@ CONFIG 已记录旧分析路径时沿用，不要并行维护 workspace 根
   Wave 4 的实施安装和 Wave 5 的 frozen install 同样适用。
 - 单仓原地升。pages 只收窄本 change，不是 A→B host-port，也不是页面闭包迁入。
 - 默认行为 parity；保留 Options API。Composition API 全仓重写另立项。
-- Vue 3.6 / Vapor mode 不在本轮范围。3.6 线目前只有预发布，任何 rc/beta 都不得
-  进入本次升级；本轮目标固定在 3.5.x 的精确补丁号（默认 3.5.39）。
+- Vue 3.6 / Vapor mode 不在本轮范围；任何 rc/beta 都不得进入本次升级。
 - 仅 Wave 4（delivery-execute-verify）可修改应用代码并安装依赖、运行命名配方；
   Wave 1–3 与 Wave 5 对应用代码只读。分析阶段 Name, never run。
 - Wave 5 可启动/停止干净服务、重跑验证、刷新 Codebase Memory 索引与 G9 证据；
@@ -173,6 +253,12 @@ CONFIG 已记录旧分析路径时沿用，不要并行维护 workspace 根
 
 自动恢复以随后 Wave 块「应已存在」行为准。已完成 Wave 的工件缺失/损坏/stale
 则停止并指出重跑 Wave，不要求用户手工提供内容。
+
+凡需要用户决定的点：先给建议项与理由，再列可原样复制的 token，最后说明选别的
+会怎样。「继续 / 都行 / 你看着办」不构成答复，重出菜单。不得代用户决定，也不得把
+两个决策并成一个 token。Wave 1 的 token 清单以分析 Skill 自己的 references 为准；
+Wave 2–5 只用本波粘贴块里点名的那些（approve: / override: / prereq: / resolve: /
+accept: / backflow:），不要发明新词。
 
 失败回流最小字段（alignment_backflow）：
 discovery / evidence / affected_scope / invalidated_artifacts /
@@ -197,43 +283,22 @@ vue 的 resolved version 必须等于 TARGET_VUE_VERSION；路径涉及
 @vue/compat / @vue/compiler-sfc / @vue/server-renderer 时，这些包的
 resolved version 必须完全一致。manifest 是否保留范围符号遵循已批准规格，
 但 lock 不得漂到其他 Vue 版本。
-框架与构建链同批替换时锁文件 digest 必然变化，这不等于漂移：漂移的判据是适用包
-resolved version 不等值或出现其他 Vue major，不是 digest 不变。凡以「digest 未变」
-表述的复用条件（如不重复安装）只用于判断是否需要再装，不得反过来当作漂移证据。
-G9 与控制台采集脚本自身的工具链依赖（无头浏览器驱动等）不计入应用锁文件的
-digest 判定，也不得为了采集把它们写进应用 dependencies。
+漂移的判据是适用包 resolved version 不等值或出现其他 Vue major，**不是** lock
+digest 变没变——同批替换框架与构建链时 digest 必然变。「digest 未变」只用于判断
+是否需要重装，不得反过来当漂移证据。G9 与控制台采集脚本自身的工具链依赖（无头
+浏览器驱动等）不计入应用 lock 判定，也不得为采集写进应用 dependencies。
 @vue/compat 的 peer 是精确版本而非范围，补丁号对不上会在安装期直接失败或告警，
-不会静默漂移——按硬约束对待，不要只靠事后核对 resolved version。
+按硬约束对待，不要只靠事后核对 resolved version。
 
-router / i18n / store 等会被实际安装的包，其目标 major 必须显式钉死并有依据：
-dist-tags.latest 可能已越过迁移指南所在的区间（例如 vue-router 的 latest 已是
-v5，而 Vue2 仓的主迁移文档仍是 v3→v4）。裸装解析到哪个 major 与该读哪份文档是
-两件事，不得互相替代。
+「裸装解析到哪个 major」与「该读哪份迁移文档」是两件事，不得互相替代。
 
 visual=required 时 G9 用 delivery-visual-evidence/v1，目录 G9_ROOT。
 外部分析视觉字段只允许引用 G9 白名单：baseline_state_ids、identity_route、
 identity_marker、comparison_boundary、style_closure_status、color_metrics、
 typography_metrics、icon_identity、table_metrics、rollback_fixture。
 
-仓内 verified（仅 Wave 5 在独立功能验证通过后才能声称）须同时：
-分析包 complete 且交接时 gate=ready；路径仍是原地升；规格批准与实现 go 绑定当前
-revision；权威任务完成；Wave 4 已写出绑定当前 revision 的 Delivery verification
-与 verified handoff；Wave 4 Fresh Verification 与 High 独立审查通过；Wave 5 在
-全新会话对当前 revision 重跑 named_validations、规格场景与升级后功能冒烟，且不
-混用 Wave 4 旧 pass；visual=required 时 G9 pass 且 required 状态未被任何 Wave
-单方降级（assessment_mode / diff_policy / structural_parity_metrics 仍是 Wave 2
-已批准的值，current 与基线同 capture_conditions）；回滚演练证据存在（升级前
-revision 在旧 lane frozen install/build 通过）；存在 dev 运行面时 dev 与 build
-两条运行面各自独立跑过完整冒烟并各有证据；console-evidence.json 按每路由 ×
-每运行面 fresh page 口径采集，且已与 console-baseline.json 同 route 同 runtime_lane
-逐条对比、每条 error 归入 regression 或 pre-existing 并无未处置项（error 记
-accepted-residual 须用户显式批准）；交互断言清单逐条有结果；Wave 3 记录的人工前置
-（后端/Mock、测试账号与权限、稳定数据）全部兑现，未兑现项已逐条列入
-inrepo-verification.md 的覆盖声明并经用户显式接受；结论落盘
-EVIDENCE_ROOT/inrepo-verification.md，其中含覆盖声明（跑了哪些运行面、哪些路由、
-哪些已批准交互未被实际执行及原因）；
-Vue resolved version 与 TARGET_VUE_VERSION 一致；Composition 全仓重写仍在
-non-goals；无 blocking residual。仍不 archive/commit/push/PR/部署。
+仓内 verified 仅 Wave 5 在独立功能验证通过后才能声称，条件清单在 Wave 5 块里。
+Wave 2–4 只需知道：本波不得声称它，也不得把 Delivery verified 说成它。
 ```
 
 ### 1.3 工件恢复矩阵
@@ -291,66 +356,24 @@ pages 有值 → batch_scope=page-closure（页面+闭包+共享 runtime/build�
 校验失败或该版本不可用时停下询问用户，不得自行改钉其他版本（包括 3.5.x 线的
 其他补丁）。registry 显示 3.5.x 线已有更新补丁时，把「默认钉 vs 线上最新」作为
 一行提示回显给用户，由用户决定是否覆盖；未覆盖就继续用默认钉，不得自行更换。
+覆盖写法固定为 override:target_vue_version:<精确补丁号>；不接受「用最新的」这类
+表述——它没有指向一个确定版本，各波会装到不同补丁上。
 「2. 仓画像与依赖就绪度」与「3. 推荐迁移路径」必须写出该精确补丁号。
 CONFIG 一旦记录，后续各 Wave 一律沿用，不得因为上游发了新补丁而漂移。
-compat 对齐 vue / @vue/compat / @vue/compiler-sfc 同版本；direct 至少 vue 与
-@vue/compiler-sfc；SSR 再对齐 @vue/server-renderer。版本不可用或冲突：gate=frozen。
-
-router / store / i18n / ui / test 等会被实际安装的包，报告须分别写出「迁移文档区间」
-与「安装目标 major」，后者按 evidence_as_of 当天的 registry 元数据解析并注明来源；
-两者不一致时（例如 vue-router 的 latest 已越过 v4）把差距记为决策，不得默认取其一。
-跨子系统的 peer 约束（router×build、router×store、i18n×Node 等）在对应子系统行与
-决策记录里双向登记，不得只写在一侧。
-
-host-port-direct、另一 Vue3 宿主、iframe 收编、topology_axis=host-port、
-或实施落点不是当前 workspace：停止本剧本，不要进入 Wave 2，不要加载其他剧本。
-
-画像 vue_major=3（workspace 已是/部分是 Vue3）：停止本剧本主线；只有用户显式
-要求时才产出残留审计包——按分析 Skill 报告契约的 residual-audit 形态写
-（状态表 entry_mode: residual-audit + 「3.」推荐路径 id: residual-audit +
-「5.」residual_findings），不得按 Vue2 基线写升级决策包。残留审计不接本剧本
-Wave 2，清理另行立项。
-
-确认队列里的 Wave 1 / Wave 2+ 是分析 Skill 的**提问批次**（先路径、后子系统），
-与本剧本 Wave 1–5 的会话阶段不是同一套编号；本剧本 Wave 1 覆盖该 Skill 的全部
-提问批次。
-报告「1. 基线与假设」必须记录 repo_revision（分析绑定的 git HEAD）与
-browser_support_floor；下游各 Wave 以此判定分析是否 stale。
 
 报告「3. 推荐迁移路径」必须出现字面：
 Composition API 全仓重写：另立项，本次不评估工作量
 
-summary 必须给出 recipe_constraints：每个命名配方一行 after（保留锚点或另一配方 id）
-与 atomic；两个命名配方改写同一批调用点时（典型：Vue core codemod × UI 库 codemod
-同时命中 `.sync` / `v-model` 绑定）双向写出 overlaps_with，并在报告「8. 验证矩阵」
-为该交集单列一行验证。inventory 必须含
-source_impact_signals.interaction_assertion_candidates（逐点定位 model_option /
-native_modifier / keycode_modifier / transition_component / sync_modifier /
-options_filters_access）。
-candidates.truncated=true 说明清单不完备，须在本波补一次全量检索或写入证据缺口。
+host-port-direct、另一 Vue3 宿主、iframe 收编、topology_axis=host-port、
+或实施落点不是当前 workspace：停止本剧本，不要进入 Wave 2，不要加载其他剧本。
+画像 vue_major=3（workspace 已是/部分是 Vue3）：同样停止本剧本主线。用户显式要求时
+才按 Skill 契约出 residual-audit 包；它不接 Wave 2，清理另行立项。
 
-运行面必须拆成两条：dev server 与 build 产物是两套模块解析、入口/URL 形态与 env
-处理，一条绿不构成另一条的证据。报告须记录本 workspace 实际存在哪些运行面，
-多入口（MPA）证据既落到 rollupOptions.input 也落到 dev URL 形态；summary 的
-runtime_lanes 逐条列出，named_validations 每条运行面各有一行 lane:<name> 验证。
-
-UI 库整体替换或跨大版本时（「4. 子系统影响清单」的 ui 行 in_scope 且就绪度
-replace / needs-major），
-报告「3.」必须写出 ui_cutover_staging（with-runtime / after-runtime），「5.」必须写出
-与 ui_visual_risk 并列的 ui_behavior_contract（mount_timing / prop_renames /
-enum_renames / event_contract / slot_contract / required_behavior_assertions，
-断言至少 3 条），summary 同步给出 ui_behavior_contract.required_assertions。
-懒挂载、prop 改名、枚举改名这些是视觉 diff 看不见、build 也不报的行为破坏，
-不得并进视觉块用截图顶替。
-若把单仓原地升的路径定为 direct-vue3（推翻 compat-big-bang 默认），
-「3.」必须写出 default_path_deviation：默认路径本可吸收什么（compat 对 .sync、
-filters、已移除实例 API 等静默失效族的兜底）、为何本次不需要或不值得、
-改由哪些命名验证承接。
-凡命名了 cutover 之后的功能验证，就必须同时命名 console-baseline：升级前 revision
-在与升级后**同一采集条件**下的控制台输出。缺这条基线，事后无法区分环境噪声与
-升级回归，只能靠主张。
-
-确认队列按 Skill 用 proceed:path:<id> / proceed:subsystem:<id>。
+其余报告形状、证据要求与确认 token 一律以该 Skill 的 references 与校验器为准，
+本块不复述——包括版本解析纪律、子系统与 peer 登记、三轴与 default_path_deviation、
+运行面拆分、ui 行为契约、console-baseline、recipe_constraints、报告章节锚点，
+以及全部 confirm/proceed 提问形状。
+输出目录与批次范围本剧本已给定（OUTPUT_DIR、pages），属已答复项，不得再问。
 报告与 summary 不得填写其他 Skill 名称。
 
 本波结束前写入 CONFIG（workspace、pages、target_vue_version、派生路径，
@@ -431,7 +454,8 @@ required 时已批准 spec 还须同时写明下列四项，缺一不得通过�
 visual 是否 required，本波都必须批准一份控制台基线契约（与 G9 分开，不受
 visual=no 影响）：
 - console_baseline_required 固定 yes（除非有证据说明升级前 app 在任何 lane 都无法
-  启动，此时按「无基线」记 residual 并在本波显式批准）；
+  启动，此时按「无基线」记 residual，并要用户回 override:console-baseline:no-baseline
+  显式批准——Agent 不得因为采集麻烦就自行降级）；
 - 采集范围为 Wave 5 功能冒烟将覆盖的路由集合，采集口径与 Wave 4/5 一致
   （每路由独立 fresh page），采集条件复用同一份 capture_conditions；
 - 采集内容为控制台**全量输出**（error 与 warning 全量、按消息类去重计数），不得只
@@ -450,7 +474,13 @@ required 状态若属数据驱动（loading、pagination populated、tree-expand
 但该分层必须在本波声明并写入已批准 spec，且以基线在同条件下同样只能取到
 component-shell 为前提。Wave 5 不得临时发明分层来兜底。
 
-通过规格闸门：只问一次范围批准。然后停止。下一步 Wave 3。
+通过规格闸门：只问一次范围批准，但那一条消息里必须把它背后的取值逐条摊开——
+visual 是否 required、assessment_mode、diff_policy、structural_parity_metrics、
+capture_conditions、required_visual_states、console_baseline_required、数据依赖态
+分层、ui_behavior_contract 断言——每项写「当前建议值 + 一行理由」。这些值定义验收
+判据本身，不摊开就等于让用户批一个他看不见的东西，而 Wave 4/5 之后都不得单方改写。
+用户回复 approve:spec 表示全部采纳；要改哪项就先写若干行 override:<项>:<值>，
+最后一行再 approve:spec。含糊放行无效，重出清单。然后停止。下一步 Wave 3。
 ```
 
 ## 4. Wave 3：Delivery Plan go
@@ -478,9 +508,11 @@ pages 有值时，任务不得把未点名且未进入闭包的页面扩进范�
 依赖任务必须使用 TARGET_VUE_VERSION，校验适用包 resolved version 相等，拒绝 lock 漂移。
 
 Node 任务须纵向且排在首次 install 之前：保存当前 Node 绿色基线；在改 Vue 依赖
-前验证旧项目能否运行于目标 Node；按已批准策略更新 .nvmrc/.node-version/Volta/
-engines、CI、Docker/devcontainer、部署 builder 与 Corepack/packageManager；再用
-目标 Node frozen install + build/test。temporary-dual-node 要有两 lane、切换条件、
+前验证旧项目能否运行于目标 Node；按已批准策略把**所有**声明面更新到同一个
+selected_node_version（报告「1.」记录的那个具体版本，不是 target_node_requirement
+那个区间）——.nvmrc/.node-version/Volta/engines、CI、Docker/devcontainer、部署
+builder 与 Corepack/packageManager 逐处核对一致；报告没有 selected_node_version
+时停止回 Wave 1，不得由本波挑一个版本填进去。再用目标 Node frozen install + build/test。temporary-dual-node 要有两 lane、切换条件、
 删除条件与缓存隔离。不得只改开发者本机 Node。
 
 visual=required 时：基线捕获发生在升级之前；每个 required sample/state 映射到任务；G9 路径为 G9_ROOT。
@@ -505,8 +537,9 @@ runtime_lane。该任务必须排在所有 install 与配方任务之前——�
 形态、base/publicPath、env 分支）逐项生成验证任务。
 基线可行性前置：必须先有任务证明旧 app 能在某个可用 lane 启动（老 Node 仓即
 temporary-dual-node 的旧 lane）；若证明不可启动，须显式二选一并写入任务——
-用预生产/生产环境捕获替代基线，或把「无基线」记为 blocking residual 并回
-Wave 2 重议 visual 契约。不允许 baseline_status 悬空滑过。
+override:baseline:preprod（用预生产/生产环境捕获替代基线，建议）或
+override:baseline:none（把「无基线」记为 blocking residual 并回 Wave 2 重议
+visual 契约）。这是用户的选择，不是 Agent 的判断；不允许 baseline_status 悬空滑过。
 
 交互断言清单：以 inventory 的
 source_impact_signals.interaction_assertion_candidates.rows 为准，逐行生成交互
@@ -541,11 +574,14 @@ worktree 能力不可用时任务须写明降级方案（临时目录 clone / de
 两者都不可行则记 non-blocking residual（写明 owner 与补救计划）。
 
 人工前置核对：Wave 5 功能冒烟所需的后端/Mock、测试账号与权限、验证码或
-二次验证的处理方式、稳定测试数据——本波逐项确认可用，或写成计划前置任务；
-缺口不得拖到 Wave 5 才暴露。
+二次验证的处理方式、稳定测试数据——本波逐项列给用户，逐项收
+prereq:<项>:ready 或 prereq:<项>:missing；missing 的写成计划前置任务并注明
+owner。这些是 Agent 查不出来的事实，只能问；缺口不得拖到 Wave 5 才暴露。
 
 实现闸门只问一次（High 附代价/风险/回滚摘要，并把回滚演练所需的临时
-worktree/git 操作授权一并在此询问）。go 必须绑定当前 artifact_revision 与仓库 revision。然后停止。下一步 Wave 4。
+worktree/git 操作授权一并在此询问）。用户回复 approve:plan 放行；要改哪项先写
+override:<项>:<值> 再 approve:plan。go 必须绑定当前 artifact_revision 与仓库
+revision。然后停止。下一步 Wave 4。
 ```
 
 ## 5. Wave 4：Delivery Execute
@@ -561,8 +597,10 @@ worktree/git 操作授权一并在此询问）。go 必须绑定当前 artifact_
 visual=required 时，计划中必须有基线任务；基线须在本波首次依赖/代码 mutation 前捕获
 并绑定当时 revision，而不是要求 Wave 3 已执行基线。
 
-首次 mutation 前检查 git status：工作区不干净时停止，让用户显式处置
-（commit/stash/纳入范围），否则基线与 handoff 的 revision 绑定不可复现。
+首次 mutation 前检查 git status：工作区不干净时停止，让用户在三个原样选项里挑一个——
+resolve:workdir:stash（建议）、resolve:workdir:commit（会把在途改动写进历史）、
+resolve:workdir:include（纳入本次范围，基线 revision 随之改变）。Agent 不得代选：
+否则基线与 handoff 的 revision 绑定不可复现，而且可能把别人的在途改动一并提交。
 首次 install 前打印实际 node -v、package manager 版本、NODE_ENV 与
 npm config get production；node 不满足已批准 target range 时停止，production
 环境噪声按固定边界处置后再装。
@@ -667,8 +705,9 @@ warning 的合法处置只有三种：改写到未弃用的 API（resolved）；
 构建配置里**按具名弃用 id** 定点静默（样式编译器的弃用静默选项是典型），必须同时
 记下该 id、理由与解除条件；`accepted-residual` 并写明 owner。禁止全局过滤控制台、
 包裹 `console.*`，也禁止对 error 做任何静默。
-error 记 accepted-residual 必须经用户显式批准并记录批准语句；
-不得自行接受运行时 error。交互断言（Wave 3 从 inventory 生成的
+error 记 accepted-residual 必须经用户显式批准并记录批准语句：逐条给出
+route、runtime_lane、消息类、为何判定非回归，用户逐条回 accept:console-error:<route>:<消息类>
+才成立。整批放行、口头「这个没事」都不成立，Agent 更不得自行接受运行时 error。交互断言（Wave 3 从 inventory 生成的
 v-model 回写、`.sync` 目标 prop 身份、`$options.filters` 调用点、router 导航
 （吞错覆写移除后按 name 跳转不得抛 Missing required param）、触发型插槽内容形状、
 配方交集等逐点检查）必须逐条执行并记录结果。不得用测试已绿代替未执行的场景。
@@ -693,20 +732,37 @@ EVIDENCE_ROOT/upgrade-retrospective.md，记录本次实测到的四类事实，
 - 运行面分叉（只在 dev 或只在 build 出现的问题）；
 - 控制台弃用面（目标 UI 库与构建/样式工具链自身的告警：哪些改写消除、哪些按具名
   弃用 id 定点静默、哪些留 residual）。
-它不改任何 Skill，也不是本波通过条件；它是把一次实战沉淀回配方库的**唯一**合法
-来源——没有它，下一个仓会把同样的坑重踩一遍。附录性质，写明"依赖前须按当时选定
-的工具版本复核"。
-它是 **append-only** 工件：仓内 verified 之后仍可继续追加（见「9. verified 之后」），
-追加不改变本 change 的状态，也不需要重开任何波次。
+它不是本波通过条件，也不改任何 Skill；它是把这次实战沉淀给下一个仓的唯一去处。
+写明"依赖前须按当时选定的工具版本复核"。**append-only**：verified 之后仍可追加，
+追加不改变本 change 的状态，也不需要重开波次。
 
-pass：对照通用头仓内 verified 条件逐条核对，并把结论落盘
+已批准交互/场景因人工前置未兑现而**没能实际执行**的，逐条列出（哪一条、为什么不可得、
+不验的风险是什么），由用户逐条回 accept:coverage-gap:<项> 才能计入覆盖声明；未逐条
+接受的不得声称仓内 verified。不要把「测试已绿」当作这些场景的替代证据。
+
+仓内 verified 须同时满足（本波逐条核对，缺一不得声称）：
+分析包 complete 且交接时 gate=ready；路径仍是原地升；规格批准与实现 go 绑定当前
+revision；权威任务完成；Wave 4 已写出绑定当前 revision 的 Delivery verification
+与 verified handoff；Wave 4 Fresh Verification 与 High 独立审查通过；本波在全新
+会话对当前 revision 重跑 named_validations、规格场景与升级后功能冒烟，且不混用
+Wave 4 旧 pass；visual=required 时 G9 pass 且 required 状态未被任何 Wave 单方降级
+（assessment_mode / diff_policy / structural_parity_metrics 仍是 Wave 2 已批准的值，
+current 与基线同 capture_conditions）；回滚演练证据存在（升级前 revision 在旧 lane
+frozen install/build 通过）；存在 dev 运行面时 dev 与 build 两条运行面各自独立跑过
+完整冒烟并各有证据；console-evidence.json 按每路由 × 每运行面 fresh page 口径采集，
+且已与 console-baseline.json 同 route 同 runtime_lane 逐条对比、每条 error 归入
+regression 或 pre-existing 并无未处置项；交互断言清单逐条有结果；Wave 3 记录的人工
+前置全部兑现，未兑现项已逐条经 accept:coverage-gap:<项> 接受；Vue resolved version
+与 TARGET_VUE_VERSION 一致；Composition 全仓重写仍在 non-goals；无 blocking residual。
+
+pass：对照上列条件逐条核对，并把结论落盘
 EVIDENCE_ROOT/inrepo-verification.md（逐条核对结果、console-evidence 与交互
 断言指针、G9 与 named_validations 结果、绑定当前 revision）后，才能声称仓内
 verified。仓内 verified ≠ 生产完成。
 仍不 archive/commit/push/PR/部署。然后停止。
-fail：按 alignment_backflow 输出，不要改代码，返回：
-规格/验收→Wave 2；任务/验证命令/回滚→Wave 3；实现、测试、G9 或功能回归→Wave 4。
-然后停止。
+fail：按 alignment_backflow 输出，不要改代码，给出建议回流波次与理由，由用户回
+backflow:wave2（规格/验收）、backflow:wave3（任务/验证命令/回滚）或
+backflow:wave4（实现、测试、G9 或功能回归）确认。然后停止。
 ```
 
 ## 7. 失败回流
@@ -750,9 +806,8 @@ Verification，并重新执行完整 Wave 5；不得用 Wave 4 旧 pass 声称�
 
 ## 8. 完成判定
 
-权威清单是「Wave 2–5 追加」粘贴块里的仓内 verified 条件（Wave 5 对照的就是
-那份）；本章是同一清单的展开版，供通读本文的人核对，两处不一致时以通用头
-为准并修复本章。
+权威清单是 Wave 5 粘贴块里的仓内 verified 条件（Wave 5 对照的就是那份）；本章是
+同一清单的展开版，供通读本文的人核对，两处不一致时以 Wave 5 块为准并修复本章。
 只有以下全部满足，才能声称本 change 仓内 `verified`：
 
 - 分析包 `analysis_status=complete`，且交接时 `batch_implementation_gate=ready`；
@@ -784,7 +839,8 @@ Verification，并重新执行完整 Wave 5；不得用 Wave 4 旧 pass 声称�
   解除条件）、accepted-residual（有 owner），error 记 accepted-residual
   须有用户显式批准记录；交互断言清单逐条有结果；
 - Wave 3 记录的人工前置（后端/Mock、测试账号与权限、验证码处理、稳定数据）
-  全部兑现；未兑现项不得静默滑过，须逐条进入覆盖声明并由用户显式接受；
+  全部兑现；未兑现项不得静默滑过，须逐条进入覆盖声明并由用户逐条
+  `accept:coverage-gap:<项>` 显式接受；
 - 分析包含 `ui_behavior_contract` 时，`required_behavior_assertions` 逐条有执行
   结果；G9 pass 不构成这些行为断言的证据；
 - `EVIDENCE_ROOT/inrepo-verification.md` 存在、逐条核对通用头条件、含覆盖声明
@@ -809,10 +865,13 @@ Verification，并重新执行完整 Wave 5；不得用 Wave 4 旧 pass 声称�
 终止条件，实际效果是让 change 永远开着。但 verified 之后用户真实使用中冒出来的问题
 需要一条合法通道，否则它们既回不到配方库、也没人认领。按性质二分，只有两条出口：
 
-| verified 之后的发现 | 出口 |
-|---|---|
-| 阻断、回归、或需要改应用代码 | 新开一个 change 走 Wave 2–5（新 `CHANGE_ID`；不得回改已 verified 的 change，也不得在无规格批准的情况下直接改代码） |
-| 非阻断的控制台噪声、弃用告警、已记 residual 的项 | 追加到 `EVIDENCE_ROOT/upgrade-retrospective.md`（append-only，带观察日期与证据指针），并作为下一个仓 Wave 1 的输入 |
+| verified 之后的发现 | 出口 | 用户原样回复 |
+|---|---|---|
+| 阻断、回归、或需要改应用代码 | 新开一个 change 走 Wave 2–5（新 `CHANGE_ID`；不得回改已 verified 的 change，也不得在无规格批准的情况下直接改代码） | `open:new-change` |
+| 非阻断的控制台噪声、弃用告警、已记 residual 的项 | 追加到 `EVIDENCE_ROOT/upgrade-retrospective.md`（append-only，带观察日期与证据指针），并作为下一个仓 Wave 1 的输入 | `append:retrospective` |
+
+归入哪一类由用户定，Agent 只给建议与理由：把阻断项误归成 retrospective 追加，等于
+让一个真回归没有 owner 地留在仓里。
 
 追加时按上面的四类事实归类，`config-silenced` 的具名弃用 id 与解除条件一并记下。
 这类发现**不表示 Wave 1–5 跑得不严**，而是分析期的建模面没覆盖到该破坏面；因此

@@ -80,14 +80,56 @@ forbid_source_mutation: yes
 
 「继续 / 全部放行 / 别再问了 / 全部纳入」**不是**确认。须逐单元回复字面 token：
 
-| 场景 | 你怎么答 |
-|---|---|
-| Wave 1 路径 | `proceed:path:compat-big-bang` / `proceed:path:direct-vue3` / `proceed:path:host-port-direct` / `proceed:path:microfrontend-coexist` / `defer` / `other` |
-| Wave 2+ 子系统 | `proceed:subsystem:<id>` / `defer` / `other`；也可一次答多个**列举**的 id：`proceed:subsystem:core-vue,router,ui,build`（不接受 `all` / `*` / `全部`；含未知或未 ready 的 id 则整条作废重问） |
-| 多仓候选 | 选 `workspace_id`（可多选）或 `defer` |
-| 无 lockfile | 先补 lock 再求 `ready`；否则最多 `complete` + `frozen` |
-| 推荐变成 host-port / 仓内已有 Vue3 宿主 | 停原地升；改走页面迁入剧本 |
-| workspace 本身已是 Vue3 | 要么就此打住，要么 `proceed:path:residual-audit` 出残留审计包（不写 Vue2 基线） |
+| 场景 | 建议项 | 你怎么答 |
+|---|---|---|
+| Wave 0 设置确认（画像期一次问完） | 见下表 | 一行一个 `confirm:<topic>[:<值>]`；出现未开启项、未知 topic 或 `全部` 则**整条消息作废**重问 |
+| Wave 1 路径 | 原地升 `compat-big-bang`；A→B `host-port-direct` | `proceed:path:compat-big-bang` / `proceed:path:direct-vue3` / `proceed:path:host-port-direct` / `proceed:path:microfrontend-coexist` / `defer` / `other` |
+| Wave 2+ 子系统 | 全部 `proceed`（`required_for_path=yes` 是路径前提） | `proceed:subsystem:<id>` / `defer` / `other`；也可一次答多个**列举**的 id：`proceed:subsystem:core-vue,router,ui,build`（不接受 `all` / `*` / `全部`；含未知或未 ready 的 id 则整条作废重问） |
+| 多仓候选 | 先出一个仓，证据才可比 | `proceed:batch:<workspace_id>`，多选逐个列全，或 `defer` |
+| 无 lockfile | 先补 lock 再求 `ready` | 否则最多 `complete` + `frozen` |
+| 推荐变成 host-port / 仓内已有 Vue3 宿主 | 停原地升 | 改走页面迁入剧本 |
+| workspace 本身已是 Vue3 | `defer`（没有 Vue2 基线可升） | `proceed:path:residual-audit` 出残留审计包（不写 Vue2 基线） |
+
+Wave 0 的九项设置确认（触发了才问，其余按证据默认；完整选项与不答的后果见 Skill 的
+`references/user-decision-catalog.md`）：
+
+| topic | 何时问你 | 建议项 | 你怎么答 |
+|---|---|---|---|
+| `output-dir` | 调用没带 `--output-dir` | 候选 `.vue2-to-vue3-upgrade-analysis` | `confirm:output-dir` 或 `confirm:output-dir:<绝对路径>` |
+| `workspace` | 根下有多个前端 workspace | 含待升 `vue` 且离根最近的 | `confirm:workspace:<workspace_id>` |
+| `package-manager` | ≥2 个 lockfile 或与 `packageManager` 不一致 | `packageManager` 声明的那个 | `confirm:package-manager:pnpm` |
+| `network-mode` | registry 与官方文档**双双**探测失败 | `defer`，补网络再跑 | `confirm:network-mode:offline` / `:partial` |
+| `browser-floor` | 无 browserslist，或配置含旧浏览器 | 无旧浏览器证据时取 `modern` | `confirm:browser-floor:modern` / `:legacy-plugin` |
+| `behavior-parity` | 你要求行为变更，或 UI 库 `replace` 使严格 parity 不可能 | `yes` | `confirm:behavior-parity:yes` / `:no` + 逐条列出允许变化的行为 |
+| `scope` | 调用没限定范围 | 原地升 `full-stack`，A→B `page-closure` | `confirm:scope:full-stack` |
+| `target-version` | 需要目标面 `engines.node`，或某包 `latest` 已越过迁移文档区间 | 钉迁移文档区间覆盖的那个 major | `confirm:target-version:vite@5.4.11` |
+| `node-target` | 同上 | 目标区间内维护期最长的活跃 LTS | `confirm:node-target:22.12.0` |
+| `node-strategy` | `node_compatibility_status: upgrade-required` | `upgrade-before-vue`（先让旧仓在目标 Node 跑绿，再动 Vue） | `confirm:node-strategy:upgrade-before-vue` |
+
+`node-target` 与 `node-strategy` 是两问：`target_node_requirement` 给的是**区间**
+（如 `^20.19.0 || >=22.12.0`），而 `.nvmrc`、`engines.node`、CI、Docker、部署 builder
+每一处只能填**一个值**——那个值由你定，写进 §1 `selected_node_version`；策略只回答
+「怎么从当前 Node 走过去」。
+
+子系统除了「纳不纳入」，多数还有一个**内部分叉**，与该子系统的问题同时出示，各有
+各的 token（完整清单见 catalog D15–D20）：
+
+| 子系统 | 分叉 | 建议项 | 你怎么答 |
+|---|---|---|---|
+| `router` | 装 v4 还是 v5 | v4（Vue2 仓主迁移文档是 v3→v4；`latest` 已是 v5，裸装会落到 v5） | `confirm:router-major:4` |
+| `store` | 留 Vuex 4 还是迁 Pinia | Vuex 4（本轮目标是升级，不是换状态库） | `confirm:store-target:vuex4` |
+| `ui` | 与 runtime 同批切还是切完再切 | `after-runtime`（同批时两个 codemod 落在同一批调用点上） | `confirm:ui-staging:after-runtime` |
+| `i18n-plugins` | vue-i18n v9 legacy 还是 composition | `legacy`（与保留 Options API 一致） | `confirm:i18n-mode:legacy` |
+| `blockers` | 每个残留包 replace/fork/remove/defer | 逐包给建议 | `confirm:blocker:<pkg>:replace` |
+| `test` | 保留现有 runner 还是换 | 保留，只升 `@vue/test-utils` 到 v2 | `confirm:test-runner:keep` |
+
+`build` 的 Vite vs cli5-webpack5 不在此列：它是路径三轴之一（`build_axis`），跟着
+path preset 走，要非默认组合只能在 Wave 1 路径那一问回 `other`。
+
+`defer` 与 `other` 的区别：`defer` 是「现在不定」，该项若是 High/blocker 或
+`required_for_path=yes`，`batch_implementation_gate` 就永远 `frozen`；`other` 是
+「给的选项都不合适」，你补一句 `other: <想要什么>`，Agent 须把它翻译成具体的
+path id + 三轴再用原样 token 重问一次，`other` 本身不会被记成 `decided`。
 
 这里的 **Wave 是确认队列的批次**（先路径、后子系统），和剧本里 Wave 1–5 的会话
 阶段不是一回事。剧本 Wave 1 整个装的就是本 Skill 的全部 Wave。

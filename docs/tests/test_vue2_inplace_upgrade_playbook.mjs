@@ -236,10 +236,16 @@ assert.ok(wave4Prompt.includes("worktree"), "Wave 4 rollback rehearsal must carr
 assert.ok(wave5Prompt.includes("inrepo-verification.md"), "Wave 5 must persist the in-repo verified verdict as an artifact");
 assert.ok(wave5Prompt.includes("handoff-wave4.json"), "Wave 5 must archive the Wave 4 handoff before overwriting handoff.json");
 
-// The header checklist is authoritative; section 8 must not diverge from it again.
+// The Wave 5 checklist is authoritative; section 8 must not diverge from it again.
+// It lives in the Wave 5 paste block rather than the shared append so that Waves
+// 2-4, which cannot act on it, do not carry it.
+assert.ok(
+  !headerFences[1].includes("回滚演练"),
+  "Wave 2-5 append must defer the verified checklist to Wave 5 instead of restating it"
+);
 const section8 = playbook.slice(playbook.indexOf("## 8. 完成判定"));
 for (const needle of ["回滚演练", "console-evidence", "inrepo-verification.md", "交互断言"]) {
-  assert.ok(headerFences[1].includes(needle), `header verified checklist must include ${needle}`);
+  assert.ok(wave5Prompt.includes(needle), `Wave 5 verified checklist must include ${needle}`);
   assert.ok(section8.includes(needle), `section 8 verified checklist must include ${needle}`);
 }
 const backflow = section(playbook, "## 7. 失败回流", "## 8. 完成判定");

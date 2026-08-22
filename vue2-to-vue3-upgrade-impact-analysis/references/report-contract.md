@@ -17,6 +17,17 @@
 
 硬规则：输出目录只属于本 Skill。调用已含 `--output-dir <path>` 视为已确认；否则须复述绝对路径并得到 `confirm:output-dir` 后再写。路径未确认前只读分析、禁止写入。口语「写到仓库」无效。
 
+## Wave 0 设置确认记在哪
+
+`confirm:<topic>` 家族（输出目录、workspace、包管理器、`network_mode`、
+`browser_support_floor`、`behavior_parity_required`、`batch_scope`、目标版本钉、
+`node_transition_strategy`；清单见 `user-decision-catalog.md`）**不新增字段、不进
+§7、不产生 Decision Record**——它们改写的是本契约已有的状态表与 §1 锚点。
+
+§1 可另起一行 `设置确认:`，逐项记「字段 ← 用户原样 token」。该行不是校验器强制项，
+但它是事后区分「用户定的」与「分析器默认的」唯一证据；缺这行时，§1 里每个本可由
+用户决定的值都必须自证是默认值还是确认值。
+
 ## 多批次布局
 
 | 批次数 | 布局 |
@@ -163,6 +174,11 @@ High/blocker 与每个 `required_for_path=yes` 均为 `decided`（`deferred` 只
 - `node_compatibility_status:` `compatible` / `upgrade-required` / `conflict` / `unknown`
 - `node_transition_strategy:` `same-node` / `upgrade-before-vue` /
   `temporary-dual-node` / `blocked` / `undecided`
+- `selected_node_version:` 交集里**实际要落到** `.nvmrc` / `engines.node` / CI /
+  Docker / 部署 builder 的那一个版本。`node_compatibility_status: upgrade-required`
+  时必填（校验器不强制，但缺它等于把各声明面填什么留给实施期各自决定，声明面必然
+  分叉）；`compatible` + `same-node` 时可写当前基线版本或省略。区间不是版本，
+  `target_node_requirement` 不能顶替这一行。
 
 `target_node_requirement` 必须保留完整 semver 联合范围，不能把
 `^20.19.0 || >=22.12.0` 简化为“Node 20+”。非
@@ -302,6 +318,33 @@ summary 的 `ui_behavior_contract.required_assertions` 必须同时给出（3..2
 `in_scope` 且 `high`/`blocker` 的行必须 `required_for_path=yes`。
 路径未 `decided` 前，子系统行不得为 `ready`。
 
+## 子系统内部取舍记在哪
+
+`proceed:subsystem:<id>` 只回答「这次带不带它一起改」。若该子系统还有一个**分叉**
+（router 装 v4 还是 v5、store 保留 Vuex 4 还是迁 Pinia、UI 库与 runtime 同批还是
+分步、vue-i18n 用 legacy 还是 composition mode、每个 residual blocker 是
+replace/fork/remove/defer），那是另一个决策，用 `confirm:` 家族单独问，取值写进
+§4 该行的「说明」与对应 `decision-records/subsystem__<id>.md` 的「当前结论」。
+清单与建议项见 `user-decision-catalog.md` D15–D20。
+
+分叉未答复时，该子系统的 `decision-records` 不得写成已定结论，§4 说明须写
+`<分叉项>: undecided`，且该行不得 `decided`——一个 `proceed` 顶两个决策，正是
+「用户以为只批了范围，实施期却发现库也被换了」的来源。
+
+**这条由校验器强制。** §7 队列行一旦 `decided`，§4 该行「说明」必须带上对应 marker，
+缺值或取值非法直接报错（`residual-audit` 入口豁免——它不装包，没有分叉）：
+
+| 子系统 | marker | 合法取值 |
+|---|---|---|
+| `router` | `router_major:` | `4` / `5` |
+| `store` | `store_target:` | `vuex4` / `pinia` |
+| `i18n-plugins` | `i18n_mode:` | `legacy` / `composition` |
+| `test` | `test_runner:` | `keep` / `vitest` |
+
+marker 写在说明里即可，例如「已 proceed；`router_major: 4`」。`ui` 不在此表：它的分叉是
+§3 的 `ui_cutover_staging`，在那里单独校验。`blockers` 逐包一问，没有单一 marker，仍只有
+协议约束。
+
 ## 仓画像表列（§2）
 
 `包名 | 当前版本 | Vue3 就绪度 | 建议 | 证据`
@@ -325,9 +368,11 @@ summary 的 `ui_behavior_contract.required_assertions` 必须同时给出（3..2
 
 `单元 | 类型 | 状态 | 问题 | 选项`
 
-- 类型：`path` / `subsystem`
+- 类型：`path` / `subsystem`（**只有这两个**；Wave 0 确认不占队列行）
 - 状态：`ready` / `pending` / `blocked` / `decided` / `deferred`
 - 路径选项须含 `proceed:path:` 形式；子系统含 `proceed:subsystem:`
+- `选项` 列须把建议项写在第一位，并保持可原样复制；`defer` / `other` 的后果见
+  `user-decision-catalog.md`
 
 ## 校验
 

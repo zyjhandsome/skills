@@ -1047,6 +1047,35 @@ class ValidateReportTests(unittest.TestCase):
             self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
             self.assertIn("ui_cutover_staging", result.stdout + result.stderr)
 
+    def test_rejects_decided_subsystem_without_its_fork_marker(self) -> None:
+        # `proceed:subsystem:router` says the router comes along, not which major
+        # gets installed. Without the fork on the row, a packet where nobody
+        # chose reads exactly like one where the human did.
+        body = (FIXTURES / "valid-report-complete.md").read_text(encoding="utf-8")
+        body = body.replace("已 proceed；`router_major: 4`", "已 proceed")
+        with tempfile.TemporaryDirectory() as tmp:
+            result = self._probe_report(body, tmp)
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertIn("router_major", result.stdout + result.stderr)
+
+    def test_rejects_fork_marker_outside_its_allowed_values(self) -> None:
+        body = (FIXTURES / "valid-report-complete.md").read_text(encoding="utf-8")
+        body = body.replace("`router_major: 4`", "`router_major: 3`")
+        with tempfile.TemporaryDirectory() as tmp:
+            result = self._probe_report(body, tmp)
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertIn("invalid router_major", result.stdout + result.stderr)
+
+    def test_subsystem_not_yet_decided_needs_no_fork_marker(self) -> None:
+        # The fork is asked with the subsystem, so it cannot be required before
+        # the row is decided — otherwise every draft packet would fail.
+        body = (FIXTURES / "valid-report.md").read_text(encoding="utf-8")
+        self.assertIn("| `subsystem:router` | subsystem | pending |", body)
+        self.assertNotIn("router_major", body)
+        with tempfile.TemporaryDirectory() as tmp:
+            result = self._probe_report(body, tmp)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_rejects_inplace_direct_vue3_without_default_deviation(self) -> None:
         # Single-repo in-place defaults to compat-big-bang; dropping the compat
         # layer has to be argued, not silently preset.

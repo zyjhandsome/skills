@@ -29,13 +29,12 @@ directory under Output unless overridden.
 Before analysis (including manifest-only reads), run
 `references/environment-preflight.md` / `scripts/preflight.py`. Missing Node
 (or project pin probe), package manager detection, or Python → batch-wide
-`analysis_status=blocked`; list gaps in chat; **do not write** reports. Host
-Node vs project declarations mismatch is recorded, not by itself a hard block.
-Treat Node as a two-plane decision: record the current project's effective Node
-contract separately from the selected target toolchain's `engines.node`
-intersection. An unknown target range or unresolved current→target conflict
-keeps the handoff frozen. Network probe runs in the same wave; dual
-registry+docs failure follows the offline confirm gate.
+`analysis_status=blocked`; list gaps in chat; **do not write** reports. Host vs
+project Node mismatch is recorded, not a hard block. Node is two-plane: the
+project's effective contract, separate from the selected target toolchain's
+`engines.node` intersection. Unknown target range or unresolved conflict keeps
+the handoff frozen; `upgrade-required` also needs `confirm:node-strategy:…`.
+Network probe same wave; dual registry+docs failure → offline confirm gate.
 
 ## Boundaries
 
@@ -81,7 +80,9 @@ build variant × scope** (A→B: workspace=A; scope often `page-closure`).
 
 ## Workflow
 
-1. Preflight; resolve workspace (ask if multiple). Exit `5` → `blocked`.
+1. Preflight; ask every triggered Wave 0 setup confirm in **one** message, each
+   with a recommendation and a verbatim reply
+   (`references/user-decision-catalog.md`). Exit `5` → `blocked`.
 2. Light inventory (`scripts/profile_inventory.py`). Cover
    `references/subsystem-inventory.md`. Record `lockfile_status`
    `present|absent|unparsed`; gate stays `frozen` unless `present`. Bind the
@@ -120,14 +121,13 @@ build variant × scope** (A→B: workspace=A; scope often `page-closure`).
    Record → regenerate → Agent review → `analysis_status=complete`.
 9. Stop. Do not open implementation plans.
 
-「继续 / 全部放行 / 别再问了 / 全部纳入」**≠** proceed token. Re-prompt
-verbatim `proceed:path:…` / `proceed:subsystem:…` menus. Wave here = a
-confirmation-queue batch, never a session phase of some calling playbook.
+「继续 / 全部放行 / 别再问了 / 全部纳入」**≠** proceed token. Re-prompt verbatim
+`confirm:…` / `proceed:path:…` / `proceed:subsystem:…` menus, recommendation
+first. Wave here = a confirmation batch, not a caller's session phase.
 
 ## Output
 
-1. Explicit `--output-dir` **is** confirmation — do not also ask
-   `confirm:output-dir`. The candidate
+1. Explicit `--output-dir` **is** confirmation — do not re-ask. The candidate
    `<project-root>/.vue2-to-vue3-upgrade-analysis` (after `confirm:output-dir`)
    is standalone-only: a caller that owns an evidence root must pass
    `--output-dir`. Until confirmed: read-only.
@@ -185,9 +185,9 @@ when every other Skill folder is absent.
 ## References
 
 **Minimum load (every run):** `references/environment-preflight.md`,
-`references/subsystem-inventory.md`, `references/human-confirmation-gates.md`;
-plus `references/report-contract.md` before writing any packet — the validator
-enforces fields listed only there.
+`references/subsystem-inventory.md`, `references/human-confirmation-gates.md`,
+`references/user-decision-catalog.md`; plus `references/report-contract.md`
+before writing any packet — the validator enforces fields listed only there.
 
 **On demand:** `references/dual-entry-and-batching.md`,
 `references/migration-path-ladder.md`, `references/impact-and-validation.md`,

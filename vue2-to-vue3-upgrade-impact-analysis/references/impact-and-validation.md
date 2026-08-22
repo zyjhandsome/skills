@@ -103,6 +103,13 @@ package-manager-enforced constraint: a mismatched pin fails or warns at install
 time instead of drifting silently. Record which alignment rules are
 tool-enforced and which still need a named validation.
 
+Which packages must be aligned depends on the path: `runtime_axis: compat` needs
+`vue` + `@vue/compat` + `@vue/compiler-sfc`; `direct-vue3` needs at least `vue` +
+`@vue/compiler-sfc`; an SSR workspace adds `@vue/server-renderer`. State the set
+this workspace actually needs in §2, and keep the handoff `frozen` when the
+selected target version is unavailable for any member of it — a partially
+resolvable set is a conflict, not a rounding error.
+
 ## Impact layers (report §5)
 
 | Layer | Examples |

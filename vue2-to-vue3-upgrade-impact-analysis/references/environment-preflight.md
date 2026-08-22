@@ -16,12 +16,31 @@ Run before any analysis write. Prefer `scripts/preflight.py`.
   contract includes `.nvmrc`, `.node-version`, Volta, `engines.node`, CI
   workflow/setup-node, Docker/devcontainer base image, and deployment build
   settings when present; do not reduce it to `package.json#engines.node`.
-- Multiple lockfiles → record; ask which workspace/manager if ambiguous
+- Multiple lockfiles → record; ambiguous manager → ask `confirm:package-manager:<pm>`
 - Package-manager detection can pass without a lockfile; consume
   `profile_inventory.py`'s `lockfile_status` separately and keep handoff frozen
   for `absent` / `unparsed`
-- Multiple frontend workspaces → ask (not exit `5`)
-- Network: npm registry HEAD + `https://v3-migration.vuejs.org/` HEAD in same wave; dual failure → offline confirm gate (not tool-preflight failure)
+- Multiple frontend workspaces → ask `confirm:workspace:<workspace_id>` (not exit `5`)
+- Network: npm registry HEAD + `https://v3-migration.vuejs.org/` HEAD in same wave; dual failure → offline confirm gate below (not tool-preflight failure)
+
+These are Wave 0 setup confirms, not queue units. Options, recommendations and
+reply strings: `user-decision-catalog.md`; wording: `next-action-choice-menus.md` §D.
+
+## Offline confirm gate
+
+Both probes failing is not a tool failure, so it does not exit `5` — but it does
+remove the two evidence sources this skill's version claims rest on. Stop and
+ask; do not pick for the human:
+
+| Answer | `network_mode` | Effect |
+|---|---|---|
+| `defer` (**recommended**) | — | Stop at profiling; no report. Restore network and rerun — an offline packet's path choice rests on recalled version facts |
+| `confirm:network-mode:offline` | `offline` | Write the packet, but every version / breaking-change claim is labelled inference, each intended URL is still listed unverified (`official-docs-index.md`), and `target_node_requirement` stays `unknown` unless a cached registry copy is cited — so `batch_implementation_gate` stays `frozen` |
+| `confirm:network-mode:partial` | `partial` | Only when exactly one plane failed; name which one and which claims it degrades |
+
+`network_mode=offline` never upgrades to `ready` on its own: `unknown` target
+Node and unverified `engines.node` are frozen conditions regardless of how the
+queue was answered.
 
 ## Node is a two-plane decision
 
@@ -46,12 +65,17 @@ Record both planes in report §1:
 
 Compute the satisfiable intersection, preserving disjoint semver ranges such as
 `^20.19.0 || >=22.12.0`; do not reduce them to a misleading single integer.
-Then classify:
+
+The intersection is a **range**; `.nvmrc`, `engines.node`, CI setup-node, the
+Docker base image and the deployment builder each hold **one value**. Picking
+that value is a human decision (`confirm:node-target:<version>`), recorded in §1
+as `selected_node_version:`. Leaving it to implementation is how the declaration
+surfaces drift apart — each one gets filled by whoever touched it. Then classify:
 
 | `node_compatibility_status` | Meaning | Handoff effect |
 |---|---|---|
 | `compatible` | one supported Node range covers current baseline and target toolchain | may proceed |
-| `upgrade-required` | target floor is higher, but a staged or temporary dual-Node route is selected | `build` is High + `required_for_path=yes`; human decision required |
+| `upgrade-required` | target floor is higher, but a staged or temporary dual-Node route is selected | `build` is High + `required_for_path=yes`; ask **both** `confirm:node-target:<version>` and `confirm:node-strategy:<value>` (`next-action-choice-menus.md` §E) |
 | `conflict` | current and target contracts have no proven transition | frozen |
 | `unknown` | target versions/engines or current baseline evidence are insufficient | frozen |
 
@@ -74,4 +98,8 @@ condition. Never silently change only the analyst's local Node.
 
 1. Run preflight with `--project-root`.
 2. On exit `5`: list missing probes in Chinese; set mental `analysis_status=blocked`; stop.
-3. On exit `0`: proceed to inventory / analysis; network gaps use offline gate after human confirm.
+3. On exit `0`: proceed to inventory / analysis. Collect every triggered Wave 0
+   confirm — output dir, workspace, package manager, network mode, browser
+   floor, scope, target versions, Node strategy — and ask them in **one**
+   message with recommendations attached, rather than interrupting once per
+   probe.

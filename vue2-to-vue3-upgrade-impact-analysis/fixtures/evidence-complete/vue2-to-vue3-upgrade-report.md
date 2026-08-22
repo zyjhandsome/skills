@@ -70,13 +70,13 @@
 | 子系统 | scope_status | 风险 | 就绪度 | required_for_path | 命名配方 | 说明 |
 |---|---|---|---|---|---|---|
 | `core-vue` | in_scope | high | needs-major | yes | `vue-compat`, `gogocode-vue` | 已 proceed；模板/API codemod 与 UI 库 codemod 命中同一批调用点 |
-| `router` | in_scope | high | needs-major | yes | `manual-router4` | 已 proceed |
+| `router` | in_scope | high | needs-major | yes | `manual-router4` | 已 proceed；`router_major: 4`（迁移文档区间是 v3→v4；`latest` 已是 v5，裸装会落错） |
 | `build` | in_scope | high | needs-major | yes | `webpack-to-vite` | 已 proceed |
 | `store` | in_scope | medium | needs-major | no | `manual-pinia-or-vuex4` | 未进队 |
 | `ui` | in_scope | blocker | replace | yes | `gogocode-element` | 已 proceed |
 | `test` | in_scope | medium | needs-major | no | — | 未进队 |
 | `lint-ide` | in_scope | medium | needs-major | no | `eslint-vue3` | 未进队 |
-| `i18n-plugins` | in_scope | high | unknown | yes | — | 已 proceed |
+| `i18n-plugins` | in_scope | high | unknown | yes | — | 已 proceed；`i18n_mode: legacy`（保留 `$t` 调用面，与保留 Options API 一致） |
 | `composition-existing` | in_scope | low | unused | no | — | 未进队 |
 | `blockers` | in_scope | n/a | replace | no | — | 已由 `ui` / `i18n-plugins` 覆盖 |
 

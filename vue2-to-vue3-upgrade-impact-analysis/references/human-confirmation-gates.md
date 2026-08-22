@@ -9,8 +9,24 @@ install/codemod authorization. `implementation_readiness` is always
 
 | Wave | Unit type | When | Options |
 |---|---|---|---|
+| 0 | **Setup confirm** | While profiling, before any packet write | `confirm:<topic>[:<value>]` / `defer` |
 | 1 | Migration **path** | After draft; path row `ready` | `proceed:path:<id>` / `defer` / `other` |
 | 2+ | **Subsystem** High/blocker | After path is `decided` | `proceed:subsystem:<id>` / `defer` / `other` |
+
+Wave 0 answers edit existing §1 / status fields (`report_path`, `network_mode`,
+`browser_support_floor`, `behavior_parity_required`, `batch_scope`,
+`node_transition_strategy`, lock/manager evidence). They never become §7 queue
+rows and never get a Decision Record — `§7 类型` stays `path` / `subsystem`.
+Full inventory with recommendations and reply strings:
+`user-decision-catalog.md`.
+
+A triggered Wave 0 topic that goes unanswered is never recorded as confirmed. Per
+`user-decision-catalog.md` the「未答复后果」column has only two legal shapes: the
+field holds at its「需决策」value (which by contract keeps
+`batch_implementation_gate=frozen`), or the row names a safe value that is written
+**and explicitly labelled `default`, not `confirmed`**. Which shape applies is per
+row — D6 splits by which trigger fired. Never pick the recommendation on the
+human's behalf and record it as an answer.
 
 Path ids: see `migration-path-ladder.md` (`compat-big-bang`, `direct-vue3`,
 `host-port-direct`,
@@ -61,13 +77,36 @@ Never paste draft and wait for「继续/放行」— **ask now**.
 | 「继续 / 放行 / 全部放行 / 别再问了 / 全部纳入」 | **Not** a proceed token. Re-prompt the current wave with verbatim options. Do not set `decided`. |
 | Exact `proceed:path:<id>` / `proceed:subsystem:<id>` / `defer` / `other` | Record into `人工答复` and regenerate |
 | `proceed:subsystem:<id>,<id>,…` with every id spelled out and currently `ready` | Accept as one answer per named id: own queue transition, own Decision Record. Unnamed ids stay askable |
-| Same form containing `all` / `*` / `全部`, an unknown id, or a non-`ready` id | Reject the **whole** token — never apply the valid part — and re-show the menu |
+| Same form containing `all` / `*` / `全部`, an unknown id, or a non-`ready` id | Reject the **whole** token — never apply the valid part — and re-show the menu per **Rejection shape** below |
+| One `confirm:<topic>[:<value>]` per line for topics currently open | Apply each to its own field and continue profiling |
+| A `confirm:` line whose topic is unknown, not currently open, or repeated | Reject the **whole** message — never apply the valid lines — and re-show §D per **Rejection shape** below |
 | Ambiguous mix | Ask once to pick a single verbatim token per unit |
 
 Never infer Wave-1 path `decided` from blanket language, then skip or auto-answer Wave 2.
 
+## Rejection shape
+
+Rejecting the whole message is deliberate: half-applying a batch leaves the human
+guessing which fields moved. But it only costs one retype if the rejection says
+**where** it broke, so a rejection is never just「无效，请重发」. It must carry:
+
+1. the offending line or id, **quoted verbatim**;
+2. why it was rejected — unknown topic, not currently open, repeated, or blanket
+   wording. If an unknown topic is within a character or two of an open one
+   (`node-targt` vs `node-target`), name the topic it resembles — and still do not
+   apply it;
+3. **the lines that would otherwise have been accepted, echoed back**, so the human
+   re-pastes a corrected block instead of reconstructing it from the menu;
+4. the menu again.
+
+Item 3 is what keeps whole-message rejection cheap. Without it a single typo reads
+as「四条 confirm 全丢了」and the human re-derives the entire batch.
+
 ## Protocol
 
+0. During profiling, ask every triggered Wave 0 confirm in one message
+   (`next-action-choice-menus.md` §D), each with its recommendation and its
+   verbatim reply. Do not write anything until `output-dir` is answered.
 1. Draft full packet (profile + recommended path + axes + subsystems + queue).
 2. Ask Wave 1 path immediately if `ready`.
 3. After path answer recorded, regenerate; open Wave 2 for every High/blocker

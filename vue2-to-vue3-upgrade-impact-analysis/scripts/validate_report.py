@@ -263,6 +263,17 @@ UI_BEHAVIOR_MARKERS = (
     "required_behavior_assertions:",
 )
 UI_STAGING_VALUES = {"with-runtime", "after-runtime"}
+# `proceed:subsystem:<id>` answers "does it come along", never the fork inside.
+# Each of these picks a different package to install, and each has a wrong
+# default nobody chose — a bare `npm i vue-router` resolves to v5 while a Vue2
+# repo's migration guide is v3->v4. `ui` is absent on purpose: its fork is
+# `ui_cutover_staging`, gated in §3.
+SUBSYSTEM_FORK_MARKERS = {
+    "router": ("router_major:", {"4", "5"}),
+    "store": ("store_target:", {"vuex4", "pinia"}),
+    "i18n-plugins": ("i18n_mode:", {"legacy", "composition"}),
+    "test": ("test_runner:", {"keep", "vitest"}),
+}
 RESIDUAL_AUDIT_PATH_ID = "residual-audit"
 # A residual audit inspects an already-Vue3 workspace; it proposes no cutover,
 # so it is exempt from the upgrade-path machinery and carries these instead.
@@ -560,6 +571,56 @@ def validate_ui_cutover_staging(
         result.error(
             f"§3 invalid ui_cutover_staging {staging!r}; allowed={sorted(UI_STAGING_VALUES)}"
         )
+
+
+def _inline_marker_value(text: str, marker: str) -> str | None:
+    """Read a marker written inside a table cell rather than on its own line."""
+    match = re.search(rf"`?{re.escape(marker)}`?\s*`?([A-Za-z0-9_.-]+)`?", text)
+    if not match:
+        return None
+    value = match.group(1).strip().strip("`")
+    return None if value.lower() in MARKER_PLACEHOLDERS else value
+
+
+def validate_subsystem_forks(
+    subsystems: list[dict[str, str]],
+    queue: list[dict[str, str]],
+    entry_mode: str,
+    result: "ReportResult",
+) -> None:
+    """A scope answer must not be mistaken for an answer to the fork inside it.
+
+    Router v4-vs-v5, Vuex-vs-Pinia, i18n legacy-vs-composition and the test
+    runner each decide what actually gets installed. Left unanswered they are
+    settled later by whoever runs the install, which is how a human who approved
+    a scope finds the state library swapped at implementation time. A `decided`
+    queue row whose §4 note carries no fork marker is indistinguishable from one
+    the analyzer answered on the human's behalf, so require the marker.
+    """
+    if entry_mode == "residual-audit":
+        return
+    notes = {row.get("id"): row.get("note", "") for row in subsystems}
+    for row in queue:
+        if row.get("type") != "subsystem" or row.get("status") != "decided":
+            continue
+        subsystem_id = row.get("id", "")
+        spec = SUBSYSTEM_FORK_MARKERS.get(subsystem_id)
+        if spec is None:
+            continue
+        marker, allowed = spec
+        value = _inline_marker_value(notes.get(subsystem_id, ""), marker)
+        if value is None:
+            result.error(
+                f"§4 {subsystem_id} is decided in §7 but its note records no "
+                f"{marker} — proceed:subsystem only answers scope; "
+                f"allowed={sorted(allowed)}"
+            )
+            continue
+        if value not in allowed:
+            result.error(
+                f"§4 invalid {marker} {value!r} for {subsystem_id}; "
+                f"allowed={sorted(allowed)}"
+            )
 
 
 def validate_residual_audit(
@@ -956,6 +1017,7 @@ def parse_subsystems(block: str, result: ReportResult) -> list[dict[str, str]]:
                 "readiness": readiness,
                 "required_for_path": required,
                 "recipe": recipe,
+                "note": note,
             }
         )
     missing_defaults = [sid for sid in DEFAULT_SUBSYSTEMS if sid not in seen]
@@ -1178,6 +1240,7 @@ def validate_report(path: Path) -> ReportResult:
         validate_default_path_deviation(axes, path_block, result)
     validate_validation_matrix(sections.get("验证矩阵", ""), subsystems, result)
     queue = parse_queue(sections.get("确认队列", ""), result)
+    validate_subsystem_forks(subsystems, queue, entry_mode, result)
     queue_by_unit = {row["unit"]: row for row in queue}
     path_rows = [row for row in queue if row["type"] == "path"]
     path_row = path_rows[0] if len(path_rows) == 1 else None

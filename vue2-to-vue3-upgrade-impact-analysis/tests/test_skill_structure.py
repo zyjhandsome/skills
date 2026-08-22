@@ -68,6 +68,7 @@ class SkillStructureTests(unittest.TestCase):
             "common-upgrade-patterns.md",
             "human-confirmation-gates.md",
             "next-action-choice-menus.md",
+            "user-decision-catalog.md",
             "report-contract.md",
             "decision-record-schema.md",
             "sibling-skill-drift-checklist.md",
@@ -254,6 +255,64 @@ class SkillStructureTests(unittest.TestCase):
         # Enumerated ids are consent; blanket language still is not.
         self.assertIn("全部放行", menus)
         self.assertIn("全部放行", gates)
+
+
+    def test_every_confirm_topic_is_catalogued(self) -> None:
+        # A `confirm:` token the agent is told to emit but that no catalog row
+        # explains is a gate with no options, no recommendation and no cost of
+        # skipping it — which is how a decision silently becomes a default.
+        catalog = (ROOT / "references" / "user-decision-catalog.md").read_text(
+            encoding="utf-8"
+        )
+        sources = [ROOT / "SKILL.md"] + [
+            ROOT / "references" / name
+            for name in (
+                "environment-preflight.md",
+                "human-confirmation-gates.md",
+                "next-action-choice-menus.md",
+                "report-contract.md",
+            )
+        ]
+        emitted: set[str] = set()
+        for path in sources:
+            emitted.update(
+                re.findall(r"confirm:([a-z-]+)", path.read_text(encoding="utf-8"))
+            )
+        self.assertIn("output-dir", emitted)
+        catalogued = set(re.findall(r"confirm:([a-z-]+)", catalog))
+        self.assertLessEqual(emitted, catalogued, sorted(emitted - catalogued))
+
+    def test_catalog_gives_every_decision_a_recommendation_and_a_cost(self) -> None:
+        catalog = (ROOT / "references" / "user-decision-catalog.md").read_text(
+            encoding="utf-8"
+        )
+        for token in (
+            "建议",
+            "用户原样回复",
+            "未答复后果",
+            "proceed:batch:",
+            "confirm:node-strategy:upgrade-before-vue",
+            "confirm:network-mode:offline",
+            "confirm:browser-floor:",
+            "confirm:target-version:",
+            "confirm:behavior-parity:",
+            # Wave 0 must not grow a third queue type behind the validator's back.
+            "§7 类型` 仍只有 `path` / `subsystem`",
+        ):
+            self.assertIn(token, catalog, token)
+        # Blanket language stays rejected in the batch-answer shortcut too.
+        for token in ("all", "*", "全部"):
+            self.assertIn(token, catalog, token)
+
+    def test_offline_gate_is_defined_not_just_referenced(self) -> None:
+        preflight = (ROOT / "references" / "environment-preflight.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Offline confirm gate", preflight)
+        gate = preflight[preflight.index("Offline confirm gate") :]
+        # The gate has to say what each answer costs, not merely name itself.
+        for token in ("network_mode", "offline", "partial", "defer", "frozen"):
+            self.assertIn(token, gate, token)
 
 
 if __name__ == "__main__":
