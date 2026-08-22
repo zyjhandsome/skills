@@ -176,9 +176,10 @@ High/blocker 与每个 `required_for_path=yes` 均为 `decided`（`deferred` 只
   `temporary-dual-node` / `blocked` / `undecided`
 - `selected_node_version:` 交集里**实际要落到** `.nvmrc` / `engines.node` / CI /
   Docker / 部署 builder 的那一个版本。`node_compatibility_status: upgrade-required`
-  时必填（校验器不强制，但缺它等于把各声明面填什么留给实施期各自决定，声明面必然
-  分叉）；`compatible` + `same-node` 时可写当前基线版本或省略。区间不是版本，
-  `target_node_requirement` 不能顶替这一行。
+  时**由校验器强制**：缺失报错，写成区间（含 `||` / `^` / `~` / `>=` / `x`）也报错——
+  区间不是版本，`target_node_requirement` 不能顶替这一行。缺它就等于把各声明面填什么
+  留给实施期各自决定，声明面必然分叉。`compatible` + `same-node` 不要求：那种情况下
+  没有任何声明面被改写，可写当前基线版本或省略。
 
 `target_node_requirement` 必须保留完整 semver 联合范围，不能把
 `^20.19.0 || >=22.12.0` 简化为“Node 20+”。非

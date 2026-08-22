@@ -1047,6 +1047,48 @@ class ValidateReportTests(unittest.TestCase):
             self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
             self.assertIn("ui_cutover_staging", result.stdout + result.stderr)
 
+    def _make_node_upgrade_required(self, body: str) -> str:
+        return body.replace(
+            "- node_compatibility_status: compatible\n"
+            "- node_transition_strategy: same-node",
+            "- node_compatibility_status: upgrade-required\n"
+            "- node_transition_strategy: upgrade-before-vue",
+        )
+
+    def test_rejects_node_upgrade_without_a_selected_version(self) -> None:
+        # Wave 3 writes .nvmrc/engines/CI/Docker from this field. Without it the
+        # analysis reads complete, and the pick only surfaces downstream — which
+        # sends the human back to redo the analysis wave.
+        body = (FIXTURES / "valid-report.md").read_text(encoding="utf-8")
+        body = self._make_node_upgrade_required(body)
+        self.assertNotIn("selected_node_version", body)
+        with tempfile.TemporaryDirectory() as tmp:
+            result = self._probe_report(body, tmp)
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertIn("selected_node_version", result.stdout + result.stderr)
+
+    def test_rejects_selected_node_version_that_is_a_range(self) -> None:
+        body = (FIXTURES / "valid-report.md").read_text(encoding="utf-8")
+        body = self._make_node_upgrade_required(body).replace(
+            "- node_compatibility_status: upgrade-required",
+            "- selected_node_version: `^20.19.0 || >=22.12.0`\n"
+            "- node_compatibility_status: upgrade-required",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            result = self._probe_report(body, tmp)
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertIn("one concrete version", result.stdout + result.stderr)
+
+    def test_compatible_node_needs_no_selected_version(self) -> None:
+        # same-node rewrites no declaration surface, so there is nothing to pick
+        # and demanding it would be pure confirmation tax.
+        body = (FIXTURES / "valid-report.md").read_text(encoding="utf-8")
+        self.assertIn("- node_compatibility_status: compatible", body)
+        self.assertNotIn("selected_node_version", body)
+        with tempfile.TemporaryDirectory() as tmp:
+            result = self._probe_report(body, tmp)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_rejects_decided_subsystem_without_its_fork_marker(self) -> None:
         # `proceed:subsystem:router` says the router comes along, not which major
         # gets installed. Without the fork on the row, a packet where nobody

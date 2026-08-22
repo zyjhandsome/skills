@@ -343,6 +343,18 @@ Delivery 固定三行报告停止，不降级。
 不 init OpenSpec，不调用 create_change。
 
 应已存在：无。不要求 OpenSpec / Memory。
+
+本波要把该 Skill 的**全部提问批次跑完**，不是只问路径。它内部按 Wave 0（设置确认）
+→ Wave 1（迁移路径）→ Wave 2+（子系统纳入及其内部分叉）分批提问；那套编号是**提问
+批次**，与本剧本 Wave 1–5 的**会话阶段**不是同一套东西，本剧本 Wave 1 覆盖它的全部
+批次。路径答完必须紧接着开子系统批次，直到确认队列里没有 ready/pending 且 gate 得出
+结论，才允许结束本波。不得以「子系统是 Wave 2 的事」为由留到下一个会话——本剧本
+Wave 2 是 Frame 规格批准，它既不提问也无法记录分析包的决策，留过去只会被打回本波。
+
+Wave 0 设置确认（浏览器基线、Node 目标主版本与过渡策略、非 vue 包的版本钉等）合并成
+**一条**消息问完，不要一个探针打断一次。Node 的两面——当前项目的 Node 契约，与所选
+目标工具链的 engines.node 交集——必须在本波定下来并记入报告，不得留给后续波次。
+
 入口：单 workspace；project-root = workspace。--output-dir OUTPUT_DIR
 （CHANGE_DIR/evidence/vue2-to-vue3-upgrade）。禁止再问 confirm:output-dir。
 本波只创建 ANALYSIS_ROOT 与 CONFIG（及必要父目录）；不要写到 workspace 根
@@ -396,6 +408,12 @@ gate=frozen：说明缺口，不要进入 Wave 2，然后停止。
 
 应已存在：定稿决策包（analysis_status=complete，batch_implementation_gate=ready）。
 缺失或 gate=frozen：停止，回 Wave 1。OpenSpec + Memory 本波起为硬前提。
+本波**不替分析包补问决策**：迁移路径、子系统纳入、子系统内部分叉（router major、
+store 目标、i18n mode、test runner）、Node 目标版本与过渡策略，全部属 Wave 1，本波
+既不提问也无法记录（它们是分析报告「7. 确认队列」的行与「1. 基线与假设」的字段，
+不是 Frame 的规格项）。
+发现这些仍未决：直接停止并说明回 Wave 1 补完，不要在本波开菜单问用户——问了也存不下，
+只会让用户答两遍。
 硬前提：workspace 的 OpenSpec 已初始化；Codebase Memory 对 workspace 可查询。
 索引缺失时先 index_repository。openspec: cli-only 时按 Frame Skill 固定三行报告
 并询问 initialize_repo，不得发明平行 Markdown 状态。

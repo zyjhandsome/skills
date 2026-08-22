@@ -25,9 +25,13 @@ D16 `store-target`、D18 `i18n-mode`、D20 `test-runner` 在 §4 被硬校验—
 `i18n_mode:` / `test_runner:`），缺值或取值非法直接报错。所以「只回 `proceed` 把分叉
 蒙混过去」现在过不了校验器。取值与写法见 `report-contract.md`。
 
-仍**只有协议约束、没有机器门**的是 D10 的 `selected_node_version` 与 D19 的逐包
-`blocker`：它们靠本表的「未答复后果」拦住，校验器不认。这两项上「校验器过了」不等于
-「决策答过了」。
+Node 侧同样有门：D9 的 `node_transition_strategy` 必须与 `node_compatibility_status`
+相符；D10 的 `selected_node_version` 在 `upgrade-required` 时必填且必须是**一个具体
+版本**（写成 `^20.19.0 || >=22.12.0` 这样的区间会被拒——区间不是版本，而 `.nvmrc`、
+`engines`、CI、Docker、部署 builder 每处只能填一个值）。
+
+仍**只有协议约束、没有机器门**的只剩 D19 的逐包 `blocker`：它每包一问，没有单一字段
+可校验，靠本表的「未答复后果」拦住。这一项上「校验器过了」不等于「决策答过了」。
 
 ## 提问形状（每个决策都照此输出）
 
@@ -57,7 +61,7 @@ D16 `store-target`、D18 `i18n-mode`、D20 `test-runner` 在 §4 被硬校验—
 | D7 | 批次范围 | 调用未限定范围 | 原地升取 `full-stack`；A→B 取 `page-closure` | `confirm:scope:full-stack` | `confirm:scope:page-closure`／`confirm:scope:build-ui` | 按入口默认值并在 §1 写明是默认而非确认 | `batch_scope` |
 | D8 | 目标版本钉死 | 需要目标面 `engines.node`；或某包 `dist-tags.latest` 已越过迁移文档区间 | 钉迁移文档区间覆盖的那个 major 的**精确版本**，并把与 `latest` 的差距记成一行证据 | `confirm:target-version:<pkg>@<exact>` | `confirm:target-version:<pkg>@<major>`（只钉 major，精确版本留实施期）／`defer` | `target_node_requirement` 与 `node_compatibility_status` 停在 `unknown` → gate `frozen` | §1 `target_node_sources`、§2 |
 | D9 | Node 过渡策略 | `node_compatibility_status: upgrade-required` | `upgrade-before-vue` —— 先证明旧仓能在目标 Node 上跑绿，再动 Vue；一次只改一个变量 | `confirm:node-strategy:upgrade-before-vue` | `confirm:node-strategy:same-node`（仅当交集已覆盖当前基线）／`confirm:node-strategy:temporary-dual-node`（须同时给两条 lane 的 owner、切换条件、删除条件） | 停在 `undecided`，`build` 不能 `decided`，gate `frozen` | `node_transition_strategy` |
-| D10 | Node **主版本**（落到声明面的那个具体版本） | `node_compatibility_status: upgrade-required`，或 `target_node_requirement` 是含多支的区间（如 `^20.19.0 \|\| >=22.12.0`） | 区间内**维护期最长的活跃 LTS**；同时说明另一支何时到 EOL | `confirm:node-target:22.12.0` | `confirm:node-target:<区间内其他版本>`（须说明为何不取更长维护期，例如基础镜像或部署平台只提供该版本） | `selected_node_version` 空缺 → `.nvmrc`、`engines`、CI、Docker、部署 builder 各填各的，声明面悄悄分叉 | §1 `selected_node_version` |
+| D10 | Node **主版本**（落到声明面的那个具体版本） | `node_compatibility_status: upgrade-required`（`compatible`+`same-node` 不触发：没有任何声明面要改写，也就没有「填哪个值」） | 区间内**维护期最长的活跃 LTS**；同时说明另一支何时到 EOL | `confirm:node-target:22.12.0` | `confirm:node-target:<区间内其他版本>`（须说明为何不取更长维护期，例如基础镜像或部署平台只提供该版本） | 报告过不了校验：`upgrade-required` 缺 `selected_node_version` 直接报错，写成区间也报错 | §1 `selected_node_version` |
 
 D6 的未答复后果**取决于是哪个触发条件把它问出来的**，两支不能合并：
 

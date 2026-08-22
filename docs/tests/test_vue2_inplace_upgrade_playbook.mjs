@@ -197,6 +197,28 @@ const wave2Prompt = fence(wave2);
 const wave3Prompt = fence(wave3);
 const wave4Prompt = fence(wave4);
 const wave5Prompt = fence(wave5);
+// Two numbering schemes collide here: the playbook's Wave 1-5 are session stages
+// while the analysis skill's Wave 0/1/2+ are question batches inside one run.
+// Without this said out loud, an agent in playbook Wave 1 answers the path, calls
+// subsystems "Wave 2 work", and defers them to the Frame session -- which cannot
+// record analysis decisions and bounces the user back. The analysis skill cannot
+// supply this: it does not know the playbook exists.
+assert.ok(
+  wave1Prompt.includes("全部提问批次") && wave1Prompt.includes("会话阶段"),
+  "Wave 1 must state that it covers every analysis question batch, and that the skill's wave numbers are not the playbook's"
+);
+assert.ok(
+  /子系统[\s\S]{0,80}留到下一个会话|不得以「子系统是 Wave 2 的事」/.test(wave1Prompt),
+  "Wave 1 must forbid deferring subsystem decisions to the next session"
+);
+assert.ok(
+  wave1Prompt.includes("Node") && /Node[\s\S]{0,120}本波/.test(wave1Prompt),
+  "Wave 1 must settle the Node contract in this wave rather than leaving it downstream"
+);
+assert.ok(
+  wave2Prompt.includes("不替分析包补问决策"),
+  "Wave 2 must refuse to re-ask analysis-owned decisions instead of looping the user"
+);
 assert.ok(wave1Prompt.includes("3. 推荐迁移路径"), "Wave 1 must name the analysis report H2, not a playbook section number");
 assert.ok(wave1Prompt.includes(COMPOSITION_MARKER), "Wave 1 must use the analysis validator's exact Composition marker");
 assert.ok(!wave1Prompt.includes("写进"), "Wave 1 must not insert author notes into the Composition marker");

@@ -804,7 +804,39 @@ def parse_node_matrix(baseline: str, result: ReportResult) -> dict[str, str]:
             "§1 unknown Node matrix requires "
             "node_transition_strategy=undecided|blocked"
         )
+    validate_selected_node_version(status, baseline, result)
     return values
+
+
+def validate_selected_node_version(
+    status: str, baseline: str, result: "ReportResult"
+) -> None:
+    """A range is not a version, and every declaration surface holds one value.
+
+    `target_node_requirement` is an intersection like `^20.19.0 || >=22.12.0`,
+    but `.nvmrc`, `engines.node`, CI setup-node, the Docker base image and the
+    deploy builder each take exactly one. Leaving the pick implicit is how those
+    surfaces quietly end up on different majors. Only demanded when the upgrade
+    actually rewrites them: a `compatible`/`same-node` repo writes nothing.
+    """
+    if status != "upgrade-required":
+        return
+    match = re.search(
+        r"(?im)^\s*[-*]?\s*`?selected_node_version`?\s*[:：]\s*(.+?)\s*$", baseline
+    )
+    selected = match.group(1).strip().strip("`").strip() if match else ""
+    if not selected or re.fullmatch(r"(?:<[^>]+>|tbd|todo|待补|undecided)", selected, re.I):
+        result.error(
+            "§1 node_compatibility_status=upgrade-required requires "
+            "selected_node_version: the one concrete version every declaration "
+            "surface (.nvmrc / engines / CI / Docker / deploy builder) will carry"
+        )
+        return
+    if re.search(r"\|\||[\^~><=*]|\bx\b", selected):
+        result.error(
+            f"§1 selected_node_version must be one concrete version, not a range: "
+            f"{selected!r}"
+        )
 
 
 def parse_baseline_anchor_fields(baseline: str, result: ReportResult) -> dict[str, str]:
