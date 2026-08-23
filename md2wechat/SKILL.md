@@ -3,7 +3,8 @@ name: md2wechat
 description: >-
   Turn 整理文档 Markdown into an edited WeChat Official Account article,
   paste-ready inline HTML, and a 2.35:1 cover. Use when existing Markdown,
-  HTML, lecture notes, interviews or整理文档 need 微信公众号改写、排版或播报优化.
+  HTML, lecture notes, interviews or整理文档 need 微信公众号改写、排版或播报优化,
+  or when a prior 公众号 was deleted for 微信公众平台运营规范 / 法律法规和政策.
   Distinguish an editorial article from a complete-format conversion. Do not
   route unrelated from-scratch writing here when no source material exists.
 ---
@@ -19,12 +20,13 @@ description: >-
 | User intent | Mode | Result |
 |---|---|---|
 | “生成/改写成公众号文章”“更易读/易听” | `editorial`（默认） | 先写公众号成稿 Markdown，再生成 HTML；围绕一条主线删重、合并、转述 |
-| “公众号完整版”“完整保留”“只排版” | `full` | 保留正文信息与“核心洞察/深度解析/对谈实录”三层，只删除元数据噪音 |
+| “公众号完整版”“完整保留”“只排版” | `full` | 保留正文信息与“核心洞察/深度解析/对谈实录”三层，只删除元数据噪音；运营规范阻断的主张不能靠 full 重印，删不掉就停 |
 
 不要用 `full` 冒充“成稿”，也不要在用户要求完整保留时擅自压缩。
 
 ## Read as needed
 
+- 两种模式都必须先读 [references/wechat-operation-policy.md](references/wechat-operation-policy.md)，对源稿做《微信公众平台运营规范》门禁；不可发布就停，不要出 HTML。
 - 两种模式都必须读 [references/content-integrity.md](references/content-integrity.md)，先完成内容覆盖审计，再交付。
 - 做 `editorial` 时，必须读 [references/editorial-and-audio.md](references/editorial-and-audio.md)。
 - 处理微信 HTML、表格或粘贴问题时，读 [reference-wechat-constraints.md](reference-wechat-constraints.md)。
@@ -53,7 +55,15 @@ description: >-
 
 以 `*_整理文档.md` 为内容源；只有 HTML 时，先寻找同名 Markdown，找不到再谨慎提取正文并披露这一降级。同名 HTML 也可用于提取用户明确要求保留的图。先判断受众、原稿信息密度、可验证边界和最值得承诺的一条主线。用户没有指定读者时，从标题、栏目和原稿语气合理推断，不必停下来提问。
 
-写作前列出源稿每个正文 H2 的核心结论、关键证据、限定/反方和行动含义，并完成覆盖判断（`保留 / 合并 / 删减 / 删除`）。审计表不要写成交付文件。
+先做运营规范门禁，再做覆盖审计。政策先于覆盖：`full` 不能用来重印被阻断的主张。
+
+```powershell
+python "$env:USERPROFILE\.cursor\skills\md2wechat\scripts\scan_wechat_policy.py" "<整理文档.md>"
+```
+
+退出码 1：按 [wechat-operation-policy.md](references/wechat-operation-policy.md) 判 `可发布 / 改写后可发布 / 不可发布`。闭门会外泄全文、未证实融资新闻、落马官员关系 → **不可发布，停交付**。改写不能把泄稿合法化；归因到「知情人士」也不能把传闻当新闻。只有公开可核实的主线，才继续往下写。
+
+写作前列出源稿每个正文 H2 的核心结论、关键证据、限定/反方和行动含义，并完成覆盖判断（`保留 / 合并 / 删减 / 删除`）。因运营规范删去的章节标 `删除`，理由写「运营规范」。审计表不要写成交付文件。
 
 ### 2. Edit the content
 
@@ -61,7 +71,7 @@ description: >-
 
 `full`：保留原稿主体和三层结构；删除目录、术语表、自检、抓取流水、编辑注及冗长免责声明。输出文件名仍是 `{原文文件名}_公众号文章.html`。
 
-共同要求：不得把简介中的问题写成嘉宾说过的结论；口述数字和观点要明确归于讲者，未核实内容不要升级成事实。区分短引语与编辑概括。观点归属写在正文里；来源与说明只保留「原文：{原标题}」，不要视频链接、日期括注或编辑说明。
+共同要求：不得把简介中的问题写成嘉宾说过的结论；口述数字和观点要明确归于讲者，未核实内容不要升级成事实。区分短引语与编辑概括。观点归属写在正文里；来源与说明只保留「原文：{原标题}」，不要视频链接、日期括注或编辑说明。标题和正文不要用外泄、全文、突然、震惊、心虚、爆料做传播点。页脚免责声明不能对冲违规内容。
 
 ### 3. Build paste-ready HTML
 
@@ -99,11 +109,13 @@ python "$env:USERPROFILE\.cursor\skills\md2wechat\scripts\overlay_cover_text.py"
 python "$env:USERPROFILE\.cursor\skills\md2wechat\scripts\validate_wechat_bundle.py" "<原文文件名>_公众号文章.html" --cover "<原文文件名>_公众号封面.png" --source "<整理文档.md>"
 ```
 
-必须修到退出码为 0。校验器检查 HTML、来源页脚是否只有原文、封面比例，以及封面/HTML 文件名是否与原文文件名同茎。覆盖完整性仍要人工判断。还要检查：只听音频是否能理解指代和转折；只扫标题、每节首段和金句是否能复述主线；标题是否兑现；显式问题是否逐一回答；每个重要判断是否能区分“事实、讲者观点、编辑推论”。交付前删除临时成稿和审计文件。
+必须修到退出码为 0。校验器检查 HTML、来源页脚是否只有原文、封面比例、封面/HTML 文件名是否与原文文件名同茎，以及运营规范标题/审计门禁。覆盖与是否可发布仍要对照 [wechat-operation-policy.md](references/wechat-operation-policy.md) 人工判断。还要检查：只听音频是否能理解指代和转折；只扫标题、每节首段和金句是否能复述主线；标题是否兑现；显式问题是否逐一回答；每个重要判断是否能区分“事实、讲者观点、编辑推论”。发布结论是「不可发布」时不要修校验器去出 HTML。交付前删除临时成稿和审计文件。
 
 ### 6. Hand off
 
-告诉用户打开 HTML，复制米色卡片内的正文，粘贴到公众号编辑器，上传 2.35:1 封面并手机预览。没有公众号登录态时停在这里；群发或发表必须由用户确认。
+可发布或改写后可发布：告诉用户打开 HTML，复制米色卡片内的正文，粘贴到公众号编辑器，上传 2.35:1 封面并手机预览。没有公众号登录态时停在这里；群发或发表必须由用户确认。扫描仍有残余风险时，在交接里写明，不要暗示「校验通过=平台不会删」。
+
+不可发布：只说明触碰了哪几条运营规范、为什么停，不要交付粘贴稿。
 
 ## Non-negotiable anti-patterns
 
@@ -125,3 +137,9 @@ python "$env:USERPROFILE\.cursor\skills\md2wechat\scripts\validate_wechat_bundle
 - 清目录时删掉其他篇目已有的公众号文件
 - 来源与说明里写视频链接、日期括注或编辑说明
 - 把 md2html 整页或 Mermaid 源码直接粘进公众号
+- 把闭门会/内部会外泄「全文」改排后称为公众号成稿
+- 把知情人士、尚未核实的融资/估值写成新闻标题或开场
+- 用 `full` 或「覆盖完整」重印运营规范已阻断的主张
+- 正文写落马官员关系等政治公共事件联想，即使标注「不采信」
+- 用页脚免责声明、拆字、谐音或截图长文规避审核
+- 源稿不可发布仍先出 HTML，让用户自己决定发不发

@@ -56,6 +56,7 @@ If the knowledge base already extracted a section as its own note, that judgment
 - Keep source caveats that affect the conclusion, but move process notes out of the reader copy.
 - Do not promote a question from a video description into a claim made during the talk.
 - Prefer precise paraphrase to long quotation.
+- Attribution does not make a leak or unverified financing rumor publishable. Run the 运营规范 gate in `wechat-operation-policy.md` before writing.
 
 ### 5. Shareability
 

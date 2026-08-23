@@ -19,6 +19,8 @@ Cover **text** is centered on the image: H1 on top, speakers underneath, no whit
 
 Do not leave 成稿、审计、完整版 HTML，or `*_公众号封面_2.35x1.png` in the source directory.
 
+A leaked closed-door talk plus unverified financing news is **not** a WeChat deliverable. See `references/wechat-operation-policy.md` and the 梁文锋 / DeepSeek 2026-07-25 case: scan first, stop if 不可发布.
+
 ## Full-mode omit / keep (from production trial)
 
 **Keep:** H1, 人物背景, 核心导读, all body sections with 核心洞察 / 深度解析 / 对谈实录 labels, 来源与说明 with 原文 only.

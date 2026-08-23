@@ -26,7 +26,7 @@ Allowed decisions:
 - `删减`: the core claim remains but secondary evidence or branches are removed; record what and why.
 - `删除`: the core claim is absent; explain why it is outside the title promise.
 
-`full` mode may not use `删减` or `删除` for reader-facing body sections. `editorial` may, but the reason must be editorial rather than “篇幅有限”.
+`full` mode may not use `删减` or `删除` for reader-facing body sections, except when [wechat-operation-policy.md](wechat-operation-policy.md) requires it. Policy precedes coverage: a blocked claim is `删除` with reason `运营规范`, or the job stops. `full` may not reprint a blocked claim. `editorial` may also delete for policy; “篇幅有限” is still not a valid reason.
 
 For sources with eight or more reader-facing H2s, or talks longer than about 90 minutes, prefer `保留` or `合并`. Use `删除` only when the claim is outside the title promise. Use `删减` only after the core claim, one necessary mechanism or example, and the material boundary are already in the article. If a sentence could stand as its own knowledge-base note, it is not secondary.
 
@@ -51,6 +51,12 @@ For sources with eight or more reader-facing H2s, or talks longer than about 90 
 - 事实与观点：列出需要归因的口述数字、观察和编辑推论。
 - 来源披露：说明公开来源、编辑压缩和是否为逐字稿。
 - 重要删除：逐项列出；没有则写“无”。
+
+## 运营规范
+- 官方页：微信公众平台运营规范（发送内容规范 + 当地法律监管）
+- 扫描：风险码或「无」
+- 处理：改写 / 删除 / 停交付
+- 发布结论：可发布 | 改写后可发布 | 不可发布
 ```
 
 Do not put the audit inside the pasted WeChat article, and do not leave it next to the source as a deliverable.
@@ -83,4 +89,4 @@ Keep operational details such as crawler failures or ASR tooling out of the arti
 
 ## Validation meaning
 
-The deterministic validator checks HTML, that 来源与说明 contains only 原文, and that the cover/HTML filenames match the source filename plus suffix. A human or model must still judge whether coverage is truthful. Never report “content complete” based only on exit code 0.
+The deterministic validator checks HTML, that 来源与说明 contains only 原文, that the cover/HTML filenames match the source filename plus suffix, and the mechanical 运营规范 title/audit gate. A human or model must still judge whether coverage is truthful and whether the source is publishable. Never report “content complete” or “safe to publish” based only on exit code 0. If 发布结论 is 不可发布, do not emit HTML.

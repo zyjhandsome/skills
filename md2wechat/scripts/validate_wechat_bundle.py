@@ -8,7 +8,17 @@ import re
 import sys
 from pathlib import Path
 
+_SCRIPTS = Path(__file__).resolve().parent
+if str(_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS))
+
 from paths import pair_stem, source_stem
+from wechat_policy import (
+    scan_source_risks,
+    title_policy_errors,
+    validate_policy_audit,
+    validate_source_against_audit,
+)
 
 RATIO = 2.35
 RATIO_TOL = 0.02
@@ -143,8 +153,8 @@ def source_sections(path: Path) -> list[str]:
     return sections
 
 
-def audit_rows(path: Path) -> list[tuple[str, str]]:
-    rows: list[tuple[str, str]] = []
+def audit_rows(path: Path) -> list[tuple[str, str, str]]:
+    rows: list[tuple[str, str, str]] = []
     for line in path.read_text(encoding="utf-8").splitlines():
         if not (line.strip().startswith("|") and line.strip().endswith("|")):
             continue
@@ -153,7 +163,8 @@ def audit_rows(path: Path) -> list[tuple[str, str]]:
             continue
         if re.fullmatch(r"[-: ]+", cells[0]):
             continue
-        rows.append((cells[0].strip("`"), cells[1].strip("`")))
+        reason = cells[3].strip("`") if len(cells) > 3 else ""
+        rows.append((cells[0].strip("`"), cells[1].strip("`"), reason))
     return rows
 
 
@@ -169,13 +180,22 @@ def validate_coverage(source: Path, audit: Path, profile: str) -> list[str]:
     sections = source_sections(source)
     rows = audit_rows(audit)
 
-    for required in ("标题承诺", "显式问题", "事实与观点", "来源披露", "重要删除"):
+    for required in (
+        "标题承诺",
+        "显式问题",
+        "事实与观点",
+        "来源披露",
+        "重要删除",
+        "运营规范",
+        "发布结论",
+    ):
         if required not in audit_text:
             errors.append(f"AUDIT MISSING: {required}")
+    errors.extend(validate_policy_audit(audit_text, html_delivered=True))
 
-    row_map: dict[str, list[str]] = {}
-    for heading, decision in rows:
-        row_map.setdefault(heading, []).append(decision)
+    row_map: dict[str, list[tuple[str, str]]] = {}
+    for heading, decision, reason in rows:
+        row_map.setdefault(heading, []).append((decision, reason))
 
     for heading in sections:
         decisions = row_map.get(heading, [])
@@ -184,11 +204,12 @@ def validate_coverage(source: Path, audit: Path, profile: str) -> list[str]:
             continue
         if len(decisions) > 1:
             errors.append(f"AUDIT DUPLICATE SOURCE SECTION: {heading}")
-        for decision in decisions:
+        for decision, reason in decisions:
             if decision not in AUDIT_DECISIONS:
                 errors.append(f"AUDIT INVALID DECISION: {heading} -> {decision}")
             if profile == "full" and decision in {"删减", "删除"}:
-                errors.append(f"FULL MODE CANNOT {decision}: {heading}")
+                if "运营规范" not in reason:
+                    errors.append(f"FULL MODE CANNOT {decision}: {heading}")
 
     extra = sorted(set(row_map) - set(sections))
     for heading in extra:
@@ -287,12 +308,26 @@ def main(argv: list[str] | None = None) -> int:
     errors.extend(validate_html(args.html, profile=args.profile))
 
     resolved_profile, han_chars, minutes = article_metrics(args.html, profile=args.profile)
+    article = extract_article(args.html.read_text(encoding="utf-8"))
+    errors.extend(title_policy_errors(extract_h1(article)))
     errors.extend(validate_deliverable_names(args.html, args.cover, args.source))
     if args.audit is not None:
         if args.source is None:
             errors.append("coverage validation requires --source with --audit")
         else:
             errors.extend(validate_coverage(args.source, args.audit, resolved_profile))
+    if args.source is not None and args.source.is_file():
+        source_text = args.source.read_text(encoding="utf-8")
+        audit_text = (
+            args.audit.read_text(encoding="utf-8")
+            if args.audit is not None and args.audit.is_file()
+            else None
+        )
+        errors.extend(
+            validate_source_against_audit(source_text, audit_text, html_delivered=True)
+        )
+        if scan_source_risks(source_text) and re.search(r"落马", article):
+            errors.append("POLICY BODY: 落马/政治公共事件 remains in the article")
 
     if args.cover:
         if not args.cover.is_file():
