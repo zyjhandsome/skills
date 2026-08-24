@@ -60,12 +60,12 @@
     "fixtures/evidence-complete/decision-records/migration-path__compat-big-bang.md",
     "fixtures/evidence-complete/decision-records/subsystem__build.md",
     "fixtures/evidence-complete/decision-records/subsystem__core-vue.md",
-    "fixtures/evidence-complete/decision-records/subsystem__i18n-plugins.md",
+    "fixtures/evidence-complete/decision-records/subsystem__blockers.md",
     "fixtures/evidence-complete/decision-records/subsystem__router.md",
     "fixtures/evidence-complete/decision-records/subsystem__ui.md"
   ],
-  "blockers": [],
-  "high_risks": ["core-vue", "router", "ui", "build"],
+  "blockers": ["vue-count-to"],
+  "high_risks": ["core-vue", "router", "ui", "build", "blockers"],
   "ui_visual_risk": {
     "required_states": ["search-default", "table-empty", "table-data", "cell-popper", "icon-toolbar"],
     "recommended_next_action": "run_visual_review"

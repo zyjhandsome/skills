@@ -12,7 +12,7 @@
 |---|---|---|---|---|
 | Wave 0 设置确认 | D1–D10 | `confirm:<topic>[:<value>]` | 画像期间／写报告之前 | §1 与状态表的既有字段 |
 | Wave 1 / 2+ 决策门 | D11–D14 | `proceed:path:…` / `proceed:subsystem:…` / `proceed:batch:…` | 决策包草稿之后 | §7 确认队列行 + `decision-records/`（`proceed:batch:` 例外：它只挑下一批候选，不产生队列行） |
-| 子系统内部取舍 | D15–D20 | `confirm:<topic>:<value>` | 与该子系统的 Wave 2+ 提问**同一条消息** | §4 该行「说明」+ 对应 `decision-records/subsystem__<id>.md` |
+| 子系统内部取舍 | D15–D20 | `confirm:<topic>:<value>` | 与该子系统的 Wave 2+ 提问**同一条消息** | §3/§4 结论 + 对应 DR 的 `分叉人工答复` |
 
 三个家族都不新增队列类型：`§7 类型` 仍只有 `path` / `subsystem`。`confirm:` 家族改写的
 是本契约已有的字段——`report_path`、`network_mode`、`behavior_parity_required`、
@@ -20,18 +20,19 @@
 `selected_node_version`，以及 §4 各子系统行的结论——所以不产生第二套状态。
 
 **哪些分叉有机器门。** D17 的 `ui_cutover_staging` 在 §3 被硬校验；D15 `router-major`、
-D16 `store-target`、D18 `i18n-mode`、D20 `test-runner` 在 §4 被硬校验——§7 队列行一旦
-`decided`，§4 该行说明就必须带上对应 marker（`router_major:` / `store_target:` /
-`i18n_mode:` / `test_runner:`），缺值或取值非法直接报错。所以「只回 `proceed` 把分叉
-蒙混过去」现在过不了校验器。取值与写法见 `report-contract.md`。
+D16 `store-target`、D18 `i18n-mode`、D20 `test-runner` 在 §4 被硬校验。§7 队列行一旦
+`decided`，对应 DR 的 `分叉人工答复` 还必须保存精确 `confirm:` token，并与 marker
+双向一致。只有 `proceed` 或只有 marker 都过不了校验器。取值与写法见
+`report-contract.md`。
 
 Node 侧同样有门：D9 的 `node_transition_strategy` 必须与 `node_compatibility_status`
 相符；D10 的 `selected_node_version` 在 `upgrade-required` 时必填且必须是**一个具体
 版本**（写成 `^20.19.0 || >=22.12.0` 这样的区间会被拒——区间不是版本，而 `.nvmrc`、
 `engines`、CI、Docker、部署 builder 每处只能填一个值）。
 
-仍**只有协议约束、没有机器门**的只剩 D19 的逐包 `blocker`：它每包一问，没有单一字段
-可校验，靠本表的「未答复后果」拦住。这一项上「校验器过了」不等于「决策答过了」。
+D19 也有机器门：complete 包中每个 §2 `unknown` 包必须在唯一 owner 的 §4 说明里记录
+逐包 token，owner 必须在 §7 `decided`，同一 token 必须写入 owner DR 的
+`分叉人工答复`。没有已证明专属 owner 的包归 `blockers`。
 
 ## 提问形状（每个决策都照此输出）
 
@@ -45,7 +46,8 @@ Node 侧同样有门：D9 的 `node_transition_strategy` 必须与 `node_compati
 - 一个 token 只承载一个决策。不得把「路径 + 子系统」或「视觉 + 行为断言」并成一问。
 - 调用里已经给出的值**不要再问**（例如已带 `--output-dir`）。
 - 建议项必须来自本次证据，不得来自「一般来说」。没有证据支撑就写 `defer` 为建议。
-- 「继续 / 全部放行 / 别再问了 / 全部纳入」不是任何一个 token；照
+- 任何自然语言概括放行或委托代选（如「继续 / 全部放行 / 按你的建议来 / 你替我选」）
+  都不是 token；照
   `human-confirmation-gates.md` 重出菜单。
 
 ## Wave 0 — 设置确认
@@ -61,7 +63,7 @@ Node 侧同样有门：D9 的 `node_transition_strategy` 必须与 `node_compati
 | D7 | 批次范围 | 调用未限定范围 | 原地升取 `full-stack`；A→B 取 `page-closure` | `confirm:scope:full-stack` | `confirm:scope:page-closure`／`confirm:scope:build-ui` | 按入口默认值并在 §1 写明是默认而非确认 | `batch_scope` |
 | D8 | 目标版本钉死 | 需要目标面 `engines.node`；或某包 `dist-tags.latest` 已越过迁移文档区间 | 钉迁移文档区间覆盖的那个 major 的**精确版本**，并把与 `latest` 的差距记成一行证据 | `confirm:target-version:<pkg>@<exact>` | `confirm:target-version:<pkg>@<major>`（只钉 major，精确版本留实施期）／`defer` | `target_node_requirement` 与 `node_compatibility_status` 停在 `unknown` → gate `frozen` | §1 `target_node_sources`、§2 |
 | D9 | Node 过渡策略 | `node_compatibility_status: upgrade-required` | `upgrade-before-vue` —— 先证明旧仓能在目标 Node 上跑绿，再动 Vue；一次只改一个变量 | `confirm:node-strategy:upgrade-before-vue` | `confirm:node-strategy:same-node`（仅当交集已覆盖当前基线）／`confirm:node-strategy:temporary-dual-node`（须同时给两条 lane 的 owner、切换条件、删除条件） | 停在 `undecided`，`build` 不能 `decided`，gate `frozen` | `node_transition_strategy` |
-| D10 | Node **主版本**（落到声明面的那个具体版本） | `node_compatibility_status: upgrade-required`（`compatible`+`same-node` 不触发：没有任何声明面要改写，也就没有「填哪个值」） | 区间内**维护期最长的活跃 LTS**；同时说明另一支何时到 EOL | `confirm:node-target:22.12.0` | `confirm:node-target:<区间内其他版本>`（须说明为何不取更长维护期，例如基础镜像或部署平台只提供该版本） | 报告过不了校验：`upgrade-required` 缺 `selected_node_version` 直接报错，写成区间也报错 | §1 `selected_node_version` |
+| D10 | Node **精确版本**（落到声明面的那个具体值） | `node_compatibility_status: upgrade-required`（`compatible`+`same-node` 不触发：没有任何声明面要改写，也就没有「填哪个值」） | 在 `evidence_as_of` 当天从官方 release schedule 重算：取有效区间内**维护期最长的 Active LTS**，再解析该线当前精确补丁；同时说明另一支何时到 EOL | `confirm:node-target:<菜单给出的精确版本>` | `confirm:node-target:<区间内其他精确版本>`（须说明为何不取更长维护期，例如基础镜像或部署平台只提供该版本） | 报告过不了校验：`upgrade-required` 缺 `selected_node_version` 直接报错，写成区间也报错 | §1 `selected_node_version` |
 
 D6 的未答复后果**取决于是哪个触发条件把它问出来的**，两支不能合并：
 
@@ -101,13 +103,13 @@ D8 / D9 / D10 是三件事，不要合并成一问：**装哪些包的哪个版�
 | D16 | `store` | 保留 Vuex 4 还是迁 Pinia | Vuex 4 —— 它是 Vue3 可用的桥，本轮目标是升级不是换状态库 | `confirm:store-target:vuex4` | `confirm:store-target:pinia`（另一段独立迁移，建议另立项） | 混在框架升级里迁状态库，回归时无法区分是 Vue3 还是 Pinia 引起 |
 | D17 | `ui` | 与 runtime 同批切还是切完 runtime 再切 | `after-runtime` —— 同批时 Vue core 改写与 UI 库改写落在同一批调用点上，两个各自正确的改写合起来可能是错的 | `confirm:ui-staging:after-runtime` | `confirm:ui-staging:with-runtime`（一次停机，但爆炸半径叠加，须为配方交集单列验证） | 不答则 §3 `ui_cutover_staging` 无值，校验器直接报错（它只认这两个取值） |
 | D18 | `i18n-plugins` | vue-i18n v9 用 legacy 还是 composition mode | `legacy` —— 保留 `$t` 调用面，与「保留 Options API」一致 | `confirm:i18n-mode:legacy` | `confirm:i18n-mode:composition`（要改所有调用点） | 选 composition 等于把一次翻译层重写混进框架升级 |
-| D19 | `blockers` 里每个残留包 | replace / fork / remove / defer | 逐包给建议，多数是 `replace`（有 Vue3 对应品）或 `remove`（实际未使用） | `confirm:blocker:<pkg>:replace` | `:fork` / `:remove` / `:defer` | 不答该包停在 `unknown`，`blockers` 行不得 `decided` |
+| D19 | §2 每个 `unknown` 包（通常由 `blockers` 接管） | replace / fork / remove / defer | 逐包给建议，多数是 `replace`（有 Vue3 对应品）或 `remove`（实际未使用） | `confirm:blocker:<pkg>:replace` | `:fork` / `:remove` / `:defer` | 不答则 owner 不得 `decided`；显式 `:defer` 可留档，但 handoff gate 必须 `frozen` |
 | D20 | `test` | 保留现有 runner 还是换 | 保留 —— 只把 `@vue/test-utils` 升到 v2 线 | `confirm:test-runner:keep` | `confirm:test-runner:vitest`（换 runner 是独立变更） | 换 runner 后测试红了，说不清是升级还是 runner |
 
 D19 是唯一的**三段式** token：`confirm:blocker:<pkg>:<action>` —— 因为它每个包一问，
-包名本身是 token 的一部分。其余 `confirm:` 都是两段。`blockers` 行按
-`subsystem-inventory.md` 的 dedupe 规则处理：已由 `ui` / `i18n-plugins` 等专属行认领的
-包不在这里重复问，只问没有归属的残留包。
+包名本身是 token 的一部分。其余 `confirm:` 都是两段。已被专属子系统**证据化认领**的
+unknown 包把 token 写在该 owner 行与 DR；没有专属 owner 的残留包进入 `blockers`。
+不得用 `i18n_mode`、UI staging 或一个泛化 `proceed` 替逐包行动作答。
 
 `build` 的分叉（Vite vs cli5-webpack5）不在这里：它是路径三轴之一（`build_axis`），
 由 D13 的 path preset 决定；要非默认组合只能在 D13 回 `other`，否则校验器会拒绝
@@ -139,9 +141,12 @@ confirm:scope:full-stack
 confirm:network-mode:partial
 confirm:browser-floor:modern
 confirm:target-version:vite@5.4.11
-confirm:node-target:22.12.0
+confirm:node-target:<当前菜单给出的精确版本>
 confirm:node-strategy:upgrade-before-vue
 ```
+
+`<当前菜单给出的精确版本>` 是参考文档里的生成槽位；实际菜单必须先替换成
+`evidence_as_of` 当天解析出的数字版本，用户不能原样回复尖括号。
 
 规则与 `proceed:subsystem:<id>,<id>` 一致：
 

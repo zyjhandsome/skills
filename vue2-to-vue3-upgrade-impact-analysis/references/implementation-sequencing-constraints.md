@@ -54,11 +54,15 @@ named recipe.
 6. **Interaction assertions come from the candidate list, not from improvised
    smoke.** `inventory.json` →
    `source_impact_signals.interaction_assertion_candidates` locates every hit of
-   the silent-break family (`model_option`, `native_modifier`,
-   `keycode_modifier`, `transition_component`) with file and line. These breaks
+   the silent-break/runtime-fatal family (`model_option`, `native_modifier`,
+   `keycode_modifier`, `transition_component`, `sync_modifier`,
+   `options_filters_access`, `router_error_suppression`,
+   `router_named_target`, `ui_trigger_slot_target`, `kit_icon_class_prop`,
+   `external_global_runtime`) with file and line. These breaks
    keep build and lint green, so each row needs an input→state-write-back check
-   of its own. When `truncated: true`, the list is incomplete: re-scan before
-   treating it as the closure.
+   or runtime round-trip of its own. `cap` is per signal; when `truncated: true`,
+   use `truncated_signals` plus hit/emitted counts to re-scan the incomplete
+   families before treating the list as the closure.
 7. **`model_option` rows still need the live/dead split.** The scanner locates
    the option; whether a parent consumes the component through `v-model`
    (silently rebound to `modelValue`, write-back dead) is cross-file judgement
@@ -77,6 +81,10 @@ named recipe.
 9. **Both runtime lanes are sequenced, not just one.** When the workspace has a
    dev lane and a build lane, `post-cutover` holds only when the app boots on
    both. A recipe validated on one lane is validated on one lane.
+10. **External globals close only after real mount.** A
+    `manual-external-global-script` recipe may be statically reviewed before
+    cutover, but its readiness, instance lookup and behavior round-trip must run
+    after `post-cutover`. An auth/login placeholder is not the mounted consumer.
 
 ## Out of this stage
 

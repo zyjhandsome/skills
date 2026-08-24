@@ -254,6 +254,7 @@ class ProfileInventoryTests(unittest.TestCase):
 
             candidates = data["source_impact_signals"]["interaction_assertion_candidates"]
             self.assertEqual(candidates["cap"], 200)
+            self.assertEqual(candidates["cap_scope"], "per-signal")
             self.assertFalse(candidates["truncated"])
             rows = candidates["rows"]
             located = {(row["signal"], row["file"], row["line"]) for row in rows}
@@ -367,6 +368,123 @@ class ProfileInventoryTests(unittest.TestCase):
             self.assertIn(("router_named_target", "src/App.vue"), located)
             self.assertIn(("ui_trigger_slot_target", "src/App.vue"), located)
 
+    def test_locates_legacy_icon_class_props_without_flagging_component_icons(self) -> None:
+        pkg = {
+            "name": "icon-web",
+            "dependencies": {"vue": "2.7.16", "element-ui": "2.15.14"},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "package.json").write_text(json.dumps(pkg), encoding="utf-8")
+            src = root / "src"
+            src.mkdir()
+            (src / "Toolbar.vue").write_text(
+                "<template>\n"
+                '  <el-button icon="sprite-icon size-13-icon add-b-icon" />\n'
+                '  <el-button :icon="\'el-icon-edit\'" />\n'
+                "  <el-button icon='custom-sprite add-action' />\n"
+                '  <el-button :icon="EditIcon" />\n'
+                "</template>\n",
+                encoding="utf-8",
+            )
+
+            data = self._run_profile(root)
+
+            signals = data["source_impact_signals"]["signals"]
+            self.assertEqual(signals.get("kit_icon_class_prop"), 3)
+            candidates = data["source_impact_signals"]["interaction_assertion_candidates"]
+            rows = [row for row in candidates["rows"]
+                    if row["signal"] == "kit_icon_class_prop"]
+            self.assertEqual([row["line"] for row in rows], [2, 3, 4])
+            self.assertEqual(candidates["total_hits_by_signal"]["kit_icon_class_prop"], 3)
+            self.assertEqual(candidates["emitted_rows_by_signal"]["kit_icon_class_prop"], 3)
+
+    def test_correlates_external_script_loader_with_global_runtime_polling(self) -> None:
+        pkg = {"name": "editor-web", "dependencies": {"vue": "2.7.16"}}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "package.json").write_text(json.dumps(pkg), encoding="utf-8")
+            src = root / "src"
+            public = root / "public"
+            src.mkdir()
+            public.mkdir()
+            (public / "index.html").write_text(
+                '<script src="/vendor/editor.js"></script>\n', encoding="utf-8"
+            )
+            (src / "Editor.vue").write_text(
+                "<script>\n"
+                "export default {\n"
+                "  mounted() {\n"
+                "    this.timer = setInterval(() => {\n"
+                "      if (window.EWEBEDITOR.Loaded) {\n"
+                "        this.editor = globalThis.EWEBEDITOR.Instances[this.id]\n"
+                "      }\n"
+                "    }, 20)\n"
+                "  },\n"
+                "}\n"
+                "</script>\n",
+                encoding="utf-8",
+            )
+
+            data = self._run_profile(root)
+
+            signals = data["source_impact_signals"]["signals"]
+            self.assertEqual(signals.get("external_script_loader"), 1)
+            self.assertEqual(signals.get("external_global_runtime"), 2)
+            rows = data["source_impact_signals"]["interaction_assertion_candidates"]["rows"]
+            external_rows = [row for row in rows
+                             if row["signal"] == "external_global_runtime"]
+            self.assertEqual([row["line"] for row in external_rows], [5, 6])
+
+    def test_global_polling_without_loader_is_not_a_runtime_candidate(self) -> None:
+        pkg = {"name": "global-web", "dependencies": {"vue": "2.7.16"}}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "package.json").write_text(json.dumps(pkg), encoding="utf-8")
+            src = root / "src"
+            src.mkdir()
+            (src / "feature.js").write_text(
+                "if (window.RUNTIME_CONFIG.ready) start()\n", encoding="utf-8"
+            )
+
+            data = self._run_profile(root)
+
+            signals = data["source_impact_signals"]["signals"]
+            self.assertNotIn("external_global_runtime", signals)
+            rows = data["source_impact_signals"]["interaction_assertion_candidates"]["rows"]
+            self.assertNotIn("external_global_runtime", {row["signal"] for row in rows})
+
+    def test_candidate_cap_is_per_signal_so_noisy_family_does_not_hide_blocker(self) -> None:
+        pkg = {
+            "name": "noisy-web",
+            "dependencies": {"vue": "2.7.16", "element-ui": "2.15.14"},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "package.json").write_text(json.dumps(pkg), encoding="utf-8")
+            src = root / "src"
+            src.mkdir()
+            native_rows = "\n".join(
+                f'  <el-button @click.native="go({index})" />'
+                for index in range(201)
+            )
+            (src / "Noisy.vue").write_text(
+                "<template>\n"
+                f"{native_rows}\n"
+                '  <el-button icon="sprite-icon add-action" />\n'
+                "</template>\n",
+                encoding="utf-8",
+            )
+
+            data = self._run_profile(root)
+
+            candidates = data["source_impact_signals"]["interaction_assertion_candidates"]
+            self.assertTrue(candidates["truncated"])
+            self.assertEqual(candidates["truncated_signals"], ["native_modifier"])
+            self.assertEqual(candidates["total_hits_by_signal"]["native_modifier"], 201)
+            self.assertEqual(candidates["emitted_rows_by_signal"]["native_modifier"], 200)
+            self.assertEqual(candidates["emitted_rows_by_signal"]["kit_icon_class_prop"], 1)
+
     def test_interaction_candidates_empty_without_source_roots(self) -> None:
         pkg = {"name": "no-src", "dependencies": {"vue": "2.7.16"}}
         with tempfile.TemporaryDirectory() as tmp:
@@ -376,7 +494,15 @@ class ProfileInventoryTests(unittest.TestCase):
             data = self._run_profile(root)
 
             candidates = data["source_impact_signals"]["interaction_assertion_candidates"]
-            self.assertEqual(candidates, {"cap": 200, "truncated": False, "rows": []})
+            self.assertEqual(candidates, {
+                "cap": 200,
+                "cap_scope": "per-signal",
+                "truncated": False,
+                "truncated_signals": [],
+                "total_hits_by_signal": {},
+                "emitted_rows_by_signal": {},
+                "rows": [],
+            })
 
     def test_marks_malformed_package_lock_unparsed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

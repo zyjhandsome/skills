@@ -24,8 +24,10 @@
    locates every `model_option`, `native_modifier`, `keycode_modifier`,
    `transition_component`, `sync_modifier`, `options_filters_access`,
    `router_error_suppression` and `router_named_target` hit
+   plus `kit_icon_class_prop` and correlated `external_global_runtime` hits
    with file, line and excerpt, bounded by its own
-   `cap` and `truncated` flag (separate from the file-scan `truncated`). Each
+   per-signal `cap`, `truncated_signals`, and hit/emitted counts (separate from
+   the file-scan `truncated`). Each
    row needs an interaction-level check named in §8; `truncated: true` means the
    list is incomplete and must be re-scanned before it is treated as complete.
    Sequencing and atomicity for these rows:
@@ -58,6 +60,18 @@
    Vue3 removes the entry altogether, so those sites throw at runtime with no
    static fingerprint. Treat pipe rewrites and object-access rewrites as two
    separate closures.
+
+   **A UI-kit icon prop can turn a CSS class into a tag identity.** Legacy kits
+   accepted font/sprite class strings (`el-icon-*`, `sprite-icon ...`) on
+   `icon`; component-based target kits commonly require a Component instead.
+   Depending on the exact target implementation, the old value either becomes
+   a silent missing icon or is passed to DOM creation as a tag name. A
+   whitespace-delimited class string is then capable of throwing during mount
+   and blanking the route. Resolve severity against the selected target-kit
+   version; never downgrade a proven mount throw to visual polish. Every
+   `kit_icon_class_prop` row needs a render/interaction assertion after its prop
+   is rewritten to a component, icon slot, or wrapper component. Identifier
+   bindings the scanner cannot classify remain a §10 manual lookup.
 
    **Silence can also break in the other direction.** The family above is about
    working code going quiet. The inverse is code that was *already* wrong and was
@@ -193,6 +207,21 @@ Obligations for the packet:
   lane evidence, not interaction assertions: they belong in the §10 runtime-lane
   row and in the `build` decision record.
 
+## External global scripts are a runtime contract
+
+Bare globals injected by an HTML or dynamically-created `<script>` are neither
+npm dependencies nor Vue plugins. When inventory correlates an external script
+loader with `window.X` / `globalThis.X` readiness or instance-registry polling,
+name `manual-external-global-script` and keep the row runtime-required.
+
+Static review may establish loader ownership, URL/base behavior, DOM selectors,
+polling bounds and cleanup, but it cannot prove instance-registration timing.
+After cutover, assert on every applicable runtime lane that the script loads,
+the ready condition terminates, the instance is retrievable, and one minimal
+behavior round-trip succeeds (for an editor, set/get content). Vue3 host-element
+preservation and tick/mount timing are part of this check. If auth prevents the
+real component from mounting, the assertion is unexecuted rather than passed.
+
 ## Console baseline
 
 `visual-baseline` has a sibling. Runtime console output must be captured on the
@@ -284,8 +313,9 @@ editor/tree/DAG CSS. Inventory at least:
 
 - legacy `/deep/`, `>>>`, `::v-deep`, structural and Element-internal selectors;
 - actual global CSS entry/cascade order and theme variable roots;
-- UI-kit icon system migration (element-ui font icons `el-icon-*` →
-  Element Plus SVG icon components; string `:icon` props stop rendering,
+- UI-kit icon system migration (element-ui font icons `el-icon-*` and
+  class-based sprites → target-kit icon components; old string props may either
+  stop rendering or abort mount when interpreted as a tag identity;
   `.el-icon-*` CSS selectors go dead) — a mandatory trigger, not optional;
 - UI-kit component value contracts that shift silently — these belong to the
   `ui_behavior_contract` block below, not here; list them there and keep this
@@ -339,6 +369,9 @@ Inventory at least:
   `:label` becoming `:value`, date-picker `value-format` defaults. Combined with
   a mechanical `.sync` rewrite these produce bindings that compile and write
   nowhere.
+- **Icon prop identity.** A legacy font/sprite class string is not a Component.
+  Resolve every `kit_icon_class_prop` candidate against the selected target
+  kit, and assert both successful mount and the actual icon/toolbar action.
 - **Enum renames.** Dropped or renamed enum values (`mini` / `medium` sizes,
   type/status vocabularies). An unrecognized enum value is usually ignored, not
   rejected.

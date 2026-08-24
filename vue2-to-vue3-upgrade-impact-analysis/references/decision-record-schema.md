@@ -25,11 +25,15 @@ Files live beside the report under `decision-records/`.
 | 推荐确认选项 | `proceed:path:…` / `proceed:subsystem:…` / `defer` / `other` |
 | 确认队列状态 | `ready` / `pending` / `blocked` / `decided` / `deferred` |
 | 人工答复 | filled after human answers |
+| 分叉人工答复 | exact `confirm:` token(s), or `—` when this unit has no open fork |
 
-`analysis_status=complete` requires: path decision-record present, and one
-decision-record (`subsystem__<id>.md`) per §4 High/blocker subsystem
-(`risk` in `high|blocker`, not `not_applicable`). Those units must also appear
-in the confirmation queue as `decided` / `deferred` / `blocked`.
+`analysis_status=complete` requires one decision-record for every unit that
+appears in §7, including optional medium subsystems the caller explicitly put
+into the queue. High/blocker and `required_for_path=yes` rows must appear in §7;
+medium/low rows are not forced into it.
 
 `人工答复` must quote the human's verbatim token (`proceed:…` / `defer` /
-`other`). Do not invent tokens from「继续/全部放行」.
+`other`). It proves only the scope/queue decision. `分叉人工答复` separately
+quotes every verbatim `confirm:` token that selected an internal branch. The
+validator requires those tokens to equal the values recorded in §3/§4; use `—`
+when no fork was triggered. Do not invent either field from「继续/全部放行/按建议来」.

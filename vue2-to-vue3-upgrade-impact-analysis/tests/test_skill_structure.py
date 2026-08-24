@@ -304,6 +304,38 @@ class SkillStructureTests(unittest.TestCase):
         for token in ("all", "*", "全部"):
             self.assertIn(token, catalog, token)
 
+    def test_fork_consent_has_a_separate_decision_record_field(self) -> None:
+        schema = (ROOT / "references" / "decision-record-schema.md").read_text(
+            encoding="utf-8"
+        )
+        template = (ROOT / "templates" / "decision-record.md").read_text(
+            encoding="utf-8"
+        )
+        for text in (schema, template):
+            self.assertIn("分叉人工答复", text)
+        self.assertIn("proceed:subsystem", schema)
+        self.assertIn("confirm:", schema)
+
+    def test_node_target_menu_does_not_pin_a_stale_version(self) -> None:
+        sources = (
+            ROOT / "references" / "user-decision-catalog.md",
+            ROOT / "references" / "next-action-choice-menus.md",
+            ROOT.parent / "docs" / "vue2-to-vue3-inplace-upgrade-playbook.md",
+        )
+        for path in sources:
+            text = path.read_text(encoding="utf-8")
+            self.assertNotIn("confirm:node-target:22.12.0", text, str(path))
+            self.assertIn("evidence_as_of", text, str(path))
+
+    def test_recommendation_delegation_is_not_consent(self) -> None:
+        gates = (ROOT / "references" / "human-confirmation-gates.md").read_text(
+            encoding="utf-8"
+        )
+        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+        for text in (gates, skill):
+            self.assertIn("按你的建议来", text)
+            self.assertIn("token", text)
+
     def test_offline_gate_is_defined_not_just_referenced(self) -> None:
         preflight = (ROOT / "references" / "environment-preflight.md").read_text(
             encoding="utf-8"

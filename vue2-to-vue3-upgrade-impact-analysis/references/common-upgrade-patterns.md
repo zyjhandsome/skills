@@ -33,6 +33,19 @@ Name the matching recipe; never run it in this skill. Record residuals in §10.
 - Name the Vue3 target: `app.config.globalProperties` and/or `provide/inject`
 - Do not treat a one-line “has globals” note as complete
 
+## Pattern: External global script + mount timing
+
+- Detect HTML/dynamic script loaders together with `window.X` / `globalThis.X`
+  readiness or instance-registry consumers
+- These are bare runtime globals, not npm packages and not `Vue.use` plugins
+- Name `manual-external-global-script`; record loader ownership, URL/base,
+  polling timeout/cleanup, host DOM selector and every consumer
+- Static review is necessary but cannot close instance-registration timing:
+  require a post-cutover runtime assertion on each applicable lane (loaded,
+  ready, instance retrievable, minimal behavior round-trip)
+- Auth or routing that prevents the real component from mounting leaves the
+  assertion unexecuted; it does not convert it into a static pass
+
 ## Pattern: Class components / decorators
 
 - Detect `vue-class-component`, `vue-property-decorator`, `vuex-class`

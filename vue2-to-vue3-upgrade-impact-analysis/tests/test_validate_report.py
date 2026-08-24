@@ -115,7 +115,12 @@ def _status_block(
 """
 
 
-def _record(unit: str, status: str = "decided", risk: str = "high") -> str:
+def _record(
+    unit: str,
+    status: str = "decided",
+    risk: str = "high",
+    fork_answer: str = "—",
+) -> str:
     typ, uid = unit.split(":", 1)
     token = (
         f"proceed:{typ}:{uid}"
@@ -136,6 +141,7 @@ def _record(unit: str, status: str = "decided", risk: str = "high") -> str:
         f"| 推荐确认选项 | proceed:{typ}:{uid} |\n"
         f"| 确认队列状态 | {status} |\n"
         f"| 人工答复 | {token} |\n"
+        f"| 分叉人工答复 | {fork_answer} |\n"
     )
 
 
@@ -277,6 +283,101 @@ class ValidateReportTests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
             self.assertIn("decision_records", result.stdout + result.stderr)
+
+    def test_evidence_dir_rejects_scope_only_answer_for_router_fork(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "evidence"
+            self._copy_complete_evidence(root)
+            record = root / "decision-records" / "subsystem__router.md"
+            body = record.read_text(encoding="utf-8").replace(
+                "| 分叉人工答复 | confirm:router-major:4 |",
+                "| 分叉人工答复 | — |",
+            )
+            record.write_text(body, encoding="utf-8")
+
+            result = self._run("--evidence-dir", str(root))
+
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertIn("分叉人工答复", result.stdout + result.stderr)
+            self.assertIn("confirm:router-major:4", result.stdout + result.stderr)
+
+    def test_evidence_dir_rejects_fork_token_marker_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "evidence"
+            self._copy_complete_evidence(root)
+            record = root / "decision-records" / "subsystem__router.md"
+            body = record.read_text(encoding="utf-8").replace(
+                "confirm:router-major:4",
+                "confirm:router-major:5",
+            )
+            record.write_text(body, encoding="utf-8")
+
+            result = self._run("--evidence-dir", str(root))
+
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertIn("report-derived tokens", result.stdout + result.stderr)
+
+    def test_complete_unknown_package_requires_explicit_package_action(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "evidence"
+            self._copy_complete_evidence(root)
+            report = root / "vue2-to-vue3-upgrade-report.md"
+            body = report.read_text(encoding="utf-8").replace(
+                "`confirm:blocker:vue-count-to:replace`",
+                "replace（未记录人工 token）",
+            )
+            report.write_text(body, encoding="utf-8")
+
+            result = self._run("--evidence-dir", str(root))
+
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertIn("unknown package 'vue-count-to'", result.stdout + result.stderr)
+
+    def test_deferred_unknown_package_cannot_get_ready_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "evidence"
+            self._copy_complete_evidence(root)
+            report = root / "vue2-to-vue3-upgrade-report.md"
+            report.write_text(
+                report.read_text(encoding="utf-8").replace(
+                    "confirm:blocker:vue-count-to:replace",
+                    "confirm:blocker:vue-count-to:defer",
+                ),
+                encoding="utf-8",
+            )
+            record = root / "decision-records" / "subsystem__blockers.md"
+            record.write_text(
+                record.read_text(encoding="utf-8").replace(
+                    "confirm:blocker:vue-count-to:replace",
+                    "confirm:blocker:vue-count-to:defer",
+                ),
+                encoding="utf-8",
+            )
+
+            result = self._run("--evidence-dir", str(root))
+
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertIn("must stay frozen", result.stdout + result.stderr)
+
+    def test_optional_store_needs_no_decision_until_it_enters_queue(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "evidence"
+            self._copy_complete_evidence(root)
+            report = root / "vue2-to-vue3-upgrade-report.md"
+            body = report.read_text(encoding="utf-8").replace(
+                "| `store` | in_scope | medium | needs-major | no | `manual-pinia-or-vuex4` | 未进队 |",
+                "| `store` | in_scope | medium | needs-major | no | `manual-pinia-or-vuex4` | 已 proceed；`store_target: vuex4` |",
+            ).replace(
+                "| `subsystem:router` | subsystem | decided | router 纳入 | `proceed:subsystem:router` |",
+                "| `subsystem:router` | subsystem | decided | router 纳入 | `proceed:subsystem:router` |\n"
+                "| `subsystem:store` | subsystem | decided | store 主动扩入 | `proceed:subsystem:store` |",
+            )
+            report.write_text(body, encoding="utf-8")
+
+            result = self._run("--evidence-dir", str(root))
+
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertIn("subsystem__store.md", result.stdout + result.stderr)
 
     def test_evidence_dir_rejects_named_recipe_summary_drift(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1036,6 +1137,27 @@ class ValidateReportTests(unittest.TestCase):
             self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
             self.assertIn(
                 "target dependency deprecation surface",
+                result.stdout + result.stderr,
+            )
+
+    def test_rejects_missing_ui_icon_prop_checklist_row(self) -> None:
+        body = (FIXTURES / "valid-report.md").read_text(encoding="utf-8")
+        body = re.sub(r"(?m)^\| UI-kit `icon prop`.*\n", "", body)
+        with tempfile.TemporaryDirectory() as tmp:
+            result = self._probe_report(body, tmp)
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertIn(
+                "UI kit icon prop class identity", result.stdout + result.stderr
+            )
+
+    def test_rejects_missing_external_global_runtime_checklist_row(self) -> None:
+        body = (FIXTURES / "valid-report.md").read_text(encoding="utf-8")
+        body = re.sub(r"(?m)^\| 外部全局脚本运行期契约.*\n", "", body)
+        with tempfile.TemporaryDirectory() as tmp:
+            result = self._probe_report(body, tmp)
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertIn(
+                "external global script runtime contract",
                 result.stdout + result.stderr,
             )
 

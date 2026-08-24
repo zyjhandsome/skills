@@ -6,7 +6,7 @@
 - `upgrade-summary.json`（必填，≤12 KiB）
 - `inventory.json`（执行 profile 时必填）
 - `decision-records/migration-path__<path-id>.md`（路径单元必填）
-- `decision-records/subsystem__<subsystem-id>.md`（每个 High/blocker 或 `required_for_path=yes` 子系统必填；其余可选）
+- `decision-records/subsystem__<subsystem-id>.md`（每个进入 §7 的子系统必填；medium/low 不会因此被强制进队）
 
 语言：可见正文默认简体中文；枚举、包名、版本、路径、命令、URL 保持英文原文。
 
@@ -296,7 +296,9 @@ summary 的 `ui_behavior_contract.required_assertions` 必须同时给出（3..2
   mixin data 浅合并、attribute coercion）
 - `.sync` 修饰符与目标 UI 库 prop 身份（`:p.sync` → `v-model:p` 是正确的 Vue3
   改写，但 `p` 是**旧库**的 prop 名；同批替换 UI 库时必须按新库实际 prop 重解析，
-  否则绑定编译通过却写不进任何 prop，常表现为子树不挂载、`$refs` 取不到）
+   否则绑定编译通过却写不进任何 prop，常表现为子树不挂载、`$refs` 取不到）
+- UI-kit `icon` prop 的 class/sprite 字符串（目标 prop 是否要求 Component；逐调用点
+  分类为静默缺图或 mount throw，并绑定渲染/交互断言）
 - `$options.filters` 对象访问调用点（与模板管道 `| filter` 是两处独立改写面，
   codemod 通常只处理管道）
 - dev 与 build 运行面差异（源码内 CJS、`require.context`、多入口 URL 形态、
@@ -304,7 +306,10 @@ summary 的 `ui_behavior_contract.required_assertions` 必须同时给出（3..2
   不得以其一代替另一条
 - router 导航静默变抛错（旧版 `push`/`replace` 的 prototype 吞错覆写与 `.catch`
   吞错在新版失效；按 name 跳转缺必填参数由静默变抛错）：吞错覆写掩盖的失败面与
-  逐调用点的必填参数核对都要写明，这是**静默被移除**而非被引入的一族
+   逐调用点的必填参数核对都要写明，这是**静默被移除**而非被引入的一族
+- 外部全局脚本运行期契约（HTML/动态 script loader、`window.X` / `globalThis.X`
+  ready/instance polling、host DOM selector、超时/清理；静态复核不得代替真实挂载后的
+  ready → instance → 最小行为 round-trip）
 - 目标依赖弃用告警面（迁移后落在目标大版本**已弃用**的 API 上；样式/构建工具
   自身的弃用告警）：构建与截图都看不见，只在控制台按 mount / 按编译刷量，
   处置口径见 `impact-and-validation.md` 的控制台分类
@@ -315,7 +320,7 @@ summary 的 `ui_behavior_contract.required_assertions` 必须同时给出（3..2
 §4 必须覆盖默认子系统全集（`core-vue` / `router` / `build` / `store` /
 `ui` / `test` / `lint-ide` / `i18n-plugins` / `composition-existing` /
 `blockers`）；不适用者标 `not_applicable`，不得省略。
-§4 中每个 `risk` 为 `high`/`blocker` 且非 `not_applicable` 的子系统，以及每个 `required_for_path=yes` 行，必须出现在 §7 确认队列；`analysis_status=complete` 时还须有对应 `decision-records/subsystem__<id>.md`。
+§4 中每个 `risk` 为 `high`/`blocker` 且非 `not_applicable` 的子系统，以及每个 `required_for_path=yes` 行，必须出现在 §7 确认队列；`analysis_status=complete` 时，§7 中**每个**单元都须有对应 decision record。medium/low 未进队时不产生记录，也不要求其内部分叉。
 `in_scope` 且 `high`/`blocker` 的行必须 `required_for_path=yes`。
 路径未 `decided` 前，子系统行不得为 `ready`。
 
@@ -325,7 +330,8 @@ summary 的 `ui_behavior_contract.required_assertions` 必须同时给出（3..2
 （router 装 v4 还是 v5、store 保留 Vuex 4 还是迁 Pinia、UI 库与 runtime 同批还是
 分步、vue-i18n 用 legacy 还是 composition mode、每个 residual blocker 是
 replace/fork/remove/defer），那是另一个决策，用 `confirm:` 家族单独问，取值写进
-§4 该行的「说明」与对应 `decision-records/subsystem__<id>.md` 的「当前结论」。
+§4 该行的「说明」、对应 `decision-records/subsystem__<id>.md` 的「当前结论」和
+`分叉人工答复`。`人工答复` 仍只保存 `proceed:subsystem:<id>`，不得把两个决策揉成一个字段。
 清单与建议项见 `user-decision-catalog.md` D15–D20。
 
 分叉未答复时，该子系统的 `decision-records` 不得写成已定结论，§4 说明须写
@@ -333,7 +339,8 @@ replace/fork/remove/defer），那是另一个决策，用 `confirm:` 家族单�
 「用户以为只批了范围，实施期却发现库也被换了」的来源。
 
 **这条由校验器强制。** §7 队列行一旦 `decided`，§4 该行「说明」必须带上对应 marker，
-缺值或取值非法直接报错（`residual-audit` 入口豁免——它不装包，没有分叉）：
+Decision Record 的 `分叉人工答复` 还必须带上与 marker **精确对应**的 `confirm:` token；
+缺值、取值非法、token 缺失或两边不一致都直接报错（`residual-audit` 入口豁免——它不装包，没有分叉）：
 
 | 子系统 | marker | 合法取值 |
 |---|---|---|
@@ -342,9 +349,15 @@ replace/fork/remove/defer），那是另一个决策，用 `confirm:` 家族单�
 | `i18n-plugins` | `i18n_mode:` | `legacy` / `composition` |
 | `test` | `test_runner:` | `keep` / `vitest` |
 
-marker 写在说明里即可，例如「已 proceed；`router_major: 4`」。`ui` 不在此表：它的分叉是
-§3 的 `ui_cutover_staging`，在那里单独校验。`blockers` 逐包一问，没有单一 marker，仍只有
-协议约束。
+marker 写在说明里，例如「已 proceed；`router_major: 4`」，对应 DR 必须写
+`分叉人工答复: confirm:router-major:4`。`ui` 不在此表：它的分叉是 §3 的
+`ui_cutover_staging`，DR token 同样会与它交叉校验。
+
+§2 每个 `unknown` 包在 `analysis_status=complete` 前必须有且仅有一个明确 owner，owner 的
+§4 说明记录 `confirm:blocker:<pkg>:<replace|fork|remove|defer>`，其 §7 行为 `decided`，
+同一 token 写进 owner DR 的 `分叉人工答复`。没有已证明的专属 owner 时，owner 必须是
+`blockers`。`:defer` 是已记录的用户选择，但不得得到 ready gate。所以
+`i18n_mode: legacy` 不能顺带决定一个残余组件包如何处理。
 
 ## 仓画像表列（§2）
 

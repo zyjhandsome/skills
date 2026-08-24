@@ -139,9 +139,12 @@ current baseline, never “Vue 3 需要 Node X”:
 **E1 落到声明面的那个具体版本** — `.nvmrc`、`engines.node`、CI setup-node、
 Docker 基础镜像、部署 builder 每一处都只能填一个值：
 
-- `confirm:node-target:22.12.0` — 建议：区间内维护期最长的活跃 LTS（同时说明 20.x 何时 EOL）
-- `confirm:node-target:20.19.0` — 仅当基础镜像或部署平台确实只提供该支；须写明约束来源
+- `confirm:node-target:<resolved-active-lts-exact>` — 建议：在 `evidence_as_of` 当天从 Node 官方 release schedule 重算区间内维护期最长的 Active LTS，再解析该线当前精确补丁
+- `confirm:node-target:<resolved-other-exact>` — 仅当基础镜像或部署平台确实只提供另一支；须写明约束来源与两支 EOL
 - `defer`
+
+尖括号只表示菜单生成槽位，**不得原样展示给用户**；展示时两行都替换为本次证据解析出的
+可复制精确版本。不要从本参考文件复制一个长期固定的 Node 版本。
 
 **E2 怎么从当前走到那个版本**：
 

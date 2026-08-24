@@ -76,9 +76,9 @@
 | `ui` | in_scope | blocker | replace | yes | `gogocode-element` | 已 proceed |
 | `test` | in_scope | medium | needs-major | no | — | 未进队 |
 | `lint-ide` | in_scope | medium | needs-major | no | `eslint-vue3` | 未进队 |
-| `i18n-plugins` | in_scope | high | unknown | yes | — | 已 proceed；`i18n_mode: legacy`（保留 `$t` 调用面，与保留 Options API 一致） |
+| `i18n-plugins` | not_applicable | n/a | unused | no | — | 未命中 vue-i18n 或已证明归属的 Vue 插件 |
 | `composition-existing` | in_scope | low | unused | no | — | 未进队 |
-| `blockers` | in_scope | n/a | replace | no | — | 已由 `ui` / `i18n-plugins` 覆盖 |
+| `blockers` | in_scope | blocker | unknown | yes | — | 已 proceed；`vue-count-to`：`confirm:blocker:vue-count-to:replace` |
 
 ## 5. 分层影响分析
 
@@ -127,7 +127,7 @@
 | `subsystem:router` | subsystem | decided | router 纳入 | `proceed:subsystem:router` |
 | `subsystem:build` | subsystem | decided | 构建同升纳入 | `proceed:subsystem:build` |
 | `subsystem:ui` | subsystem | decided | UI 大步纳入 | `proceed:subsystem:ui` |
-| `subsystem:i18n-plugins` | subsystem | decided | 残余插件纳入 | `proceed:subsystem:i18n-plugins` |
+| `subsystem:blockers` | subsystem | decided | vue-count-to 替换纳入 | `proceed:subsystem:blockers` |
 
 ## 8. 验证矩阵
 
@@ -167,9 +167,11 @@
 | `<transition>` 过渡类名（v-enter → v-enter-from） | 已扫描：无 transition 组件使用 |
 | 静默语义变更（v-if/v-for 优先级、v-bind 顺序、watch 数组、data 浅合并、attr coercion） | 已扫描：同元素 v-if+v-for 无命中；其余列入实施期核对 |
 | `.sync` 修饰符与目标 UI 库 prop 身份 | 已扫描：11 处，其中 7 处绑在 element-ui 组件上，须按 Element Plus 实际 prop 重解析 |
+| UI-kit `icon prop` 的 sprite 字符串 | 已扫描：2 处 `sprite-icon` class prop，均按目标组件 prop 重写并绑定 mount/点击断言 |
 | `$options.filters` 过滤器对象访问 | 已扫描：3 处对象访问调用点，独立于管道写法列入 core-vue 影响面 |
 | dev 与 build 运行面差异（源码 CJS、`require.context`、多入口 URL 形态） | 已扫描：src 内 2 处 `module.exports`、单入口无 `require.context`；两条运行面各列一条验证 |
 | router 导航静默变抛错（旧 `push/replace` 吞错覆写；按 name 跳转缺必填参数） | 已扫描：1 处 prototype 吞错覆写、5 处按 name 跳转，其中 1 处（启动期 `replace({name:'class'})`）缺必填参数，Router 4 下会抛错；逐调用点列入 §8 断言 |
+| 外部全局脚本运行期契约 | 未发现 HTML/动态 loader 与 `globalThis.X` ready/instance polling 的关联命中 |
 | 目标依赖弃用告警面（迁移后落在目标大版本已弃用 API；样式/构建工具自身弃用告警） | 已核对 Element Plus 弃用清单：`type="text"`（8 处）与 dialog `title` 插槽（3 处）落在已弃用 API 上，按 mount 刷告警；样式编译器 `@import` 前置注入为工具链弃用面，两类均在 console 处置协议内 |
 
 - 无阻塞缺口；实施需另授权

@@ -14,3 +14,4 @@
 | 推荐确认选项 | proceed:subsystem:router / defer / other |
 | 确认队列状态 | decided |
 | 人工答复 | proceed:subsystem:router |
+| 分叉人工答复 | confirm:router-major:4 |

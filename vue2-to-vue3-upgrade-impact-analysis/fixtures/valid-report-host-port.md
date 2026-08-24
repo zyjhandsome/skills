@@ -166,7 +166,9 @@
 | `<transition>` 过渡类名（v-enter → v-enter-from） | 闭包内待扫描 |
 | 静默语义变更（v-if/v-for 优先级、v-bind 顺序、watch 数组、data 浅合并、attr coercion） | 同元素 v-if+v-for 待扫描；其余列入 B 侧改写核对 |
 | `.sync` 修饰符与目标 UI 库 prop 身份 | 闭包内待精确扫描；改写到 B 时按宿主 UI 库实际 prop 重解析，不沿用 A 侧 prop 名 |
+| UI-kit `icon prop` 的 sprite 字符串 | 闭包内待精确扫描；class 字符串不得直接迁入要求 Component 的宿主 icon prop |
 | `$options.filters` 过滤器对象访问 | 闭包内待精确扫描（管道之外的调用点，B 侧无该入口） |
 | dev 与 build 运行面差异（源码 CJS、`require.context`、多入口 URL 形态） | 按 B 宿主工具链核对；两条运行面各需独立验证 |
 | router 导航静默变抛错（旧 `push/replace` 吞错覆写；按 name 跳转缺必填参数） | A 侧吞错覆写不随迁入；迁入路由按 B 宿主路由表逐点核对必填参数 |
+| 外部全局脚本运行期契约 | 未发现 HTML/动态 loader 与 `globalThis.X` ready/instance polling 的关联命中 |
 | 目标依赖弃用告警面（迁移后落在目标大版本已弃用 API；样式/构建工具自身弃用告警） | 按 B 宿主的组件库与样式编译器弃用清单核对，命中项走 console 处置协议 |

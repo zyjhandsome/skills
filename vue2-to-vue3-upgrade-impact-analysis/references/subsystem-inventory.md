@@ -17,7 +17,7 @@ the **installed target major** (resolved from registry metadata at
 | `ui` | Element UI / Ant Design Vue 1.x / Vuetify 2 / other | that library's own migration page | Matching Vue3 library (e.g. Element Plus), major resolved from registry |
 | `test` | `@vue/test-utils`, Jest/Vitest, E2E | test-utils v1→v2 | `@vue/test-utils` v2 line + Vitest/Jest Vue3 config |
 | `lint-ide` | eslint-plugin-vue, Vetur/Volar | eslint-plugin-vue Vue3 rule set | Vue3 eslint rules + Volar / `vue-tsc` |
-| `i18n-plugins` | vue-i18n; peer metadata; non-`vue-*` packages imported then registered via `Vue.use`; plugin/editor/grid name candidates | `vue-i18n` v8→v9 guide | Resolve the installed major; later `vue-i18n` majors raise `engines.node` and must enter the Node matrix |
+| `i18n-plugins` | vue-i18n; peer metadata; non-`vue-*` packages proven imported then registered via `Vue.use`; plugin/editor/grid name candidates are provisional only | `vue-i18n` v8→v9 guide | Resolve the installed major; later `vue-i18n` majors raise `engines.node` and must enter the Node matrix |
 | `composition-existing` | `@vue/composition-api`, Vue 2.7 `setup` usage | — | Remove bridge plugin on Vue3; no full rewrite |
 | `blockers` | Packages with no Vue3 line, opaque/internal packages, unresolved plugin candidates | — | replace / fork / remove / defer decision |
 
@@ -58,6 +58,13 @@ subsystem owned.
   `queue_eligible=no` when every blocker package is covered elsewhere.
 - Queue `blockers` only for residual packages that have **no** dedicated
   subsystem owner.
+- Dedicated ownership needs package-specific evidence (import/registration,
+  peer metadata, or maintainer documentation). A name heuristic or a generic
+  `i18n_mode` decision does not own the package; unresolved candidates go to
+  `blockers`.
+- Regardless of owner, every §2 `unknown` package needs one D19 action token in
+  that owner's §4 note and `分叉人工答复`. This is not duplicate queueing: the
+  token decides the package action, while `proceed:subsystem:<id>` decides scope.
 
 ## Classification fields (per subsystem)
 

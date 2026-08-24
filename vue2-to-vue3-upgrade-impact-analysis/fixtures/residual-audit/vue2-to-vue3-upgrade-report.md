@@ -157,9 +157,11 @@
 | `<transition>` 过渡类名（v-enter → v-enter-from） | 已扫描：过渡类名已改完 |
 | 静默语义变更（v-if/v-for 优先级、v-bind 顺序、watch 数组、data 浅合并、attr coercion） | 已扫描：同元素 v-if+v-for 无命中；其余列入清理期核对 |
 | `.sync` 修饰符与目标 UI 库 prop 身份 | 已扫描：源码已无 `.sync`，但 7 处 codemod 产出的 `v-model:visible` 绑的是旧库 prop 名，须按 Element Plus 重解析 |
+| UI-kit `icon prop` 的 sprite 字符串 | 已扫描迁移产物：1 处 `sprite-icon` class prop 仍传目标组件，列入 mount/点击清理断言 |
 | `$options.filters` 过滤器对象访问 | 已扫描：3 处对象访问调用点仍在，管道写法已改完 |
 | dev 与 build 运行面差异（源码 CJS、`require.context`、多入口 URL 形态） | 已扫描：1 处 `require.context` 与第二入口只在 build 面失败 |
 | router 导航静默变抛错（旧 `push/replace` 吞错覆写；按 name 跳转缺必填参数） | 已扫描：`prototype` 吞错覆写残留 1 处（在 Router 4 下已不生效，属死代码）；按 name 跳转 4 处参数齐备 |
+| 外部全局脚本运行期契约 | 未发现 HTML/动态 loader 与 `globalThis.X` ready/instance polling 的关联命中 |
 | 目标依赖弃用告警面（迁移后落在目标大版本已弃用 API；样式/构建工具自身弃用告警） | 已核对：上次迁移遗留 6 处已弃用 UI 库 API 与样式编译器 `@import` 前置注入，构成本次审计的 console 噪声清单 |
 
 - 无阻塞缺口；清理实施需另授权

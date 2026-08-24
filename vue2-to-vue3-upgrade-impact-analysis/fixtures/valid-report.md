@@ -169,9 +169,11 @@
 | `<transition>` 过渡类名（v-enter → v-enter-from） | 待扫描 transition 组件与相关 CSS 类 |
 | 静默语义变更（v-if/v-for 优先级、v-bind 顺序、watch 数组、data 浅合并、attr coercion） | 同元素 v-if+v-for 待扫描；其余列入实施期核对 |
 | `.sync` 修饰符与目标 UI 库 prop 身份 | 待精确扫描；element-ui 组件上的 `.sync` 须按 Element Plus 实际 prop 重解析，不得机械沿用旧 prop 名 |
+| UI-kit `icon prop` 的 sprite 字符串 | 待精确扫描；命中项须按目标 UI 库分类为静默缺图或 mount throw |
 | `$options.filters` 过滤器对象访问 | 待精确扫描（管道之外的调用点，Vue3 已移除该入口） |
 | dev 与 build 运行面差异（源码 CJS、`require.context`、多入口 URL 形态） | 待扫描；两条运行面各需独立验证，不得以其一代替另一条 |
 | router 导航静默变抛错（旧 `push/replace` 吞错覆写；按 name 跳转缺必填参数） | 待逐调用点扫描；吞错覆写掩盖的失败与必填参数缺失均在 Router 4 下暴露 |
+| 外部全局脚本运行期契约 | 待关联 HTML/动态 loader 与 `globalThis.X` ready/instance polling，并绑定真实挂载断言 |
 | 目标依赖弃用告警面（迁移后落在目标大版本已弃用 API；样式/构建工具自身弃用告警） | 待按目标 UI 库与样式编译器的弃用清单核对，命中项走 console 处置协议 |
 
 - 过滤器与 `$listeners` 的静态命中数待补精确扫描

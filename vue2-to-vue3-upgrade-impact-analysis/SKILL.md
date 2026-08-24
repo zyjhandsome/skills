@@ -109,19 +109,19 @@ build variant × scope** (A→B: workspace=A; scope often `page-closure`).
    and `globalProperties` / `provide/inject` target. UI/CSS triggers → full
    `ui_visual_risk` block; a UI-kit `replace`/`needs-major` additionally needs
    `### ui_behavior_contract` + `ui_cutover_staging:` — mount timing, prop/enum
-   renames and trigger-slot content shape are invisible to the build *and* to the
-   visual diff. Dev and build are **two runtime lanes**: one named validation
-   each. Any capture also needs a `console-baseline`, whose disposal duty is keyed
+   renames, class-string icon identity and trigger-slot shape evade build/visual diff; correlated external-script loaders + bare-global polling require a post-mount round-trip.
+   Dev and build are **two runtime lanes**: one named validation each. Any capture also needs a `console-baseline`, whose disposal duty is keyed
    by emitter (framework / target kit / toolchain), never by a remembered message
    list; and removing an error-swallowing shim makes latent defects fail on load.
-7. Draft packet + Decision Records (path + High/blocker /
-   `required_for_path=yes`).
+7. Draft packet + Decision Records for path and every §7 subsystem. Keep scope
+   `人工答复` separate from exact `分叉人工答复`; every §2 `unknown` package needs
+   one owner/action token before `complete`.
 8. Confirmation queue (`references/human-confirmation-gates.md`): Wave 1 path;
    after path decided, Wave 2+ ready High/blocker / required subsystems.
    Record → regenerate → Agent review → `analysis_status=complete`.
 9. Stop. Do not open implementation plans.
 
-「继续 / 全部放行 / 别再问了 / 全部纳入」**≠** proceed token. Re-prompt verbatim
+任何自然语言概括放行或委托代选（包括「继续 / 全部放行 / 按你的建议来 / 你替我选」）**≠** proceed/confirm token. Re-prompt verbatim
 `confirm:…` / `proceed:path:…` / `proceed:subsystem:…` menus, recommendation
 first. Wave here = a confirmation batch, not a caller's session phase.
 

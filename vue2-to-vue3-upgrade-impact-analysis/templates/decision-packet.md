@@ -54,6 +54,9 @@
 | 包名 | 当前版本 | Vue3 就绪度 | 建议 | 证据 |
 |---|---|---|---|---|
 
+`unknown` 包在 complete 前必须由唯一 §4 owner 记录
+`confirm:blocker:<pkg>:<replace|fork|remove|defer>`；无已证明专属 owner 时归 `blockers`。
+
 ## 3. 推荐迁移路径
 
 - 推荐路径 id：`compat-big-bang` / `direct-vue3` / `host-port-direct` / `microfrontend-coexist` / `residual-audit`（仅 entry_mode=residual-audit） / …
@@ -71,6 +74,9 @@
 
 | 子系统 | scope_status | 风险 | 就绪度 | required_for_path | 命名配方 | 说明 |
 |---|---|---|---|---|---|---|
+
+已答内部分叉时在说明写 marker / 逐包 token，并把同一精确 `confirm:` token 写入对应
+Decision Record 的 `分叉人工答复`；`proceed:subsystem:<id>` 只写入 `人工答复`。
 
 ## 5. 分层影响分析
 
@@ -149,9 +155,11 @@
 | `<transition>` 过渡类名（v-enter → v-enter-from） | |
 | 静默语义变更（v-if/v-for 优先级、v-bind 顺序、watch 数组、data 浅合并、attr coercion） | |
 | `.sync` 修饰符与目标 UI 库 prop 身份（同批换库时按新库实际 prop 重解析） | |
+| UI-kit `icon prop` 的 class/sprite 字符串（按目标 prop 分类 silent/mount 风险） | |
 | `$options.filters` 过滤器对象访问（与模板管道是两处独立改写面） | |
 | dev 与 build 运行面差异（源码 CJS、`require.context`、多入口 URL 形态、base、env 分支） | |
 | router 导航静默变抛错（旧版 `push/replace` 吞错覆写与 `.catch` 吞错；按 name 跳转缺必填参数） | |
+| 外部全局脚本运行期契约（loader、ready/instance polling、真实挂载后 round-trip） | |
 | 目标依赖弃用告警面（迁移后落在目标大版本已弃用的 API 上；样式/构建工具自身的弃用告警） | |
 
 其他未决：

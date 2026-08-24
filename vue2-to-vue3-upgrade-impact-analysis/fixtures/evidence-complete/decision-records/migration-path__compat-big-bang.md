@@ -14,3 +14,4 @@
 | 推荐确认选项 | proceed:path:compat-big-bang / defer / other |
 | 确认队列状态 | decided |
 | 人工答复 | proceed:path:compat-big-bang |
+| 分叉人工答复 | — |

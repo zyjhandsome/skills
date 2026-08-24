@@ -14,3 +14,4 @@
 | 推荐确认选项 | proceed:subsystem:build / defer / other |
 | 确认队列状态 | decided |
 | 人工答复 | proceed:subsystem:build |
+| 分叉人工答复 | — |

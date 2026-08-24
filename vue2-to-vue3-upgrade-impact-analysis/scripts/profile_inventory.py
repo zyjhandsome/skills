@@ -41,7 +41,7 @@ REPLACE_ON_SIGHT = {
 
 LOCK_NAMES = ("pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb", "package-lock.json")
 SKIP_DIRS = {"node_modules", ".git", "dist", "build", "coverage", ".idea", ".vscode"}
-SOURCE_SUFFIXES = {".vue", ".js", ".jsx", ".ts", ".tsx"}
+SOURCE_SUFFIXES = {".vue", ".js", ".jsx", ".ts", ".tsx", ".html"}
 SOURCE_PATTERNS = {
     "new_vue": re.compile(r"\bnew\s+Vue\s*\("),
     "vue_use": re.compile(r"\bVue\.use\s*\("),
@@ -83,6 +83,32 @@ SOURCE_PATTERNS = {
         r"""<[A-Za-z][\w.-]*\b[^>]{0,300}?\bslot\s*=\s*['"](?:reference|trigger)['"]"""
         r"""|<template\b[^>]{0,160}?(?:#|v-slot:)(?:reference|trigger)\b[^>]{0,160}?>\s*<[A-Za-z][\w.-]*""",
         re.S,
+    ),
+    # Legacy UI kits accepted CSS class strings as icon identities. Component-
+    # based target kits may instead treat that string as a component/tag name;
+    # a whitespace-delimited sprite class can then abort mount rather than only
+    # lose an icon. Keep this pattern high-confidence: known legacy icon tokens,
+    # plus unbound multi-class values on Element-family component tags.
+    "kit_icon_class_prop": re.compile(
+        r"""
+        <(?:(?:el|ep)-[\w-]+|El[A-Z][\w$]*)\b[^>]{0,800}?\b
+        (?:
+          (?:(?::|v-bind:)icon|icon)\s*=\s*
+          (?:"[^"]*(?:sprite-icon|el-icon-)[^"]*"|'[^']*(?:sprite-icon|el-icon-)[^']*')
+          |
+          (?<![:\w-])icon\s*=\s*
+          (?:"[A-Za-z0-9_-]+(?:\s+[A-Za-z0-9_-]+)+"|'[A-Za-z0-9_-]+(?:\s+[A-Za-z0-9_-]+)+')
+        )
+        """,
+        re.S | re.X,
+    ),
+    # This is only the loader half of the external-global pattern. A runtime
+    # assertion candidate is emitted below only when the workspace also polls a
+    # bare window/globalThis readiness or instance-registry field.
+    "external_script_loader": re.compile(
+        r"(?:document\s*\.\s*)?createElement\s*\(\s*['\"]script['\"]\s*\)"
+        r"|<script\b[^>]{0,800}?\bsrc\s*=",
+        re.I | re.S,
     ),
     "event_bus": re.compile(r"\.\$(?:on|off|once)\s*\("),
     "vue_prototype_assignment": re.compile(
@@ -141,9 +167,16 @@ INTERACTION_ASSERTION_SIGNALS = (
     # Needs the child's root type resolved against the target kit, which no
     # regex can decide.
     "ui_trigger_slot_target",
+    "kit_icon_class_prop",
+    # Synthesized from external_script_loader + EXTERNAL_GLOBAL_READY below.
+    "external_global_runtime",
 )
 INTERACTION_CANDIDATE_CAP = 200
 INTERACTION_EXCERPT_LIMIT = 160
+EXTERNAL_GLOBAL_READY = re.compile(
+    r"\b(?:window|globalThis)\.([A-Za-z_$][\w$]*)\."
+    r"(?:Loaded|Instances|ready|isReady)\b"
+)
 SCRIPT_SETUP_ATTR = re.compile(r"<script\b[^>]*\bsetup\b", re.I)
 # Vue Options/Composition setup(props|context) — not editor callbacks like setup(editor)
 VUE_SETUP_FN = re.compile(
@@ -658,7 +691,7 @@ def scan_source(
     max_files: int = 5000,
     max_bytes: int = 1_000_000,
 ) -> dict:
-    signal_keys = list(SOURCE_PATTERNS) + ["composition_setup"]
+    signal_keys = list(SOURCE_PATTERNS) + ["composition_setup", "external_global_runtime"]
     counts: Counter[str] = Counter()
     samples: dict[str, list[str]] = {key: [] for key in signal_keys}
     scanned_files = 0
@@ -669,14 +702,24 @@ def scan_source(
     vue3_definitions: dict[str, list[str]] = {}
     consumers: dict[str, list[str]] = {}
     candidates: list[dict[str, object]] = []
-    candidates_truncated = False
+    candidate_total: Counter[str] = Counter()
+    candidate_emitted: Counter[str] = Counter()
+    candidate_truncated_signals: set[str] = set()
+    external_ready_rows: list[dict[str, object]] = []
     roots = source_roots if source_roots is not None else discover_source_roots(root)
     if not roots:
         return {"scanned_files": 0, "skipped_large_files": 0, "truncated": False,
                 "signals": {}, "samples": {}, "vue_plugin_packages": {},
                 "global_mounts": {},
                 "interaction_assertion_candidates": {
-                    "cap": INTERACTION_CANDIDATE_CAP, "truncated": False, "rows": []}}
+                    "cap": INTERACTION_CANDIDATE_CAP,
+                    "cap_scope": "per-signal",
+                    "truncated": False,
+                    "truncated_signals": [],
+                    "total_hits_by_signal": {},
+                    "emitted_rows_by_signal": {},
+                    "rows": [],
+                }}
     paths = (path for source_root in roots for path in source_root.rglob("*"))
     for path in paths:
         if any(part in SKIP_DIRS for part in path.parts) or not path.is_file() or path.suffix.lower() not in SOURCE_SUFFIXES:
@@ -739,21 +782,45 @@ def scan_source(
                 if len(samples[key]) < 5:
                     samples[key].append(relative)
                 if key in INTERACTION_ASSERTION_SIGNALS:
+                    candidate_total[key] += len(matches)
                     for match in matches:
-                        if len(candidates) >= INTERACTION_CANDIDATE_CAP:
-                            candidates_truncated = True
-                            break
+                        if candidate_emitted[key] >= INTERACTION_CANDIDATE_CAP:
+                            candidate_truncated_signals.add(key)
+                            continue
                         candidates.append({
                             "signal": key,
                             "file": relative,
                             "line": text.count("\n", 0, match.start()) + 1,
                             "match": _match_excerpt(text, match.start()),
                         })
+                        candidate_emitted[key] += 1
+        for match in EXTERNAL_GLOBAL_READY.finditer(text):
+            external_ready_rows.append({
+                "signal": "external_global_runtime",
+                "file": relative,
+                "line": text.count("\n", 0, match.start()) + 1,
+                "match": _match_excerpt(text, match.start()),
+            })
         setup_hits = count_composition_setup(text, relative)
         if setup_hits:
             counts["composition_setup"] += setup_hits
             if len(samples["composition_setup"]) < 5:
                 samples["composition_setup"].append(relative)
+    # Bare globals are high-noise in isolation. Emit the mandatory runtime
+    # closure only when the workspace also contains an external script loader.
+    if counts.get("external_script_loader") and external_ready_rows:
+        counts["external_global_runtime"] = len(external_ready_rows)
+        for row in external_ready_rows:
+            if len(samples["external_global_runtime"]) < 5:
+                relative = str(row["file"])
+                if relative not in samples["external_global_runtime"]:
+                    samples["external_global_runtime"].append(relative)
+            candidate_total["external_global_runtime"] += 1
+            if candidate_emitted["external_global_runtime"] >= INTERACTION_CANDIDATE_CAP:
+                candidate_truncated_signals.add("external_global_runtime")
+                continue
+            candidates.append(row)
+            candidate_emitted["external_global_runtime"] += 1
     mount_names = sorted(set(legacy_definitions) | set(vue3_definitions) | set(consumers))
     global_mounts = {
         name: {
@@ -775,7 +842,11 @@ def scan_source(
         "global_mounts": global_mounts,
         "interaction_assertion_candidates": {
             "cap": INTERACTION_CANDIDATE_CAP,
-            "truncated": candidates_truncated,
+            "cap_scope": "per-signal",
+            "truncated": bool(candidate_truncated_signals),
+            "truncated_signals": sorted(candidate_truncated_signals),
+            "total_hits_by_signal": dict(sorted(candidate_total.items())),
+            "emitted_rows_by_signal": dict(sorted(candidate_emitted.items())),
             "rows": sorted(
                 candidates,
                 key=lambda row: (row["file"], row["line"], row["signal"]),
@@ -799,7 +870,14 @@ def profile(root: Path) -> dict:
         resolved_source = "yarn.lock" if resolved else None
     peer_vue_specs = package_peer_vue_specs(root, lockfiles, set(deps))
     source_roots = discover_source_roots(root)
-    source_impact = scan_source(root, source_roots)
+    scan_roots = list(source_roots)
+    public_root = root / "public"
+    if public_root.is_dir():
+        # Static HTML is a common loader surface for bare window globals. Keep
+        # it out of source_roots/build-entry semantics while including it in the
+        # bounded impact scan.
+        scan_roots.append(public_root)
+    source_impact = scan_source(root, scan_roots)
     related = {}
     for name, spec in sorted(deps.items()):
         candidate_reasons: list[str] = []

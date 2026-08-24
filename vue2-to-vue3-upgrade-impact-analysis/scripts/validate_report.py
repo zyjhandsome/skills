@@ -195,6 +195,7 @@ REQUIRED_RECORD_FIELDS = (
     "推荐确认选项",
     "确认队列状态",
     "人工答复",
+    "分叉人工答复",
 )
 
 SCOPE_STATUSES = {"in_scope", "not_applicable"}
@@ -229,6 +230,9 @@ MANUAL_GAP_ITEMS = (
     # old UI kit's prop name. When the kit is replaced in the same upgrade the prop
     # must be re-resolved against the new kit, or the binding goes dead build-green.
     ("sync modifier target prop identity", (".sync", "sync 修饰符")),
+    # Legacy UI kits accepted font/sprite class strings where component-based
+    # targets require a Component. The residue can be silent or abort mount.
+    ("UI kit icon prop class identity", ("icon prop", "sprite 字符串", "sprite-icon")),
     # Codemods rewrite the `| filter` pipe and leave object-access call sites alone.
     ("options filters object access", ("$options.filters", "过滤器对象访问")),
     # Dev server and production build are two runtime faces with different module
@@ -239,6 +243,12 @@ MANUAL_GAP_ITEMS = (
     # rejections that Router 4 reports, and missing required params go from
     # ignored to thrown — usually on a bootstrap navigation, i.e. a blank page.
     ("router navigation silent-to-throw", ("导航静默变抛错", "Missing required param")),
+    # Bare globals loaded from HTML/dynamic scripts are not Vue plugins; their
+    # registration timing is only closed by a post-mount runtime round-trip.
+    (
+        "external global script runtime contract",
+        ("外部全局脚本", "external global script", "globalThis.X"),
+    ),
     # Migrating *onto* an API the target major already deprecates is invisible to
     # build and to screenshots, and shows up as per-mount console noise at the
     # scale of the call sites a codemod touched. Style/build tooling has the same
@@ -269,11 +279,20 @@ UI_STAGING_VALUES = {"with-runtime", "after-runtime"}
 # repo's migration guide is v3->v4. `ui` is absent on purpose: its fork is
 # `ui_cutover_staging`, gated in §3.
 SUBSYSTEM_FORK_MARKERS = {
-    "router": ("router_major:", {"4", "5"}),
-    "store": ("store_target:", {"vuex4", "pinia"}),
-    "i18n-plugins": ("i18n_mode:", {"legacy", "composition"}),
-    "test": ("test_runner:", {"keep", "vitest"}),
+    "router": ("router_major:", {"4", "5"}, "confirm:router-major"),
+    "store": ("store_target:", {"vuex4", "pinia"}, "confirm:store-target"),
+    "i18n-plugins": (
+        "i18n_mode:",
+        {"legacy", "composition"},
+        "confirm:i18n-mode",
+    ),
+    "test": ("test_runner:", {"keep", "vitest"}, "confirm:test-runner"),
 }
+CONFIRM_TOKEN_RE = re.compile(
+    r"confirm:[A-Za-z0-9@._/-]+(?::[A-Za-z0-9@._/-]+)*"
+)
+BLOCKER_ACTIONS = {"replace", "fork", "remove", "defer"}
+NO_FORK_ANSWER_VALUES = {"—", "-", "n/a", "not_applicable"}
 RESIDUAL_AUDIT_PATH_ID = "residual-audit"
 # A residual audit inspects an already-Vue3 workspace; it proposes no cutover,
 # so it is exempt from the upgrade-path machinery and carries these instead.
@@ -586,8 +605,12 @@ def validate_subsystem_forks(
     subsystems: list[dict[str, str]],
     queue: list[dict[str, str]],
     entry_mode: str,
+    path_block: str,
+    inventory_rows: list[list[str]],
+    analysis_status: str,
+    implementation_gate: str,
     result: "ReportResult",
-) -> None:
+) -> dict[str, set[str]]:
     """A scope answer must not be mistaken for an answer to the fork inside it.
 
     Router v4-vs-v5, Vuex-vs-Pinia, i18n legacy-vs-composition and the test
@@ -595,11 +618,15 @@ def validate_subsystem_forks(
     settled later by whoever runs the install, which is how a human who approved
     a scope finds the state library swapped at implementation time. A `decided`
     queue row whose §4 note carries no fork marker is indistinguishable from one
-    the analyzer answered on the human's behalf, so require the marker.
+    the analyzer answered on the human's behalf. Return the exact confirm tokens
+    implied by those markers so Decision Records can prove the user supplied
+    them rather than merely repeating the analyzer's recommendation.
     """
+    expected_tokens: dict[str, set[str]] = {}
     if entry_mode == "residual-audit":
-        return
+        return expected_tokens
     notes = {row.get("id"): row.get("note", "") for row in subsystems}
+    queue_by_unit = {row.get("unit"): row for row in queue}
     for row in queue:
         if row.get("type") != "subsystem" or row.get("status") != "decided":
             continue
@@ -607,7 +634,7 @@ def validate_subsystem_forks(
         spec = SUBSYSTEM_FORK_MARKERS.get(subsystem_id)
         if spec is None:
             continue
-        marker, allowed = spec
+        marker, allowed, token_prefix = spec
         value = _inline_marker_value(notes.get(subsystem_id, ""), marker)
         if value is None:
             result.error(
@@ -621,6 +648,65 @@ def validate_subsystem_forks(
                 f"§4 invalid {marker} {value!r} for {subsystem_id}; "
                 f"allowed={sorted(allowed)}"
             )
+            continue
+        expected_tokens.setdefault(subsystem_id, set()).add(
+            f"{token_prefix}:{value}"
+        )
+
+    ui_row = queue_by_unit.get("subsystem:ui")
+    if ui_row and ui_row.get("status") == "decided":
+        ui_staging = _inline_marker_value(path_block, "ui_cutover_staging:")
+        if ui_staging in UI_STAGING_VALUES:
+            expected_tokens.setdefault("ui", set()).add(
+                f"confirm:ui-staging:{ui_staging}"
+            )
+
+    # An `unknown` package is not resolved by deciding the containing subsystem.
+    # A complete packet must carry one explicit per-package action token, owned
+    # by one decided subsystem. This prevents an i18n mode or generic proceed
+    # answer from silently deciding replace/remove for an unrelated plugin.
+    if analysis_status == "complete":
+        for package, _version, readiness, _suggestion, _evidence in inventory_rows:
+            if readiness != "unknown":
+                continue
+            token_re = re.compile(
+                rf"confirm:blocker:{re.escape(package)}:"
+                rf"({'|'.join(sorted(BLOCKER_ACTIONS))})(?![A-Za-z0-9@._/-])"
+            )
+            owners: list[tuple[str, str]] = []
+            for subsystem_id, note in notes.items():
+                for match in token_re.finditer(note):
+                    owners.append((subsystem_id or "", match.group(0)))
+            unique = set(owners)
+            if not unique:
+                result.error(
+                    f"§2 unknown package {package!r} requires exactly one explicit "
+                    f"confirm:blocker:{package}:<replace|fork|remove|defer> token "
+                    "in its §4 owner note"
+                )
+                continue
+            if len(unique) != 1:
+                result.error(
+                    f"§2 unknown package {package!r} has ambiguous package actions: "
+                    f"{sorted(unique)!r}"
+                )
+                continue
+            owner, token = next(iter(unique))
+            owner_row = queue_by_unit.get(f"subsystem:{owner}")
+            if not owner_row or owner_row.get("status") != "decided":
+                result.error(
+                    f"§2 unknown package {package!r} action is owned by {owner!r}, "
+                    "but that subsystem is not decided in §7"
+                )
+                continue
+            if token.endswith(":defer") and implementation_gate == "ready":
+                result.error(
+                    f"§2 unknown package {package!r} was explicitly deferred; "
+                    "batch_implementation_gate must stay frozen"
+                )
+            expected_tokens.setdefault(owner, set()).add(token)
+
+    return expected_tokens
 
 
 def validate_residual_audit(
@@ -1134,7 +1220,13 @@ def validate_validation_matrix(
         )
 
 
-def parse_record(path: Path, expected_unit: str, expected_status: str, result: ReportResult) -> None:
+def parse_record(
+    path: Path,
+    expected_unit: str,
+    expected_status: str,
+    expected_fork_tokens: set[str],
+    result: ReportResult,
+) -> None:
     if not path.is_file():
         result.error(f"missing decision record: {path.name}")
         return
@@ -1180,6 +1272,22 @@ def parse_record(path: Path, expected_unit: str, expected_status: str, result: R
     if evidence_url and not HTTP_URL_RE.search(evidence_url):
         result.error(
             f"{path.name}: 兼容性证据（URL） must contain an http(s) URL"
+        )
+    fork_answer = values.get("分叉人工答复", "")
+    observed_fork_tokens = set(CONFIRM_TOKEN_RE.findall(fork_answer))
+    if expected_status == "decided" and expected_fork_tokens:
+        if observed_fork_tokens != expected_fork_tokens:
+            result.error(
+                f"{path.name}: 分叉人工答复 tokens {sorted(observed_fork_tokens)!r} "
+                f"must equal report-derived tokens {sorted(expected_fork_tokens)!r}"
+            )
+    elif observed_fork_tokens:
+        result.error(
+            f"{path.name}: 分叉人工答复 must be '—' when no decided fork is open"
+        )
+    elif fork_answer and fork_answer.strip().lower() not in NO_FORK_ANSWER_VALUES:
+        result.error(
+            f"{path.name}: 分叉人工答复 must contain exact confirm tokens or '—'"
         )
 
 
@@ -1272,7 +1380,16 @@ def validate_report(path: Path) -> ReportResult:
         validate_default_path_deviation(axes, path_block, result)
     validate_validation_matrix(sections.get("验证矩阵", ""), subsystems, result)
     queue = parse_queue(sections.get("确认队列", ""), result)
-    validate_subsystem_forks(subsystems, queue, entry_mode, result)
+    subsystem_fork_tokens = validate_subsystem_forks(
+        subsystems,
+        queue,
+        entry_mode,
+        path_block,
+        inventory_rows,
+        status.get("analysis_status", ""),
+        status.get("batch_implementation_gate", ""),
+        result,
+    )
     queue_by_unit = {row["unit"]: row for row in queue}
     path_rows = [row for row in queue if row["type"] == "path"]
     path_row = path_rows[0] if len(path_rows) == 1 else None
@@ -1400,17 +1517,22 @@ def validate_report(path: Path) -> ReportResult:
         if not records_dir.is_dir():
             result.error("complete report requires decision-records/ directory")
         else:
-            required_units: list[dict[str, str]] = []
-            if path_row:
-                required_units.append(path_row)
-            for sid in sorted(mandatory_ids):
-                row = queue_by_unit.get(f"subsystem:{sid}")
-                if row:
-                    required_units.append(row)
+            # Every unit that entered §7 needs a record. Optional medium rows are
+            # not forced into the queue, but once queued their decision evidence
+            # must not disappear merely because their risk is below High.
+            required_units = list(queue)
             for row in required_units:
                 prefix = "migration-path" if row["type"] == "path" else "subsystem"
                 record_path = records_dir / f"{prefix}__{row['id']}.md"
-                parse_record(record_path, row["unit"], row["status"], result)
+                parse_record(
+                    record_path,
+                    row["unit"],
+                    row["status"],
+                    subsystem_fork_tokens.get(row["id"], set())
+                    if row["type"] == "subsystem"
+                    else set(),
+                    result,
+                )
     elif analysis == "partial" and not records_dir.is_dir():
         result.warn("partial report missing decision-records/ (recommended)")
 

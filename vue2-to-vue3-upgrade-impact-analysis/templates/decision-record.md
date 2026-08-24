@@ -16,3 +16,4 @@
 | 推荐确认选项 | proceed:path:… / proceed:subsystem:… / defer / other |
 | 确认队列状态 | ready / pending / blocked / decided / deferred |
 | 人工答复 | |
+| 分叉人工答复 | 精确 `confirm:` token；无分叉时填 `—` |

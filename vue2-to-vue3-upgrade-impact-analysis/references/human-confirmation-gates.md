@@ -74,11 +74,11 @@ Never paste draft and wait for「继续/放行」— **ask now**.
 
 | User says | Agent must |
 |---|---|
-| 「继续 / 放行 / 全部放行 / 别再问了 / 全部纳入」 | **Not** a proceed token. Re-prompt the current wave with verbatim options. Do not set `decided`. |
+| 任意自然语言概括放行或委托代选，如「继续 / 放行 / 全部放行 / 全部纳入 / 按你的建议来 / 你替我选」 | **Not** a proceed token or confirm token. Re-prompt the current wave with verbatim options. Do not set `decided`; recommendations are not evidence of consent. |
 | Exact `proceed:path:<id>` / `proceed:subsystem:<id>` / `defer` / `other` | Record into `人工答复` and regenerate |
 | `proceed:subsystem:<id>,<id>,…` with every id spelled out and currently `ready` | Accept as one answer per named id: own queue transition, own Decision Record. Unnamed ids stay askable |
 | Same form containing `all` / `*` / `全部`, an unknown id, or a non-`ready` id | Reject the **whole** token — never apply the valid part — and re-show the menu per **Rejection shape** below |
-| One `confirm:<topic>[:<value>]` per line for topics currently open | Apply each to its own field and continue profiling |
+| One `confirm:<topic>[:<value>]` per line for topics currently open | Record each exact token into its report field and, for a subsystem fork, the owner DR's `分叉人工答复`; regenerate |
 | A `confirm:` line whose topic is unknown, not currently open, or repeated | Reject the **whole** message — never apply the valid lines — and re-show §D per **Rejection shape** below |
 | Ambiguous mix | Ask once to pick a single verbatim token per unit |
 
