@@ -157,6 +157,9 @@ Decision Record 的 `分叉人工答复`；`proceed:subsystem:<id>` 只写入 `�
 | `.sync` 修饰符与目标 UI 库 prop 身份（同批换库时按新库实际 prop 重解析） | |
 | UI-kit `icon prop` 的 class/sprite 字符串（按目标 prop 分类 silent/mount 风险） | |
 | `$options.filters` 过滤器对象访问（与模板管道是两处独立改写面） | |
+| 裸 `<template>` 包默认槽（Vue2 透明拆包，Vue3 编成真实 `template` 元素后整块不渲染） | |
+| 挂载容器选择器对撞（HTML 挂载点 vs 根组件根元素 id/class；同名则全局规则命中两次） | |
+| 被 CSS 抑制的目标库 overlay chrome（teleport 后锚点失配，症状是重复控件而非缺失） | |
 | dev 与 build 运行面差异（源码 CJS、`require.context`、多入口 URL 形态、base、env 分支） | |
 | router 导航静默变抛错（旧版 `push/replace` 吞错覆写与 `.catch` 吞错；按 name 跳转缺必填参数） | |
 | 外部全局脚本运行期契约（loader、ready/instance polling、真实挂载后 round-trip） | |

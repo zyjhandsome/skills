@@ -399,6 +399,78 @@ class ProfileInventoryTests(unittest.TestCase):
             self.assertEqual(candidates["total_hits_by_signal"]["kit_icon_class_prop"], 3)
             self.assertEqual(candidates["emitted_rows_by_signal"]["kit_icon_class_prop"], 3)
 
+    def test_locates_lone_template_wrappers_without_flagging_sfc_root(self) -> None:
+        # Vue 2 unwrapped a bare `<template>` and rendered its children; Vue 3
+        # compiles it to a real element the UA stylesheet hides, so the section
+        # blanks with no error. The SFC root sits at column 0 and must not be a
+        # candidate, and any structural directive makes the wrapper legitimate.
+        pkg = {"name": "panel-web", "dependencies": {"vue": "2.7.16"}}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "package.json").write_text(json.dumps(pkg), encoding="utf-8")
+            src = root / "src"
+            src.mkdir()
+            (src / "Panel.vue").write_text(
+                "<template>\n"
+                "  <panel-frame>\n"
+                "    <template>\n"
+                "      <p>{{ description }}</p>\n"
+                "    </template>\n"
+                '    <template #footer>\n'
+                "      <el-button>ok</el-button>\n"
+                "    </template>\n"
+                '    <template v-if="loaded">\n'
+                "      <basic-info />\n"
+                "    </template>\n"
+                "  </panel-frame>\n"
+                "</template>\n",
+                encoding="utf-8",
+            )
+
+            data = self._run_profile(root)
+
+            signals = data["source_impact_signals"]["signals"]
+            self.assertEqual(signals.get("lone_template_wrapper"), 1)
+            rows = [row for row
+                    in data["source_impact_signals"]["interaction_assertion_candidates"]["rows"]
+                    if row["signal"] == "lone_template_wrapper"]
+            self.assertEqual([(row["file"], row["line"]) for row in rows],
+                             [("src/Panel.vue", 3)])
+
+    def test_locates_css_suppression_of_teleported_kit_chrome(self) -> None:
+        # Element UI rendered dialog/drawer chrome inside the component subtree;
+        # Element Plus teleports it, so a rule anchored on a component-local
+        # ancestor stops matching and the app's own close button becomes a
+        # duplicate rather than a replacement.
+        pkg = {
+            "name": "drawer-web",
+            "dependencies": {"vue": "2.7.16", "element-ui": "2.15.14"},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "package.json").write_text(json.dumps(pkg), encoding="utf-8")
+            src = root / "src"
+            src.mkdir()
+            (src / "Detail.vue").write_text(
+                "<style scoped>\n"
+                "::v-deep .el-drawer__header {\n"
+                "  display: none;\n"
+                "}\n"
+                ".panel .el-dialog__headerbtn { visibility: hidden }\n"
+                ".el-table__row { color: red }\n"
+                "</style>\n",
+                encoding="utf-8",
+            )
+
+            data = self._run_profile(root)
+
+            signals = data["source_impact_signals"]["signals"]
+            self.assertEqual(signals.get("kit_chrome_css_suppression"), 2)
+            rows = [row for row
+                    in data["source_impact_signals"]["interaction_assertion_candidates"]["rows"]
+                    if row["signal"] == "kit_chrome_css_suppression"]
+            self.assertEqual([row["line"] for row in rows], [2, 5])
+
     def test_correlates_external_script_loader_with_global_runtime_polling(self) -> None:
         pkg = {"name": "editor-web", "dependencies": {"vue": "2.7.16"}}
         with tempfile.TemporaryDirectory() as tmp:

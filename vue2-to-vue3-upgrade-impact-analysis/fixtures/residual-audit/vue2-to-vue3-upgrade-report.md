@@ -159,6 +159,9 @@
 | `.sync` 修饰符与目标 UI 库 prop 身份 | 已扫描：源码已无 `.sync`，但 7 处 codemod 产出的 `v-model:visible` 绑的是旧库 prop 名，须按 Element Plus 重解析 |
 | UI-kit `icon prop` 的 sprite 字符串 | 已扫描迁移产物：1 处 `sprite-icon` class prop 仍传目标组件，列入 mount/点击清理断言 |
 | `$options.filters` 过滤器对象访问 | 已扫描：3 处对象访问调用点仍在，管道写法已改完 |
+| 裸 `<template>` 包默认槽 | 已扫描迁移产物：5 处无属性缩进 `<template>` 仍在，正文整块不渲染；列入清理断言并补 `vue/no-lone-template` |
+| 挂载容器选择器对撞 | 已核对：`index.html` 的 `#app` 与根组件根元素 `id="app"` 上次迁移后并存，`#app` 顶距被应用两次，列入清理项 |
+| 被 CSS 抑制的目标库 overlay chrome | 已扫描：3 处隐藏 `.el-drawer__header` 的 `::v-deep` 规则在 teleport 后失配，现表现为重复关闭钮，列入清理断言 |
 | dev 与 build 运行面差异（源码 CJS、`require.context`、多入口 URL 形态） | 已扫描：1 处 `require.context` 与第二入口只在 build 面失败 |
 | router 导航静默变抛错（旧 `push/replace` 吞错覆写；按 name 跳转缺必填参数） | 已扫描：`prototype` 吞错覆写残留 1 处（在 Router 4 下已不生效，属死代码）；按 name 跳转 4 处参数齐备 |
 | 外部全局脚本运行期契约 | 未发现 HTML/动态 loader 与 `globalThis.X` ready/instance polling 的关联命中 |

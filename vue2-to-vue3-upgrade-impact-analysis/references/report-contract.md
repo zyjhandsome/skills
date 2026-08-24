@@ -301,6 +301,14 @@ summary 的 `ui_behavior_contract.required_assertions` 必须同时给出（3..2
   分类为静默缺图或 mount throw，并绑定渲染/交互断言）
 - `$options.filters` 对象访问调用点（与模板管道 `| filter` 是两处独立改写面，
   codemod 通常只处理管道）
+- 裸 `<template>` 包默认槽（无 `v-if`/`v-for`/`v-slot` 的缩进 `<template>`：Vue2
+  透明拆包，Vue3 编成真实 `template` 元素，子节点被 UA 样式表整块隐藏；标记与
+  `vue/no-lone-template` 静态验证的归属都要写明）
+- 挂载容器选择器对撞（HTML 入口的挂载选择器 vs 根组件根元素的 id/class：Vue3 挂进
+  容器而不替换它，同名时同一条全局规则命中两次，`padding`/`min-height` 翻倍）
+- 被 CSS 抑制的目标库 overlay chrome（隐藏 dialog/drawer `__header`、`__close`
+  的规则在目标库 teleport 后锚点失配，被隐藏的 chrome 回来而应用自绘的替代件仍在，
+  症状是**重复控件**；逐条判定锚点是否留在原处，并优先改用目标库自带 opt-out prop）
 - dev 与 build 运行面差异（源码内 CJS、`require.context`、多入口 URL 形态、
   `base`/`publicPath`、env 分支）：两条运行面各自的验证归属必须写明，
   不得以其一代替另一条

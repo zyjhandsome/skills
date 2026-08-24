@@ -168,6 +168,9 @@
 | `.sync` 修饰符与目标 UI 库 prop 身份 | 闭包内待精确扫描；改写到 B 时按宿主 UI 库实际 prop 重解析，不沿用 A 侧 prop 名 |
 | UI-kit `icon prop` 的 sprite 字符串 | 闭包内待精确扫描；class 字符串不得直接迁入要求 Component 的宿主 icon prop |
 | `$options.filters` 过滤器对象访问 | 闭包内待精确扫描（管道之外的调用点，B 侧无该入口） |
+| 裸 `<template>` 包默认槽 | 闭包内待扫描无属性缩进 `<template>`；迁入 B 前须改具名槽，B 侧 `vue/no-lone-template` 接手静态验证 |
+| 挂载容器选择器对撞 | 不适用于迁入页：B 宿主已用 `createApp` 挂载且挂载点由宿主拥有；仍须核对迁入根元素不复用宿主挂载选择器 |
+| 被 CSS 抑制的目标库 overlay chrome | 闭包内待扫描隐藏 dialog/drawer `__header` / `__close` 的规则；B 宿主 UI 库 teleport 后锚点失配会出现重复控件 |
 | dev 与 build 运行面差异（源码 CJS、`require.context`、多入口 URL 形态） | 按 B 宿主工具链核对；两条运行面各需独立验证 |
 | router 导航静默变抛错（旧 `push/replace` 吞错覆写；按 name 跳转缺必填参数） | A 侧吞错覆写不随迁入；迁入路由按 B 宿主路由表逐点核对必填参数 |
 | 外部全局脚本运行期契约 | 未发现 HTML/动态 loader 与 `globalThis.X` ready/instance polling 的关联命中 |

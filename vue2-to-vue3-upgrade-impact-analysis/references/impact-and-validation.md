@@ -15,7 +15,8 @@
    `Vue.directive` / `Vue.mixin` global registration, `Vue.extend` /
    `Vue.observable` / `propsData`, `<transition>` usage, AMD-style async
    component factories, same-element `v-for`+`v-if`, `$options.filters` object
-   access, and the runtime-lane family (`module.exports` / `exports.x` inside
+   access, bare `<template>` wrappers, CSS that suppresses target-kit overlay
+   chrome, and the runtime-lane family (`module.exports` / `exports.x` inside
    source, `require.context`). Also complete §10 `人工补搜检查` for residual gaps
    and non-`vue-*` blockers (`tui-editor`, internal plugins, editors, etc.).
 
@@ -24,7 +25,8 @@
    locates every `model_option`, `native_modifier`, `keycode_modifier`,
    `transition_component`, `sync_modifier`, `options_filters_access`,
    `router_error_suppression` and `router_named_target` hit
-   plus `kit_icon_class_prop` and correlated `external_global_runtime` hits
+   plus `kit_icon_class_prop`, `lone_template_wrapper`,
+   `kit_chrome_css_suppression` and correlated `external_global_runtime` hits
    with file, line and excerpt, bounded by its own
    per-signal `cap`, `truncated_signals`, and hit/emitted counts (separate from
    the file-scan `truncated`). Each
@@ -60,6 +62,39 @@
    Vue3 removes the entry altogether, so those sites throw at runtime with no
    static fingerprint. Treat pipe rewrites and object-access rewrites as two
    separate closures.
+
+   **A bare `<template>` stops being an abstract wrapper.** Vue 2's codegen
+   unwrapped any `<template>` that carried no slot target and emitted its
+   children directly, so wrapping a panel body in a plain `<template>` was a
+   free grouping device. Vue 3 classifies `template` as an abstract wrapper
+   **only** when it carries `v-if` / `v-else` / `v-else-if` / `v-for` /
+   `v-slot`; bare, it is an ordinary element and compiles to
+   `createElementVNode("template", …)`. The children then mount into a real
+   `<template>` element, which the UA stylesheet renders `display: none` — an
+   entire section of the page silently blanks with no error, no warning, and no
+   diff in the emitted component tree. It survives every codemod because the
+   markup is valid in both majors, and it survives a screenshot comparison
+   whenever the affected route was only reached at `component-shell`. Two
+   properties make it cheap to close: `lone_template_wrapper` locates every
+   indented no-attribute `<template>` (the SFC root sits at column 0 and is
+   excluded), and `eslint-plugin-vue`'s `vue/no-lone-template` reports the same
+   shape, so name a **static** validation for this row rather than resting on a
+   rendered check. Hits in `.html` files may legitimately be native
+   web-component templates; resolve those, do not assume them.
+
+   **The mount container is no longer replaced, so its selector matches
+   twice.** Vue 2's `el` / `$mount` replaced the host element with the rendered
+   root; Vue 3's `mount()` renders **into** the container and leaves it in
+   place. When `index.html` carries `<div id="app">` and the root SFC's own root
+   element also carries `id="app"` — the overwhelmingly common Vue CLI shape —
+   the upgraded DOM contains both, nested. This is not only the selector shift
+   noted under `ui_visual_risk`: every global rule on that selector now applies
+   **twice**, so `#app { padding-top: … }` doubles the offset, borders and
+   backgrounds stack, and `min-height` compounds. The duplicate `id` also makes
+   `document.getElementById` resolve to the outer element. Compare the mount
+   selector in the HTML entry against the root component's root element
+   attributes and record the collision; the fix is a decision (drop one side)
+   and belongs in the packet, not in the implementer's judgment.
 
    **A UI-kit icon prop can turn a CSS class into a tag identity.** Legacy kits
    accepted font/sprite class strings (`el-icon-*`, `sprite-icon ...`) on
@@ -322,8 +357,10 @@ editor/tree/DAG CSS. Inventory at least:
   block to what a screenshot can actually show;
 - transition class renames (`v-enter`→`v-enter-from`): animations fail
   silently with a green build — include animated states when present;
-- mount container DOM change (Vue3 no longer replaces the host el;
-  `#app > *` style selectors may shift);
+- mount container DOM change (Vue3 renders into the host el instead of
+  replacing it, so `#app > *` selectors shift **and** an id/class shared by the
+  HTML container and the root component's root element now matches twice,
+  doubling padding/border/min-height — see the evidence note above);
 - SCSS `@import` → `@use` semantics when the build migration rewrites
   `prependData`/`additionalData`: namespace isolation can drop globals, which is
   the visual half. The other half is not visual at all — `@import` is deprecated
@@ -333,7 +370,19 @@ editor/tree/DAG CSS. Inventory at least:
   disposed there, not by a screenshot;
 - Tailwind prefix/Preflight/important/content/safelist and dynamic classes;
 - primary search + table page and secondary table when mixed;
-- Teleport/append target, overflow/z-index and theme inheritance;
+- Teleport/append target, overflow/z-index and theme inheritance. Inventory
+  every rule that **suppresses or overrides the kit's own overlay chrome**
+  (dialog/drawer `__header`, `__headerbtn`, `__close`, popper arrows) —
+  `kit_chrome_css_suppression` locates the `display:none` / `visibility:hidden`
+  shape. The failure is not that scoped styles cannot reach teleported nodes:
+  teleported children do carry the emitting component's scope id. It is that
+  such rules are almost always *descendant* selectors (`::v-deep .el-drawer__header`,
+  or a local wrapper class), and teleport removes the anchor from the ancestor
+  chain, so the selector stops matching. The suppressed chrome returns while the
+  replacement the app drew for it stays, and the symptom is a **duplicated
+  control** — two close buttons, two titles — not a missing one. Resolve each
+  rule by asking whether its anchor stays behind, and prefer the kit's own
+  opt-out prop over CSS;
 - baseline status and required visual states — on a UI-kit migration the
   required states must cover icon states, navigation states and popper
   triggers, not only table/dialog states.

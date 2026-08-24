@@ -167,6 +167,9 @@
 | `.sync` 修饰符与目标 UI 库 prop 身份 | 已扫描：11 处，其中 7 处绑在 element-ui 组件上，须按 Element Plus 实际 prop 重解析 |
 | UI-kit `icon prop` 的 sprite 字符串 | 已扫描：2 处 `sprite-icon` class prop，均按目标组件 prop 重写并绑定 mount/点击断言 |
 | `$options.filters` 过滤器对象访问 | 已扫描：3 处对象访问调用点，独立于管道写法列入 core-vue 影响面 |
+| 裸 `<template>` 包默认槽 | 已扫描：4 处无属性缩进 `<template>`，逐处改 `#default` 并绑定 `vue/no-lone-template` 静态验证 |
+| 挂载容器选择器对撞 | 已核对：`public/index.html` 挂载点 `#app` 与根组件根元素 `id="app"` 同名，Vue3 下同一条 `#app` 规则命中两次，列入 ui 影响面并须二选一 |
+| 被 CSS 抑制的目标库 overlay chrome | 已扫描：2 处 `::v-deep .el-drawer__header { display: none }`，Element Plus teleport 后锚点失配会出现重复关闭钮，绑定弹层打开态断言 |
 | dev 与 build 运行面差异（源码 CJS、`require.context`、多入口 URL 形态） | 已扫描：src 内 2 处 `module.exports`、单入口无 `require.context`；两条运行面各列一条验证 |
 | router 导航静默变抛错（旧 `push/replace` 吞错覆写；按 name 跳转缺必填参数） | 已扫描：1 处 prototype 吞错覆写、5 处按 name 跳转，其中 1 处启动期跳转缺必填参数，Router 4 下会抛错 |
 | 外部全局脚本运行期契约 | 未发现 HTML/动态 loader 与 `globalThis.X` ready/instance polling 的关联命中 |

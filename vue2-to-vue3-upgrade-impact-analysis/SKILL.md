@@ -110,9 +110,9 @@ build variant × scope** (A→B: workspace=A; scope often `page-closure`).
    `ui_visual_risk` block; a UI-kit `replace`/`needs-major` additionally needs
    `### ui_behavior_contract` + `ui_cutover_staging:` — mount timing, prop/enum
    renames, class-string icon identity and trigger-slot shape evade build/visual diff; correlated external-script loaders + bare-global polling require a post-mount round-trip.
+   A bare `<template>` (Vue3 emits a real, UA-hidden element), a mount-container id/class shared with the root component's root element (Vue3 renders into the container, so one global rule matches twice), and CSS hiding kit overlay chrome the target kit teleports away each blank or duplicate what the user sees while every gate stays green.
    Dev and build are **two runtime lanes**: one named validation each. Any capture also needs a `console-baseline`, whose disposal duty is keyed
-   by emitter (framework / target kit / toolchain), never by a remembered message
-   list; and removing an error-swallowing shim makes latent defects fail on load.
+   by emitter (framework / target kit / toolchain), never by a remembered message list; and removing an error-swallowing shim makes latent defects fail on load.
 7. Draft packet + Decision Records for path and every §7 subsystem. Keep scope
    `人工答复` separate from exact `分叉人工答复`; every §2 `unknown` package needs
    one owner/action token before `complete`.

@@ -235,6 +235,22 @@ MANUAL_GAP_ITEMS = (
     ("UI kit icon prop class identity", ("icon prop", "sprite 字符串", "sprite-icon")),
     # Codemods rewrite the `| filter` pipe and leave object-access call sites alone.
     ("options filters object access", ("$options.filters", "过滤器对象访问")),
+    # Vue 2 unwrapped a bare `<template>`; Vue 3 compiles it to a real template
+    # element whose children the UA stylesheet hides, blanking a whole section
+    # with no error, no warning and no codemod fingerprint.
+    (
+        "lone template wrapper",
+        ("裸 `<template>`", "裸 <template>", "lone_template_wrapper"),
+    ),
+    # Vue 3 renders into the mount container instead of replacing it, so an id or
+    # class shared with the root component's root element now matches twice.
+    ("mount container selector collision", ("挂载容器", "mount container")),
+    # Overlay chrome moves under Teleport, so CSS that suppressed it stops
+    # matching and the app's own replacement control becomes a duplicate.
+    (
+        "teleported kit chrome suppression",
+        ("overlay chrome", "kit chrome", "kit_chrome_css_suppression"),
+    ),
     # Dev server and production build are two runtime faces with different module
     # resolution and entry/URL topology; one can stay green while the other breaks.
     ("dev vs build runtime lane", ("运行面", "require.context", "dev 与 build")),

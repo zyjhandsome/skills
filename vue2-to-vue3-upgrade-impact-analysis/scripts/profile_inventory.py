@@ -102,6 +102,27 @@ SOURCE_PATTERNS = {
         """,
         re.S | re.X,
     ),
+    # Vue 2 unwrapped a `<template>` carrying no structural directive and
+    # rendered its children directly. Vue 3 only treats `template` as an
+    # abstract wrapper when it carries v-if/v-else/v-for/v-slot; bare, it
+    # compiles to a real `template` element whose children the UA stylesheet
+    # hides. Column-0 matches are excluded so the SFC root is not a candidate.
+    "lone_template_wrapper": re.compile(r"(?m)^[ \t]+<template\s*>"),
+    # CSS that hides or overrides target-kit overlay chrome. Element UI rendered
+    # that chrome inside the component subtree; Element Plus teleports it, so any
+    # rule anchored on a component-local ancestor stops matching and the chrome
+    # the app had suppressed reappears next to the replacement the app drew.
+    "kit_chrome_css_suppression": re.compile(
+        r"""
+        \.(?:el|ep)-(?:dialog|drawer|overlay|popper|popover|tooltip|dropdown
+                      |select-dropdown|picker-panel|message-box|notification
+                      |image-viewer)
+        [\w-]*__[\w-]+
+        [^{}]{0,200}\{[^{}]{0,400}?
+        (?:display\s*:\s*none|visibility\s*:\s*hidden)
+        """,
+        re.S | re.X | re.I,
+    ),
     # This is only the loader half of the external-global pattern. A runtime
     # assertion candidate is emitted below only when the workspace also polls a
     # bare window/globalThis readiness or instance-registry field.
@@ -168,6 +189,12 @@ INTERACTION_ASSERTION_SIGNALS = (
     # regex can decide.
     "ui_trigger_slot_target",
     "kit_icon_class_prop",
+    # Both need a rendered-output assertion, not a diff review: the wrapper
+    # blanks a subtree the screenshot comparison can only catch if the route was
+    # reachable, and the suppression rule's survival depends on whether the
+    # target kit teleports the node it points at.
+    "lone_template_wrapper",
+    "kit_chrome_css_suppression",
     # Synthesized from external_script_loader + EXTERNAL_GLOBAL_READY below.
     "external_global_runtime",
 )

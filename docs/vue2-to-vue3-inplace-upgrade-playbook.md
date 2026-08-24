@@ -550,6 +550,19 @@ pages 有值时，任务不得把未点名且未进入闭包的页面扩进范�
 本波不跑配方（gogocode / vue-upgrade-tool / webpack-to-vite / npm install）。
 依赖任务必须使用 TARGET_VUE_VERSION，校验适用包 resolved version 相等，拒绝 lock 漂移。
 
+tasks.md 必须**显式分区**，每条任务标注归属波次：
+- **Wave 4 权威区**：全部应用代码与依赖 mutation，以及在 Wave 4 会话内就能证伪的
+  验证（基线采集、frozen install、build/test、named_validations、G9、回滚演练）。
+- **Wave 5 区**：只有在全新会话、按当前 revision 独立重跑才成立的验证——完整功能
+  冒烟、逐路由 × 逐运行面的控制台对比、以及依赖本波人工前置（测试账号、后端/Mock
+  数据）才能执行的已批准场景。
+Wave 4 的 Delivery verified handoff **只对权威区判定**：Wave 5 区任务在 Wave 4 结束时
+保持未勾选是预期状态，不构成 Wave 4 未完成，也不阻止写出 verified handoff。没有这条
+分区，一条只能在 Wave 5 跑的登录态验证任务会同时卡住 Wave 4 的 verified 和依赖该
+handoff 的 Wave 5，两波互相等待，实际只能靠偷偷勾选或降级绕过。
+反向也不成立：任何需要改应用代码的任务一律进权威区，「要登录才能验」不是把实施
+任务推到 Wave 5 的理由。分区随计划一并进入 approve:plan，Wave 4/5 不得单方改分区。
+
 Node 任务须纵向且排在首次 install 之前：保存当前 Node 绿色基线；在改 Vue 依赖
 前验证旧项目能否运行于目标 Node；按已批准策略把**所有**声明面更新到同一个
 selected_node_version（报告「1.」记录的那个具体版本，不是 target_node_requirement
@@ -587,28 +600,23 @@ visual 契约）。这是用户的选择，不是 Agent 的判断；不允许 ba
 交互断言清单：以 inventory 的
 source_impact_signals.interaction_assertion_candidates.rows 为准，逐行生成交互
 验证任务（每行一条「输入→状态回写」断言，最小组件测试或脚本化浏览器检查），
-写入 tasks 与验证命令，不留给执行期自拟冒烟范围。model_option 行须按报告
-「10. 未决问题与证据缺口」人工补搜检查里的 live/dead 结论区分：live（父级用
-v-model 消费）为必做断言，dead 可降级。
-sync_modifier 行须区分绑在自有组件上还是绑在本次同批替换的 UI 库组件上：后者的
-断言必须验证改写后的 prop 名是**目标库实际声明的 prop**（旧库的 `visible` 在新库
-可能已改名为 `modelValue`），且断言点落在「弹层/抽屉真正打开并挂载出子组件」，
-而不只是变量被置为 true——这类错配 build 与 lint 全绿，症状出现在远处的 $refs。
-options_filters_access 行逐点断言运行期调用不抛错（与模板管道是两处独立改写面）。
-router_error_suppression 与 router_named_target 行是**静默被移除**而非引入：前者的
-任务必须包含「删掉旧 `push`/`replace` 的吞错覆写与 `.catch` 吞错」，并断言它原先
-掩盖的导航失败已逐条暴露且处置；后者对每个按 name 的跳转断言参数齐备（新版路由对
-缺必填参数由静默改为抛错，且此类跳转常在启动路径上，首现症状是白屏而不是坏链接）。
-ui_trigger_slot_target 行断言触发型插槽（popover / tooltip / dropdown 的 reference
-面）的唯一子节点是元素型根：目标库对该子节点挂指令，放组件型根时构建、渲染与截图
-全部一致，只在运行期告警且转发 ref 失效、弹层定位错乱——断言点是「触发交互后弹层
-出现且位置正确」，不是「页面渲染出来了」。
-kit_icon_class_prop 行须先按目标 UI 库精确版本确认 icon prop 要求：旧 font/sprite
-class 字符串不得直接保留；任务必须同时断言真实组件完成 mount、图标出现且对应 toolbar
-交互可执行。运行时曾抛 DOM/tag-name 错的行按 blocker，不得降级为纯视觉任务。
-external_global_runtime 行使用 manual-external-global-script：任务覆盖 loader URL/base、
-host DOM selector、轮询超时与清理，并在每条适用运行面执行 loaded → ready → instance
-retrievable → 最小行为 round-trip；静态 review 或 build 通过均不能关闭该行。
+写入 tasks 与验证命令，不留给执行期自拟冒烟范围。
+
+每一行的**语义、断言点与严重度以分析包为准**，本剧本不复述：该 signal 的结论写在
+报告「5.」的 `ui_visual_risk` / `ui_behavior_contract` 块、「8.」验证矩阵对应行，以及
+「10. 未决问题与证据缺口」人工补搜检查的同名行里（例如 model_option 的 live/dead
+判定、sync_modifier 的目标库 prop 身份、kit_icon_class_prop 的 mount throw 分类）。
+读那几行，不要凭本剧本或记忆重推——分析 Skill 会随实战增补 signal，复述在这里只会
+比它旧一轮。缺少某行结论时停止并回 Wave 1，不得由本波自拟语义。
+
+对所有行统一适用三条，与具体 signal 无关：
+- 断言点必须是**运行期可观测的行为或最终 DOM**（弹层真的打开并挂载出子组件、图标
+  出现且 toolbar 交互可执行、导航真的完成或按预期抛错、正文节点真的被绘制），
+  不得写成「变量被置为 true」「页面渲染出来了」「build/lint 通过」——这一族的共同
+  特征就是这些都绿。
+- 报告判为运行期抛错或整块不渲染的行按 blocker，不得降级为纯视觉任务。
+- 每行落在哪条运行面上验证要写明；存在 dev 运行面时按运行面各排一条。
+
 summary.recipe_constraints 里有 overlaps_with 的配方对，必须额外生成一条**交集**
 验证任务，不能用任一配方自身的任务顶替。
 ui_behavior_contract.required_assertions 逐条生成行为验证任务（弹层打开后子组件确实
@@ -663,8 +671,17 @@ resolve:workdir:include（纳入本次范围，基线 revision 随之改变）�
 npm config get production；node 不满足已批准 target range 时停止，production
 环境噪声按固定边界处置后再装。
 优先 frozen install；禁止用仓库拒绝的包管理器。现在可以安装依赖并运行已命名配方。
-按 tasks.md 纵向实施。实施后、Fresh Verification 前重新 index_repository，刷新 Codebase Memory 索引。
+按 tasks.md 纵向实施，只实施并勾选 Wave 4 权威区；Wave 5 区任务保持未勾选是预期
+状态，不得代跑、不得勾选，也不得因它们未勾选而拒绝写出 verified handoff。
+实施后、Fresh Verification 前重新 index_repository，刷新 Codebase Memory 索引。
 lock digest 未变化不重复安装。
+
+改过模板的每个 SFC 在提交进本波证据前逐文件自检：用 @vue/compiler-sfc 解析（或跑仓
+内 lint）断言解析无 error，且该文件的起始标签属性没有被降级成文本节点。多行起始标签
+（`<el-table` 后面跟着若干行属性）在编辑时最容易被收成单行 `<el-table>`，剩下的属性变
+成模板文本——页面照常渲染，表格空着，build 与 lint 可以全绿。同一遍自检覆盖裸
+`<template>` 一族：改默认槽后重新确认无属性 `<template>` 已清零（`vue/no-lone-template`
+是现成的静态判据），不要靠肉眼过 diff。
 计划含临时同域代理、测试部署或 hosts 映射时，只能按 approve:plan 已授权的精确作用域
 执行，记录原值、启停/还原步骤与实际 capture_conditions；未授权不得临场修改系统环境。
 
@@ -677,6 +694,12 @@ visual=required：升级后写 delivery-visual-evidence/v1 到 G9_ROOT 并校验
 assessment_mode、diff_policy、structural_parity_metrics 与 capture_conditions
 一律取已批准 spec 的值填写，本波不得新定或改写——改写等同单方降级 required 状态，
 须按 alignment_backflow 回 Wave 2。current 采集必须复用基线的 capture_conditions。
+每个 required 视觉状态必须逐个记录**实际达到的可达层**（entry-reachable /
+component-shell / populated-data）；低于该状态在 Wave 2 声明的最低层时，本波不得
+写 final_visual_result=pass，按 alignment_backflow 回 Wave 2 重议该状态或其分层。
+这一条是 G9 最容易空转的地方：截图对比只能证明它拍到的那一层，`#app` 空壳、登录页
+和未挂载的占位页两边一样「相符」，于是空白正文、顶距翻倍、重复关闭钮这类**一眼可见**
+的回归会连同一个 pass 一起交出去。缺状态不是「视觉无差异」，是没验。
 
 控制台基线：若计划中的 console-baseline 任务尚未执行，必须在本波首次依赖/代码
 mutation 之前执行并落盘 EVIDENCE_ROOT/console-baseline.json；首次 mutation 之后
@@ -720,6 +743,9 @@ visual/G9 的 required 状态不得在本波降级；降级只能走 Wave 2 重�
 本波：显式使用 delivery-execute-verify，仅做独立新鲜验证与升级后功能验收。
 不得修改应用代码，不得改 tasks 勾选，不得跑新的实施配方，不得 archive/commit/push/PR。
 发现缺陷不要在本波修复。
+本波执行 tasks.md 的 **Wave 5 区**；它们在 Wave 4 结束时未勾选是预期状态，本波也不去
+勾选——结果逐条落在 EVIDENCE_ROOT/inrepo-verification.md，不通过 tasks 勾选体现。
+Wave 5 区里出现需要改应用代码的任务时，说明分区有误，按 backflow:wave3 回流。
 本波必须是全新会话；若沿用了 Wave 4 会话，停止并重新开会话。
 
 应已存在：绑定当前 revision 的 Delivery verification.md 与 verified handoff、
@@ -797,9 +823,14 @@ EVIDENCE_ROOT/handoff-wave4.json（只读归档），本波 handoff 的
 previous_handoff_id 指向它——handoff.json 是覆盖写，不归档就无法区分前置证据。
 
 无论 pass 还是 fail，本波都要写一份回灌工件
-EVIDENCE_ROOT/upgrade-retrospective.md，记录本次实测到的五类事实，每条附证据指针
+EVIDENCE_ROOT/upgrade-retrospective.md，记录本次实测到的六类事实，每条附证据指针
 （文件/路由/命令）与观察日期：
 - codemod 实际产出特征（哪种改写是错的、错在哪、build/lint 为何没拦住）；
+- **未被改写却换了语义的编译/挂载形态**：源码一字未动、两个大版本都合法，但编译产物
+  或挂载后的 DOM 变了，因此 codemod 和 diff review 都看不见（裸 `<template>` 被编成
+  真实元素、挂载容器不再被替换导致选择器命中两次、teleport 让原本生效的抑制规则
+  失配）。这一类的共同症状是**用户一眼可见而所有闸门全绿**，写清是哪个构件、
+  症状在哪条路由、最终靠什么判据发现的；
 - UI 库行为差异（懒挂载、prop / icon identity / 枚举 / 事件 / 插槽契约、插槽内容形状与预期不符之处）；
 - 运行面分叉（只在 dev 或只在 build 出现的问题）；
 - 外部运行集成与可达性（裸全局脚本 ready/instance 时序、auth/同域环境实际达到的层）；
@@ -817,7 +848,8 @@ EVIDENCE_ROOT/upgrade-retrospective.md，记录本次实测到的五类事实，
 
 仓内 verified 须同时满足（本波逐条核对，缺一不得声称）：
 分析包 complete 且交接时 gate=ready；路径仍是原地升；规格批准与实现 go 绑定当前
-revision；权威任务完成；Wave 4 已写出绑定当前 revision 的 Delivery verification
+revision；tasks.md 的 Wave 4 权威区任务完成（Wave 5 区任务由本波逐条执行并落盘
+inrepo-verification.md，未勾选不构成缺口）；Wave 4 已写出绑定当前 revision 的 Delivery verification
 与 verified handoff；Wave 4 Fresh Verification 与 High 独立审查通过；本波在全新
 会话对当前 revision 重跑 named_validations、规格场景与升级后功能冒烟，且不混用
 Wave 4 旧 pass；visual=required 时 G9 pass 且 required 状态未被任何 Wave 单方降级
@@ -862,6 +894,8 @@ backflow:wave3；必须降低最低可达层或验收范围 → backflow:wave2�
 | 行为断言未进已批准 spec，或被当作 G9 的一部分顺带豁免 | Wave 2 规格批准 |
 | 控制台基线缺失、条件不可复现，或首次 mutation 后才发现未采 | Wave 2 规格批准（重议控制台基线契约，不得在升级后 revision 补采） |
 | 任务另起第二套控制台采集器或另一种口径 | Wave 3 Plan |
+| tasks.md 未分区，或实施任务被放进 Wave 5 区（表现为 Wave 5 区未勾选卡住 Wave 4 verified，两波互等） | Wave 3 Plan 重新分区并重批 `approve:plan` |
+| G9 pass 建立在低于 Wave 2 声明最低可达层的状态上（只拍到 shell / 占位页） | Wave 2 规格批准；实现导致不挂载则 Wave 4 |
 | 运行面覆盖不全（只验证了 dev 或只验证了 build 产物） | Wave 3 Plan 补任务；已实施则 Wave 4 补跑另一条运行面 |
 | Wave 3 人工前置未兑现，导致已批准交互无法执行 | Wave 3 Plan；确实不可得时回 Wave 2 重议验收范围 |
 | auth/同域环境结构性不可达，但验收目标不变、可增加测试 harness | Wave 3 Plan：具名代理/测试部署任务与授权；有环境 mutation 时由 Wave 4 执行 |
@@ -913,7 +947,7 @@ entry-reachable 最低线、`console-evidence`、逐点交互断言、G9、回�
 归入哪一类由用户定，Agent 只给建议与理由：把阻断项误归成 retrospective 追加，等于
 让一个真回归没有 owner 地留在仓里。
 
-追加时按上面的五类事实归类，`config-silenced` 的具名弃用 id 与解除条件一并记下。
+追加时按 Wave 5 的六类事实归类，`config-silenced` 的具名弃用 id 与解除条件一并记下。
 这类发现**不表示 Wave 1–5 跑得不严**，而是分析期的建模面没覆盖到该破坏面；因此
 追加的价值在于让下一个仓的 Wave 1 把它当成已知面来扫，而不是在这个仓重开波次。
 若同一类发现在两个仓复现，那是分析 Skill 的信号或控制台分类该扩的证据，不是剧本

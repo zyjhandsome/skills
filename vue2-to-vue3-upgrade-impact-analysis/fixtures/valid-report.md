@@ -171,6 +171,9 @@
 | `.sync` 修饰符与目标 UI 库 prop 身份 | 待精确扫描；element-ui 组件上的 `.sync` 须按 Element Plus 实际 prop 重解析，不得机械沿用旧 prop 名 |
 | UI-kit `icon prop` 的 sprite 字符串 | 待精确扫描；命中项须按目标 UI 库分类为静默缺图或 mount throw |
 | `$options.filters` 过滤器对象访问 | 待精确扫描（管道之外的调用点，Vue3 已移除该入口） |
+| 裸 `<template>` 包默认槽 | 待扫描无属性缩进 `<template>`；命中项须改具名槽并绑定 `vue/no-lone-template` 静态验证 |
+| 挂载容器选择器对撞 | 待核对 HTML 入口挂载选择器与根组件根元素 id/class 是否同名；同名时全局规则命中两次，须二选一 |
+| 被 CSS 抑制的目标库 overlay chrome | 待扫描隐藏 dialog/drawer `__header` / `__close` 的规则；逐条判定 teleport 后锚点是否失配导致重复控件 |
 | dev 与 build 运行面差异（源码 CJS、`require.context`、多入口 URL 形态） | 待扫描；两条运行面各需独立验证，不得以其一代替另一条 |
 | router 导航静默变抛错（旧 `push/replace` 吞错覆写；按 name 跳转缺必填参数） | 待逐调用点扫描；吞错覆写掩盖的失败与必填参数缺失均在 Router 4 下暴露 |
 | 外部全局脚本运行期契约 | 待关联 HTML/动态 loader 与 `globalThis.X` ready/instance polling，并绑定真实挂载断言 |
