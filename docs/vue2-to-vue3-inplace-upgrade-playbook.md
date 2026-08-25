@@ -167,6 +167,7 @@ Wave 1 会话里**两套同时在场**，各管各的：`override:change-id:` �
 | `required_visual_states` | ≥5 个唯一状态（下游按证据行硬计数） | `override:visual-states:<列出>` |
 | `console_baseline_required` | 固定 `yes` | `override:console-baseline:no-baseline`（仅当升级前 app 任何 lane 都起不来） |
 | 验证可达性三层 | 固定区分 entry-reachable → component-shell → populated-data；只有最后一层可按已批准条件降级 | `override:data-dependent-layering:no`（仅关闭数据层降级，不得豁免 entry 最低线） |
+| G9 阶段划分 | 默认单阶段；仅当登录墙让部分 required 状态在 Wave 4 环境结构性拍不到时取两阶段（阶段 1 免登录状态进 Wave 4 权威区，阶段 2 全量已批准状态进 Wave 5 区） | `override:g9-phasing:two-phase`（须同时点名阶段 2 的 Wave 5 区任务）。两阶段只推后证据、不减少 required 状态；仓内 verified 以阶段 2 pass 为条件 |
 | `ui_behavior_contract` 断言 | 逐条进入已批准 spec 的验收场景，与视觉状态分开列 | 不建议覆盖：G9 pass 不构成这些断言的证据 |
 
 `entry-reachable` 的最低线不可被覆盖：每条应验证运行面至少一个代表入口必须越过
@@ -513,6 +514,17 @@ required 状态若仅 `populated-data` 不可得，允许以「component-shell p
 且以基线在同条件下同样只能取到 component-shell 为前提。Wave 5 不得临时发明分层，
 也不得用 accepted-residual 把 auth-walled/占位页说成 component-shell。
 
+登录墙让部分 required 状态在 Wave 4 环境里结构性拍不到时，本波可以批准一份**两阶段
+G9**，而不是二选一地要么降级要么卡死：
+- 阶段 1（Wave 4 权威区）：免登录可达的状态，逐状态标注可达层，作为实现闸门证据；
+- 阶段 2（Wave 5 区）：全量已批准 `required_visual_states`，在有登录的环境按同一份
+  `capture_conditions` 采集。
+批准两阶段的前提是三条同时成立：阶段 2 的状态清单就是完整的已批准清单（不是阶段 1
+的补集打折）、阶段 2 是 tasks.md 里具名的 Wave 5 区任务、仓内 verified 以阶段 2 pass
+为条件。两阶段是把证据**推后**，不是把 required 状态**减少**；缺了阶段 2 的批准
+只是「还没验」，任何一波都不得据此声称 G9 已过。不批两阶段时，required 含登录态
+就必须先由 Wave 3 的人工前置或具名测试 harness 兑现登录，不能靠 Wave 4 拍 shell 蒙过。
+
 通过规格闸门：只问一次范围批准，但那一条消息里必须把它背后的取值逐条摊开——
 visual 是否 required、assessment_mode、diff_policy、structural_parity_metrics、
 capture_conditions、required_visual_states、console_baseline_required、验证可达性
@@ -697,6 +709,8 @@ assessment_mode、diff_policy、structural_parity_metrics 与 capture_conditions
 每个 required 视觉状态必须逐个记录**实际达到的可达层**（entry-reachable /
 component-shell / populated-data）；低于该状态在 Wave 2 声明的最低层时，本波不得
 写 final_visual_result=pass，按 alignment_backflow 回 Wave 2 重议该状态或其分层。
+已批准两阶段 G9 时，本波只对阶段 1 的状态判 pass，证据里写明这是阶段 1、阶段 2
+绑在哪条 Wave 5 区任务上；不得把阶段 1 的 pass 表述为 G9 整体通过。
 这一条是 G9 最容易空转的地方：截图对比只能证明它拍到的那一层，`#app` 空壳、登录页
 和未挂载的占位页两边一样「相符」，于是空白正文、顶距翻倍、重复关闭钮这类**一眼可见**
 的回归会连同一个 pass 一起交出去。缺状态不是「视觉无差异」，是没验。
@@ -854,7 +868,8 @@ inrepo-verification.md，未勾选不构成缺口）；Wave 4 已写出绑定当
 会话对当前 revision 重跑 named_validations、规格场景与升级后功能冒烟，且不混用
 Wave 4 旧 pass；visual=required 时 G9 pass 且 required 状态未被任何 Wave 单方降级
 （assessment_mode / diff_policy / structural_parity_metrics 仍是 Wave 2 已批准的值，
-current 与基线同 capture_conditions）；回滚演练证据存在（升级前 revision 在旧 lane
+current 与基线同 capture_conditions；两阶段 G9 时阶段 2 已在本波按全量已批准
+`required_visual_states` 跑过并 pass，只有阶段 1 通过不构成 G9 通过）；回滚演练证据存在（升级前 revision 在旧 lane
 frozen install/build 通过）；存在 dev 运行面时 dev 与 build 两条运行面各自独立跑过
 完整冒烟并各有证据；console-evidence.json 按每路由 × 每运行面 fresh page 口径采集，
 且已与 console-baseline.json 同 route 同 runtime_lane 逐条对比、每条 error 归入

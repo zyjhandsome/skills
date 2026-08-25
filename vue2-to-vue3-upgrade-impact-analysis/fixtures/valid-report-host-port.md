@@ -109,7 +109,8 @@
 ### ui_behavior_contract
 
 - mount_timing: B 宿主弹层组件按 modelValue 懒挂载；A 侧「先取 `$refs` 再打开」的调用点改写到 B 时须改为打开后 nextTick
-- prop_renames: A 的 `:visible.sync` 映射到 B 组件的实际 prop（不得机械沿用 `visible`）；表单类 `:label` / `:value` 按 B 组件文档核对
+- prop_renames: A 的 `:visible.sync` 与裸 `v-model` 都须**逐组件**映射到 B 宿主组件的实际 props+emits（不得机械沿用 A 侧 prop 名，也不得把某个弹层组件的结论套到另一个）；表单类 `:label` / `:value` 按 B 组件文档核对
+- kit_internal_traversal: A 侧 `$parent` 多跳、嵌套 `$refs`、改 kit DOM 与对查出节点 `click()` 的调用点迁入 B 前必须改成公开 API——A 侧的跳数与内部 DOM 在 B 宿主一定不成立；断言落在宿主状态真的变了
 - enum_renames: size / type 枚举按 B 组件库取值重写，旧值在 B 侧不被识别且不报错
 - event_contract: `update:<prop>` 事件名随 B 侧 prop 名变化；迁入组件逐个显式声明 emits
 - slot_contract: `slot=` / `slot-scope` → `#name` / `v-slot`，作用域参数结构按 B 组件文档逐点核对
@@ -165,7 +166,10 @@
 | `Vue.component` / `Vue.directive` / `Vue.mixin` 全局注册与指令钩子改名 | 闭包内待精确扫描 |
 | `<transition>` 过渡类名（v-enter → v-enter-from） | 闭包内待扫描 |
 | 静默语义变更（v-if/v-for 优先级、v-bind 顺序、watch 数组、data 浅合并、attr coercion） | 同元素 v-if+v-for 待扫描；其余列入 B 侧改写核对 |
-| `.sync` 修饰符与目标 UI 库 prop 身份 | 闭包内待精确扫描；改写到 B 时按宿主 UI 库实际 prop 重解析，不沿用 A 侧 prop 名 |
+| `.sync` 修饰符与目标 UI 库 prop 身份 | 闭包内待精确扫描；改写到 B 时**逐组件**按宿主 UI 库的 props+emits 重解析，不沿用 A 侧 prop 名，也不得跨组件套结论 |
+| 靠遍历伸进目标库内部的调用点 | 闭包内待扫描 `$parent` 多跳、嵌套 `$refs`、`$nextTick` 改 kit DOM 与对查出节点 `click()`；迁入 B 前必须改成公开 API，A 侧的跳数在 B 宿主一定不成立 |
+| 路由 history 实现与多页入口 URL 形态 | B 宿主已有 history 实现，迁入页沿用宿主的，不得自带第二种；仍须断言迁入路由导航后宿主入口形态与 query 不变 |
+| `router-view` 上的 `ref` 归属 | 闭包内待扫描 `<router-view ref>`；A 侧靠函数式 `router-view` 透传 ref 的写法迁入 B 后失效，改 `v-slot="{ Component }"` |
 | UI-kit `icon prop` 的 sprite 字符串 | 闭包内待精确扫描；class 字符串不得直接迁入要求 Component 的宿主 icon prop |
 | `$options.filters` 过滤器对象访问 | 闭包内待精确扫描（管道之外的调用点，B 侧无该入口） |
 | 裸 `<template>` 包默认槽 | 闭包内待扫描无属性缩进 `<template>`；迁入 B 前须改具名槽，B 侧 `vue/no-lone-template` 接手静态验证 |

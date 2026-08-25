@@ -123,6 +123,39 @@ SOURCE_PATTERNS = {
         """,
         re.S | re.X | re.I,
     ),
+    # Overlay visibility bindings whose prop identity is per-component in the
+    # target kit, and which move in *opposite* directions: Element UI's popover
+    # took a bare `v-model` and Element Plus needs `v-model:visible` (argument
+    # added), while a dialog/drawer `:visible.sync` becomes a bare `v-model`
+    # (argument removed). Neither direction can be inferred from the other.
+    "kit_vmodel_prop_identity": re.compile(
+        r"""<(?:(?:el|ep)-(?:dialog|drawer|popover|tooltip|popconfirm)
+              |El(?:Dialog|Drawer|Popover|Tooltip|Popconfirm))
+            \b[^>]{0,400}?\bv-model(?::[\w-]+)?\s*=""",
+        re.S | re.X | re.I,
+    ),
+    # Reaching into a kit's internals by traversal instead of through its public
+    # API. The hop count of a `$parent` chain, the shape of a nested `$refs`
+    # chain, and the DOM a kit renders are all implementation details that any
+    # kit upgrade is free to change — and lazily mounted overlays mean a queried
+    # node may not exist at all. Assignments land on an inner instance, or the
+    # query returns null, with no build or lint fingerprint.
+    "kit_internal_traversal": re.compile(
+        r"""
+        \$parent\s*\.\s*\$parent
+        | \$refs\b[\w$.\[\]'"-]{0,48}\.\s*\$refs\b
+        | (?:querySelector(?:All)?|getElementById)\s*\([^)]{0,120}\)\s*\.\s*
+          (?:click|focus|classList|value)\b
+        | \.\s*classList\s*\.\s*(?:add|remove|toggle)\s*\(
+        """,
+        re.S | re.X,
+    ),
+    # Router 3's `router-view` is functional, so a `ref` on it fell through to
+    # the matched component. Router 4's RouterView is stateful and keeps the ref
+    # for itself, so calling a page method through it throws TypeError.
+    "router_view_ref": re.compile(
+        r"<(?:router-view|RouterView)\b[^>]{0,200}?\bref\s*=", re.S | re.I
+    ),
     # This is only the loader half of the external-global pattern. A runtime
     # assertion candidate is emitted below only when the workspace also polls a
     # bare window/globalThis readiness or instance-registry field.
@@ -195,6 +228,11 @@ INTERACTION_ASSERTION_SIGNALS = (
     # target kit teleports the node it points at.
     "lone_template_wrapper",
     "kit_chrome_css_suppression",
+    # Each needs the target component's own props/emits, the kit's internal tree,
+    # or the matched-component identity resolved by hand — no regex decides them.
+    "kit_vmodel_prop_identity",
+    "kit_internal_traversal",
+    "router_view_ref",
     # Synthesized from external_script_loader + EXTERNAL_GLOBAL_READY below.
     "external_global_runtime",
 )

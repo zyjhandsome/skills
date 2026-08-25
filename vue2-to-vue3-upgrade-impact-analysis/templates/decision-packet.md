@@ -99,7 +99,8 @@ Decision Record 的 `分叉人工答复`；`proceed:subsystem:<id>` 只写入 `�
 ### ui_behavior_contract（`ui` 为 replace / needs-major 时必填）
 
 - mount_timing:（新库是否懒挂载子树，`$refs` 何时可用）
-- prop_renames:（值契约改名，如 `visible` → `modelValue`）
+- prop_renames:（值契约改名。弹层可见性 prop 逐组件查目标库 props+emits；dialog/drawer 与 popover/tooltip 两族方向相反，不得统一改写。受控模式下 `trigger` 可能失效，改 `trigger` 不算修复）
+- kit_internal_traversal:（`$parent` 多跳写宿主状态、嵌套 `$refs`、改 kit 渲染出的 DOM、对查出节点 `click()`；断言落在宿主状态真的变了）
 - enum_renames:（size / type 等枚举取值改名或删除）
 - event_contract:（`update:<prop>` 事件名、payload、`emits` 与双触发）
 - slot_contract:（插槽名与作用域参数结构）
@@ -154,7 +155,10 @@ Decision Record 的 `分叉人工答复`；`proceed:subsystem:<id>` 只写入 `�
 | `Vue.component` / `Vue.directive` / `Vue.mixin` 全局注册与指令钩子改名 | |
 | `<transition>` 过渡类名（v-enter → v-enter-from） | |
 | 静默语义变更（v-if/v-for 优先级、v-bind 顺序、watch 数组、data 浅合并、attr coercion） | |
-| `.sync` 修饰符与目标 UI 库 prop 身份（同批换库时按新库实际 prop 重解析） | |
+| `.sync` 修饰符与目标 UI 库 prop 身份（同批换库时**逐组件**按新库 props+emits 重解析；两族方向可能相反） | |
+| 靠遍历伸进目标库内部的调用点（`$parent` 多跳、嵌套 `$refs`、改 kit DOM、对查出节点 `click()`） | |
+| 路由 history 实现与多页入口 URL 形态（Router 3 `mode` 缺省 hash；断言 `*.html` 与 query 保留） | |
+| `router-view` 上的 `ref` 归属（Router 4 的 RouterView 自留 ref，父页调子页方法会抛） | |
 | UI-kit `icon prop` 的 class/sprite 字符串（按目标 prop 分类 silent/mount 风险） | |
 | `$options.filters` 过滤器对象访问（与模板管道是两处独立改写面） | |
 | 裸 `<template>` 包默认槽（Vue2 透明拆包，Vue3 编成真实 `template` 元素后整块不渲染） | |

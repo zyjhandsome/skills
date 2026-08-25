@@ -471,6 +471,84 @@ class ProfileInventoryTests(unittest.TestCase):
                     if row["signal"] == "kit_chrome_css_suppression"]
             self.assertEqual([row["line"] for row in rows], [2, 5])
 
+    def test_locates_overlay_vmodel_bindings_for_per_component_resolution(self) -> None:
+        # Overlay visibility prop identity moves in opposite directions between
+        # component families, so every binding is a candidate regardless of which
+        # shape it currently uses: a bare `v-model` is right for a dialog and
+        # wrong for a popover, and `v-model:visible` is the reverse.
+        pkg = {
+            "name": "overlay-web",
+            "dependencies": {"vue": "2.7.16", "element-ui": "2.15.14"},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "package.json").write_text(json.dumps(pkg), encoding="utf-8")
+            src = root / "src"
+            src.mkdir()
+            (src / "Roles.vue").write_text(
+                "<template>\n"
+                '  <el-popover v-model="visible" trigger="click">\n'
+                "    <template #reference><span>cfg</span></template>\n"
+                "  </el-popover>\n"
+                '  <el-dialog v-model:visible="dialogShown" />\n'
+                '  <el-select v-model="picked" />\n'
+                "</template>\n",
+                encoding="utf-8",
+            )
+
+            data = self._run_profile(root)
+
+            signals = data["source_impact_signals"]["signals"]
+            self.assertEqual(signals.get("kit_vmodel_prop_identity"), 2)
+            rows = [row for row
+                    in data["source_impact_signals"]["interaction_assertion_candidates"]["rows"]
+                    if row["signal"] == "kit_vmodel_prop_identity"]
+            self.assertEqual([row["line"] for row in rows], [2, 5])
+
+    def test_locates_kit_internal_traversal_and_router_view_ref(self) -> None:
+        # Hop counts, nested ref chains, kit-rendered DOM and queried nodes are
+        # all implementation details. Router 3's functional router-view passed a
+        # `ref` through to the matched component; Router 4's keeps it.
+        pkg = {
+            "name": "traversal-web",
+            "dependencies": {
+                "vue": "2.7.16", "vue-router": "3.6.5", "element-ui": "2.15.14",
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "package.json").write_text(json.dumps(pkg), encoding="utf-8")
+            src = root / "src"
+            src.mkdir()
+            (src / "Drawer.vue").write_text(
+                "<script>\n"
+                "export default {\n"
+                "  methods: {\n"
+                "    createCancel() { this.$parent.$parent.drawer = false },\n"
+                "    focusName() { this.$refs.panel.$refs.input.focus() },\n"
+                "    merge(td) { td.classList.add('is-merged') },\n"
+                "    relogin() { document.getElementById('reloginBtn').click() },\n"
+                "  },\n"
+                "}\n"
+                "</script>\n",
+                encoding="utf-8",
+            )
+            (src / "App.vue").write_text(
+                '<template><router-view ref="routerView" /></template>\n',
+                encoding="utf-8",
+            )
+
+            data = self._run_profile(root)
+
+            signals = data["source_impact_signals"]["signals"]
+            self.assertEqual(signals.get("kit_internal_traversal"), 4)
+            self.assertEqual(signals.get("router_view_ref"), 1)
+            located = {(row["signal"], row["file"], row["line"]) for row
+                       in data["source_impact_signals"]["interaction_assertion_candidates"]["rows"]}
+            for line in (4, 5, 6, 7):
+                self.assertIn(("kit_internal_traversal", "src/Drawer.vue", line), located)
+            self.assertIn(("router_view_ref", "src/App.vue", 1), located)
+
     def test_correlates_external_script_loader_with_global_runtime_polling(self) -> None:
         pkg = {"name": "editor-web", "dependencies": {"vue": "2.7.16"}}
         with tempfile.TemporaryDirectory() as tmp:

@@ -251,6 +251,18 @@ MANUAL_GAP_ITEMS = (
         "teleported kit chrome suppression",
         ("overlay chrome", "kit chrome", "kit_chrome_css_suppression"),
     ),
+    # Hop counts, nested ref chains and kit-rendered DOM are implementation
+    # details, so traversal-based writes retarget silently on any kit upgrade.
+    ("kit internal traversal", ("$parent", "内部遍历")),
+    # Router 3 defaults `mode` to hash and Router 4 has no default, so a recipe
+    # that reaches for path routing rewrites an MPA entry's pathname away.
+    (
+        "router history mode and entry url shape",
+        ("history 实现", "history 模式", "createWebHashHistory"),
+    ),
+    # Router 3's functional router-view passed a `ref` through to the matched
+    # component; Router 4's stateful RouterView keeps it.
+    ("router-view ref ownership", ("router-view", "RouterView")),
     # Dev server and production build are two runtime faces with different module
     # resolution and entry/URL topology; one can stay green while the other breaks.
     ("dev vs build runtime lane", ("运行面", "require.context", "dev 与 build")),
@@ -278,6 +290,10 @@ UI_BEHAVIOR_READINESS = {"replace", "needs-major"}
 UI_BEHAVIOR_MARKERS = (
     "mount_timing:",
     "prop_renames:",
+    # Traversal into kit internals ($parent hop counts, nested $refs, DOM
+    # mutation of kit output, programmatic clicks on queried nodes). All were
+    # already fragile; the upgrade is what collects the bill.
+    "kit_internal_traversal:",
     "enum_renames:",
     "event_contract:",
     "slot_contract:",

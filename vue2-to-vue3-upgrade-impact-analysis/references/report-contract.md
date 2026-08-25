@@ -263,7 +263,15 @@ High/blocker 与每个 `required_for_path=yes` 均为 `decided`（`deferred` 只
 `not_applicable`）：
 
 - `mount_timing:`（新库是否延迟/懒挂载子树，`$refs` 何时可用）
-- `prop_renames:`（值契约改名，如 `visible` → `modelValue`、`:label` → `:value`）
+- `prop_renames:`（值契约改名。**弹层可见性 prop 必须逐组件查目标库 props+emits**，
+  禁止写成全库统一规则：Element UI→Plus 里 dialog/drawer 是 `:visible.sync` →
+  `v-model`（去掉参数），popover/tooltip 是裸 `v-model` → `v-model:visible`
+  （加上参数），两族方向相反，任一族的结论都不能套到另一族。另记受控模式对
+  `trigger` 的影响：改 `trigger` 让弹层出现不算修复）
+- `kit_internal_traversal:`（靠遍历伸进目标库内部而不是走公开 API：`$parent` 多跳
+  写宿主状态、嵌套 `$refs` 链、`$nextTick` 里改 kit 渲染出的 DOM（`classList` /
+  `querySelector`）、对查出来的节点 `click()`。跳数与内部 DOM 都不是契约，升级即
+  改写；断言必须落在**宿主状态真的变了**，不是处理函数跑了）
 - `enum_renames:`（size / type 等枚举取值改名或删除，旧值静默失效）
 - `event_contract:`（`update:<prop>` 事件名、payload、`emits` 声明与双触发）
 - `slot_contract:`（插槽名与作用域参数结构）
@@ -294,9 +302,19 @@ summary 的 `ui_behavior_contract.required_assertions` 必须同时给出（3..2
 - `<transition>` 过渡类名（`v-enter` → `v-enter-from`；动画静默失效）
 - 静默语义变更族（v-if/v-for 优先级、v-bind 合并顺序、watch 数组、
   mixin data 浅合并、attribute coercion）
-- `.sync` 修饰符与目标 UI 库 prop 身份（`:p.sync` → `v-model:p` 是正确的 Vue3
-  改写，但 `p` 是**旧库**的 prop 名；同批替换 UI 库时必须按新库实际 prop 重解析，
-   否则绑定编译通过却写不进任何 prop，常表现为子树不挂载、`$refs` 取不到）
+- `.sync` 修饰符与目标 UI 库 prop 身份（`:p.sync` → `v-model:p` 保留的 `p` 是**旧库**
+  的 prop 名；同批替换 UI 库时必须**逐组件**按新库 props+emits 重解析，且不得把某个
+  弹层组件的结论套到另一个——两族方向可能相反。否则绑定编译通过却写不进任何 prop，
+   常表现为子树不挂载、`$refs` 取不到，或弹层不开而本地标志已翻）
+- 靠遍历伸进目标库内部的调用点（`$parent` 多跳写宿主状态、嵌套 `$refs` 链、
+  `$nextTick` 里改 kit 渲染出的 DOM、对查出来的节点 `click()`）：跳数与内部 DOM 都不是
+  契约；逐点写明改成哪个公开 API，断言落在宿主状态真的变了
+- 路由 history 实现与多页入口 URL 形态（Router 3 的 `mode` 缺省是 hash，Router 4 无
+  缺省；逐入口记录当前 mode 并沿用，改路径路由是另一个决策。多页仓还须断言首次
+  `push`/`replace` 之后 `*.html` 入口名与 query 仍在）
+- `router-view` 上的 `ref` 归属（Router 3 的 `router-view` 是函数式组件，`ref` 落到
+  匹配组件；Router 4 的 `RouterView` 是有状态组件，`ref` 归它自己，父页调子页方法会抛
+  TypeError；逐处改 `v-slot="{ Component }"` 并断言父页仍调得到）
 - UI-kit `icon` prop 的 class/sprite 字符串（目标 prop 是否要求 Component；逐调用点
   分类为静默缺图或 mount throw，并绑定渲染/交互断言）
 - `$options.filters` 对象访问调用点（与模板管道 `| filter` 是两处独立改写面，

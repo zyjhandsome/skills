@@ -156,7 +156,10 @@
 | `Vue.component` / `Vue.directive` / `Vue.mixin` 全局注册与指令钩子改名 | 已扫描：全局注册已迁至 app.component，指令钩子已改名 |
 | `<transition>` 过渡类名（v-enter → v-enter-from） | 已扫描：过渡类名已改完 |
 | 静默语义变更（v-if/v-for 优先级、v-bind 顺序、watch 数组、data 浅合并、attr coercion） | 已扫描：同元素 v-if+v-for 无命中；其余列入清理期核对 |
-| `.sync` 修饰符与目标 UI 库 prop 身份 | 已扫描：源码已无 `.sync`，但 7 处 codemod 产出的 `v-model:visible` 绑的是旧库 prop 名，须按 Element Plus 重解析 |
+| `.sync` 修饰符与目标 UI 库 prop 身份 | 已扫描：源码已无 `.sync`；逐组件核对目标库 props+emits 后，4 处 dialog/drawer 上的 `v-model:visible` 是错的（EP 要裸 `v-model`），3 处 popover 上的 `v-model:visible` 是**对的**（EP popover 声明 `visible` + `update:visible`），两族方向相反，不得统一改写 |
+| 靠遍历伸进目标库内部的调用点 | 已扫描：2 处 `$parent.$parent` 写宿主 `drawer`（EP 中间多了 overlay/focus-trap，赋值落在内部实例，取消钮无反应）、1 处嵌套 `$refs` 链、1 处 `$nextTick` 改 `td.classList` 做合并；逐点改公开 API 并断言宿主状态翻转 |
+| 路由 history 实现与多页入口 URL 形态 | 已扫描：上次迁移把 3 个入口全改成 `createWebHistory`，而 Vue2 侧 `mode` 均未设置（即 hash）；`*.html` 入口名与 query 在首次 `replace` 后丢失，列入清理项并改回 `createWebHashHistory` |
+| `router-view` 上的 `ref` 归属 | 已扫描：2 处 `<router-view ref>` 仍按 Router 3 语义取匹配组件，Router 4 下 `ref` 归 RouterView 自身，父页调 `addNewIssue` 抛 TypeError；改 `v-slot="{ Component }"` |
 | UI-kit `icon prop` 的 sprite 字符串 | 已扫描迁移产物：1 处 `sprite-icon` class prop 仍传目标组件，列入 mount/点击清理断言 |
 | `$options.filters` 过滤器对象访问 | 已扫描：3 处对象访问调用点仍在，管道写法已改完 |
 | 裸 `<template>` 包默认槽 | 已扫描迁移产物：5 处无属性缩进 `<template>` 仍在，正文整块不渲染；列入清理断言并补 `vue/no-lone-template` |

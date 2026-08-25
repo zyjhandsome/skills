@@ -105,7 +105,8 @@
 ### ui_behavior_contract
 
 - mount_timing: Element Plus 弹层（el-dialog / el-drawer）按 modelValue 懒挂载，子组件在打开前不存在；已登记 4 处「先取 `$refs` 再打开」的调用点，须改为打开后 nextTick
-- prop_renames: `visible` → `modelValue`（7 处 `:visible.sync` 命中）；checkbox/radio `:label` → `:value`（2 处）
+- prop_renames: 弹层可见性逐组件查 Element Plus 的 props+emits，两族方向相反：dialog/drawer 由 `:visible.sync` 去掉参数改裸 `v-model`（7 处命中），popover/tooltip 由旧库裸 `v-model` 加上参数改 `v-model:visible`（3 处命中，其中【配置角色】一处 popover 若沿用裸 `v-model` 会落到无 `modelValue` 的 attrs、弹层不开而本地标志已翻、遮罩孤存）；受控模式下 EP popover 的 `trigger` 失效，产品要的 click 须靠绑定与 reference 节点修复，不得改 `trigger` 充数。另 checkbox/radio `:label` → `:value`（2 处）
+- kit_internal_traversal: 3 处 `$parent.$parent` 写宿主 `drawer`（EP 在 slot 内容与页面之间多了 overlay/focus-trap，赋值落在内部实例，取消钮静默无效而关闭图标因走 `$emit` 仍可用）、2 处嵌套 `$refs` 链、1 处 `$nextTick` 改 `td.classList` 做表格合并（改用 `:span-method`）、1 处对 `getElementById` 结果 `click()`（节点在 dialog footer 内，关闭态不挂 DOM）；逐点改公开 API 并断言宿主状态翻转
 - enum_renames: size `mini` → `small`、`medium` → `default`；已登记 9 处 `size="mini"`，旧值不被识别且不报错
 - event_contract: `update:<prop>` 事件名随 prop 改名同步变化；3 个组件未声明 emits，存在 attrs fallthrough 双触发风险
 - slot_contract: `slot=` / `slot-scope` → `#name` / `v-slot`；el-table 列插槽作用域参数按 Element Plus 文档逐列核对
@@ -166,7 +167,10 @@
 | `Vue.component` / `Vue.directive` / `Vue.mixin` 全局注册与指令钩子改名 | 已扫描：3 处全局组件注册列入影响面 |
 | `<transition>` 过渡类名（v-enter → v-enter-from） | 已扫描：无 transition 组件使用 |
 | 静默语义变更（v-if/v-for 优先级、v-bind 顺序、watch 数组、data 浅合并、attr coercion） | 已扫描：同元素 v-if+v-for 无命中；其余列入实施期核对 |
-| `.sync` 修饰符与目标 UI 库 prop 身份 | 已扫描：11 处，其中 7 处绑在 element-ui 组件上，须按 Element Plus 实际 prop 重解析 |
+| `.sync` 修饰符与目标 UI 库 prop 身份 | 已扫描：11 处，其中 7 处绑在 element-ui 组件上，逐组件按 Element Plus 的 props+emits 重解析——dialog/drawer 去掉参数改裸 `v-model`，popover/tooltip 反而要加上参数，两族方向相反，不得互相套用 |
+| 靠遍历伸进目标库内部的调用点 | 已扫描：3 处 `$parent.$parent` 写宿主弹层标志、2 处嵌套 `$refs` 链、1 处 `$nextTick` 改 `td.classList` 做表格合并、1 处对 `getElementById` 结果 `click()`（目标节点在弹层内，关闭态不挂 DOM）；逐点改公开 API 并断言宿主状态翻转 |
+| 路由 history 实现与多页入口 URL 形态 | 已扫描：2 个入口的 Router 3 `mode` 均未设置（即 hash），沿用为 `createWebHashHistory`；改路径路由另立决策。断言首次 `replace` 后 `*.html` 入口名与 `crntProjectSelfCode` query 仍在 |
+| `router-view` 上的 `ref` 归属 | 已扫描：2 处 `<router-view ref="routerView">`，Router 3 下 `ref` 落到匹配组件，Router 4 归 RouterView 自身；改 `v-slot="{ Component }"` 并断言父页仍调得到页面方法 |
 | UI-kit `icon prop` 的 sprite 字符串 | 已扫描：2 处 `sprite-icon` class prop，均按目标组件 prop 重写并绑定 mount/点击断言 |
 | `$options.filters` 过滤器对象访问 | 已扫描：3 处对象访问调用点，独立于管道写法列入 core-vue 影响面 |
 | 裸 `<template>` 包默认槽 | 已扫描：4 处无属性缩进 `<template>`（Panel 正文与基本信息块），Vue3 下编成真实 `template` 元素后整块不渲染；逐处改具名槽并补 `vue/no-lone-template` |

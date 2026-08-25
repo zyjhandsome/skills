@@ -47,15 +47,19 @@
    **`.sync` carries a prop name, not just a syntax.** `:p.sync="x"` →
    `v-model:p="x"` is the correct Vue3 rewrite and is safe when the component is
    your own. It is **not** safe when the component belongs to a UI kit that this
-   same upgrade replaces: the argument `p` is the *old* kit's prop name, and the
-   new kit may have renamed it (a dialog/drawer `visible` becoming `modelValue`
-   is the common case). The rewritten binding then compiles, lints and builds
-   clean while writing to a prop nothing reads — and because such components
-   usually gate a subtree, the visible symptom is a child that never mounts and
-   a `$refs` lookup that returns `undefined`, far from the binding. Split
-   `sync_modifier` hits by whether the target is a first-party component or a
-   kit component under replacement, and resolve the kit ones against the target
-   kit's current API before naming the assertion.
+   same upgrade replaces: the rewrite preserves the argument `p`, which is the
+   *old* kit's prop name. Whether that is right depends entirely on the target
+   component — the new kit may have kept the name, renamed it, or dropped the
+   argument in favor of a bare `v-model`. The rewritten binding compiles, lints
+   and builds clean either way while possibly writing to a prop nothing reads —
+   and because such components usually gate a subtree, the visible symptom is a
+   child that never mounts and a `$refs` lookup that returns `undefined`, far
+   from the binding. Split `sync_modifier` hits by whether the target is a
+   first-party component or a kit component under replacement, and resolve the
+   kit ones **per component** against the target kit's own props/emits before
+   naming the assertion. Do not carry a conclusion from one overlay component to
+   another: see the overlay prop-identity entry under `ui_behavior_contract`,
+   where the two Element families move in opposite directions.
 
    **`$options.filters` is a second call shape.** Codemods rewrite the template
    pipe `{{ x | f }}` and routinely leave `this.$options.filters.f(x)` alone;
@@ -130,6 +134,30 @@
      rather than a broken link. Every name-target `push`/`replace` needs its
      params checked against the route definition — this is a per-call-site
      closure, not a codemod.
+
+   **History mode is a migration decision, not a default.** Router 3's `mode`
+   defaults to `'hash'`, so a project that never set `mode` is a hash project.
+   Router 4 has no default: the history implementation is an explicit argument,
+   and picking `createWebHistory` converts a working hash app to path routing.
+   Record each entry's *current* mode as evidence and carry it forward
+   (`createWebHashHistory` for hash); moving to path routing is a separate
+   decision that needs a server rewrite rule. This is load-bearing for
+   multi-page workspaces: a URL like `/app/report.html?token=…#/detail` keeps its
+   entry filename and query in the fragment, but under path routing the router
+   owns the pathname, so the first `push`/`replace` rewrites `report.html` away
+   and the query with it. The page then 404s or silently loads a different entry.
+   Assert after navigation that the pathname still ends in the expected `*.html`
+   and the query survives — a build and a dev-server boot both pass while this is
+   broken.
+
+   **A `ref` on `router-view` changes owner.** Router 3's `router-view` is a
+   functional component, so `<router-view ref="page">` put the ref on the
+   *matched* component and parent pages called its methods directly. Router 4's
+   `RouterView` is a stateful component and keeps the ref for itself, so the same
+   call throws `TypeError: … is not a function`. Nothing in the template changes
+   and no codemod flags it. `router_view_ref` locates the sites; the closure is
+   the `v-slot="{ Component }"` form with the ref moved onto the rendered
+   component, plus an assertion that the parent can still reach the page method.
 4. Official docs URLs for the exact interval / library major — start from
    `official-docs-index.md` (EOL + two-layer modification model + canonical
    hubs + high-signal checklist), then fetch the linked page; do not invent
@@ -323,7 +351,26 @@ into the `build` decision: every entry maps to a Vite `rollupOptions.input`
 row **and to a dev-server URL** (see the lane table above), and is a candidate
 for visual sample selection. A dropped entry is a silently missing build
 surface; an entry whose dev URL shape changed is a build that ships while
-nobody can open the page locally.
+nobody can open the page locally. Three more per-entry obligations that only
+bite on MPA workspaces:
+
+- **`base` / `outDir` must branch on Vite's `command`, not its `mode`.** These
+  are independent axes: `vite build --mode development` is still a build and
+  still needs the deployment prefix, while `vite serve` needs to be served from
+  `/`. Keying the config on `mode` produces artifacts that load from the wrong
+  prefix whenever a non-production mode is built — a class that neither lane's
+  smoke test catches, because each lane is usually exercised in only one mode.
+  Record which axis the config currently keys on.
+- **Router history implementation is per entry.** Each entry has its own router
+  instance and may have had a different `mode`; see the history-mode note above.
+- **Store shape is per entry.** Each entry builds its own store, so a component
+  shared across entries can `dispatch` an action that only one entry registers.
+  Under Vue 2 this was a console warning that most repos had learned to ignore;
+  it stays a warning after the upgrade, which means it will be filed as
+  pre-existing noise unless the console baseline names it. Inventory every
+  action/getter a shared component reaches for against **every** entry's store,
+  and gate or provide the missing ones rather than letting the entry render a
+  half-initialized component.
 
 ## Validation matrix guidance
 
@@ -360,7 +407,14 @@ editor/tree/DAG CSS. Inventory at least:
 - mount container DOM change (Vue3 renders into the host el instead of
   replacing it, so `#app > *` selectors shift **and** an id/class shared by the
   HTML container and the root component's root element now matches twice,
-  doubling padding/border/min-height — see the evidence note above);
+  doubling padding/border/min-height — see the evidence note above). The extra
+  nesting also lengthens the **height chain**: a global flex utility on a page
+  shell (`.flex-box { align-items: center }`) that used to sit on a
+  content-height box can end up on a box stretched to full height, and then
+  vertically centers the shorter column instead of top-aligning it. Zeroing the
+  duplicated padding does not fix this second cause; inventory global flex/align
+  utilities applied to page shells alongside the container change, and prefer
+  `align-items: stretch` on the shells that must top-align;
 - SCSS `@import` → `@use` semantics when the build migration rewrites
   `prependData`/`additionalData`: namespace isolation can drop globals, which is
   the visual half. The other half is not visual at all — `@import` is deprecated
@@ -412,12 +466,66 @@ Inventory at least:
   `this.$refs.child` before opening — or immediately after setting the flag,
   without awaiting a tick — silently gets `undefined`. The symptom surfaces far
   from the cause, usually as a dead button rather than as an error at the
-  binding.
+  binding. `$refs` is not the only reader: a `document.getElementById(id).click()`
+  whose target element lives inside an overlay's markup throws on `null` once the
+  kit stops rendering closed overlays. Inventory programmatic clicks and focus
+  calls the same way, and check where the queried node is declared.
+- **Traversal into kit internals.** A kit's internal component tree and rendered
+  DOM are not a contract, and every one of these shapes silently retargets when
+  the kit changes — `kit_internal_traversal` locates all four:
+  - **`$parent` hop counts.** `this.$parent.$parent.drawer = false` worked only
+    because the old kit happened to put exactly two instances between the slot
+    content and the page. Target kits routinely add overlay and focus-trap
+    components, so the assignment lands on a kit-internal instance: the host
+    flag never changes and the cancel button does nothing, while the close icon
+    still works because it goes through `$emit`. Replace with an emit or a
+    `v-model` write and assert the **host** state flipped, not that the handler ran.
+  - **Nested `$refs` chains.** `$refs.a.$refs.input.$refs.input` encodes the old
+    kit's internal component nesting. Resolve against the target's exposed refs
+    or a single `$el.querySelector`.
+  - **Direct DOM mutation of kit output.** `$nextTick` + `td.classList` /
+    `querySelector` to merge table cells or restyle rows depends on the kit's row
+    and cell timing. Target kits mount later or differently, so the query returns
+    `undefined` and throws. Move to the kit's own API (a table's span/merge hook)
+    rather than re-timing the hack.
+  - **Programmatic clicks on queried nodes** (see mount timing above).
+
+  All four share one property worth stating in the packet: they were *already*
+  fragile and the upgrade is what collects the bill, so the closure is a rewrite
+  to a public API plus a host-state assertion — never a longer chain or a
+  bigger `$nextTick`.
 - **Prop renames.** Value contracts that change identity while keeping their
-  meaning: a dialog/drawer `visible` becoming `modelValue`, checkbox/radio
-  `:label` becoming `:value`, date-picker `value-format` defaults. Combined with
-  a mechanical `.sync` rewrite these produce bindings that compile and write
-  nowhere.
+  meaning: checkbox/radio `:label` becoming `:value`, date-picker
+  `value-format` defaults. Combined with a mechanical `.sync` rewrite these
+  produce bindings that compile and write nowhere.
+- **Overlay visibility prop identity is per component, and the two directions
+  are opposite.** There is no kit-wide rule here, and writing one down is worse
+  than writing nothing: an agent applies it uniformly and breaks the call sites
+  that were already correct. Resolve **each** overlay component against the
+  selected kit version's own `props` + `emits`. In Element UI → Element Plus,
+  verified against the target's API tables, the two families move in opposite
+  directions:
+  - dialog / drawer: Element UI `:visible.sync` → Element Plus `model-value` /
+    `v-model` — the argument is **removed**;
+  - popover / tooltip / popconfirm: Element UI bare `v-model` → Element Plus
+    `visible` / `v-model:visible` — the argument is **added**.
+
+  So a mechanical `:p.sync` → `v-model:p` rewrite is right for one family and
+  wrong for the other, and a mechanical "collapse to bare `v-model`" is wrong
+  for the other one. A bare `v-model` on a component with no `modelValue` prop
+  falls through to attrs: the overlay never opens while the app's own local flag
+  still flips, so a full-screen mask or a disabled page is a common first
+  symptom rather than a missing popper. `kit_vmodel_prop_identity` locates these
+  bindings; each row is closed by reading the target component's props/emits,
+  never by analogy with a sibling component.
+
+  Controlled mode can also change the **trigger** contract. Element Plus popover
+  and tooltip document `trigger` as "not valid in controlled mode": binding
+  `visible` takes over visibility entirely, so a `trigger="click"` that worked
+  under Element UI stops opening the popper. The correct closure is the binding
+  and the reference node; changing `trigger` to `hover` makes the popper appear
+  and is **not** a fix — it silently changes the interaction the product
+  specified. Record the intended trigger as part of the assertion.
 - **Icon prop identity.** A legacy font/sprite class string is not a Component.
   Resolve every `kit_icon_class_prop` candidate against the selected target
   kit, and assert both successful mount and the actual icon/toolbar action.

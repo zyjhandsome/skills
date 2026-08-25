@@ -107,7 +107,8 @@
 ### ui_behavior_contract
 
 - mount_timing: 待实施阶段核对 Element Plus 弹层（el-dialog / el-drawer）按 modelValue 懒挂载，子组件在打开前不存在；先取 `$refs` 再打开的调用点须改为打开后 nextTick
-- prop_renames: `visible` → `modelValue`；checkbox/radio `:label` → `:value`（待逐点扫描调用面）
+- prop_renames: 弹层可见性 prop 待**逐组件**按 Element Plus 的 props+emits 核对（dialog/drawer 与 popover/tooltip 方向相反，不得统一改写）；checkbox/radio `:label` → `:value`（待逐点扫描调用面）
+- kit_internal_traversal: 待扫描 `$parent` 多跳写宿主状态、嵌套 `$refs`、`$nextTick` 改 kit DOM 与对查出节点 `click()`；命中项改公开 API 并断言宿主状态翻转
 - enum_renames: size `mini` → `small`、`medium` → `default`；旧值不被识别且不报错
 - event_contract: `update:<prop>` 事件名随 prop 改名同步变化；未声明 emits 的组件可能走 attrs fallthrough 双触发
 - slot_contract: `slot=` / `slot-scope` → `#name` / `v-slot`，作用域插槽参数结构按 Element Plus 文档逐组件核对
@@ -168,7 +169,10 @@
 | `Vue.component` / `Vue.directive` / `Vue.mixin` 全局注册与指令钩子改名 | 待精确扫描 |
 | `<transition>` 过渡类名（v-enter → v-enter-from） | 待扫描 transition 组件与相关 CSS 类 |
 | 静默语义变更（v-if/v-for 优先级、v-bind 顺序、watch 数组、data 浅合并、attr coercion） | 同元素 v-if+v-for 待扫描；其余列入实施期核对 |
-| `.sync` 修饰符与目标 UI 库 prop 身份 | 待精确扫描；element-ui 组件上的 `.sync` 须按 Element Plus 实际 prop 重解析，不得机械沿用旧 prop 名 |
+| `.sync` 修饰符与目标 UI 库 prop 身份 | 待精确扫描；element-ui 组件上的 `.sync` 须**逐组件**按 Element Plus 的 props+emits 重解析，不得机械沿用旧 prop 名，也不得把某个弹层组件的结论套到另一个 |
+| 靠遍历伸进目标库内部的调用点 | 待扫描 `$parent` 多跳、嵌套 `$refs`、`$nextTick` 改 kit DOM 与对查出节点 `click()`；命中项逐点改公开 API 并断言宿主状态翻转 |
+| 路由 history 实现与多页入口 URL 形态 | 待逐入口记录 Router 3 当前 `mode`（未设置即 hash）并沿用；改路径路由属另一个决策，须另配服务端 rewrite |
+| `router-view` 上的 `ref` 归属 | 待扫描 `<router-view ref>`；命中项改 `v-slot="{ Component }"` 并断言父页仍调得到页面方法 |
 | UI-kit `icon prop` 的 sprite 字符串 | 待精确扫描；命中项须按目标 UI 库分类为静默缺图或 mount throw |
 | `$options.filters` 过滤器对象访问 | 待精确扫描（管道之外的调用点，Vue3 已移除该入口） |
 | 裸 `<template>` 包默认槽 | 待扫描无属性缩进 `<template>`；命中项须改具名槽并绑定 `vue/no-lone-template` 静态验证 |
