@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
-"""Lightweight 4c lexicon scan for content-structuring outputs (spec v5.29).
+"""Lightweight 4c lexicon scan for content-structuring outputs (spec v5.31).
 
 - Greps the unified lexicon against narrative-ish Markdown
 - Ignores metadata「原标题」cells, glossary proper-noun column heuristically
 - Ignores first-occurrence parentheticals: 中文（English） / （English）
 - Ignores allowlisted proper-noun phrases (Skill Creator, Claude Code, ...)
+- Reports likely Chinese over-translation of AI/DevTools labels for human review
 
 Usage:
   python check_4c.py path/to/doc.md
   python check_4c.py path/to/doc.md --json
 
 Exit 0 if no *actionable* hits; 1 if bare lexicon hits remain.
-Does NOT replace 4c-2 human pass for ≥2 consecutive English words.
+Does NOT replace 4c-2 human pass for ≥2 consecutive English words or term intent.
 """
 
 from __future__ import annotations
@@ -27,13 +28,17 @@ from pathlib import Path
 LEXICON = [
     r"super bullish",
     r"operationalize",
-    r"dogfooding?",
-    r"oneshot",
-    r"one-shot",
-    r"flaky",
-    r"\bbuilder\b",
     r"\brefine\b",
     r"\bholistic\b",
+    r"mass unemployment",
+]
+
+# Ambiguous community terms: they may be unwanted English residue or intentional
+# technical labels. Report them for source-aware review; never auto-fail on the word.
+CONTEXTUAL_ENGLISH_REVIEW = [
+    r"dogfooding?",
+    r"one[ -]?shot",
+    r"\bflaky\b",
     r"\bcontext\b",
     r"\bfeature\b",
     r"\bship\b",
@@ -50,7 +55,18 @@ LEXICON = [
     r"\bsandbox\b",
     r"\bvibe\b",
     r"\bcraft\b",
-    r"mass unemployment",
+]
+
+# Likely cases where an English AI/DevTools label may have been translated away.
+# These are review hints, not automatic failures: Chinese wording can be correct in
+# ordinary prose, while the source may instead be naming a taxonomy or identity.
+OVER_TRANSLATION_REVIEW = [
+    r"(?:代理|智能体)\s*(?:循环|图)",
+    r"先是\s*(?:代理|智能体).{0,24}?循环.{0,24}?图",
+    r"(?:循环|图)[、，,]\s*(?:图|工作流)",
+    r"(?:技能创建者|电脑使用|计算机使用|子代理)",
+    r"爱的是\s*(?:\*\*)?(?:建造|构建)(?:\*\*)?",
+    r"(?:认同|身份).{0,12}?(?:建造者|构建者)",
 ]
 
 # Proper-noun / product spans: if hit is inside these, ignore.
@@ -65,6 +81,7 @@ ALLOW_PHRASES = [
     r"\bHooks\b",
     r"feature flag",
     r"context window",
+    r"context engineering",
     r"git checkout",
     r"Demo Day",
     r"Custom GPTs?",
@@ -72,6 +89,15 @@ ALLOW_PHRASES = [
     r"\bCanvas\b",
     r"\bSubagents?\b",
     r"\bRAG\b",  # allowed abbreviation; first-use Chinese expansion is a separate manual gate
+    r"\bBuilders?\b",
+    r"\bAgents?\b",
+    r"\bAgent(?:ic)? Loops?\b",
+    r"\bAgent Graphs?\b",
+    r"\bLoops?\b",
+    r"\bGraphs?\b",
+    r"\bWorkflows?\b",
+    r"\bEvals?\b",
+    r"\bTool Calls?\b",
 ]
 
 # Official names whose capitalization matters. Lowercase generic uses remain actionable.
@@ -157,6 +183,51 @@ def scan(text: str) -> list[dict]:
     return hits
 
 
+def scan_contextual_english(text: str) -> list[dict]:
+    """Return non-blocking English terms whose treatment depends on source intent."""
+    body = _mask_allowed(_strip_excluded_regions(text))
+    hints: list[dict] = []
+    for pat in CONTEXTUAL_ENGLISH_REVIEW:
+        for m in re.finditer(pat, body, flags=re.IGNORECASE):
+            hints.append(
+                {
+                    "pattern": pat,
+                    "match": m.group(0),
+                    "line": body.count("\n", 0, m.start()) + 1,
+                }
+            )
+    return hints
+
+
+def scan_over_translation(text: str) -> list[dict]:
+    """Return non-blocking hints for Chinese text that may hide field-native labels."""
+    body = _strip_excluded_regions(text)
+    hints: list[dict] = []
+    english_label = re.compile(
+        r"\b(?:Builder|Agent(?:ic)? Loop|Agent Graph|Loop|Graph|Workflow|"
+        r"Skill Creator|Computer Use|Subagent)\b",
+        flags=re.IGNORECASE,
+    )
+    for pat in OVER_TRANSLATION_REVIEW:
+        for m in re.finditer(pat, body, flags=re.IGNORECASE):
+            line_start = body.rfind("\n", 0, m.start()) + 1
+            line_end = body.find("\n", m.end())
+            if line_end < 0:
+                line_end = len(body)
+            line = body[line_start:line_end]
+            # A same-line English label means the Chinese is probably an explanation.
+            if english_label.search(line):
+                continue
+            hints.append(
+                {
+                    "pattern": pat,
+                    "match": m.group(0),
+                    "line": body.count("\n", 0, m.start()) + 1,
+                }
+            )
+    return hints
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="4c lexicon helper scan")
     parser.add_argument("path", type=Path)
@@ -164,18 +235,41 @@ def main() -> int:
     args = parser.parse_args()
     text = args.path.read_text(encoding="utf-8")
     hits = scan(text)
+    contextual = scan_contextual_english(text)
+    review = scan_over_translation(text)
     if args.json:
-        print(json.dumps({"hits": hits, "count": len(hits)}, ensure_ascii=False, indent=2))
+        print(
+            json.dumps(
+                {
+                    "hits": hits,
+                    "count": len(hits),
+                    "contextual_english_review": contextual,
+                    "contextual_review_count": len(contextual),
+                    "over_translation_review": review,
+                    "review_count": len(review),
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
     else:
         if not hits:
             print("OK: no actionable 4c lexicon hits (parentheticals/allowlist excluded)")
-            return 0
-        print(f"ACTIONABLE_HITS: {len(hits)}")
-        for h in hits:
-            print(f"  L{h['line']}: {h['match']}  (pattern {h['pattern']})")
+        else:
+            print(f"ACTIONABLE_HITS: {len(hits)}")
+            for h in hits:
+                print(f"  L{h['line']}: {h['match']}  (pattern {h['pattern']})")
+        if review:
+            print(f"OVER_TRANSLATION_REVIEW: {len(review)} (non-blocking; compare with source)")
+            for h in review:
+                print(f"  L{h['line']}: {h['match']}  (pattern {h['pattern']})")
+        if contextual:
+            print(f"CONTEXTUAL_ENGLISH_REVIEW: {len(contextual)} (non-blocking; judge term role)")
+            for h in contextual:
+                print(f"  L{h['line']}: {h['match']}  (pattern {h['pattern']})")
         print(
-            "Note: 4c-2 consecutive-English pass still required; "
-            "see references/over-translation-guard.md for Skill/Creator etc."
+            "Note: 4c-2 consecutive-English and concept-label passes are still required; "
+            "see references/over-translation-guard.md."
         )
     return 1 if hits else 0
 

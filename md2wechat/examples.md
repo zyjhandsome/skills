@@ -21,11 +21,21 @@ Do not leave 成稿、审计、完整版 HTML，or `*_公众号封面_2.35x1.png
 
 A leaked closed-door talk plus unverified financing news is **not** a WeChat deliverable. See `references/wechat-operation-policy.md` and the 梁文锋 / DeepSeek 2026-07-25 case: scan first, stop if 不可发布.
 
+## Editorial-mode omit / keep
+
+**Keep:** source H1, 人物背景, 核心导读, every reader-facing body H2 **verbatim**, 来源与说明 with 原文 only.
+
+**Inside each H2:** flatten 核心洞察 / 深度解析 / 对谈实录 into narration. Do not retitle the section after its insight line.
+
+**Omit:** 元数据表 rows, 目录, 延伸术语表, 自检报告, **关键语录与交锋时刻**, 编者注, 抓取流水, 视频链接.
+
+Do not write new headings such as 「最好的产品，从一件没法继续做饭的小事长出来」when the source H2 is 「恼怒是灵感：厨房里长出 WhatsApp 中继」.
+
 ## Full-mode omit / keep (from production trial)
 
 **Keep:** H1, 人物背景, 核心导读, all body sections with 核心洞察 / 深度解析 / 对谈实录 labels, 来源与说明 with 原文 only.
 
-**Omit:** 元数据表 rows, 目录, 延伸术语表, 自检报告, 「完整整理版｜微信排版」eyebrow, long legal footer, 视频链接, 编辑说明, **过程流水账**. 副标题不要直接截断「内容来源」格.
+**Omit:** 元数据表 rows, 目录, 延伸术语表, 自检报告, **关键语录与交锋时刻**, 「完整整理版｜微信排版」eyebrow, long legal footer, 视频链接, 编辑说明, **过程流水账**. 副标题不要直接截断「内容来源」格.
 
 **Subtitle:** `讲者 · 公开场次`，例如 `Garry Tan · Y Combinator · Startup School 2026`.
 
@@ -48,7 +58,7 @@ arrows, no UI, no logos, no captions, no watermarks, no white plates,
 no purple neon.
 ```
 
-After crop, overlay the real H1 (never a punchier rewrite):
+After crop, overlay the **source H1** (the same string as the HTML H1; never a punchier rewrite):
 
 ```bash
 python scripts/make_cover_235.py generated.png --out "{原文文件名}_公众号封面.png"

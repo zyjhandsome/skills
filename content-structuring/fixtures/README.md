@@ -1,4 +1,4 @@
-# content-structuring fixtures（v5.29）
+# content-structuring fixtures（v5.31）
 
 迷你金样，用于结构/闸门回归。**不是**生产级深度文。
 

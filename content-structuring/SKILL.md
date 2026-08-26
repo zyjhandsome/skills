@@ -7,7 +7,7 @@ description: >-
   GitHub repo tutorials, AI-tool update HTML briefs, or generic MD→HTML (md2html /
   md2html-lecture).
 metadata:
-  version: "5.30"
+  version: "5.31"
 ---
 
 # 内容结构化整理（Content Structuring）
@@ -25,16 +25,16 @@ metadata:
 | 写什么 | 默认语言 |
 |--------|----------|
 | 导读、目录、正文、核心洞察、**对谈实录 / 关键语录** | **中文**（直接用中文写，禁止先英后译式夹写） |
-| 公司/产品/API/**Agent Skill** 等专名 | **保留英文**（禁止过译，见下） |
+| 公司/产品/API/**Agent Skill** 等专名，以及 AI/DevTools 的社区原生概念标签 | **保留英文或中英并写**（禁止过译，见下） |
 | 元数据「原标题」、术语表专名列 | 可保留英文 |
 
-**过译红线（v5.28）**：整理 Cursor / Claude / Agent 工具向素材时，**Skill / Agent Skill / Skill Creator / Hooks / Computer Use / Composer / Canvas / Subagent** 等是**产品专名**，保留英文；❌ 不要译成「技能 / 技能创建者 / 钩子 / 电脑使用」。人类软技能（沟通技能等）仍用中文「技能」。细则与更多专名：`references/over-translation-guard.md`。
+**过译红线（v5.31）**：整理 Cursor / Claude / Agent 工具向素材时，不只产品专名要保留英文，讲者用来命名**角色、范式、工作流原语或对照组**的社区原生标签也要保真。**Skill / Agent Skill / Skill Creator / Hooks / Computer Use / Composer / Canvas / Subagent** 保留英文；**Builder、Agent、Agent Loop、Loop、Graph、Workflow、Harness、Evals** 等在承担概念标签时也保留英文，首次可补一句中文释义。❌ 不要把 `Agent → Loop → Graph` 抹平成「代理→循环→图」，也不要因 4c 词库命中就机械翻译。普通动作、状态和形容词仍写中文；同一个词按指称判断。细则见 `references/over-translation-guard.md`。
 
-**成稿后必做**：对叙述层与**对谈实录/关键语录**跑 spec **4c 检索** + **4c 验收闸门**（4c-1 词库 grep → 4c-2 连续英文通读 → 4c-3 对谈实录或关键语录独立扫）；**裸词**自检写 **grep 命中 X→修正后 Y**（首现 `中文（English）` 括注与专名白名单**不计入**失败）；并核过译护栏。**未过闸门不得标 ✅**。可辅以 `scripts/check_4c.py`。成稿后还须跑 **4d 节间空白验收闸门**（或 `scripts/normalize_spacing.py --check`），**未过不得标纯净排版 ✅**。优化存量 output 稿时：**最小 diff** 增量中文化，见 spec「默认中文化工作流」。
+**成稿后必做**：对叙述层与**对谈实录/关键语录**跑 spec **4c 检索** + **4c 验收闸门**（4c-1 词库 grep → 4c-2 连续英文通读 + 反向过译检查 → 4c-3 对谈实录或关键语录独立扫）；**裸词**自检写 **grep 命中 X→修正后 Y**（首现 `中文（English）` 括注与专名白名单**不计入**失败），多义术语与疑似过译命中写明「已对照来源逐项核实」。**未核实不得标 ✅**。可辅以 `scripts/check_4c.py`：其 `CONTEXTUAL_ENGLISH_REVIEW` / `OVER_TRANSLATION_REVIEW` 是人工复核提示，不是机械替换清单。成稿后还须跑 **4d 节间空白验收闸门**（或 `scripts/normalize_spacing.py --check`），**未过不得标纯净排版 ✅**。优化存量 output 稿时：**最小 diff** 增量中文化，见 spec「默认中文化工作流」。
 
 ## 技术素材与多源合并（v5.27+）
 
-- **AI/DevTools 行话**：整理 AI 编码、开发者工具类素材时，4c 须额外 grep「AI/DevTools 行话簇」。**判定原则**：产品/命令/协议/模型名（`Claude Code`、`MCP`、`/loop`、`worktree`、**`Skill`**）保留英文；**行为、状态、口语形容词**中文化，首现可「中文（English）」括注一次。
+- **AI/DevTools 行话**：整理 AI 编码、开发者工具类素材时，4c 须额外 grep「AI/DevTools 行话簇」。**判定原则**：产品/命令/协议/模型名，以及承担角色、范式、工作流原语或对照组的社区原生标签（如 `Builder`、`Agent Loop`、`Loop`、`Graph`）保留英文或首现中英并写；**普通行为、状态、口语形容词**中文化。若原文把若干词并列成一套 taxonomy，整组保留，不拆散翻译。
 - **首现缩写注释**：行业缩写（IC/ASL/MTS/RAG/GTM 等）首次出现须注中文全称「中文全称（英文缩写）」；MCP/API/LLM/SaaS 等已普及缩写可免。自检新增「首现缩写注释」行。
 - **多源合并稿（≥2 来源）**：走「通用模板 + **源口径标注** + **多源一致性核对**」；冲突须 `[编者注]` 并存或点明「**互补/不同维度**」，禁自称「互证」。详见 spec「多源合并稿」。
 
@@ -94,7 +94,7 @@ metadata:
 
 - **≥95% 关键信息覆盖**
 - **纯净深度文章感**（段内呼吸感 ≠ 节间多空行）
-- **正文默认中文叙事** + **专名不过译**
+- **正文默认中文叙事** + **专名/技术概念标签不过译**
 - **正文默认全名**指称人物
 
 ## 执行顺序
@@ -122,7 +122,7 @@ metadata:
 - [ ] 原标题核心承诺已在 H1 / 全文论点 / 前段落地，或已注明标题包装边界。
 - [ ] 已区分已发生案例、嘉宾预测、机构目标、主持人口播与编者推断。
 - [ ] 已核人物声纹；深度解析与实录按「一项事实一个主要归宿」去重。
-- [ ] 技术/Agent 素材已核 `over-translation-guard.md`（Skill/Creator 等）。
+- [ ] 技术/Agent 素材已核 `over-translation-guard.md`：专名、角色/范式/工作流标签未被过译；原文 taxonomy（如 `Agent → Loop → Graph`）保持完整。
 - [ ] 已执行 **4c-1/4c-2/4c-3**（裸词 X→Y；括注/白名单已排除）；技术素材已加跑行话簇。
 - [ ] 行业缩写首现已注中文全称（已普及可免）。
 - [ ] 多源合并稿已做源口径 + 多源一致性。

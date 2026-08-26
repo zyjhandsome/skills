@@ -43,7 +43,7 @@
 - Target **2.35:1** (WeChat 首图常见比).
 - Export size recommendation: **1175 × 500**.
 - GenerateImage supports `16:9` etc. → generate wide, then `make_cover_235.py` center-crop.
-- **Type is overlay-only.** Image model must not paint letters. `overlay_cover_text.py` uses 华文中宋 / Noto Serif for the H1 (`#A85533`, tracked), a 56×2 hairline, and a sans people line (`#B09480`). Never Microsoft YaHei + `#1A1A1A` on the cover.
+- **Type is overlay-only.** Image model must not paint letters. `--title` is the article H1, which defaults to the source H1. `overlay_cover_text.py` uses 华文中宋 / Noto Serif (`#A85533`, tracked), a 56×2 hairline, and a sans people line (`#B09480`). Never Microsoft YaHei + `#1A1A1A` on the cover.
 
 ## Paste checklist
 

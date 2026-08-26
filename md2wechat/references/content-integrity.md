@@ -11,7 +11,7 @@ For every reader-facing H2 in the source, capture four things:
 3. Boundary — uncertainty, counterargument, speaker attribution or condition that prevents overclaiming.
 4. Consequence — what the claim changes for the intended reader.
 
-Ignore metadata, table of contents, glossary, self-check and production notes. Do not ignore a section merely because its details do not fit the new article.
+Ignore metadata, table of contents, glossary, self-check, the 关键语录与交锋时刻 anthology, and production notes. Do not ignore a remaining body section merely because its details do not fit the new article.
 
 ## Decide coverage explicitly
 
@@ -21,14 +21,14 @@ The coverage table must contain every source H2 exactly once.
 
 Allowed decisions:
 
-- `保留`: the core claim, necessary support and material boundary remain recognizable.
-- `合并`: those elements move into another section without changing meaning.
-- `删减`: the core claim remains but secondary evidence or branches are removed; record what and why.
-- `删除`: the core claim is absent; explain why it is outside the title promise.
+- `保留`: default. The source H2 title stays, and the core claim, necessary support and material boundary remain recognizable under that title.
+- `合并`: only for layers **inside** one H2 (洞察/解析/实录). Do not merge two reader-facing H2s under a new heading.
+- `删减`: the source H2 title stays; secondary evidence or branches are removed; record what and why.
+- `删除`: the core claim is absent; allowed for 运营规范. 「关键语录与交锋时刻」is omitted like 术语表 / 自检, not listed in the coverage matrix.
 
 `full` mode may not use `删减` or `删除` for reader-facing body sections, except when [wechat-operation-policy.md](wechat-operation-policy.md) requires it. Policy precedes coverage: a blocked claim is `删除` with reason `运营规范`, or the job stops. `full` may not reprint a blocked claim. `editorial` may also delete for policy; “篇幅有限” is still not a valid reason.
 
-For sources with eight or more reader-facing H2s, or talks longer than about 90 minutes, prefer `保留` or `合并`. Use `删除` only when the claim is outside the title promise. Use `删减` only after the core claim, one necessary mechanism or example, and the material boundary are already in the article. If a sentence could stand as its own knowledge-base note, it is not secondary.
+Both modes keep the source H1 and reader-facing H2 titles unless the user explicitly asked to 改写标题. Do not treat a punchier heading as `保留`.
 
 ## Required audit format
 
@@ -43,7 +43,7 @@ For sources with eight or more reader-facing H2s, or talks longer than about 90 
 ## 覆盖矩阵
 | 源稿主题 | 处理 | 成稿位置 | 核心保留与删减理由 |
 |---|---|---|---|
-| Exact source H2 | 合并 | 二、... | Core retained; secondary example omitted because... |
+| Exact source H2 | 保留 | Exact source H2 | 节内去掉三层标签；结论与机制仍在 |
 
 ## 闭环检查
 - 标题承诺：...；正文如何兑现：...
@@ -65,7 +65,7 @@ Do not put the audit inside the pasted WeChat article, and do not leave it next 
 
 ### Promise closure
 
-- The title asks one question or makes one promise; the conclusion answers it in compatible terms.
+- The title is the source H1 unless policy or an explicit 改写标题 request changed it. The conclusion answers that same promise.
 - Every explicit question in the opening or body receives an explicit answer.
 - A heading that promises a number, such as “两件事”, delivers both items with comparable clarity.
 
@@ -89,4 +89,4 @@ Keep operational details such as crawler failures or ASR tooling out of the arti
 
 ## Validation meaning
 
-The deterministic validator checks HTML, that 来源与说明 contains only 原文, that the cover/HTML filenames match the source filename plus suffix, and the mechanical 运营规范 title/audit gate. A human or model must still judge whether coverage is truthful and whether the source is publishable. Never report “content complete” or “safe to publish” based only on exit code 0. If 发布结论 is 不可发布, do not emit HTML.
+The deterministic validator checks HTML, that 来源与说明 contains only 原文, that the cover/HTML filenames match the source filename plus suffix, that the article H1 and reader-facing H2s match the source (unless `--allow-heading-rewrite`), and the mechanical 运营规范 title/audit gate. A human or model must still judge whether coverage is truthful and whether the source is publishable. Never report “content complete” or “safe to publish” based only on exit code 0. If 发布结论 is 不可发布, do not emit HTML.

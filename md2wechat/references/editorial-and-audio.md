@@ -4,15 +4,9 @@ Use this reference only for `editorial` mode.
 
 ## The target form
 
-The article should behave as one argument, not a transcript archive. Prefer this progression when it fits the source:
+The article should behave as one argument, not a transcript archive. Keep the source H1, each reader-facing H2, **and that section's claim**. WeChat work happens inside the section: flatten 核心洞察 / 深度解析 / 对谈实录 into narration, drop process noise, make it listenable. Do not keep the old heading and swap in a different argument.
 
-1. A concrete tension or counter-intuitive claim.
-2. What most readers currently misunderstand.
-3. The mechanism behind it.
-4. Separate implications for organizations and individuals.
-5. A closing decision rule or action.
-
-Four to seven body sections usually gives enough navigation without turning the audio into repeated menu announcements. This is a judgment range, not a hard quota. Talks longer than about 90 minutes, or sources with eight or more reader-facing H2s, may need eight to ten body sections. Completeness means every source H2 still has a recognizable claim, one mechanism or example, and its material boundary — not that the article is short.
+Do not invent a shorter heading outline. Section count follows the source, minus 元数据 / 目录 / 术语表 / 自检 / 关键语录与交锋时刻. Completeness means every remaining source H2 still has a recognizable claim, one mechanism or example, and its material boundary — under the same heading. Short quotes already in those sections stay; do not reprint the anthology.
 
 Length is a function of source density, not a badge of editorial quality:
 
@@ -30,7 +24,7 @@ If the knowledge base already extracted a section as its own note, that judgment
 
 - One paragraph should carry one move in the argument.
 - Use short paragraphs and visible section breaks; do not split every sentence into a paragraph.
-- Headings should state an idea, not use generic labels such as “背景” or “思考”.
+- Keep the source H2 wording. Do not replace it with a punchier claim. If a source heading is generic (“背景”), keep it; do not invent a new label.
 - Keep only the numbers and names that change the conclusion.
 
 ### 2. Listenability
@@ -44,8 +38,8 @@ If the knowledge base already extracted a section as its own note, that judgment
 
 ### 3. Editorial value
 
-- Choose one central promise and make every section advance it.
-- Merge repeated insight/analysis/dialogue material instead of preserving the source order. Do not merge away a distinct judgment just to hit a section quota.
+- Keep the source title promise. Advance it in source order.
+- Merge repeated insight/analysis/dialogue **inside** a section. Do not merge two source H2s under a new title.
 - Keep an example when it explains a mechanism, makes the conclusion memorable, or is already a reusable insight in the source. Cutting the only mechanism turns a claim into a slogan.
 - Preserve useful tension; do not flatten a nuanced discussion into motivational slogans.
 - After the draft, check whether a careful reader could reconstruct each source H2’s core claim. If not, the article is incomplete even if it “reads well.”
@@ -60,7 +54,7 @@ If the knowledge base already extracted a section as its own note, that judgment
 
 ### 5. Shareability
 
-- The title promises one useful judgment, not a catalog of topics.
+- The title is the source H1. Do not rewrite it for shareability unless the user asked to 改写标题.
 - The opening should tell readers why the issue matters now without clickbait.
 - Include one or two short, source-faithful lines that can stand alone as share cards.
 - The ending should give a decision rule readers can reuse.
@@ -83,7 +77,7 @@ If the knowledge base already extracted a section as its own note, that judgment
 The builder accepts ordinary Markdown. Keep the metadata section because it supplies the subtitle and source footer; it is removed from the pasted article.
 
 ```markdown
-# One clear title
+# {源稿 H1 原文}
 
 ## 文章元数据
 | 项目 | 内容 |
@@ -97,18 +91,12 @@ The builder accepts ordinary Markdown. Keep the metadata section because it supp
 > **人物背景**：one short reader-facing sentence.
 
 ## 核心导读
-> **全文论点**：one sentence.
+> **全文论点**：source thesis, not a rewrite.
 
-Opening paragraphs.
+## {源稿第一节 H2 原文}
+Narrative that keeps that section's claim, mechanism, boundary.
 
-## 一、A claim heading
-Narrative paragraphs.
-> One short source-faithful line if useful.
-
-## 二、A claim heading
-...
-
-## 结语：A reusable decision rule
+## {源稿第二节 H2 原文}
 ...
 ```
 

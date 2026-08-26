@@ -1,28 +1,37 @@
 ---
 name: md2wechat
 description: >-
-  Turn 整理文档 Markdown into an edited WeChat Official Account article,
-  paste-ready inline HTML, and a 2.35:1 cover. Use when existing Markdown,
-  HTML, lecture notes, interviews or整理文档 need 微信公众号改写、排版或播报优化,
-  or when a prior 公众号 was deleted for 微信公众平台运营规范 / 法律法规和政策.
-  Distinguish an editorial article from a complete-format conversion. Do not
-  route unrelated from-scratch writing here when no source material exists.
+  Turn 整理文档 Markdown into a WeChat Official Account article: paste-ready
+  inline HTML and a 2.35:1 cover. Default editorial keeps the source H1,
+  reader-facing H2s, and each section's claims; WeChat work is inside the
+  section (flatten 三层, drop metadata noise, make it listenable). Use when
+  整理文档 / lecture notes / interviews need 微信公众号排版 or 播报优化, or when a
+  prior 公众号 was deleted for 运营规范. Do not rewrite titles unless the user
+  asks 改写标题 or policy requires it. Do not route from-scratch writing here.
 ---
 
 # md2wechat
 
 把整理文档变成真正适合公众号发布的内容，而不只是把 Markdown 换成带样式的 HTML。
 
-公众号同时是阅读媒介和收听媒介。默认优化手机扫读、连续播报、可信度、转发意愿和粘贴稳定性；用户明确要求“完整版/完整保留/只排版”时，才保留原稿的完整三层结构。
+公众号同时是阅读媒介和收听媒介。默认两件事一起做：**标题、小节标题和各节判断跟整理文档走**；节内按公众号做扫读、连续播报、合规和粘贴稳定性。用户明确要求“完整版/完整保留/只排版”时，连三层标签也保留。用户明确要求“改写标题”时，才另写 H1/H2。
+
+## Source fidelity（默认，未要求改写标题时）
+
+- 成稿 H1 = 源稿 `#` 第一行，封面叠字用同一句。
+- 每个读者向 H2 原样出现，不得改成更冲的金句，也不得把两节合成一个新标题。篇末「关键语录与交锋时刻」不进公众号（金句留在各节正文里）。
+- 各节的核心结论、必要机制/例子、会改变力度的限定仍在该节标题下；压缩的是三层重复和过程噪音，不是另写一篇。
+- 文件名仍跟源文件走，只加 `_公众号文章` / `_公众号封面`。页脚「原文：」用元数据原标题，不是 H1。
 
 ## Choose the mode
 
 | User intent | Mode | Result |
 |---|---|---|
-| “生成/改写成公众号文章”“更易读/易听” | `editorial`（默认） | 先写公众号成稿 Markdown，再生成 HTML；围绕一条主线删重、合并、转述 |
-| “公众号完整版”“完整保留”“只排版” | `full` | 保留正文信息与“核心洞察/深度解析/对谈实录”三层，只删除元数据噪音；运营规范阻断的主张不能靠 full 重印，删不掉就停 |
+| “生成/改写成公众号文章”“更易读/易听” | `editorial`（默认） | 先写公众号成稿 Markdown，再生成 HTML；**沿用源稿 H1 与读者向 H2**，节内去掉三层标签、改成可播报叙述 |
+| “改写标题”“重写小节标题”“不要跟原文标题走” | `editorial` + 改写标题 | 只有用户明确要求时，才另写 H1/H2 |
+| “公众号完整版”“完整保留”“只排版” | `full` | 连“核心洞察/深度解析/对谈实录”三层也保留；只删除元数据噪音；运营规范阻断的主张不能靠 full 重印，删不掉就停 |
 
-不要用 `full` 冒充“成稿”，也不要在用户要求完整保留时擅自压缩。
+不要用 `full` 冒充“成稿”，也不要在用户要求完整保留时擅自压缩。默认也不要为了「更好听」另起一套章节标题。
 
 ## Read as needed
 
@@ -63,13 +72,13 @@ python "$env:USERPROFILE\.cursor\skills\md2wechat\scripts\scan_wechat_policy.py"
 
 退出码 1：按 [wechat-operation-policy.md](references/wechat-operation-policy.md) 判 `可发布 / 改写后可发布 / 不可发布`。闭门会外泄全文、未证实融资新闻、落马官员关系 → **不可发布，停交付**。改写不能把泄稿合法化；归因到「知情人士」也不能把传闻当新闻。只有公开可核实的主线，才继续往下写。
 
-写作前列出源稿每个正文 H2 的核心结论、关键证据、限定/反方和行动含义，并完成覆盖判断（`保留 / 合并 / 删减 / 删除`）。因运营规范删去的章节标 `删除`，理由写「运营规范」。审计表不要写成交付文件。
+写作前列出源稿每个正文 H2 的核心结论、关键证据、限定/反方和行动含义，并完成覆盖判断（`保留 / 合并 / 删减 / 删除`）。默认每个读者向 H2 标 `保留`，成稿位置写源稿原标题。因运营规范删去的章节标 `删除`，理由写「运营规范」。审计表不要写成交付文件。
 
 ### 2. Edit the content
 
-`editorial`：先在临时目录写公众号成稿 Markdown，再生成 HTML。文章应有一条标题承诺、一个能独立听懂的开场、清晰的章节推进和行动性收束。合并重复的“洞察/解析/实录”，把对话改为叙述，只保留少量不可替代的短引语。压缩的是重复层和过程噪音，不是可独立成条的判断；每条源稿 H2 的核心结论、一条必要机制或例子、以及会改变力度的限定，都要还能被读出来。长对谈（约 90 分钟以上或 ≥8 个正文 H2）默认写 5,000–8,000 字、8–10 节，而不是压成口号集。表格改为口语化结论；链接、来源和复杂数字不要打断正文播报。正文主动提出的问题必须在本节或后文明确回答，不能只靠暗示闭环。
+`editorial`：先在临时目录写公众号成稿 Markdown，再生成 HTML。先抄源稿 H1 和读者向 H2（不含「关键语录与交锋时刻」），再写节内正文。公众号适配发生在**节内**：去掉「核心洞察/深度解析/对谈实录」标签，把对话改成叙述，表格改成口语化结论，删掉目录、术语表、自检、关键语录汇编、编者注和抓取流水。不要把一节的洞察句提升为新 H2。链接、来源和复杂数字不要打断正文播报。正文主动提出的问题必须在本节或后文明确回答。只有用户明确要求「改写标题」，或源稿 H1 本身触碰运营规范 4.11 时，才另写 H1/H2，并给校验器加 `--allow-heading-rewrite`。
 
-`full`：保留原稿主体和三层结构；删除目录、术语表、自检、抓取流水、编辑注及冗长免责声明。输出文件名仍是 `{原文文件名}_公众号文章.html`。
+`full`：保留原稿主体和三层结构；删除目录、术语表、自检、关键语录汇编、抓取流水、编辑注及冗长免责声明。输出文件名仍是 `{原文文件名}_公众号文章.html`。
 
 共同要求：不得把简介中的问题写成嘉宾说过的结论；口述数字和观点要明确归于讲者，未核实内容不要升级成事实。区分短引语与编辑概括。观点归属写在正文里；来源与说明只保留「原文：{原标题}」，不要视频链接、日期括注或编辑说明。标题和正文不要用外泄、全文、突然、震惊、心虚、爆料做传播点。页脚免责声明不能对冲违规内容。
 
@@ -78,9 +87,11 @@ python "$env:USERPROFILE\.cursor\skills\md2wechat\scripts\scan_wechat_policy.py"
 使用绝对路径，避免依赖当前目录：
 
 ```powershell
-python "$env:USERPROFILE\.cursor\skills\md2wechat\scripts\build_wechat_html.py" "<成稿或整理文档.md>" --mode editorial
+python "$env:USERPROFILE\.cursor\skills\md2wechat\scripts\build_wechat_html.py" "<成稿或整理文档.md>" --mode editorial --out "<原文文件名>_公众号文章.html"
 python "$env:USERPROFILE\.cursor\skills\md2wechat\scripts\build_wechat_html.py" "<整理文档.md>" --mode full
 ```
+
+脚本会把自身目录加入 `sys.path`。当前 `python` 缺 Pillow 时，改用已安装 Pillow 的解释器跑封面和校验，不要跳过。
 
 默认输出 `{原文文件名}_公众号文章.html`，与源文件同目录。从临时成稿构建时必须 `--out` 到该路径。
 
@@ -107,9 +118,10 @@ python "$env:USERPROFILE\.cursor\skills\md2wechat\scripts\overlay_cover_text.py"
 
 ```powershell
 python "$env:USERPROFILE\.cursor\skills\md2wechat\scripts\validate_wechat_bundle.py" "<原文文件名>_公众号文章.html" --cover "<原文文件名>_公众号封面.png" --source "<整理文档.md>"
+# 仅当用户明确要求改写标题时加： --allow-heading-rewrite
 ```
 
-必须修到退出码为 0。校验器检查 HTML、来源页脚是否只有原文、封面比例、封面/HTML 文件名是否与原文文件名同茎，以及运营规范标题/审计门禁。覆盖与是否可发布仍要对照 [wechat-operation-policy.md](references/wechat-operation-policy.md) 人工判断。还要检查：只听音频是否能理解指代和转折；只扫标题、每节首段和金句是否能复述主线；标题是否兑现；显式问题是否逐一回答；每个重要判断是否能区分“事实、讲者观点、编辑推论”。发布结论是「不可发布」时不要修校验器去出 HTML。交付前删除临时成稿和审计文件。
+必须修到退出码为 0。校验器检查 HTML、来源页脚是否只有原文、封面比例、封面/HTML 文件名是否与原文文件名同茎、源稿 H1/读者向 H2 是否原样保留，以及运营规范标题/审计门禁。覆盖与是否可发布仍要对照 [wechat-operation-policy.md](references/wechat-operation-policy.md) 人工判断。还要检查：只听音频是否能理解指代和转折；只扫标题、每节首段和金句是否能复述主线；标题是否兑现；显式问题是否逐一回答；每个重要判断是否能区分“事实、讲者观点、编辑推论”。发布结论是「不可发布」时不要修校验器去出 HTML。交付前删除临时成稿和审计文件。
 
 ### 6. Hand off
 
@@ -120,10 +132,13 @@ python "$env:USERPROFILE\.cursor\skills\md2wechat\scripts\validate_wechat_bundle
 ## Non-negotiable anti-patterns
 
 - 把原稿逐段换皮，却称为“公众号成稿”
+- 擅自改写源稿 H1 或读者向 H2，或把多节合成一个新标题
+- 标题沿用了原文，却把各节内容改写成另一条主线
 - 把 2 小时对谈压成口号集，却称为“成稿”
 - 为了短而删除限定词、来源边界、相反观点，或唯一能让结论成立的机制/例子
 - 未做逐节覆盖审计，却声称“内容完整”
 - 在正文提出问题，后文没有明确回答
+- 把「关键语录与交锋时刻」整节贴进公众号（金句已在各节）
 - 用表格、括号注释、裸链接和连续 speaker 标签组织需要播报的正文
 - 标题同时塞入四五个议题，正文没有单一回答
 - 用工具效率代替读者价值，只报告“压缩了多少字”

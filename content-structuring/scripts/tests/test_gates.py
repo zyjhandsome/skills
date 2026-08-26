@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Gate regression tests for content-structuring scripts (v5.29)."""
+"""Gate regression tests for content-structuring scripts (v5.31)."""
 
 from __future__ import annotations
 
@@ -114,12 +114,12 @@ def test_fixture_stock_4c_hits() -> None:
     assert "super bullish" in out or "operationalize" in out or "refine" in out
 
 
-def test_4c_allows_rag_and_capitalized_harness_only() -> None:
+def test_4c_allows_rag_and_technical_harness() -> None:
     text = """# T
 
 ## 第一节
 
-检索增强生成（RAG）用于召回。Harness 是产品名，但普通 harness 仍应中文化。
+检索增强生成（RAG）用于召回。Harness 是产品名，harness 也是常见技术层标签。
 """
     with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as f:
         f.write(text)
@@ -128,9 +128,48 @@ def test_4c_allows_rag_and_capitalized_harness_only() -> None:
         cp = run([sys.executable, str(CHECK4C), str(path)])
         out = (cp.stdout or b"").decode("utf-8", errors="replace")
         err = (cp.stderr or b"").decode("utf-8", errors="replace")
-        assert cp.returncode != 0, out + err
-        assert out.lower().count("harness") == 2, out
+        assert cp.returncode == 0, out + err
         assert "RAG" not in out, out
+    finally:
+        path.unlink(missing_ok=True)
+
+
+def test_4c_allows_field_native_concept_labels() -> None:
+    text = """# T
+
+## 第一节
+
+他把自己定义为 Builder。技术演化线是 Agent → Loop → Graph，核心是 Agent Loop。
+"""
+    with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as f:
+        f.write(text)
+        path = Path(f.name)
+    try:
+        cp = run([sys.executable, str(CHECK4C), str(path)])
+        out = (cp.stdout or b"").decode("utf-8", errors="replace")
+        err = (cp.stderr or b"").decode("utf-8", errors="replace")
+        assert cp.returncode == 0, out + err
+        assert "ACTIONABLE_HITS" not in out, out
+    finally:
+        path.unlink(missing_ok=True)
+
+
+def test_4c_reports_likely_over_translation_without_failing() -> None:
+    text = """# T
+
+## 第一节
+
+现场先问：先是代理，然后循环，然后图。讲者说自己爱的是建造，编程只是手段。
+"""
+    with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as f:
+        f.write(text)
+        path = Path(f.name)
+    try:
+        cp = run([sys.executable, str(CHECK4C), str(path)])
+        out = (cp.stdout or b"").decode("utf-8", errors="replace")
+        err = (cp.stderr or b"").decode("utf-8", errors="replace")
+        assert cp.returncode == 0, out + err
+        assert "OVER_TRANSLATION_REVIEW" in out, out
     finally:
         path.unlink(missing_ok=True)
 
@@ -165,7 +204,9 @@ def main() -> int:
         test_fixture_adversarial_4d_ok,
         test_fixture_dialogue_4c_ok,
         test_fixture_stock_4c_hits,
-        test_4c_allows_rag_and_capitalized_harness_only,
+        test_4c_allows_rag_and_technical_harness,
+        test_4c_allows_field_native_concept_labels,
+        test_4c_reports_likely_over_translation_without_failing,
         test_4c_ignores_code_fences_links_and_urls,
     ]
     failed = 0

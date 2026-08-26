@@ -81,7 +81,7 @@
 15. **受众可读性内化（可选）**：用户指定跨文化受众（如赴美留学生）时，首次出现处补文化/人物/语境背景，**客观第三人称**，**禁元叙述、禁「你们」说教、禁国内场景硬类比**，照跑 4c 并加「可读性内化」自检行。见「可读性内化适配」。
 16. **访谈结构路由【v5.29】**：信息型多人 Q&A 每节固定 **核心洞察 → 深度解析 → 对谈实录**；若分歧贯穿多个主题且追问/纠错持续升级，则用 **原声交锋 → 语境与释义 → 未决问题**，保留时间顺序与人物声纹。见「对谈三层节结构」「争辩型访谈 / 原声增强模式」。
 17. **核心导读论点合成【v5.26】**：导读首块 `> **全文论点**：…` 合成中心主张；主体 2–4 段以 `**{实质性标签}。**` 分层展开，须覆盖目录末 2–3 节收束线；禁止话题串烧式议程回顾。见「核心导读写法（全文论点）」。
-18. **AI/DevTools 行话 + 专名判定【v5.27/v5.28】**：整理技术/开发者素材时，4c 须额外跑「AI/DevTools 行话簇」；**产品/命令/协议/模型名保留英文，行为与口语中文化**；**禁止过译**（Skill≠技能、Skill Creator≠技能创建者）。行业缩写（IC/ASL/MTS/RAG/GTM）首现须注中文全称。见「专名 vs 行话」与 `over-translation-guard.md`。
+18. **AI/DevTools 行话 + 术语保真【v5.31】**：整理技术/开发者素材时，4c 须额外跑「AI/DevTools 行话簇」；产品/命令/协议/模型名保留英文，讲者用作角色、范式、工作流原语或对照组的社区原生标签（如 **Builder、Agent Loop、Loop、Graph、Harness、Evals**）也保留英文或首现中英并写；普通行为与口语中文化。**禁止过译**（Skill≠技能、`Agent → Loop → Graph`≠代理→循环→图）。行业缩写（IC/ASL/MTS/RAG/GTM）首现须注中文全称。见「专名 vs 行话」与 `over-translation-guard.md`。
 19. **多源合并稿 + 多源一致性【v5.27】**：合并 ≥2 来源时走「多源合并稿」模式——**源口径标注** + **多源一致性核对**（冲突须 `[编者注]` 并存或点明「互补非互证」，禁自称「互证」）。见「多源合并稿」与「防幻觉 第 8 条」。
 20. **4c 括注不计失败【v5.28】**：首现 `中文（English）` 内的词库词、以及过译护栏白名单专名，**不计入** 4c-1 裸词失败；可跑 `scripts/check_4c.py`。
 21. **冲突不等于结论【v5.29】**：争辩型稿不得把双方未解决的事实争议、价值分歧改写成编者共识；所有争议主张必须署名归属，解释置于原声之后。
@@ -98,23 +98,41 @@
 | 层级 | 范围 | 语言规则 |
 | :--- | :--- | :--- |
 | **叙述层** | 导读、目录标题、各节正文、列表说明、Q&A 归纳句 | **以中文为主**写清含义；读者不应需要英文阅读能力才能跟读论证 |
-| **专名层** | 公司/产品/模型/API、已校准术语、行业固定缩写 | 保留**官方英文写法**（如 **Claude Managed Agents**、**MCP**、**Messages API**）；**行业缩写首次出现须注中文全称「中文全称（英文缩写）」**（如 个人贡献者（IC）、自主安全等级（ASL）、检索增强生成（RAG）），后文可用缩写——MCP、API、LLM、SaaS 等已普及缩写可免注【v5.27 由「可」升为「须」】 |
+| **专名 / 术语保真层** | 公司/产品/模型/API、已校准术语、行业固定缩写，以及讲者明确用作角色/范式/工作流原语/对照组的社区原生标签 | 保留**官方或社区通行英文写法**（如 **Claude Managed Agents**、**MCP**、**Messages API**、**Builder**、**Agent Loop**、**Loop / Graph**）；需要解释时首次中英并写，后文沿用标签。行业缩写首次出现须注中文全称「中文全称（英文缩写）」——MCP、API、LLM、SaaS 等已普及缩写可免注 |
 | **档案层** | 元数据「原标题」、延伸术语表专名列、ASR 音译记录 | 可保留**原文英文**；**关键语录默认不在此层**——须译成中文 |
 
-### 叙述层：必须中文化 vs 可保留英文
+### 叙述层：必须中文化 vs 必须保真的英文
 
 **必须译为中文**（不得仅加粗英文原词顶替）：
 
 - 通用动作与状态：*fully auditable*、*convert to approval*、*shared workspace*、*minimalistic iteration*、*leak information*、*wake up*、*dogfooding* 等
-- 通用名词短语：*verification loop*（→ 验证闭环）、*outcome spec*（→ 产出规格）、*single player / multiplayer*（→ 单人试用 / 多人协作；首次可加英文括注）
+- 通用名词短语：*outcome spec*（→ 产出规格）、*single player / multiplayer*（→ 单人试用 / 多人协作；首次可加英文括注）等；但若讲者把某词当作命名或范式标签（如 **Agent Loop**），转入下方术语保真规则
 - 形容词与副词性口语：*actionable*、*highly optimized*、*immediate* 等（除非已是业界固定专名的一部分）
 
-**可在叙述层保留英文**（仍需符合术语校准表）：
+**必须保留英文或首现中英并写**（仍需符合术语校准表）：
 
 - **品牌与产品正式名称**：OpenAI、Asana、Claude、**AI Teammates**
 - **API / 协议 / 控制台能力名**：**Messages API**、**Model Context Protocol（MCP）**
 - **讲者明确当作产品 UI 标签**且中文尚无统一译名的字段（首次：**中文说明 + 英文 UI 名**；后文可简称中文）
+- **讲者明确当作角色、身份、范式、工作流原语、架构层或对照组的社区原生标签**：**Builder**、**Agent**、**Agent Loop**、**Loop**、**Graph**、**Workflow**、**Harness**、**Evals**、**Tool Call** 等。若原文把多个词并列成 taxonomy，整组保留其英文关系，不逐词翻掉
 - **无法可靠译出的 ASR 音**（保留音并 `[ASR不确定]` / 编者注），不得用英文假装「更忠实」
+
+#### AI/DevTools 概念标签的语境判定【v5.31】
+
+不要再用「是不是官方产品名」作为唯一标准。依次问：
+
+1. 这是产品、UI、命令、代码对象或文件名吗？是则保留英文。
+2. 讲者是否在**命名一个概念**、声明自我身份、比较几种范式，或列举一套演化链？是则保留英文标签，首次可补中文解释。
+3. 英文是否提供中文译法无法保留的可检索性或圈内指向？是则采用「中文说明（English）」或直接保留英文。
+4. 以上都不是，只是普通动作、状态、形容或比喻，才翻成自然中文。
+
+典型回归：
+
+- ❌ `先是代理，然后循环，然后图` → ✅ `先是 Agent，接着是 Loop，再到 Graph`
+- ❌ `他爱的是建造，编程只是手段`（原文强调 builder 身份）→ ✅ `他真正认同的是 Builder 身份；编程只是实现手段`
+- ❌ 为通过 4c，把 **Agent Loop**、**Harness** 全部替换成中文 → ✅ 先判断它们是否承担标签/层名；仅普通语义才译
+
+**克制原则**：术语保真不等于恢复整句英文，也不等于每次都加括号。一个标签首次解释一次即可；普通叙事仍写流畅中文。
 
 ### 首次出现与目录标题
 
@@ -145,7 +163,7 @@
 | **误标自检** | 正文大量夹写却写「正文中文叙事 ✅」 | 须先跑 4c 检索，有命中则 ⚠️ 并写修正处数 |
 | **误标排版** | 正文节间堆 `---`/三连空行却写「纯净排版 ✅」 | 须先跑 **4d 节间空白闸门**；违规 >0 则 ⚠️ 并写计数 |
 | **呼吸感误读** | 为「呼吸感」在 `##` 下留 3–4 空行、每节后加 `---` | **段内**短段落=呼吸感；**节间**仅单空行、禁 `---` |
-| **高保真误读** | 为「保留口吻」在叙述层堆 `refine`/`holistic`/`builder` 等 | 语义用**中文复述**；风格进中文关键语录，不是堆英文 |
+| **高保真误读** | 为「保留口吻」在叙述层堆 `refine`/`holistic` 等普通英文；或反过来把 **Builder / Agent Loop / Loop / Graph** 等概念标签翻没 | 普通语义用中文复述；概念标签按 v5.31 保留英文或首现中英并写 |
 | **括注式夹写** | `great products（伟大产品）` 或整句英文+中文括注 | 正文写中文；首次 coined term 才用「中文（English）」 |
 
 **Dan Shipper 类反例（错误 → 正确）**：
@@ -165,8 +183,8 @@
 
 成稿后、写自检前，对**导读 + 目录标题 + 各节深度解析 + 核心洞察 + 对谈实录 + 关键语录**（**排除**元数据「原标题」、术语表专名列、用户显式要求保留英文的双语原文副行）执行：
 
-1. **全文通读**：任一中文句若含 **≥2 个连续英文单词**（非「专名层误判清单」允许项），优先改写成中文。
-2. **模式检索**（命中即改，专名除外）：对「默认中文化工作流 > 英文源素材高频夹写词（统一词库）」执行 grep（该词库含 `super bullish`、`operationalize`、`builder`、`holistic`、`refine` 等）。
+1. **全文通读**：任一中文句若含 **≥2 个连续英文单词**，先判定它是普通英语还是专名/社区原生概念标签；前者改中文，后者保留并检查是否需要首次释义。
+2. **模式检索**（命中先判指称）：对「默认中文化工作流 > 英文源素材高频夹写词（统一词库）」执行 grep。`super bullish`、`operationalize`、`holistic`、`refine` 等普通用法命中即改；多义技术词不得仅凭词库命中机械翻译。
 3. **核心洞察专项检查**：每个 `### 核心洞察` 下 `>` 块不得含英文谓语串（允许 **GPT-5.5**、**SaaS** 等专名）。
 4. **关键语录 / 对谈实录专项检查（4c-3）**：若启用**对谈三层节结构**，逐节扫描各 `### 对谈实录`；否则扫描 `## 关键语录与交锋时刻`。均须**全中文译文**（专名层除外）；不得保留 `unaware`、`disposable`、`craft`、`vibe` 等通用英文谓语/形容词。
 5. **统计**：自检「正文中文叙事」行须写 **grep 命中 X 处 → 修正后 Y 处**（或 **`⚠️ 存量夹写 M 处待补丁`**）；**Y > 0 且仍有 M>0 时不得标 ✅**。
@@ -179,12 +197,12 @@
 | 步骤 | 动作 | 通过标准 |
 | :--- | :--- | :--- |
 | **4c-1 词库 grep** | 对「英文源素材高频夹写词」+ 播客扩展词表 grep 全文（排除元数据原标题、术语表专名列） | 叙述层+关键语录中**裸露通用夹写词为 0**（专名层除外）。**不计入失败**：① 首现合法括注 `中文（English）` / `（English）` 内的词库词；② `references/over-translation-guard.md` 白名单专名（如 **Skill** / **Skill Creator** / **Claude Code**） |
-| **4c-2 连续英文扫描** | 通读导读/正文/核心洞察/关键语录，找 **≥2 连续英文单词** 的非专名短语 | 命中须改中文或确认为专名层；**不得**留 `refine`、`builder`、`holistic` 等通用词；**同时检查过译**（勿把 Skill/Creator 等专名译没） |
+| **4c-2 连续英文扫描** | 通读导读/正文/核心洞察/关键语录，找 **≥2 连续英文单词** 的非术语短语 | 命中须改中文或确认为专名/概念标签；不得留 `refine`、`holistic` 等普通夹写；**同时反向检查过译**（勿把 Skill/Creator、Builder、Agent Loop、Loop/Graph taxonomy 等译没） |
 | **4c-3 关键语录 / 对谈实录独立扫** | 启用**对谈三层**时逐节扫 `### 对谈实录`；否则扫 `## 关键语录` | 无英文半句/整句（专名、产品型号除外） |
 
-**可选自动化**：成稿后可运行本技能内 `scripts/check_4c.py {文件路径}`（排除括注与专名白名单）；**脚本 0 命中不能替代 4c-2 通读与过译护栏**，但脚本仍报裸词命中时**不得标 ✅**。勿依赖已移除的 `.cursor/tmp/output_full_audit.py`。
+**可选自动化**：成稿后可运行本技能内 `scripts/check_4c.py {文件路径}`。脚本分三类输出：`ACTIONABLE_HITS`（明确普通夹写，未清零不得标 ✅）、`CONTEXTUAL_ENGLISH_REVIEW`（多义技术词，须按来源判断保留或翻译）、`OVER_TRANSLATION_REVIEW`（疑似把英文概念标签翻没，须回看原文）。后两类是**人工复核提示**，允许核实后保留，但不得未看就忽略。**脚本 0 命中不能替代 4c-2 通读与过译护栏**。勿依赖已移除的 `.cursor/tmp/output_full_audit.py`。
 
-**自检备注格式（新建稿）**：`✅ 4c 闸门通过；裸词 grep 命中 {X}→修正后 {Y}；括注/专名白名单已排除；过译护栏已核；金句/实录已译中文`
+**自检备注格式（新建稿）**：`✅ 4c 闸门通过；裸词 grep 命中 {X}→修正后 {Y}；多义术语 {C} 项、疑似过译 {R} 项已对照来源逐项核实；括注/术语白名单已排除；金句/实录已译中文`
 
 ### 步骤 4d：节间空白验收闸门【v5.25】
 
@@ -207,7 +225,7 @@
 以下为**高频误判示例**（与「英文源素材高频夹写词（统一词库）」**有意重叠**，便于就近查阅；**grep 唯一来源仍以统一词库为准**，勿在两处重复维护新增词——新词只加进统一词库）。这些词**不是**品牌/产品专名，**不得**以「高保真」「业界固定说法」为由留在叙述层或关键语录——须译成中文（首次 coined term 可用「中文（English）」，后文中文）：
 
 ```text
-builder|refine|holistic|aware|unaware|functional|dysfunctional|storytelling|tech-led|
+refine|holistic|aware|unaware|functional|dysfunctional|storytelling|tech-led|
 gut|informed gut|orchestrate|micromanagement|stepchild|centerpiece|priority|
 genius|sublime|backwards|gobbledegook|frictionless|tentpole|product marketing|
 back-calculate|brittle|disposable|craft|vibe|persona|context|early adopters|laggards|
@@ -286,7 +304,7 @@ super bullish|operationalize|mass unemployment|too comforting|turn over rocks|
 stand behind|human writing|good excuse|not fundamentally|day looks similar|
 hands in it|speed up|closed loop|massive shift|for real|wait and see|
 early adopter|daily driver|horse race|paper over|vibe code|
-functional|dysfunctional|builder|holistic|storytelling|tech-led|gut feeling|informed gut|
+functional|dysfunctional|holistic|storytelling|tech-led|gut feeling|informed gut|
 aware|unaware|orchestrate|micromanagement|stepchild|centerpiece|genius|sublime|
 backwards|gobbledegook|frictionless|tentpole|product marketing|back-calculate|brittle|
 persona|context|laggards|earned media|boil down|punchline|competitor|infomercial|
@@ -294,7 +312,7 @@ gizmo|deprecate|crutch|unsustainable|painkiller|addict|junk food|lizard brain|
 double-edged|unintended consequence|great products|cover their ass|benevolent dictatorship|
 COGS|down-rev|down rev|term sheet|offer letter|outbound|inbound|PIP|T&E|containment|
 pitch|rep|miss|operator|onboarding|refinement|disposable|cosmetic|one-shot|live demo|
-prompt caching|grading criteria|setup 脚本|graph-based|harness|sandbox|demo|horseshit
+prompt caching|grading criteria|setup 脚本|graph-based|sandbox|demo|horseshit
 dogfood|dogfooding|oneshot|one-shot|flaky|ration|tally|spawn|checkout|hook|subprocess|
 RAG|chassis|wrapper|bare-bones|launch review|latent demand|roadmap|standup|moderation|
 primitive|craze|type-ahead|dead test|allow.?list|block.?list|conservative|secret sauce|source available
@@ -302,9 +320,9 @@ primitive|craze|type-ahead|dead test|allow.?list|block.?list|conservative|secret
 
 > **播客/创投/企业销售扩展词**（与上表一并 grep）：`COGS`→销货成本、`down-rev`→向下修订、`term sheet`→投资条款清单、`offer letter`→录用通知书、`outbound/inbound`→外呼/入站线索、`PIP`→绩效改进计划、`T&E`→差旅与招待报销、`containment`→隔离边界、`pitch`→推销陈述（非体育）、`rep`→销售代表、`onboarding`→新用户引导（**产品模块正式名可保留 onboarding**）、`refinement`→微调、`rollout`→**按语境**：产品发布/灰度推进；仅在训练/推理采样语境才用「采样轨迹」；（**禁止**无脑译「推广」）、`demo`→演示（**Demo Day** 等专名保留）、`live demo`→现场演示、`one-shot prompt`→单次提示词。
 
-> **AI / DevTools 行话簇【v5.27，整理技术/开发者素材必跑】**：`dogfood/dogfooding`→内部试用、`oneshot/one-shot`→一次成功、`flaky`→不稳定（测试）、`ration`→限额/配给、`tally`→记一笔/统计、`spawn`→启动/拉起（**API 名讨论可保留**）、`checkout`→检出（**`git checkout` 保留**）、`hook`→钩子（**Cursor Hooks 产品名保留 Hooks**）、`subprocess`→子进程、`RAG`→检索增强生成（缩写可留，须首现全称）、`chassis`→底盘、`wrapper`→封装层/套壳、`bare-bones`→极简、`launch review`→上线评审、`latent demand`→潜在需求、`roadmap`→路线图、`standup`→每日站会、`moderation`→人工审核、`primitive`→原语、`craze`→狂热、`secret sauce`→独门秘方、`source available`→源码可见。
+> **AI / DevTools 行话簇【v5.31，整理技术/开发者素材必跑】**：下列映射只适用于**普通叙述义**，若词在原文中承担产品对象、代码对象、角色、范式或架构层标签，转入术语保真层，不机械替换。`dogfood/dogfooding`→内部试用、`oneshot/one-shot`→一次成功、`flaky`→不稳定（测试）、`ration`→限额/配给、`tally`→记一笔/统计、`spawn`→启动/拉起（**API 名讨论可保留**）、`checkout`→检出（**`git checkout` 保留**）、`hook`→钩子（**Cursor Hooks 产品名保留 Hooks**）、`subprocess`→子进程、`RAG`→检索增强生成（缩写可留，须首现全称）、`chassis`→底盘、`wrapper`→封装层/套壳、`bare-bones`→极简、`launch review`→上线评审、`latent demand`→潜在需求、`roadmap`→路线图、`standup`→每日站会、`moderation`→人工审核、`primitive`→原语、`craze`→狂热、`secret sauce`→独门秘方、`source available`→源码可见。**Harness / Evals / Builder / Agent Loop / Loop / Graph** 不列作机械替换项，按指称判断。
 >
-> **专名 vs 行话判定原则【v5.27/v5.28】**：**保留英文**——产品/工具/协议/模型/命令名与技术对象名（`Claude Code`、`MCP`、`Opus 4.5`、`/loop`、`worktree`、`tmux`、`bash`、`PR`、`CI`、**`Skill` / `Agent Skill` / `Skill Creator`**、**`Hooks`**、**`Computer Use`**、**`Composer`**、**`Canvas`**、**`Subagent`**）；**中文化**——行为、状态、口语形容词与**非专名**通用名词短语（上列行话簇）。拿不准时问：「这是一个**能被官方写进文档的专有名字**，还是一个**普通英文词**？」后者必译；前者**禁止过译**（❌ Skill→技能、Skill Creator→技能创建者）。首现可「中文说明（English）」括注一次，后文中文为主、**专名本身仍保留英文**。详见 `references/over-translation-guard.md`。
+> **专名 vs 行话判定原则【v5.31】**：**保留英文**——产品/工具/协议/模型/命令名与技术对象名（`Claude Code`、`MCP`、`Opus 4.5`、`/loop`、`worktree`、`tmux`、`bash`、`PR`、`CI`、**`Skill` / `Agent Skill` / `Skill Creator`**、**`Hooks`**、**`Computer Use`**、**`Composer`**、**`Canvas`**、**`Subagent`**），以及讲者用作角色、身份、范式、工作流原语或对照组的社区原生标签（**`Builder`、`Agent`、`Agent Loop`、`Loop`、`Graph`、`Workflow`、`Harness`、`Evals`**）。**中文化**——普通行为、状态、口语形容词与不承担标签作用的通用名词短语。拿不准时不能只问「是不是官方名字」，还要问「讲者是否在用它命名一个概念或一组 taxonomy」；若是，英文标签保留，首次可补中文说明。详见 `references/over-translation-guard.md`。
 
 #### 4c 检索范围（强制）
 
@@ -319,7 +337,7 @@ primitive|craze|type-ahead|dead test|allow.?list|block.?list|conservative|secret
 
 | 场景 | 「正文中文叙事」行 |
 | :--- | :--- |
-| 新建稿 | `✅ 4c 闸门通过；裸词 grep 命中 X→修正后 Y；括注/专名白名单已排除；过译护栏已核；关键语录已译中文` |
+| 新建稿 | `✅ 4c 闸门通过；裸词 grep 命中 X→修正后 Y；多义术语 C 项、疑似过译 R 项已对照来源逐项核实；括注/术语白名单已排除；关键语录已译中文` |
 | 增量中文化 | `✅ 增量中文化 {范围}；裸词 grep 命中 X→修正后 Y；关键语录中文化 M 条；无过译专名` |
 | 用户要求保留英文金句 | `✅ 叙述层中文；关键语录保留英文（用户覆盖）` |
 | 用户要求双语金句 | `✅ 叙述层中文；关键语录中英双语（用户覆盖）` |
@@ -357,7 +375,7 @@ primitive|craze|type-ahead|dead test|allow.?list|block.?list|conservative|secret
 | **毕业典礼 / Class Day** | **Commencement** vs **Class Day**、**residential college**、**summa/magna/cum laude**、**final club**、**legacy** |
 | **论坛 / 主题演讲** | 活动正式名称、主办机构、行业展会语境（如 **Computex**、**Cisco Live**） |
 | **播客** | 节目定位（**20VC**、**Decoder**、**Hard Fork**、**MAD**、**All-In**） |
-| **AI Engineer / 技术工作坊** | **harness**→编排层（产品/框架专名可保留）、**rollout**→按语境（发布/灰度 vs 采样轨迹）、**eval**→评测（evals 套件名可保留） |
+| **AI Engineer / 技术工作坊** | **Harness** 作为架构层/概念标签时保留英文，首次可写「代理编排层（Harness）」；**rollout**→按语境（发布/灰度 vs 采样轨迹）；**Evals** 作为评测体系标签时保留，普通动词/泛称写「评测」 |
 | **Agent / Cursor / Claude 工具** | **Skill / Skill Creator / Hooks / Computer Use** 等**禁止过译**；见 `over-translation-guard.md` |
 
 ---
@@ -1063,6 +1081,6 @@ primitive|craze|type-ahead|dead test|allow.?list|block.?list|conservative|secret
 7. **用户追补转写（增量修订）**：若用户在初稿后粘贴更长字幕/转写，**仅做补洞**：全文检索产品代际、主持侧数字、下载量等易漏项，**最小 diff** 合并进对应小节；**禁止**为补丁而重写无关段落。补丁后复检自检表中「引子 / 附着型 / 数字 vs 转写」三行。
 
 ---
-*Skill Version: v5.30*
-*Optimization Focus: v5.30 立场演化型信息访谈的叙事轴 + 标题承诺、事实状态、人物声纹与解析/实录去重闸门；v5.29 争辩型访谈 / 原声增强模式；v5.28 过译护栏与 4c 白名单；v5.27 AI/DevTools 行话簇 + 多源合并；v5.26 核心导读论点；v5.25 4d；v5.23 对谈三层；成稿即中文；Browser-first.*
+*Skill Version: v5.31*
+*Optimization Focus: v5.31 AI/DevTools 概念标签保真（Builder、Agent Loop、Loop/Graph taxonomy）与 4c 反向过译检查；v5.30 立场演化型信息访谈的叙事轴 + 标题承诺、事实状态、人物声纹与解析/实录去重闸门；v5.29 争辩型访谈 / 原声增强模式；v5.27 AI/DevTools 行话簇 + 多源合并；v5.26 核心导读论点；v5.25 4d；v5.23 对谈三层；成稿即中文；Browser-first.*
 

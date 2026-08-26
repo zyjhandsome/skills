@@ -9,6 +9,10 @@ import re
 import sys
 from pathlib import Path
 
+_SCRIPTS = Path(__file__).resolve().parent
+if str(_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS))
+
 from paths import article_html_name
 
 C = {
@@ -30,7 +34,7 @@ FONT = (
     "'Microsoft YaHei','Noto Sans CJK SC',sans-serif"
 )
 
-OMIT_H2 = {"延伸术语表", "目录", "自检报告"}
+OMIT_H2 = {"延伸术语表", "目录", "自检报告", "关键语录与交锋时刻"}
 
 # 整理文档「内容来源」常把抓取流水账写进同一格；公众号只留读者能看懂的场次/平台。
 _PROCESS_MARKERS = (

@@ -22,7 +22,15 @@ from wechat_policy import (
 
 RATIO = 2.35
 RATIO_TOL = 0.02
-SOURCE_OMIT_H2 = {"文章元数据", "核心导读", "目录", "延伸术语表", "自检报告"}
+SOURCE_OMIT_H2 = {
+    "文章元数据",
+    "核心导读",
+    "目录",
+    "延伸术语表",
+    "自检报告",
+    "关键语录与交锋时刻",
+}
+ALLOWED_EXTRA_H2 = {"核心导读"}
 AUDIT_DECISIONS = {"保留", "合并", "删减", "删除"}
 
 FORBIDDEN_IN_ARTICLE = [
@@ -33,6 +41,7 @@ FORBIDDEN_IN_ARTICLE = [
     (r">目录<", "TOC heading should be omitted"),
     (r">延伸术语表<", "glossary heading should be omitted"),
     (r">自检报告<", "self-check section should be omitted"),
+    (r">关键语录", "quotes anthology should be omitted"),
     (r"完整整理版｜微信排版", "redundant subtitle"),
     (r"用户提供完整字幕", "pipeline note leaked (字幕来源)"),
     (r"次要核对", "pipeline note leaked (次要核对)"),
@@ -49,13 +58,6 @@ COMMON_REQUIRED_IN_ARTICLE = [
     (r">来源与说明<", "source footer"),
     (r"style=", "inline styles"),
 ]
-
-# 对谈实录 required unless keynote/anthology mode (关键语录 section present)
-REQUIRED_DIALOGUE_OR_ANTHOLOGY = [
-    (r">对谈实录<", "对谈实录 labels"),
-    (r">关键语录", "关键语录（单人主题演讲可替代对谈实录）"),
-]
-
 
 def extract_article(html: str) -> str:
     m = re.search(
@@ -111,14 +113,8 @@ def validate_html(path: Path, profile: str = "auto") -> list[str]:
             errors.append("FORBIDDEN: 来源与说明 must contain only 原文")
 
     if resolved_profile == "full":
-        has_dialogue = bool(re.search(r">对谈实录<", article))
-        has_anthology = bool(re.search(r">关键语录", article))
-        if not has_dialogue and not has_anthology:
-            errors.append(
-                "MISSING: 对谈实录 labels（或单人主题演讲的关键语录节）"
-            )
-
-        # Full mode keeps the source's three-layer reading hierarchy.
+        # Full mode keeps 核心洞察 / 深度解析. 对谈实录 is optional (keynotes).
+        # 关键语录 anthology is omitted in both modes.
         n_insight = len(re.findall(r">核心洞察<", article))
         n_analysis = len(re.findall(r">深度解析<", article))
         n_dialogue = len(re.findall(r">对谈实录<", article))
@@ -129,10 +125,6 @@ def validate_html(path: Path, profile: str = "auto") -> list[str]:
         elif n_insight != n_analysis:
             errors.append(
                 f"UNBALANCED layers: 核心洞察={n_insight} 深度解析={n_analysis} 对谈实录={n_dialogue}"
-            )
-        elif n_dialogue == 0 and not has_anthology:
-            errors.append(
-                f"WEAK structure: 核心洞察={n_insight} 深度解析={n_analysis} 对谈实录={n_dialogue}"
             )
     else:
         h2_count = len(re.findall(r"<h2\b", article, flags=re.I))
@@ -210,6 +202,11 @@ def validate_coverage(source: Path, audit: Path, profile: str) -> list[str]:
             if profile == "full" and decision in {"删减", "删除"}:
                 if "运营规范" not in reason:
                     errors.append(f"FULL MODE CANNOT {decision}: {heading}")
+            if profile == "editorial" and decision == "合并":
+                errors.append(
+                    f"EDITORIAL CANNOT 合并 ACROSS H2: {heading}; "
+                    "use 保留 and flatten 三层 inside the section"
+                )
 
     extra = sorted(set(row_map) - set(sections))
     for heading in extra:
@@ -233,6 +230,57 @@ def extract_h1(article: str) -> str:
     if not m:
         return ""
     return re.sub(r"<[^>]+>", "", m.group(1)).strip()
+
+
+def extract_source_h1(md: str) -> str:
+    for line in md.splitlines():
+        if line.startswith("# "):
+            return line[2:].strip()
+    return ""
+
+
+def extract_html_h2s(article: str) -> list[str]:
+    found: list[str] = []
+    for raw in re.findall(r"<h2\b[^>]*>(.*?)</h2>", article, flags=re.S | re.I):
+        found.append(re.sub(r"<[^>]+>", "", raw).strip())
+    return found
+
+
+def norm_heading(text: str) -> str:
+    return re.sub(r"\s+", "", (text or "").strip())
+
+
+def validate_heading_fidelity(
+    source: Path, article: str, profile: str, allow_rewrite: bool = False
+) -> list[str]:
+    """Default: article H1 and reader-facing H2s must match the source."""
+    if allow_rewrite:
+        return []
+    if not source.is_file():
+        return [f"heading source not found: {source}"]
+
+    errors: list[str] = []
+    src_text = source.read_text(encoding="utf-8")
+    src_h1 = extract_source_h1(src_text)
+    html_h1 = extract_h1(article)
+    if src_h1 and html_h1 != src_h1:
+        errors.append(f"H1 rewritten: {html_h1!r} != source {src_h1!r}")
+
+    required = source_sections(source)
+    html_h2s = extract_html_h2s(article)
+    html_set = {norm_heading(h) for h in html_h2s}
+
+    for heading in required:
+        if norm_heading(heading) not in html_set:
+            errors.append(f"MISSING SOURCE H2: {heading}")
+
+    allowed = {norm_heading(h) for h in required} | {
+        norm_heading(h) for h in ALLOWED_EXTRA_H2
+    }
+    for heading in html_h2s:
+        if norm_heading(heading) not in allowed:
+            errors.append(f"REWRITTEN OR EXTRA H2: {heading}")
+    return errors
 
 
 def validate_deliverable_names(
@@ -299,6 +347,11 @@ def main(argv: list[str] | None = None) -> int:
         choices=("auto", "editorial", "full"),
         default="auto",
     )
+    ap.add_argument(
+        "--allow-heading-rewrite",
+        action="store_true",
+        help="Permit H1/H2 rewrite when the user explicitly asked to 改写标题",
+    )
     args = ap.parse_args(argv)
 
     errors: list[str] = []
@@ -328,6 +381,14 @@ def main(argv: list[str] | None = None) -> int:
         )
         if scan_source_risks(source_text) and re.search(r"落马", article):
             errors.append("POLICY BODY: 落马/政治公共事件 remains in the article")
+        errors.extend(
+            validate_heading_fidelity(
+                args.source,
+                article,
+                resolved_profile,
+                allow_rewrite=args.allow_heading_rewrite,
+            )
+        )
 
     if args.cover:
         if not args.cover.is_file():
