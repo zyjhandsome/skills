@@ -1,0 +1,4 @@
+interface:
+  display_name: "AngularJS To Vue 3 Host Migration"
+  short_description: "Plan hosted AngularJS/JSP/jQuery migration into an existing Vue3 app"
+  default_prompt: "Use $angularjs-to-vue3-host-migration to assess a legacy AngularJS/JSP/jQuery source repo against an existing Vue3 host repo, produce an A/B page comparison, identify host-stack gaps, choose page-level migration units, and create evidence-backed design or verification contracts without defaulting to a new Vue3 project."
