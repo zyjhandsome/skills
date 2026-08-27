@@ -26,6 +26,7 @@ If the knowledge base already extracted a section as its own note, that judgment
 - Use short paragraphs and visible section breaks; do not split every sentence into a paragraph.
 - Keep the source H2 wording. Do not replace it with a punchier claim. If a source heading is generic (“背景”), keep it; do not invent a new label.
 - Keep only the numbers and names that change the conclusion.
+- When the 整理文档 already marks a judgment (`**加粗**` / 核心洞察 / 术语表词条), carry that same phrase into the WeChat draft as `==荧光笔==`. One to three marks per section. Do not highlight speaker names, metadata, or every oral number.
 
 ### 2. Listenability
 

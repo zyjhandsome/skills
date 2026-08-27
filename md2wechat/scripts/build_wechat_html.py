@@ -77,6 +77,16 @@ def _inline_no_link(text: str) -> str:
             f"{m.group(1)}</strong>"
         )
 
+    def highlight(m: re.Match) -> str:
+        inner = re.sub(r"\*\*(.+?)\*\*", bold, m.group(1))
+        return (
+            f'<span style="background:{C["accent_soft"]};color:{C["text"]};'
+            f'padding:1px 4px;border-radius:3px;">'
+            f"{inner}</span>"
+        )
+
+    # ==荧光笔== first so ==**词**== still bolds inside the mark.
+    s = re.sub(r"==(.+?)==", highlight, s)
     s = re.sub(r"\*\*(.+?)\*\*", bold, s)
 
     def code(m: re.Match) -> str:
@@ -664,6 +674,9 @@ def _self_test() -> None:
     _, editorial_parts, detected = parse_md(editorial, mode="auto")
     assert detected == "editorial"
     assert any("border:1px solid" in part for part in editorial_parts)
+    marked = _inline_no_link("差异化来自==该让什么存在==。")
+    assert C["accent_soft"] in marked and "该让什么存在" in marked
+    assert "==" not in marked
     print("self-test OK")
 
 
