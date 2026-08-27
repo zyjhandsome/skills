@@ -21,7 +21,7 @@ Produce one record for the revision pair:
 
 ```yaml
 schema: runtime-compatibility-evidence/v1
-producer: migrate-vue2-pages-to-vue3-host
+producer: vue2-pages-to-vue3-host-migration
 authority: domain_evidence_only
 authority: domain_evidence_only
 source_revision: <source A revision>

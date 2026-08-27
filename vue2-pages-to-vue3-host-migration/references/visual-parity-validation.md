@@ -12,7 +12,7 @@ Produce a revision-bound record:
 
 ```yaml
 schema: visual-parity-evidence/v1
-producer: migrate-vue2-pages-to-vue3-host
+producer: vue2-pages-to-vue3-host-migration
 authority: domain_evidence_only
 source_revision: <source A revision>
 host_revision: <host B revision>

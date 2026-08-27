@@ -1,4 +1,0 @@
-interface:
-  display_name: "Vue 2 to Vue 3 Host Migration"
-  short_description: "Assess, design, and verify Vue 2 page host-port evidence"
-  default_prompt: "Use $migrate-vue2-pages-to-vue3-host to assess, design, and verify a Vue 2 page migration into an existing Vue 3 host. Never mutate application code; refresh domain evidence with verify after an external implementer changes the host."

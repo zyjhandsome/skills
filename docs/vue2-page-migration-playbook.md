@@ -3,7 +3,7 @@
 > 这不是 Skill。不要把它当独立技能加载或改任何 Skill 的内部 schema。
 >
 > 用途：把一次跨仓单页迁入拆成可粘贴的会话。允许按名组合
-> `migrate-vue2-pages-to-vue3-host`、`delivery-frame-spec`、
+> `vue2-pages-to-vue3-host-migration`、`delivery-frame-spec`、
 > `delivery-plan-tasks`、`delivery-execute-verify`。
 >
 > 禁止改 `vue-migration-domain/v1`、`delivery-handoff/v1` 或各 Skill
@@ -36,7 +36,7 @@ Wave 1  建 change（无规格闸门）     GLM 5.2
 
 ### 0.1 Skill 职责边界
 
-- `migrate-vue2-pages-to-vue3-host` 独立负责 A/B 事实、页面与样式闭包、运行时、
+- `vue2-pages-to-vue3-host-migration` 独立负责 A/B 事实、页面与样式闭包、运行时、
   视觉基线、迁移设计、回滚和最终领域复核；只有 assess / design / verify，
   不修改应用代码，也不调用 Delivery Family。
 - Delivery Family 独立负责 OpenSpec、规格与实施批准、技术计划、B 代码修改、
@@ -313,7 +313,7 @@ Plan 的 handoff transition。
 ```text
 expected_model=Kimi K2.6（实际 model id 以 provider 配置为准）。
 
-显式使用 migrate-vue2-pages-to-vue3-host Skill，mode=assess。
+显式使用 vue2-pages-to-vue3-host-migration Skill，mode=assess。
 只做只读摸底和证据采集；不要进入 design/verify；migrate 没有 execute mode。
 
 应已存在：<CONFIG>、<CHANGE_DIR>。缺失则回 Wave 1。尚无规格批准为正常。
@@ -362,7 +362,7 @@ A 的多状态截图，必须阻塞“样式不变”结论。仅有截图而未
 ```text
 expected_model=GLM 5.2（实际 model id 以 provider 配置为准）。
 
-显式使用 migrate-vue2-pages-to-vue3-host Skill，mode=design。
+显式使用 vue2-pages-to-vue3-host-migration Skill，mode=design。
 不要修改 A/B 应用代码。migrate 没有 execute mode。
 
 应已存在：<CONFIG>、assess packet、runtime、visual contract、baseline。
@@ -495,7 +495,7 @@ handoff path/revision。说明下一步为 Wave 7，然后停止。
 ```text
 expected_model=GLM 5.2（实际 model id 以 provider 配置为准）。
 
-显式使用 migrate-vue2-pages-to-vue3-host Skill，mode=verify。
+显式使用 vue2-pages-to-vue3-host-migration Skill，mode=verify。
 migrate 没有 execute mode，不修改 A/B 应用代码。
 
 应已存在：Delivery verification、G9、完整领域证据、当前代码、<INDEX_MANIFEST>。

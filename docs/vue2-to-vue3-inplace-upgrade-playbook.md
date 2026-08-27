@@ -45,7 +45,7 @@ Delivery G9、独立审查和交付状态。`delivery-execute-verify` 是唯一�
 mutation owner；Wave 4 实施，Wave 5 只用它做独立验证、不改应用代码。
 - `delivery-explore` 不适用。主路径不插入
 `frontend-dependency-upgrade-impact-analysis`，也不调用
-`migrate-vue2-pages-to-vue3-host`。
+`vue2-pages-to-vue3-host-migration`。
 - 视觉验收只走 Delivery G9。G9 未过则留在 Wave 4。仓内 verified 只在 Wave 5
 独立功能验证通过后声称。
 
@@ -199,7 +199,7 @@ Wave 粘贴块只补充本波 Skill、应已存在的上游工件、增量门禁
 若本波是 Wave 5，必须确认这是全新会话，否则停止。
 全程使用单一模型；本波内不换模型。
 本会话只执行随后指定的一个 Wave；写盘校验后立即停止，不要加载或执行下一个 Skill。
-不要使用 delivery-explore，不要调用 migrate-vue2-pages-to-vue3-host。
+不要使用 delivery-explore，不要调用 vue2-pages-to-vue3-host-migration。
 
 默认（仅 CONFIG 不存在且用户未覆盖时使用）：
 - workspace = 当前本地仓库 / workspace（含待升级的 package.json）

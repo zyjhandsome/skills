@@ -27,7 +27,7 @@ export function validateRuntimeEvidence(evidence, options = {}) {
   const require = (condition, message) => { if (!condition) errors.push(message); };
 
   require(evidence?.schema === "runtime-compatibility-evidence/v1", "schema must be runtime-compatibility-evidence/v1");
-  require(evidence?.producer === "migrate-vue2-pages-to-vue3-host", "producer must be migrate-vue2-pages-to-vue3-host");
+  require(evidence?.producer === "vue2-pages-to-vue3-host-migration", "producer must be vue2-pages-to-vue3-host-migration");
   require(evidence?.authority === "domain_evidence_only", "authority must be domain_evidence_only");
   require(nonEmpty(evidence?.source_revision), "source_revision is required");
   require(nonEmpty(evidence?.host_revision), "host_revision is required");

@@ -115,7 +115,7 @@ assert.ok(!wave1.includes("OpenSpec 已初始化"), "Wave 1 must not require Ope
 assert.ok(wave2.includes("显式使用 delivery-frame-spec"), "Wave 2 must invoke Frame");
 assert.ok(wave2.includes("禁止 Quick") || wave2.includes("固定 High"), "Wave 2 must keep High");
 assert.ok(wave2.includes("external_artifacts"), "Wave 2 must cite the analysis bundle as external artifacts");
-assert.ok(playbook.includes("不要调用 migrate-vue2-pages-to-vue3-host"), "playbook must not invoke migrate");
+assert.ok(playbook.includes("不要调用 vue2-pages-to-vue3-host-migration"), "playbook must not invoke migrate");
 assert.ok(wave2.includes("quality_profiles.visual"), "Wave 2 must recompute visual from evidence");
 
 assert.ok(wave3.includes("显式使用 delivery-plan-tasks"), "Wave 3 must invoke Plan");

@@ -1,5 +1,5 @@
 ---
-name: migrate-vue2-pages-to-vue3-host
+name: vue2-pages-to-vue3-host-migration
 description: >
   Use when a Vue 2 page or independently switchable user behavior must be
   natively hosted in an existing Vue 3 repository, especially when the host
@@ -11,7 +11,7 @@ description: >
   to vue2-to-vue3-upgrade-impact-analysis.
 ---
 
-# Migrate Vue 2 Pages to a Vue 3 Host
+# Vue 2 Pages To Vue 3 Host Migration
 
 ## Purpose
 

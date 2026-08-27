@@ -31,7 +31,7 @@ delivery-explore  →  delivery-frame-spec  →  delivery-plan-tasks  →  deliv
 | [java-dependency-upgrade-impact-analysis](./java-dependency-upgrade-impact-analysis/SKILL.md) | Java/Maven/Gradle 依赖升级影响分析：处置阶梯、owner-first、确认队列决策包 |
 | [vue2-to-vue3-upgrade-impact-analysis](./vue2-to-vue3-upgrade-impact-analysis/SKILL.md) | Vue 2→Vue 3 框架升级影响分析：迁移路径、子系统风险、确认队列；单仓原地升默认 `compat-big-bang`，A→B 分析默认 `host-port-direct` |
 
-`vue2-to-vue3-upgrade-impact-analysis` 覆盖框架切仓决策（路径三维 + 子系统耦合 + Vue2 API 盘点），不是把 `vue` 当成又一个包来升。包级 from→to 仍走 frontend-dependency。A→B **实施**（改 B、视觉证据、iframe 退出）走下方 `migrate-vue2-pages-to-vue3-host`，不要用本 skill 改代码。
+`vue2-to-vue3-upgrade-impact-analysis` 覆盖框架切仓决策（路径三维 + 子系统耦合 + Vue2 API 盘点），不是把 `vue` 当成又一个包来升。包级 from→to 仍走 frontend-dependency。A→B **实施**（改 B、视觉证据、iframe 退出）走下方 `vue2-pages-to-vue3-host-migration`，不要用本 skill 改代码。
 
 ### 与 delivery-* 联用（短提示词）
 
@@ -103,7 +103,7 @@ forbid_source_mutation: yes
 
 | 技能 | 说明 |
 |------|------|
-| [migrate-vue2-pages-to-vue3-host](./migrate-vue2-pages-to-vue3-host/SKILL.md) | 跨仓页面迁移：页面闭包、Vuex→Pinia / Element UI→Plus 适配、iframe 退出、视觉与 runtime 证据 |
+| [vue2-pages-to-vue3-host-migration](./vue2-pages-to-vue3-host-migration/SKILL.md) | 跨仓页面迁移：页面闭包、Vuex→Pinia / Element UI→Plus 适配、iframe 退出、视觉与 runtime 证据 |
 
 **不要**用它做「单仓把 Vue2 原地升到 Vue3」。单仓原地升的决策包走 `/vue2-to-vue3-upgrade-impact-analysis`（只分析）；改代码并验收按
 [`docs/vue2-to-vue3-inplace-upgrade-playbook.md`](./docs/vue2-to-vue3-inplace-upgrade-playbook.md)。
@@ -111,7 +111,7 @@ forbid_source_mutation: yes
 A→B 不要混用职责：host-port **决策包**可用 vue 分析 skill；**页面迁入、iframe 退出**用本 skill。升级后「功能可用但搜索/表格/表单样式仍乱」走 `/frontend-ui-stack-visual-parity`（默认只定界，明确 go 后再改 CSS/配置）。
 
 ```text
-/migrate-vue2-pages-to-vue3-host
+/vue2-pages-to-vue3-host-migration
 依次执行 assess 和 design（本阶段不改应用代码）。
 源仓 A：<Vue2 仓库>
 宿主仓 B：<已有 Vue3 仓库>
@@ -134,7 +134,7 @@ Plan go、Execute，最后 migrate `verify`。
 配套说明：
 
 - [`docs/vue2-page-migration-playbook.md`](./docs/vue2-page-migration-playbook.md)（A→B 用户粘贴剧本；每步独立会话）
-- [`docs/migrate-vue2-pages-to-vue3-host-delivery-usage.md`](./docs/migrate-vue2-pages-to-vue3-host-delivery-usage.md)（解耦原则与交接字段；顺序以剧本为准）
+- [`docs/vue2-pages-to-vue3-host-migration-delivery-usage.md`](./docs/vue2-pages-to-vue3-host-migration-delivery-usage.md)（解耦原则与交接字段；顺序以剧本为准）
 
 ## UI 栈视觉 parity（升级后样式）
 
@@ -271,7 +271,7 @@ vue2-to-vue3-upgrade-impact-analysis/
 ├── templates/            # 决策包 / 决策记录中文模板
 └── tests/
 
-migrate-vue2-pages-to-vue3-host/
+vue2-pages-to-vue3-host-migration/
 ├── SKILL.md              # 技能加载器（模式、闭包、授权、视觉/runtime 闸门）
 ├── agents/
 │   └── openai.yaml

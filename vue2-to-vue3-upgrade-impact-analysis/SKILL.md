@@ -8,7 +8,7 @@ description: >
   Also use when auditing what a previous Vue3 migration left behind.
   Do not use when one page is already chosen for native hosting and the caller
   needs revision-bound behavior, visual, permission, or rollback evidence —
-  that belongs to migrate-vue2-pages-to-vue3-host.
+  that belongs to vue2-pages-to-vue3-host-migration.
 ---
 
 # Vue 2 → Vue 3 Upgrade Impact Analysis

@@ -68,7 +68,7 @@ function checkStructure() {
 
   const yaml = read(AGENT_YAML);
   assert.ok(
-    yaml.includes("$migrate-vue2-pages-to-vue3-host"),
+    yaml.includes("$vue2-pages-to-vue3-host-migration"),
     "default_prompt must contain the exact skill token"
   );
   assert.ok(
@@ -346,7 +346,7 @@ function checkDomainPacketValidator() {
     exit_code: 0, output_digest: "a".repeat(64),
   });
   const runtimeInline = {
-    schema: "runtime-compatibility-evidence/v1", producer: "migrate-vue2-pages-to-vue3-host", authority: "domain_evidence_only",
+    schema: "runtime-compatibility-evidence/v1", producer: "vue2-pages-to-vue3-host-migration", authority: "domain_evidence_only",
     source_revision: "source-123", host_revision: "host-456",
     source_runtime: { required_node: "18", evidence: ["package.json"], package_manager: "npm@9", lock_owner_format: "npm-v2", selected_runtime: "node18", isolation_method: "fnm", command_readiness: "ready" },
     host_runtime: { required_node: "22", evidence: ["package.json"], package_manager: "pnpm@11", lock_owner_format: "pnpm-v9", selected_runtime: "node22", isolation_method: "fnm", command_readiness: "ready" },
@@ -438,7 +438,7 @@ function checkRuntimeEvidenceValidator() {
   });
   /** @type {any} */
   const runtime = {
-    schema: "runtime-compatibility-evidence/v1", producer: "migrate-vue2-pages-to-vue3-host", authority: "domain_evidence_only",
+    schema: "runtime-compatibility-evidence/v1", producer: "vue2-pages-to-vue3-host-migration", authority: "domain_evidence_only",
     source_revision: "source-1", host_revision: "host-1",
     source_runtime: { required_node: "18", evidence: ["package.json"], package_manager: "npm@9", lock_owner_format: "npm-v2", selected_runtime: "node18", isolation_method: "fnm", command_readiness: "ready" },
     host_runtime: { required_node: "22", evidence: ["package.json"], package_manager: "pnpm@11", lock_owner_format: "pnpm-v9", selected_runtime: "node22", isolation_method: "fnm", command_readiness: "ready" },

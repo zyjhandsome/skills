@@ -1,9 +1,9 @@
-# Migrate Vue2 Pages → Vue3 Host × Delivery — 使用说明
+# Vue2 Pages → Vue3 Host Migration × Delivery — 使用说明
 
-> 受众：要把 `migrate-vue2-pages-to-vue3-host` 和 `delivery-*` 组合使用的人。  
+> 受众：要把 `vue2-pages-to-vue3-host-migration` 和 `delivery-*` 组合使用的人。  
 > **唯一顺序以粘贴剧本为准：** [`vue2-page-migration-playbook.md`](./vue2-page-migration-playbook.md)。  
 > 本文件只解释解耦原则和交接字段。  
-> `migrate-vue2-pages-to-vue3-host` Skill **正文不依赖、不引用** `delivery-*` / OpenSpec。
+> `vue2-pages-to-vue3-host-migration` Skill **正文不依赖、不引用** `delivery-*` / OpenSpec。
 
 ---
 
@@ -24,7 +24,7 @@
 
 | 层 | 职责 |
 |---|---|
-| `migrate-vue2-pages-to-vue3-host` | 跨仓页面迁移领域：assess / design / verify；产出 `vue-migration-domain/v1`、`visual-parity-evidence/v1`、`runtime-compatibility-evidence/v1`。没有 execute mode，不改应用代码 |
+| `vue2-pages-to-vue3-host-migration` | 跨仓页面迁移领域：assess / design / verify；产出 `vue-migration-domain/v1`、`visual-parity-evidence/v1`、`runtime-compatibility-evidence/v1`。没有 execute mode，不改应用代码 |
 | `delivery-*` | 定框 / 计划 / 实施闸门 / Fresh Verification / G9 自有视觉记录。`delivery-execute-verify` 是唯一代码 mutation owner |
 | OpenSpec change | 生命周期与状态真相（若团队使用） |
 | 粘贴剧本 | 按名组合上述 Skill；不改任何 Skill 内部 schema |

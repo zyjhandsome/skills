@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DOCS = resolve(HERE, "..");
 const PLAYBOOK = resolve(DOCS, "vue2-page-migration-playbook.md");
-const USAGE = resolve(DOCS, "migrate-vue2-pages-to-vue3-host-delivery-usage.md");
+const USAGE = resolve(DOCS, "vue2-pages-to-vue3-host-migration-delivery-usage.md");
 const RETIRED_LATEST = resolve(DOCS, "vue2-page-migration-orchestration-latest.md");
 
 const read = (path) => readFileSync(path, "utf8");

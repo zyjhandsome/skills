@@ -134,7 +134,7 @@ for (const [name, content] of iconAssets) {
 
 const evidence = {
   schema: "visual-parity-evidence/v1",
-  producer: "migrate-vue2-pages-to-vue3-host",
+  producer: "vue2-pages-to-vue3-host-migration",
   authority: "domain_evidence_only",
   source_revision: "source-123",
   host_revision: "host-456",
