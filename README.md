@@ -37,9 +37,9 @@ delivery-explore  →  delivery-frame-spec  →  delivery-plan-tasks  →  deliv
 
 分析定稿后，仅当 `batch_implementation_gate=ready` 且你显式 go，再进入实施。  
 **单仓原地升**不要同一会话从分析接到 Execute，按
-[`docs/vue2-to-vue3-inplace-upgrade-playbook.md`](./docs/vue2-to-vue3-inplace-upgrade-playbook.md)
+[`docs/vue2-to-vue3-upgrade-impact-analysis-playbook.md`](./docs/vue2-to-vue3-upgrade-impact-analysis-playbook.md)
 分波粘贴。Java 依赖挂载仍见
-[`docs/java-dependency-upgrade-delivery-usage.md`](./docs/java-dependency-upgrade-delivery-usage.md)。
+[`docs/java-dependency-upgrade-impact-analysis-usage.md`](./docs/java-dependency-upgrade-impact-analysis-usage.md)。
 
 **前端依赖**
 
@@ -75,7 +75,7 @@ delivery-explore  →  delivery-frame-spec  →  delivery-plan-tasks  →  deliv
 
 要做到仓内 `verified`（测试 + 需要时的视觉 G9，不含生产发布）：不要把 Frame /
 Plan / Execute 焊进上面这一条。按
-[`docs/vue2-to-vue3-inplace-upgrade-playbook.md`](./docs/vue2-to-vue3-inplace-upgrade-playbook.md)
+[`docs/vue2-to-vue3-upgrade-impact-analysis-playbook.md`](./docs/vue2-to-vue3-upgrade-impact-analysis-playbook.md)
 分波粘贴（分析 → Frame 规格批准 → Plan go → Execute；样式残差才开视觉 Skill）。
 
 **Vue2→Vue3（A→B 只分析）**
@@ -92,10 +92,9 @@ forbid_source_mutation: yes
 配套说明：
 
 - [`docs/frontend-dependency-upgrade-impact-analysis-usage.md`](./docs/frontend-dependency-upgrade-impact-analysis-usage.md)
-- [`docs/java-dependency-upgrade-impact-analysis-usage.md`](./docs/java-dependency-upgrade-impact-analysis-usage.md)
-- [`docs/java-dependency-upgrade-delivery-usage.md`](./docs/java-dependency-upgrade-delivery-usage.md)（与 delivery-* 可选挂载）
+- [`docs/java-dependency-upgrade-impact-analysis-usage.md`](./docs/java-dependency-upgrade-impact-analysis-usage.md)（分析-only；与 delivery-* 联用见同文件后半）
 - [`docs/vue2-to-vue3-upgrade-impact-analysis-usage.md`](./docs/vue2-to-vue3-upgrade-impact-analysis-usage.md)（Vue2 分析-only）
-- [`docs/vue2-to-vue3-inplace-upgrade-playbook.md`](./docs/vue2-to-vue3-inplace-upgrade-playbook.md)（单仓原地升到仓内 verified；每步独立会话）
+- [`docs/vue2-to-vue3-upgrade-impact-analysis-playbook.md`](./docs/vue2-to-vue3-upgrade-impact-analysis-playbook.md)（单仓原地升到仓内 verified；每步独立会话）
 
 ## Vue2 页面迁入 Vue3 Host
 
@@ -106,7 +105,7 @@ forbid_source_mutation: yes
 | [vue2-pages-to-vue3-host-migration](./vue2-pages-to-vue3-host-migration/SKILL.md) | 跨仓页面迁移：页面闭包、Vuex→Pinia / Element UI→Plus 适配、iframe 退出、视觉与 runtime 证据 |
 
 **不要**用它做「单仓把 Vue2 原地升到 Vue3」。单仓原地升的决策包走 `/vue2-to-vue3-upgrade-impact-analysis`（只分析）；改代码并验收按
-[`docs/vue2-to-vue3-inplace-upgrade-playbook.md`](./docs/vue2-to-vue3-inplace-upgrade-playbook.md)。
+[`docs/vue2-to-vue3-upgrade-impact-analysis-playbook.md`](./docs/vue2-to-vue3-upgrade-impact-analysis-playbook.md)。
 
 A→B 不要混用职责：host-port **决策包**可用 vue 分析 skill；**页面迁入、iframe 退出**用本 skill。升级后「功能可用但搜索/表格/表单样式仍乱」走 `/frontend-ui-stack-visual-parity`（默认只定界，明确 go 后再改 CSS/配置）。
 
@@ -125,7 +124,7 @@ A 只读；B 壳 host-native；内容区 strict parity；visual=required
 ### 与 delivery-* 联用
 
 不要在同一会话里把 Frame 和 migrate 焊在一起。按
-[`docs/vue2-page-migration-playbook.md`](./docs/vue2-page-migration-playbook.md)
+[`docs/vue2-pages-to-vue3-host-migration-playbook.md`](./docs/vue2-pages-to-vue3-host-migration-playbook.md)
 分波粘贴：先建 change（无规格闸门），再 assess / design，然后 Frame 规格批准、
 Plan go、Execute，最后 migrate `verify`。
 
@@ -133,8 +132,8 @@ Plan go、Execute，最后 migrate `verify`。
 
 配套说明：
 
-- [`docs/vue2-page-migration-playbook.md`](./docs/vue2-page-migration-playbook.md)（A→B 用户粘贴剧本；每步独立会话）
-- [`docs/vue2-pages-to-vue3-host-migration-delivery-usage.md`](./docs/vue2-pages-to-vue3-host-migration-delivery-usage.md)（解耦原则与交接字段；顺序以剧本为准）
+- [`docs/vue2-pages-to-vue3-host-migration-playbook.md`](./docs/vue2-pages-to-vue3-host-migration-playbook.md)（A→B 用户粘贴剧本；每步独立会话）
+- [`docs/vue2-pages-to-vue3-host-migration-usage.md`](./docs/vue2-pages-to-vue3-host-migration-usage.md)（解耦原则与交接字段；顺序以剧本为准）
 
 ## UI 栈视觉 parity（升级后样式）
 

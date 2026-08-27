@@ -14,7 +14,7 @@
 > 为保持独立新鲜验证，必须使用全新会话。
 >
 > 不要用本剧本做跨仓页面迁入或仓内 strangler。那些走
-> [vue2-page-migration-playbook.md](./vue2-page-migration-playbook.md)。
+> [vue2-pages-to-vue3-host-migration-playbook.md](./vue2-pages-to-vue3-host-migration-playbook.md)。
 > 分析 Skill 单独用法见
 > [vue2-to-vue3-upgrade-impact-analysis-usage.md](./vue2-to-vue3-upgrade-impact-analysis-usage.md)。
 

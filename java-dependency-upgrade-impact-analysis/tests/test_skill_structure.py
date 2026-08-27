@@ -229,7 +229,7 @@ class SkillStructureTests(unittest.TestCase):
         delivery = (
             ROOT.parents[0]
             / "docs"
-            / "java-dependency-upgrade-delivery-usage.md"
+            / "java-dependency-upgrade-impact-analysis-usage.md"
         ).read_text(encoding="utf-8")
         full_layout = (
             "__variant-<build-variant>__scope-<batch-scope>"

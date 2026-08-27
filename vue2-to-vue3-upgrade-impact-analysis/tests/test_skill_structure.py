@@ -320,7 +320,7 @@ class SkillStructureTests(unittest.TestCase):
         sources = (
             ROOT / "references" / "user-decision-catalog.md",
             ROOT / "references" / "next-action-choice-menus.md",
-            ROOT.parent / "docs" / "vue2-to-vue3-inplace-upgrade-playbook.md",
+            ROOT.parent / "docs" / "vue2-to-vue3-upgrade-impact-analysis-playbook.md",
         )
         for path in sources:
             text = path.read_text(encoding="utf-8")

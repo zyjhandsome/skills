@@ -8,8 +8,8 @@ import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DOCS = resolve(HERE, "..");
-const PLAYBOOK = resolve(DOCS, "vue2-page-migration-playbook.md");
-const USAGE = resolve(DOCS, "vue2-pages-to-vue3-host-migration-delivery-usage.md");
+const PLAYBOOK = resolve(DOCS, "vue2-pages-to-vue3-host-migration-playbook.md");
+const USAGE = resolve(DOCS, "vue2-pages-to-vue3-host-migration-usage.md");
 const RETIRED_LATEST = resolve(DOCS, "vue2-page-migration-orchestration-latest.md");
 
 const read = (path) => readFileSync(path, "utf8");
@@ -65,7 +65,7 @@ assert.ok(!/mode=execute|migrate execute/i.test(playbook), "playbook must not in
 assert.ok(!/显式使用\s+frontend-dependency-upgrade-impact-analysis/.test(playbook), "playbook must not invoke dependency analysis");
 assert.ok(!/显式使用\s+frontend-ui-stack-visual-parity/.test(playbook), "playbook must not invoke CSS repair");
 
-assert.ok(usage.includes("vue2-page-migration-playbook.md"), "usage must point at the playbook");
+assert.ok(usage.includes("vue2-pages-to-vue3-host-migration-playbook.md"), "usage must point at the playbook");
 assert.ok(usage.includes("已作废"), "usage must retire the conflicting sequence");
 assert.ok(!usage.includes("](./vue2-page-migration-orchestration-latest.md)"), "usage must not link to the retired latest file");
 assert.ok(usage.indexOf("已作废") < usage.indexOf("assess + design 先于建 change"), "retired assess-first order must sit in the obsolete section");
@@ -188,7 +188,7 @@ assert.ok(fence(wave1).includes("缺什么"), "Wave 1 must name the Frame three-
 for (const [name, wave] of wavePrompts) {
   assert.ok(!fence(wave).includes("§"), `${name} paste block must not use bare §`);
   assert.ok(
-    !fence(wave).includes("vue2-to-vue3-inplace-upgrade-playbook.md"),
+    !fence(wave).includes("vue2-to-vue3-upgrade-impact-analysis-playbook.md"),
     `${name} paste block must not require the sibling in-place playbook`
   );
 }

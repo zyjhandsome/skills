@@ -9,10 +9,10 @@ import { fileURLToPath } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DOCS = resolve(HERE, "..");
 const ROOT = resolve(DOCS, "..");
-const PLAYBOOK = resolve(DOCS, "vue2-to-vue3-inplace-upgrade-playbook.md");
+const PLAYBOOK = resolve(DOCS, "vue2-to-vue3-upgrade-impact-analysis-playbook.md");
 const USAGE = resolve(DOCS, "vue2-to-vue3-upgrade-impact-analysis-usage.md");
 const README = resolve(ROOT, "README.md");
-const AB_PLAYBOOK = resolve(DOCS, "vue2-page-migration-playbook.md");
+const AB_PLAYBOOK = resolve(DOCS, "vue2-pages-to-vue3-host-migration-playbook.md");
 
 const read = (path) => readFileSync(path, "utf8");
 
@@ -54,7 +54,7 @@ assert.ok(playbook.includes("delivery-visual-evidence/v1"), "playbook must use D
 assert.ok(playbook.includes("Name, never run"), "playbook must keep analysis recipes unexecuted until Execute");
 assert.ok(playbook.includes("Composition API"), "playbook must keep Composition rewrite out of this change");
 assert.ok(playbook.includes("proceed:path:"), "playbook must require verbatim path tokens");
-assert.ok(playbook.includes("vue2-page-migration-playbook.md"), "host-port must redirect to the A→B playbook");
+assert.ok(playbook.includes("vue2-pages-to-vue3-host-migration-playbook.md"), "host-port must redirect to the A→B playbook");
 
 assert.ok(!/可(?:偏|走)?\s*Quick|否则可\s*Quick|Quick\s*直接\s*execute/i.test(corpus), "docs must not offer a Quick bypass");
 assert.ok(!/mode=execute|migrate execute/i.test(playbook), "inplace playbook must not invoke migrate execute");
@@ -224,8 +224,8 @@ assert.ok(wave1Prompt.includes(COMPOSITION_MARKER), "Wave 1 must use the analysi
 assert.ok(!wave1Prompt.includes("写进"), "Wave 1 must not insert author notes into the Composition marker");
 assert.ok(!wave1Prompt.includes("search_graph"), "Wave 1 paste must not include Memory protocol");
 assert.ok(!wave1Prompt.includes("仓内 verified"), "Wave 1 paste must not include the verified checklist");
-assert.ok(!wave1Prompt.includes("vue2-page-migration-playbook.md"), "Wave 1 must not require the sibling playbook as input");
-assert.ok(!wave2Prompt.includes("vue2-page-migration-playbook.md"), "Wave 2 must not require the sibling playbook as input");
+assert.ok(!wave1Prompt.includes("vue2-pages-to-vue3-host-migration-playbook.md"), "Wave 1 must not require the sibling playbook as input");
+assert.ok(!wave2Prompt.includes("vue2-pages-to-vue3-host-migration-playbook.md"), "Wave 2 must not require the sibling playbook as input");
 assert.ok(wave1Prompt.includes("不得加载其他剧本") || wave1Prompt.includes("不要加载其他剧本"), "Wave 1 host-port stop must stay inside this playbook");
 assert.ok(wave2Prompt.includes("不要加载其他剧本"), "Wave 2 host-port stop must stay inside this playbook");
 assert.ok(!wave2Prompt.includes("A→B 剧本"), "Wave 2 must not dangle to an unpasted playbook nickname");
@@ -238,12 +238,12 @@ assert.ok(wave4Prompt.includes("index_repository"), "Wave 4 must name index_repo
 assert.ok(!wave4Prompt.includes("仓内 verified ≠ 生产完成"), "Wave 4 paste must not claim in-repo verified");
 assert.ok(wave5Prompt.includes("named_validations"), "Wave 5 paste must re-run named_validations");
 assert.ok(wave5Prompt.includes("干净"), "Wave 5 paste must require a clean runtime");
-assert.ok(!wave5Prompt.includes("vue2-page-migration-playbook.md"), "Wave 5 must not require the sibling playbook as input");
+assert.ok(!wave5Prompt.includes("vue2-pages-to-vue3-host-migration-playbook.md"), "Wave 5 must not require the sibling playbook as input");
 assert.ok(!wave5Prompt.includes("A→B 剧本"), "Wave 5 must not dangle to an unpasted playbook nickname");
 for (const [name, wave] of inplaceWaves) {
   assert.ok(!fence(wave).includes("§"), `${name} paste block must not use bare § (unpasted playbook/report section numbers)`);
   assert.ok(
-    !fence(wave).includes("vue2-page-migration-playbook.md"),
+    !fence(wave).includes("vue2-pages-to-vue3-host-migration-playbook.md"),
     `${name} paste block must not require the sibling playbook as input`
   );
 }
@@ -273,14 +273,14 @@ for (const needle of ["回滚演练", "console-evidence", "inrepo-verification.m
 const backflow = section(playbook, "## 7. 失败回流", "## 8. 完成判定");
 assert.ok(backflow.includes("连续 2 次 G9 fail"), "backflow table must route the double G9 failure escalation to Wave 2");
 
-assert.ok(usage.includes("vue2-to-vue3-inplace-upgrade-playbook.md"), "usage must point at the inplace playbook");
+assert.ok(usage.includes("vue2-to-vue3-upgrade-impact-analysis-playbook.md"), "usage must point at the inplace playbook");
 assert.ok(usage.includes("openspec/changes/vue2-to-vue3-inplace-<SLUG>/evidence/vue2-to-vue3-upgrade"), "usage must document the playbook analysis path under the change dir");
 assert.ok(usage.includes("batch_implementation_gate"), "usage must explain the analysis gate");
 assert.ok(usage.includes("proceed:path:compat-big-bang"), "usage must show verbatim path tokens");
 assert.ok(usage.includes("implementation_readiness"), "usage must keep implementation_readiness unset");
 assert.ok(!usage.includes("开始实施并改 package.json"), "usage must not authorize implementation");
 
-assert.ok(readme.includes("docs/vue2-to-vue3-inplace-upgrade-playbook.md"), "README must link the inplace playbook");
+assert.ok(readme.includes("docs/vue2-to-vue3-upgrade-impact-analysis-playbook.md"), "README must link the inplace playbook");
 assert.ok(readme.includes("docs/vue2-to-vue3-upgrade-impact-analysis-usage.md"), "README must link the analysis usage doc");
 assert.ok(existsSync(AB_PLAYBOOK), "A→B playbook should still exist as the host-port redirect target");
 

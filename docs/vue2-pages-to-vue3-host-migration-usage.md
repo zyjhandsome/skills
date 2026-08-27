@@ -1,7 +1,7 @@
 # Vue2 Pages → Vue3 Host Migration × Delivery — 使用说明
 
 > 受众：要把 `vue2-pages-to-vue3-host-migration` 和 `delivery-*` 组合使用的人。  
-> **唯一顺序以粘贴剧本为准：** [`vue2-page-migration-playbook.md`](./vue2-page-migration-playbook.md)。  
+> **唯一顺序以粘贴剧本为准：** [`vue2-pages-to-vue3-host-migration-playbook.md`](./vue2-pages-to-vue3-host-migration-playbook.md)。  
 > 本文件只解释解耦原则和交接字段。  
 > `vue2-pages-to-vue3-host-migration` Skill **正文不依赖、不引用** `delivery-*` / OpenSpec。
 

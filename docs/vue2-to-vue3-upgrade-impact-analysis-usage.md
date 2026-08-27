@@ -6,9 +6,9 @@
 >
 > 本 Skill **只出决策包**，不改代码、不跑 codemod、不写 OpenSpec/delivery 状态。  
 > 单仓原地升要做到仓内 `verified`，唯一顺序以
-> [`vue2-to-vue3-inplace-upgrade-playbook.md`](./vue2-to-vue3-inplace-upgrade-playbook.md)
+> [`vue2-to-vue3-upgrade-impact-analysis-playbook.md`](./vue2-to-vue3-upgrade-impact-analysis-playbook.md)
 > 为准。跨仓页面迁入走
-> [`vue2-page-migration-playbook.md`](./vue2-page-migration-playbook.md)，
+> [`vue2-pages-to-vue3-host-migration-playbook.md`](./vue2-pages-to-vue3-host-migration-playbook.md)，
 > 不要用本 Skill 当实施器。
 
 ---
@@ -154,11 +154,11 @@ install / codemod / 改 `package.json` 的授权。
 
 - 只要决策包：到此停止。
 - 单仓原地升要改代码并做到仓内 `verified`：按
-  [`vue2-to-vue3-inplace-upgrade-playbook.md`](./vue2-to-vue3-inplace-upgrade-playbook.md)
+  [`vue2-to-vue3-upgrade-impact-analysis-playbook.md`](./vue2-to-vue3-upgrade-impact-analysis-playbook.md)
   分波粘贴；不要同一会话从本 Skill 接到 Execute。实施会话（Wave 4）通过后还须
   新开 Wave 5 做独立功能验证，才能声称仓内 `verified`。
 - 跨仓把一页迁入已有 Vue3 host：按
-  [`vue2-page-migration-playbook.md`](./vue2-page-migration-playbook.md)。
+  [`vue2-pages-to-vue3-host-migration-playbook.md`](./vue2-pages-to-vue3-host-migration-playbook.md)。
 
 报告里的 `recommended_next_action`（如 `run_visual_review`）是通用动作，**不会**
 写出其他 Skill 名称。Skill 名只出现在上述剧本里。
@@ -172,8 +172,8 @@ install / codemod / 改 `package.json` 的授权。
 ## 5. 相关路径
 
 - Skill：`vue2-to-vue3-upgrade-impact-analysis/SKILL.md`
-- 单仓原地升剧本：`docs/vue2-to-vue3-inplace-upgrade-playbook.md`
-- A→B 页面迁入剧本：`docs/vue2-page-migration-playbook.md`
+- 单仓原地升剧本：`docs/vue2-to-vue3-upgrade-impact-analysis-playbook.md`
+- A→B 页面迁入剧本：`docs/vue2-pages-to-vue3-host-migration-playbook.md`
 - 校验：
 
 ```shell
