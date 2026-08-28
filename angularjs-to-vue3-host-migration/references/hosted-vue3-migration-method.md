@@ -6,6 +6,10 @@ Default to migrating into an existing Vue3 host repository. The host owns the fi
 
 Create a new Vite/create-vue project only when no host exists.
 
+## Report Language
+
+User-facing evidence reports and copied table contracts default to Simplified Chinese. Keep status enums, IDs, paths, commands, URLs, and CSV field keys in English.
+
 ## Inputs
 
 For hosted migration, collect:
@@ -204,7 +208,7 @@ Include:
 
 ## Report From Code
 
-Generate reports from repository evidence:
+Generate reports from repository evidence. Write the user-facing markdown in Simplified Chinese; keep CSV field keys and status enums in English.
 
 - page inventory
 - host stack

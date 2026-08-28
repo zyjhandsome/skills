@@ -80,88 +80,90 @@ rg -n "window\.|setInterval\(|setTimeout\(|location\.href|window\.location|histo
 
 ## Required Tables
 
-### Page Basic Information
+Copy these headers into user-facing reports. Table titles and column labels are Simplified Chinese; IDs, selectors, URLs, and risk enums stay English.
 
-| Item | Content |
+### 页面基本信息
+
+| 项 | 内容 |
 |---|---|
-| Page name | |
-| URL / route | |
-| HTML file | |
-| JS files | |
-| CSS files | |
-| jQuery plugins | |
-| backend interface count | |
-| primary business functions | |
+| 页面名称 | |
+| URL / 路由 | |
+| HTML 文件 | |
+| JS 文件 | |
+| CSS 文件 | |
+| jQuery 插件 | |
+| 后端接口数 | |
+| 主要业务功能 | |
 
-### Page Feature List
+### 页面功能清单
 
-| Feature | Trigger | Interfaces | Core? | Risk | Notes |
+| 功能 | 触发 | 接口 | 是否核心 | 风险 | 备注 |
 |---|---|---|---|---|---|
 | query | search button | | yes/no | low/medium/high | |
 | add/edit/save/delete/export | | | | | |
 
-### Entry Function Table
+### 入口函数表
 
-| Entry / function | Order | Purpose | Depends on API? | Affects page state? |
+| 入口/函数 | 顺序 | 用途 | 是否依赖 API | 是否影响页面状态 |
 |---|---:|---|---|---|
 | `$(function(){})` | 1 | page init | no | yes |
 | `initPage()` / `loadData()` / `bindEvents()` | | | | |
 
-### Event Binding Table
+### 事件绑定表
 
-| Element | Selector | Event | Handler | Business action | Preconditions | Next action | Risk |
+| 元素 | 选择器 | 事件 | 处理函数 | 业务动作 | 前置条件 | 下一步 | 风险 |
 |---|---|---|---|---|---|---|---|
 
-### Ajax Interface Table
+### Ajax 接口表
 
-| URL | Method | Caller | Input source | Input fields | Response handling | Failure handling | Business meaning | Risk |
+| URL | 方法 | 调用方 | 输入来源 | 输入字段 | 成功处理 | 失败处理 | 业务含义 | 风险 |
 |---|---|---|---|---|---|---|---|---|
 
-### Form Field Table
+### 表单字段表
 
-| Field | Element | jQuery read/write | Type | Required? | Default | Validation | Business meaning |
+| 字段 | 元素 | jQuery 读写 | 类型 | 是否必填 | 默认值 | 校验 | 业务含义 |
 |---|---|---|---|---|---|---|---|
 
-### Validation Rule Table
+### 校验规则表
 
-| Field | Condition | Error message | Interrupt style | Function | Backend recheck? | Risk |
+| 字段 | 条件 | 错误提示 | 中断方式 | 函数 | 后端是否再校验 | 风险 |
 |---|---|---|---|---|---|---|
 
-### Business Rule Table
+### 业务规则表
 
-| Rule ID | Rule | Condition | Action | Function | Elements | Risk |
+| 规则 ID | 规则 | 条件 | 动作 | 函数 | 元素 | 风险 |
 |---|---|---|---|---|---|---|
 
-### Page State And Permission Tables
+### 页面状态与权限表
 
-| State / permission | Source | Condition | UI behavior | Allowed actions | Blocked actions | Risk |
+| 状态/权限 | 来源 | 条件 | UI 行为 | 允许动作 | 阻断动作 | 风险 |
 |---|---|---|---|---|---|---|
 
-### DOM Operation Table
+### DOM 操作表
 
-| DOM operation | Type | Target | Trigger | Business meaning | Vue migration advice | Risk |
+| DOM 操作 | 类型 | 目标 | 触发 | 业务含义 | Vue 迁移建议 | 风险 |
 |---|---|---|---|---|---|---|
 
-### Plugin Dependency Table
+### 插件依赖表
 
-| Plugin type | Plugin | Pages | Purpose | Vue replacement | Difficulty | Risk | Advice |
+| 插件类型 | 插件 | 页面 | 用途 | Vue 替代 | 难度 | 风险 | 建议 |
 |---|---|---|---|---|---|---|---|
 
-### Navigation / Globals / Timer / Exception Tables
+### 导航 / 全局量 / 定时器 / 异常表
 
-Include these when matching code exists:
+有对应代码时再补：
 
-- navigation: source page, target page, params, source, business meaning
-- globals: variable, definition location, source, usage, Vue target, risk
-- timers: interval, function, purpose, stop condition, cleanup risk
-- exceptions: failure scenario, current handling, user message, blocking behavior, logging, improvement
+- 导航：源页、目标页、参数、来源、业务含义
+- 全局量：变量、定义位置、来源、用途、Vue 落点、风险
+- 定时器：间隔、函数、用途、停止条件、清理风险
+- 异常：失败场景、当前处理、用户提示、是否阻断、日志、改进
 
-### Vue Impact And Test Tables
+### Vue 影响与测试表
 
-| jQuery logic | Current implementation | Vue target | Impact | Difficulty | Risk | Test focus |
+| jQuery 逻辑 | 当前实现 | Vue 落点 | 影响 | 难度 | 风险 | 测试重点 |
 |---|---|---|---|---|---|---|
 
-| Test scenario | Preconditions | Steps | Expected result | Related feature | Risk |
+| 测试场景 | 前置条件 | 步骤 | 期望结果 | 相关功能 | 风险 |
 |---|---|---|---|---|---|
 
 ## Risk Rules
@@ -181,14 +183,14 @@ Mark these high risk unless code evidence proves otherwise:
 
 For each page, end with:
 
-| Item | Conclusion |
+| 项 | 结论 |
 |---|---|
-| page complexity | low / medium / high |
-| core business functions | |
-| high-risk logic | |
-| primary interfaces | |
-| primary states | |
-| primary permission points | |
-| suitable for early migration? | yes / no |
-| Vue migration advice | |
-| regression test focus | |
+| 页面复杂度 | low / medium / high |
+| 核心业务功能 | |
+| 高风险逻辑 | |
+| 主要接口 | |
+| 主要状态 | |
+| 主要权限点 | |
+| 是否适合先迁 | yes / no |
+| Vue 迁移建议 | |
+| 回归测试重点 | |

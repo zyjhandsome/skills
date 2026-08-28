@@ -437,16 +437,16 @@ Performance gates should track at least:
 
 ## Migration Management Template
 
-Do not manage migration as a plain task list. Every migration item should carry rollback and acceptance criteria.
+Do not manage migration as a plain task list. Every migration item should carry rollback and acceptance criteria. User-facing copies of this table use Simplified Chinese headers; status enums stay English.
 
-| Task | Owner | Start | End | Milestone | Acceptance Criteria | Rollback | Tests | Dependencies | Status |
+| 任务 | 负责人 | 开始 | 结束 | 里程碑 | 验收标准 | 回退 | 测试 | 依赖 | 状态 |
 |---|---|---|---|---|---|---|---|---|---|
-| Inventory and dependency register | [fill] | [date] | [date] | Baseline approved | modules/routes/deps/risks captured and reviewed | document version rollback | inventory sampling | repo access, build runnable | not started |
-| Vue 3 skeleton | [fill] | [date] | [date] | New skeleton works | dev/build/test/lint pass; Router/Pinia available | keep old build | skeleton smoke test | Node, CI, registry | not started |
-| Auth and API compatibility | [fill] | [date] | [date] | Gray traffic possible | login/refresh/logout/401/403 consistent | switch to old auth entry | auth and API matrix | backend, gateway | not started |
-| Shared components | [fill] | [date] | [date] | Component MVP | button/input/modal/table key states replaceable | component rollback | unit/component/visual | design tokens | not started |
-| First page batch | [fill] | [date] | [date] | First Vue route online | URL, auth, tracking, permission, performance accepted | route flag to old page | E2E, regression, performance baseline | router/API/components | not started |
-| AngularJS removal | [fill] | [date] | [date] | Old stack removed | old bundle/routes/deps removed | prior stable release | full regression, Lighthouse, monitoring | all pages migrated | not started |
+| 清单与依赖登记 | [fill] | [date] | [date] | 基线已批准 | 模块/路由/依赖/风险已采集并评审 | 文档版本回退 | 清单抽样 | 仓可访问、构建可跑 | not started |
+| Vue 3 骨架 | [fill] | [date] | [date] | 新骨架可用 | dev/build/test/lint 通过；Router/Pinia 可用 | 保留旧构建 | 骨架冒烟 | Node, CI, registry | not started |
+| 鉴权与 API 兼容 | [fill] | [date] | [date] | 可灰度 | 登录/刷新/登出/401/403 一致 | 切回旧鉴权入口 | 鉴权与 API 矩阵 | backend, gateway | not started |
+| 共享组件 | [fill] | [date] | [date] | 组件 MVP | 按钮/输入/弹窗/表格关键态可替换 | 组件回退 | 单元/组件/视觉 | design tokens | not started |
+| 首批页面 | [fill] | [date] | [date] | 首条 Vue 路由上线 | URL、鉴权、埋点、权限、性能验收通过 | 路由开关回旧页 | E2E、回归、性能基线 | router/API/components | not started |
+| 移除 AngularJS | [fill] | [date] | [date] | 旧栈已下 | 旧 bundle/路由/依赖已移除 | 上一稳定版 | 全量回归、Lighthouse、监控 | 全部页面已迁 | not started |
 
 ## Estimation Guidance
 

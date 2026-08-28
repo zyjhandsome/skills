@@ -91,57 +91,63 @@ HOST_SIGNAL_PATTERNS = {
     "mpa": r"getPages|pagesDir|src/pages|entry\s*:",
 }
 
+MODE_LABELS = {
+    "assess": "评估",
+    "design": "设计",
+    "verify": "复核",
+}
+
 FLOW_CONTRACT_HEADERS = [
     "FLOW-ID",
-    "Step",
-    "Entry/Trigger",
-    "Condition",
-    "Input",
-    "Processing",
-    "Output",
-    "Call Target",
-    "Side Effect",
-    "Business Meaning",
-    "Evidence",
-    "Confidence",
-    "Related CHAIN-ID",
+    "步骤",
+    "入口/触发",
+    "条件",
+    "输入",
+    "处理",
+    "输出",
+    "调用目标",
+    "副作用",
+    "业务含义",
+    "证据",
+    "置信度",
+    "关联 CHAIN-ID",
 ]
 
 VARIABLE_CHAIN_HEADERS = [
     "CHAIN-ID",
-    "Step",
+    "步骤",
     "VAR-ID",
-    "Normalized Path",
-    "Operation",
-    "Scope/Function",
-    "Upstream",
-    "Downstream",
-    "Condition",
-    "Business Meaning",
-    "Evidence",
-    "Confidence",
-    "Vue3 Host Target",
+    "规范化路径",
+    "操作",
+    "作用域/函数",
+    "上游",
+    "下游",
+    "条件",
+    "业务含义",
+    "证据",
+    "置信度",
+    "Vue3 Host 落点",
 ]
 
 GATE_ROWS = [
-    ["behavior", "inputs, validation, branches, success/error/empty/loading states", "pending evidence"],
-    ["permission", "menu, route, button hide/disable, server-side rejection", "pending evidence"],
-    ["url", "old deep link, query/hash, redirects, back/forward, external links", "pending evidence"],
-    ["api", "endpoint, method, params/body, response codes, failure handling", "pending evidence"],
-    ["visual", "screenshot or measurement evidence; otherwise manual-only", "manual-only until measured"],
-    ["runtime", "host Node, lockfile, existing lint/build/test commands", "pending host command run"],
-    ["git hygiene", "no dependency/cache/build directory in intended commit; distinguish business clean from repo clean", "pending git status review"],
-    ["rollback", "switch, scope, owner, restore condition, data compatibility", "pending design"],
-    ["completion authority", "domain verify is evidence only; completion requires Delivery verified + domain verify + current host revision", "pending both gates"],
+    ["behavior", "输入、校验、分支、成功/失败/空态/加载态", "待补证据"],
+    ["permission", "菜单、路由、按钮隐藏/禁用、服务端拒绝", "待补证据"],
+    ["url", "旧深链、query/hash、重定向、前进后退、外链", "待补证据"],
+    ["api", "端点、方法、参数/body、响应码、失败处理", "待补证据"],
+    ["visual", "截图或测量证据；否则标 manual-only", "未测量前仅人工核对"],
+    ["runtime", "宿主 Node、lockfile、既有 lint/build/test 命令", "待跑宿主命令"],
+    ["git hygiene", "拟提交内容无依赖/缓存/构建目录；区分业务干净与整仓干净", "待复核 git status"],
+    ["rollback", "开关、范围、责任人、恢复条件、数据兼容", "待设计"],
+    ["completion authority", "领域复核只是证据；完成需要 Delivery verified + 领域复核 + 当前宿主修订", "待两边门禁"],
 ]
 
 DESIGN_READY_ROWS = [
-    ["page closure", "source templates/fragments/scripts/controllers/services/APIs/assets identified", "not-ready: empty-contract"],
-    ["core flows", "at least 1-2 material business FLOW rows filled for the selected unit", "not-ready: empty-contract"],
-    ["variable/API chains", "material request/response/state/DOM chains filled or unresolved with runtime checks", "not-ready: empty-contract"],
-    ["host decisions", "reuse/change/create decisions for host entry/router/API/store/components/i18n/style", "not-ready: empty-contract"],
-    ["URL mapping", "old source URL to new host entry backed by Java/menu/MPA evidence", "not-ready: empty-contract"],
-    ["permission/API/rollback", "permission/session/API parity and rollback condition drafted", "not-ready: empty-contract"],
+    ["page closure", "已识别源仓模板/片段/脚本/controller/service/API/资产", "not-ready: empty-contract"],
+    ["core flows", "选定单元至少填实 1-2 条核心业务 FLOW", "not-ready: empty-contract"],
+    ["variable/API chains", "已填实请求/响应/状态/DOM 链，或标未决并给出运行时检查", "not-ready: empty-contract"],
+    ["host decisions", "已给出宿主入口/路由/API/store/组件/i18n/样式的复用/改动/新建决策", "not-ready: empty-contract"],
+    ["URL mapping", "旧源 URL 到新宿主入口有 Java/菜单/MPA 证据", "not-ready: empty-contract"],
+    ["permission/API/rollback", "已起草权限/会话/API 对等与回退条件", "not-ready: empty-contract"],
 ]
 
 
@@ -249,7 +255,7 @@ def repo_acquisition_rows(args, source: Path, host: Path) -> list[dict[str, str]
                 "revision_source": "git rev-parse --short HEAD" if git_repo else "unavailable",
                 "dirty_entries": str(len(status_paths)),
                 "usable_for_stage": "yes" if git_repo and git_revision(repo) != "unknown" else "no",
-                "notes": "existing repository reused; record clone warnings separately" if warnings[role] else "",
+                "notes": "复用已有仓库；克隆警告单独记录" if warnings[role] else "",
             }
         )
     return rows
@@ -286,7 +292,7 @@ def git_hygiene_rows(source: Path, host: Path) -> list[dict[str, str]]:
                 "lockfile_changes": str(len(lockfiles)),
                 "dependency_noise": str(len(dependency_noise)),
                 "stage_status": stage_status,
-                "notes": "src clean is not repo clean; dependency/cache/build noise must not enter commits" if paths else "clean worktree",
+                "notes": "src 干净不等于整仓干净；依赖/缓存/构建噪声不得进入提交" if paths else "工作区干净",
             }
         )
     return rows
@@ -583,14 +589,14 @@ def compare_pages(source_pages: list[dict[str, str]], host_pages: list[dict[str,
             matched_host_paths.add(host["path"])
             status = "partial-overlap"
             confidence = "medium" if score >= 60 else "low"
-            next_action = "human-correct mapping; trace URL/API/permission/behavior before marking migrated"
+            next_action = "人工校正映射；在标 already-migrated 前先追 URL/API/权限/行为"
         else:
             host = None
             score = 0
             basis = []
             status = "unmigrated"
             confidence = "medium"
-            next_action = "identify host landing point"
+            next_action = "识别宿主落点"
         rows.append(
             {
                 "status": status,
@@ -612,13 +618,13 @@ def compare_pages(source_pages: list[dict[str, str]], host_pages: list[dict[str,
             continue
         if not is_host_landing_candidate(host):
             if is_shell_candidate(host):
-                next_action = "ignore for business-page matching unless router/menu evidence points here"
+                next_action = "除非路由/菜单证据指向此处，否则不参与业务页匹配"
                 status = "host-shell"
             else:
-                next_action = "ignore unless referenced by a matched host page closure"
+                next_action = "除非被已匹配页面闭包引用，否则忽略"
                 status = "host-component"
         else:
-            next_action = "confirm whether this replaces or is unrelated to source"
+            next_action = "确认是替换源页还是无关页面"
             status = "host-page-only"
         rows.append(
             {
@@ -797,7 +803,7 @@ def build_url_entry_mapping(source: Path, host: Path, source_pages: list[dict[st
             "host_menu_or_route": entry.get("host_menu_or_route", ""),
             "mapping_status": "candidate" if route or entry else "unresolved",
             "confidence": "medium" if route and entry else "low",
-            "unresolved": "" if route and entry else "requires Java/menu/MPA evidence",
+            "unresolved": "" if route and entry else "需要 Java/菜单/MPA 证据",
         })
 
     for entry in host_entries:
@@ -813,7 +819,7 @@ def build_url_entry_mapping(source: Path, host: Path, source_pages: list[dict[st
             "host_menu_or_route": entry.get("host_menu_or_route", ""),
             "mapping_status": "host-page-only-candidate",
             "confidence": "low",
-            "unresolved": "confirm source counterpart",
+            "unresolved": "确认源仓对应页",
         })
     return rows
 
@@ -913,7 +919,7 @@ def recommended_units(comparison: list[dict[str, str]], url_mapping: list[dict[s
         score += route_score
         if source_shellish(row):
             score -= 50
-            route_reason = f"{route_reason}; shell/index downgraded"
+            route_reason = f"{route_reason}; shell/index 已降权"
         scored.append((score, index, route_reason, row))
     scored.sort(key=lambda item: (-item[0], item[1]))
     return [
@@ -921,7 +927,7 @@ def recommended_units(comparison: list[dict[str, str]], url_mapping: list[dict[s
             "priority": f"P{index + 1}",
             "unit": row["source_key"],
             "source_path": row["source_path"],
-            "reason": f"page-level switchable candidate; {route_reason}; requires host landing and parity closure",
+            "reason": f"可独立切换的页面候选；{route_reason}；需要宿主落点与对等闭包",
             "status": row["status"],
         }
         for index, (_score, _original_index, route_reason, row) in enumerate(scored[:10])
@@ -939,93 +945,175 @@ def dict_table(rows: list[dict[str, str]], headers: list[str]) -> str:
     return table(headers, ([row.get(header, "") for header in headers] for row in rows))
 
 
+def labeled_table(rows: list[dict[str, str]], columns: list[tuple[str, str]]) -> str:
+    return table(
+        [label for _key, label in columns],
+        ([row.get(key, "") for key, _label in columns] for row in rows),
+    )
+
+
 def build_markdown(args, data: dict) -> str:
     mode = args.mode
+    mode_label = MODE_LABELS.get(mode, mode)
     lines = [
-        f"# {args.project_name} Hosted AngularJS To Vue3 Migration {mode.title()}",
+        f"# {args.project_name} AngularJS 迁入 Vue3 Host — {mode_label}",
         "",
-        "This artifact is an evidence baseline. Review source and host code before treating any row as implementation design.",
+        "本文件是证据基线。对照源仓与宿主代码复核之前，任何一行都不得当作实施设计。",
         "",
-        "## Revisions",
-        table(["repo", "path", "revision"], [
+        "> 状态枚举、路径、命令、URL、CSV 字段名保持英文原文；章节标题、表头与说明默认简体中文。",
+        "",
+        "## 修订绑定",
+        table(["仓库", "路径", "修订"], [
             ["source", str(data["source_repo"]), data["source_revision"]],
             ["host", str(data["host_repo"]), data["host_revision"]],
         ]),
         "",
-        "## Repo Acquisition",
-        "A failed clone may be a warning rather than a blocker when an existing git repo is present and its revision is readable.",
-        dict_table(data["repo_acquisition"], ["repo_role", "repo_path", "acquisition_status", "acquisition_warning", "revision", "revision_source", "dirty_entries", "usable_for_stage", "notes"]),
+        "## 仓库获取",
+        "克隆失败在已有 git 仓且 HEAD 可读时，记为警告而非阻断。",
+        labeled_table(data["repo_acquisition"], [
+            ("repo_role", "角色"),
+            ("repo_path", "路径"),
+            ("acquisition_status", "获取状态"),
+            ("acquisition_warning", "获取警告"),
+            ("revision", "修订"),
+            ("revision_source", "修订来源"),
+            ("dirty_entries", "脏文件数"),
+            ("usable_for_stage", "本阶段可用"),
+            ("notes", "备注"),
+        ]),
         "",
-        "## Git Hygiene",
-        "Dependency/cache/build directory noise blocks commit readiness. `src/` clean is useful but does not prove the whole repo is clean.",
-        dict_table(data["git_hygiene"], ["repo_role", "status_entries", "business_changes", "src_or_webapp_changes", "lockfile_changes", "dependency_noise", "stage_status", "notes"]),
+        "## Git 卫生",
+        "依赖/缓存/构建目录噪声会阻断提交就绪。`src/` 干净有参考价值，但不能证明整仓干净。",
+        labeled_table(data["git_hygiene"], [
+            ("repo_role", "角色"),
+            ("status_entries", "状态条目数"),
+            ("business_changes", "业务变更"),
+            ("src_or_webapp_changes", "src/webapp 变更"),
+            ("lockfile_changes", "lockfile 变更"),
+            ("dependency_noise", "依赖噪声"),
+            ("stage_status", "阶段状态"),
+            ("notes", "备注"),
+        ]),
         "",
-        "## Host Stack",
-        dict_table(data["host_stack"], ["area", "value", "evidence"]),
+        "## Host 栈",
+        labeled_table(data["host_stack"], [
+            ("area", "领域"),
+            ("value", "取值"),
+            ("evidence", "证据"),
+        ]),
         "",
-        "## Source Page Inventory",
-        dict_table(data["source_pages"], ["key", "kind", "tokens", "path", "url_guess", "signals", "line_count"]),
+        "## 源仓页面清单",
+        labeled_table(data["source_pages"], [
+            ("key", "标识"),
+            ("kind", "类型"),
+            ("tokens", "分词"),
+            ("path", "路径"),
+            ("url_guess", "URL 猜测"),
+            ("signals", "信号"),
+            ("line_count", "行数"),
+        ]),
         "",
-        "## Host Page Inventory",
-        dict_table(data["host_pages"], ["key", "kind", "tokens", "path", "url_guess", "signals", "line_count"]),
+        "## Host 页面清单",
+        labeled_table(data["host_pages"], [
+            ("key", "标识"),
+            ("kind", "类型"),
+            ("tokens", "分词"),
+            ("path", "路径"),
+            ("url_guess", "URL 猜测"),
+            ("signals", "信号"),
+            ("line_count", "行数"),
+        ]),
         "",
-        "## A/B Page Comparison",
-        "This table is a candidate map, not a gap truth table. `already-migrated` requires behavior evidence or human confirmation and is never inferred from filename matching alone.",
-        dict_table(data["comparison"], ["status", "match_basis", "candidate_score", "needs_human_correction", "source_key", "source_path", "source_url", "host_path", "host_entry", "confidence", "next_action"]),
+        "## A/B 页面对照",
+        "本表是候选映射，不是缺口真相表。`already-migrated` 需要行为证据或人工确认，不得仅凭文件名匹配判定。",
+        labeled_table(data["comparison"], [
+            ("status", "状态"),
+            ("match_basis", "匹配依据"),
+            ("candidate_score", "候选分"),
+            ("needs_human_correction", "需人工校正"),
+            ("source_key", "源标识"),
+            ("source_path", "源路径"),
+            ("source_url", "源 URL"),
+            ("host_path", "宿主路径"),
+            ("host_entry", "宿主入口"),
+            ("confidence", "置信度"),
+            ("next_action", "下一步"),
+        ]),
         "",
-        "## URL / Entry Mapping",
-        "File-derived URL guesses are low-confidence until backed by Java route, menu, or MPA entry evidence.",
-        dict_table(data["url_entry_mapping"], ["source_url", "source_route_evidence", "source_template", "server_controller", "host_entry_html", "host_entry_ts", "host_menu_or_route", "mapping_status", "confidence", "unresolved"]),
+        "## URL / 入口映射",
+        "由文件路径猜出的 URL 在有 Java 路由、菜单或 MPA 入口证据前，置信度为低。",
+        labeled_table(data["url_entry_mapping"], [
+            ("source_url", "源 URL"),
+            ("source_route_evidence", "源路由证据"),
+            ("source_template", "源模板"),
+            ("server_controller", "服务端 Controller"),
+            ("host_entry_html", "宿主 HTML 入口"),
+            ("host_entry_ts", "宿主 TS 入口"),
+            ("host_menu_or_route", "宿主菜单/路由"),
+            ("mapping_status", "映射状态"),
+            ("confidence", "置信度"),
+            ("unresolved", "未决"),
+        ]),
         "",
-        "## Coupling Counts",
-        "Source counts exclude vendor/lib/locale/build artifacts.",
-        dict_table(data["source_couplings"], ["signal", "matches", "files"]),
+        "## 耦合计数",
+        "源仓计数已排除 vendor/lib/locale/构建产物。",
+        labeled_table(data["source_couplings"], [
+            ("signal", "信号"),
+            ("matches", "命中数"),
+            ("files", "文件数"),
+        ]),
         "",
-        "## Suggested First Migration Units",
-        dict_table(data["recommended_units"], ["priority", "unit", "source_path", "status", "reason"]),
+        "## 建议优先迁移单元",
+        labeled_table(data["recommended_units"], [
+            ("priority", "优先级"),
+            ("unit", "单元"),
+            ("source_path", "源路径"),
+            ("status", "状态"),
+            ("reason", "理由"),
+        ]),
         "",
-        "## Validation Gates",
-        table(["gate", "check", "status"], GATE_ROWS),
+        "## 校验门禁",
+        table(["门禁", "检查项", "状态"], GATE_ROWS),
         "",
-        "## Completion Authority",
-        "Do not announce a page migration complete from this domain artifact alone. Completion requires Delivery verified evidence, domain verify evidence, current host revision binding, and no blocking residuals.",
+        "## 完成判定权",
+        "不得仅凭本领域工件宣布页面迁移完成。完成需要 Delivery verified 证据、领域复核证据、当前宿主修订绑定，以及无阻断残留。",
     ]
 
     if mode in {"design", "verify"}:
-        unit = args.unit or "[required migration unit missing]"
+        unit = args.unit or "[缺少必填迁移单元]"
         lines.extend([
             "",
-            f"## {mode.title()} Unit",
-            f"- unit: `{unit}`",
-            "- scope: one independently switchable page or user behavior",
-            "- rule: reuse host shell/auth/API/state/components; do not copy source layout",
+            f"## {mode_label}单元",
+            f"- 单元：`{unit}`",
+            "- 范围：一个可独立切换的页面或用户行为",
+            "- 规则：复用宿主 shell/鉴权/API/状态/组件；不要复制源仓布局",
             "",
-            "## Page Closure Contract",
-            table(["item", "evidence"], [
-                ["source templates/fragments", "fill from source code"],
-                ["source AngularJS/jQuery/server variables", "fill from source code"],
-                ["source APIs and response codes", "fill from source code"],
-                ["host landing files", "fill from host code"],
-                ["reuse/change/create decisions", "fill after host review"],
-                ["old URL -> new entry", "fill with route evidence"],
-                ["rollback switch and condition", "fill before implementation"],
+            "## 页面闭包合同",
+            table(["项", "证据"], [
+                ["源仓模板/片段", "从源码填写"],
+                ["源仓 AngularJS/jQuery/服务端变量", "从源码填写"],
+                ["源仓 API 与响应码", "从源码填写"],
+                ["Host 落点文件", "从宿主代码填写"],
+                ["复用/改动/新建决策", "复核宿主后填写"],
+                ["旧 URL → 新入口", "用路由证据填写"],
+                ["回退开关与条件", "实施前填写"],
             ]),
             "",
-            "## Design Ready Gate",
-            "Script-generated header-only contracts are `not-ready: empty-contract`. Do not enter Delivery Frame until an agent fills these rows with evidence or marks unresolved edges with a non-blocking reason.",
-            table(["gate", "minimum evidence", "status"], DESIGN_READY_ROWS),
+            "## 设计就绪门禁",
+            "脚本生成的仅表头合同为 `not-ready: empty-contract`。在用证据填实这些行、或把未决边标为非阻断原因之前，不得进入 Delivery Frame。",
+            table(["门禁", "最低证据", "状态"], DESIGN_READY_ROWS),
         ])
 
     if mode == "design" and args.unit:
         lines.extend([
             "",
-            "## Scoped FLOW/CHAIN Contracts",
-            "These tables are intentionally scoped to the selected unit. Do not fill them with whole-repo placeholders.",
+            "## 限定范围的 FLOW/CHAIN 合同",
+            "这些表仅覆盖选定单元。不要用整仓占位行填表。",
             "",
-            "### Business Flow",
+            "### 业务流",
             table(FLOW_CONTRACT_HEADERS, []),
             "",
-            "### Variable Reference Chain",
+            "### 变量引用链",
             table(VARIABLE_CHAIN_HEADERS, []),
         ])
 
@@ -1049,10 +1137,10 @@ def write_html(path: Path, markdown_text: str) -> None:
     body = escaped.replace("\n", "<br>\n")
     path.write_text(
         f"""<!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <title>Hosted AngularJS To Vue3 Migration</title>
+  <title>AngularJS 迁入 Vue3 Host 迁移证据</title>
   <style>
     body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 1180px; margin: 32px auto; padding: 0 24px; line-height: 1.55; color: #1f2937; }}
     h1, h2, h3 {{ color: #111827; }}

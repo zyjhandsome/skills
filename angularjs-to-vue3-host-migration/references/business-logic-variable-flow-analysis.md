@@ -128,61 +128,63 @@ Separate facts, inferences, and `UNRESOLVED` edges. Never raise confidence becau
 
 ## Required Output Tables
 
-### Business Logic Flow
+Copy these headers into user-facing reports. Table titles and column labels are Simplified Chinese; IDs and operation enums stay English.
 
-| FLOW-ID | Step | Entry/Trigger | Condition | Input | Processing | Output | Call Target | Side Effect | Business Meaning | Evidence | Confidence | Related CHAIN-ID |
+### 业务流
+
+| FLOW-ID | 步骤 | 入口/触发 | 条件 | 输入 | 处理 | 输出 | 调用目标 | 副作用 | 业务含义 | 证据 | 置信度 | 关联 CHAIN-ID |
 |---|---:|---|---|---|---|---|---|---|---|---|---|---|
 
-### Variable Definition And Source
+### 变量定义与来源
 
-| VAR-ID | Variable/Path | Definition/Source | Scope | Initial Value | Evidence | Confidence |
+| VAR-ID | 变量/路径 | 定义/来源 | 作用域 | 初值 | 证据 | 置信度 |
 |---|---|---|---|---|---|---|
 
-### Injection And Scope
+### 注入与作用域
 
-| VAR-ID | Injection/Binding | Source Scope | Target Scope | Lifetime | Evidence | Confidence |
+| VAR-ID | 注入/绑定 | 源作用域 | 目标作用域 | 生命周期 | 证据 | 置信度 |
 |---|---|---|---|---|---|---|
 
-### Alias Mapping
+### 别名映射
 
-| Alias | Canonical Path | Alias Type | Scope/Function | Created At | Valid Until | Evidence |
+| 别名 | 规范路径 | 别名类型 | 作用域/函数 | 创建于 | 有效至 | 证据 |
 |---|---|---|---|---|---|---|
 
-### Nested Read And Write
+### 嵌套读写
 
-| CHAIN-ID | VAR-ID | Normalized Path | Read/Write | Value Source/Target | Condition | Evidence | Confidence |
+| CHAIN-ID | VAR-ID | 规范化路径 | 读/写 | 值来源/去向 | 条件 | 证据 | 置信度 |
 |---|---|---|---|---|---|---|---|
 
-### Cross-Function Transfer
+### 跨函数传递
 
-| CHAIN-ID | Caller | Callee | Parameter/Return | Upstream Path | Downstream Path | Async Stage | Evidence | Confidence |
+| CHAIN-ID | 调用方 | 被调方 | 参数/返回 | 上游路径 | 下游路径 | 异步阶段 | 证据 | 置信度 |
 |---|---|---|---|---|---|---|---|---|
 
-### Watch And Template Consumption
+### Watch 与模板消费
 
-| CHAIN-ID | Consumer Type | Expression/Path | Watcher/Template | Condition | Result | Evidence | Confidence |
+| CHAIN-ID | 消费类型 | 表达式/路径 | Watcher/模板 | 条件 | 结果 | 证据 | 置信度 |
 |---|---|---|---|---|---|---|---|
 
-### Ajax, State, And DOM Effects
+### Ajax、状态与 DOM 副作用
 
-| CHAIN-ID | Effect Type | Target | Input Path | Condition | Business Result | Evidence | Confidence |
+| CHAIN-ID | 副作用类型 | 目标 | 输入路径 | 条件 | 业务结果 | 证据 | 置信度 |
 |---|---|---|---|---|---|---|---|
 
-### End-To-End Variable Reference Chain
+### 端到端变量引用链
 
-| CHAIN-ID | Step | VAR-ID | Normalized Path | Operation | Scope/Function | Upstream | Downstream | Condition | Business Meaning | Evidence | Confidence | Vue 3 Target |
+| CHAIN-ID | 步骤 | VAR-ID | 规范化路径 | 操作 | 作用域/函数 | 上游 | 下游 | 条件 | 业务含义 | 证据 | 置信度 | Vue3 Host 落点 |
 |---|---:|---|---|---|---|---|---|---|---|---|---|---|
 
-### Unresolved Edges
+### 未决边
 
-| Unresolved Edge | Expression | Known Source | Missing Evidence | Runtime Check | Risk | Evidence |
+| 未决边 | 表达式 | 已知来源 | 缺失证据 | 运行时检查 | 风险 | 证据 |
 |---|---|---|---|---|---|---|
 
 ## Worked Example
 
 Given the `app.js` and `order.html` fixture used below, the save flow is:
 
-| FLOW-ID | Step | Entry/Trigger | Condition | Input | Processing | Output | Call Target | Side Effect | Business Meaning | Evidence | Confidence | Related CHAIN-ID |
+| FLOW-ID | 步骤 | 入口/触发 | 条件 | 输入 | 处理 | 输出 | 调用目标 | 副作用 | 业务含义 | 证据 | 置信度 | 关联 CHAIN-ID |
 |---|---:|---|---|---|---|---|---|---|---|---|---|---|
 | FLOW-SAVE | 1 | form submit | — | `orderForm` | call `vm.submit` | form state | controller | begin save | user requests save | `order.html:2` | High | CHAIN-CITY, CHAIN-POSTAL, CHAIN-PERMISSION |
 | FLOW-SAVE | 2 | `vm.submit` | valid and edit allowed | form, order, permission | build payload | id/city/postalCode | `buildPayload` | — | enforce save rules | `app.js:17-21` | High | CHAIN-CITY, CHAIN-POSTAL, CHAIN-PERMISSION |
@@ -191,7 +193,7 @@ Given the `app.js` and `order.html` fixture used below, the save flow is:
 
 Key aliases:
 
-| Alias | Canonical Path | Alias Type | Scope/Function | Created At | Valid Until | Evidence |
+| 别名 | 规范路径 | 别名类型 | 作用域/函数 | 创建于 | 有效至 | 证据 |
 |---|---|---|---|---|---|---|
 | `vm.order` | `$scope.initialOrder` | object reference | `OrderCtrl` | controller init | reassignment/destruction | `app.js:14` |
 | `customer` | `$scope.initialOrder.customer` | local alias | `OrderCtrl` | controller init | controller destruction | `app.js:15` |
@@ -199,7 +201,7 @@ Key aliases:
 
 Representative chains:
 
-| CHAIN-ID | Step | VAR-ID | Normalized Path | Operation | Scope/Function | Upstream | Downstream | Condition | Business Meaning | Evidence | Confidence | Vue 3 Target |
+| CHAIN-ID | 步骤 | VAR-ID | 规范化路径 | 操作 | 作用域/函数 | 上游 | 下游 | 条件 | 业务含义 | 证据 | 置信度 | Vue3 Host 落点 |
 |---|---:|---|---|---|---|---|---|---|---|---|---|---|
 | CHAIN-CITY | 1 | VAR-ORDER | `$scope.initialOrder` | INJECT | `OrderCtrl` | scope input | `vm.order` | — | initial order source | `app.js:14` | High | route/prop/store input |
 | CHAIN-CITY | 2 | VAR-CITY | `vm.order.customer.address.city` | ALIAS | `OrderCtrl/vm.submit` | `vm.order→customer→address` | `address.city` | — | locate shipping city | `app.js:14-18` | High | reactive form state |
@@ -215,7 +217,7 @@ Representative chains:
 
 Permission resolution remains explicit:
 
-| Unresolved Edge | Expression | Known Source | Missing Evidence | Runtime Check | Risk | Evidence |
+| 未决边 | 表达式 | 已知来源 | 缺失证据 | 运行时检查 | 风险 | 证据 |
 |---|---|---|---|---|---|---|
 | UNRESOLVED-PERMISSION | template `permissions.orderEdit` vs controller `$rootScope.permissions.orderEdit` | controller guard and template disable rule | scope inheritance/binding proof | inspect scope tree or log both values during submit | UI and controller may enforce different values | `app.js:19`; `order.html:7` |
 
@@ -223,16 +225,16 @@ The example additionally records `vm.order→$scope.lastSavedOrder` as a `STATE`
 
 ## Quick Reference
 
-| Question | Required Evidence | Artifact |
+| 问题 | 所需证据 | 工件 |
 |---|---|---|
-| What starts the action? | handler/template/router `file:line` | business flow |
-| Where does the value originate? | definition, injection, or input | variable definition |
-| Is this the same object? | assignment and lifetime | alias mapping |
-| Which nested field changes? | exact read/write expression | nested read/write |
-| How does it cross a function? | call, parameter, return, callback | function transfer |
-| Who consumes it? | watch/template/request/state/DOM location | consumer/effect table |
-| What cannot be proven? | dynamic expression and missing link | unresolved edge |
-| Where should it move in Vue? | proven ownership and lifecycle | Vue 3 target column |
+| 动作从哪开始？ | handler/template/router `file:line` | 业务流 |
+| 值从哪来？ | 定义、注入或输入 | 变量定义 |
+| 是不是同一个对象？ | 赋值与生命周期 | 别名映射 |
+| 哪个嵌套字段变了？ | 精确读写表达式 | 嵌套读写 |
+| 怎么跨过函数边界？ | 调用、参数、返回、回调 | 跨函数传递 |
+| 谁消费它？ | watch/模板/请求/状态/DOM 位置 | 消费/副作用表 |
+| 什么无法证明？ | 动态表达式与缺失环节 | 未决边 |
+| 在 Vue 里落到哪？ | 已证明的归属与生命周期 | Vue3 Host 落点列 |
 
 ## Common Mistakes
 

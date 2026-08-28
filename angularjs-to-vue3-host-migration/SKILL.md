@@ -93,6 +93,8 @@ These commands discover candidates only. Read definitions, callers, templates, c
 
 ## Output Contracts
 
+User-facing evidence reports, copied table contracts, and filled FLOW/VAR/CHAIN rows default to Simplified Chinese. Keep status enums, IDs (`FLOW-ID`, `unmigrated`, `not-ready: empty-contract`), paths, commands, URLs, and CSV field keys in English.
+
 ### Assess
 
 Include:

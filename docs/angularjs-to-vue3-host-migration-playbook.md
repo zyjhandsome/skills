@@ -219,8 +219,8 @@ python angularjs-to-vue3-host-migration/scripts/generate_migration_plan.py asses
   --format all
 
 脚本输出只是 evidence baseline；必须用代码证据复核，不得把通用表格当设计。
-Repo Acquisition 与 Git Hygiene 表必须进入 assess evidence；出现 dependency/cache/build noise 时，后续不得声明 commit-ready。
-A/B Page Comparison 是候选表，不是缺口真相；文件名/路径命中不能直接判 already-migrated。
+仓库获取与 Git 卫生表必须进入 assess evidence；出现 dependency/cache/build noise 时，后续不得声明 commit-ready。
+A/B 页面对照是候选表，不是缺口真相；文件名/路径命中不能直接判 already-migrated。
 `.vue` 组件不能默认当页面，根 `index.html` 只能当 host-shell；宿主业务页必须有 MPA、
 router、menu 或 entry 证据。`openspec/`、报告 HTML、e2e/spec/test 文件不得进入页面清单。
 `workBench`/`workbench`、`taskManage`/`taskManagement` 等别名或近似命中必须标
@@ -489,7 +489,7 @@ decision_needed / recommended_resolution / resume_point
 - A/B Codebase Memory 或 fallback 证据均绑定当前 revision；
 - Delivery verified、High 独立审查、必要的 G9 或 manual-only 视觉说明完成；
 - AngularJS domain verify 的 behavior、permission、URL、API、runtime/build、rollback 通过；
-- Repo Acquisition 可用，A/B revision 当前且 HEAD 可读；
+- 仓库获取可用，A/B revision 当前且 HEAD 可读；
 - Git Hygiene 无阻塞；没有 dependency/cache/build 噪声进入 intended commit；
 - 视觉结论有测量证据；没有测量链时明确不是 visual pass；
 - fallback/rollback 已演练或清楚记录未演练 blocker；
