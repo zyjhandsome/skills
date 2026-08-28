@@ -3,7 +3,7 @@ name: angularjs-to-vue3-host-migration
 description: Use when assessing, designing, or verifying migration of AngularJS 1.x/jQuery/JSP/Thymeleaf mixed legacy pages into an existing Vue 3 host repository. Supports dual-repo source-vs-host comparison, page-level migration units, business-flow and variable-chain reconstruction, host-stack gap analysis, URL/permission/API rollback gates, and evidence reports for projects like hiapm -> apmweb3. Not for greenfield Vue 3 creation unless no host repository exists.
 ---
 
-# AngularJS To Vue 3 Migration
+# AngularJS To Vue 3 Host Migration
 
 Use this skill to produce evidence and page-level designs for moving AngularJS 1.x, jQuery, JSP, Thymeleaf, and server-rendered page islands into an existing Vue 3 host. Default to **hosted migration**: source repo A supplies legacy behavior; host repo B owns the final entry, shell, auth, build, API conventions, components, state, i18n, proxy, and runtime gates.
 
@@ -38,12 +38,17 @@ If only one repo is available, perform source-only assessment and state that hos
    - MPA/SPA entry layout, router, route meta, auth/permission, axios/API client, state store, component library, i18n, proxy, env config, lockfile, Node baseline, lint/build/test gates.
 6. Build a source A page-entry inventory before deep scanning:
    - JSP, Thymeleaf, HTML, server templates, page-level `ng-app`/`ng-controller`, AngularJS modules/controllers/services/directives/filters, jQuery entry functions, Ajax, DOM operations, plugins.
-   - Exclude dependency noise: `.git`, `node_modules`, `dist`, `build`, `target`, `coverage`, `vendor`, `vendors`, `lib`, `libs`, `locale`, `locales`, generated bundles, minified files.
+   - Exclude dependency and evidence noise: `.git`, `node_modules`, `dist`, `build`, `target`, `coverage`, `reports`, `evidence`, `openspec`, `test`, `tests`, `e2e-tests`, `vendor`, `vendors`, `lib`, `libs`, `locale`, `locales`, generated bundles, minified files, `*.spec.*`, `*.test.*`, `*.e2e.*`.
 7. Produce A/B page comparison:
-   - `unmigrated`, `partial-overlap`, `already-migrated`, `host-only`, `unknown`.
+   - `unmigrated`, `partial-overlap`, `already-migrated`, `host-page-only`, `host-component`, `host-shell`, `unknown`.
    - Include old URL/template and new host entry/route when evidence exists.
-8. Choose migration units as independently switchable pages or user behaviors, not whole-repo batches.
-9. For each selected unit, produce a page closure:
+   - Treat filename/path matches as candidates only. Include match basis, candidate score, and whether human correction is required. Never mark `already-migrated` from filename matching alone.
+   - Distinguish host pages/entries from reusable components and shell files. Do not treat every `.vue` file or root `index.html` as a page.
+8. Produce URL and entry mapping:
+   - Prefer Java/Spring route annotations, menu config, server template returns, MPA `getPages()`/`src/pages/*/*.ts`, and host route/menu evidence over guessed file paths.
+   - Mark file-derived URL guesses as low confidence until backed by route/menu/MPA evidence.
+9. Choose migration units as independently switchable pages or user behaviors, not whole-repo batches.
+10. For each selected unit, produce a page closure:
    - source templates/fragments/scripts/controllers/services/APIs/assets
    - host files/components/stores/API modules to reuse or change
    - old URL -> new entry mapping
@@ -51,7 +56,7 @@ If only one repo is available, perform source-only assessment and state that hos
    - API contracts and response-code handling
    - rollback switch and rollback condition
    - parity checks and unresolved evidence
-10. Generate evidence baseline artifacts when requested:
+11. Generate evidence baseline artifacts when requested:
 
 ```bash
 python scripts/generate_migration_plan.py assess \
@@ -61,18 +66,18 @@ python scripts/generate_migration_plan.py assess \
   --output-dir reports/angularjs-vue3-migration
 ```
 
-11. Treat script output as evidence baseline only. Do not treat generated tables as implementation design until reviewed against source and host code.
+12. Treat script output as evidence baseline only. Do not treat generated tables as implementation design until reviewed against source and host code. Header-only FLOW/VAR/CHAIN contracts are not design-ready.
 
 ## Scan Commands
 
 Use Codebase Memory first. Use these `rg` commands only as fallback or for non-code/template evidence:
 
 ```bash
-rg -n --glob '!{node_modules,dist,build,target,coverage,vendor,vendors,lib,libs,locale,locales}/**' --glob '!*.min.*' "ng-app|ng-controller|angular\.module|\.controller\(|\.component\(|\.directive\(|\.service\(|\.factory\(|\.filter\(" <source>
+rg -n --glob '!{node_modules,dist,build,target,coverage,reports,evidence,openspec,test,tests,e2e-tests,vendor,vendors,lib,libs,locale,locales}/**' --glob '!*.min.*' --glob '!*.spec.*' --glob '!*.test.*' "ng-app|ng-controller|ng-repeat|ng-model|ng-src|ng-click|ng-change|angular\.module|\.controller\(|\.component\(|\.directive\(|\.service\(|\.factory\(|\.filter\(" <source>
 rg -n --glob '!{node_modules,dist,build,target,coverage,vendor,vendors,lib,libs,locale,locales}/**' --glob '!*.min.*' "\$scope|\$rootScope|\$watch|\$emit|\$broadcast|\$http|\$resource|\$q" <source>
 rg -n --glob '!{node_modules,dist,build,target,coverage,vendor,vendors,lib,libs,locale,locales}/**' --glob '!*.min.*' "\$\(document\)\.ready|\$\(function|\.on\(|\.click\(|\.change\(|\.submit\(|\$\.ajax\(|\.val\(|\.html\(|\.append\(" <source>
-rg -n --glob '!{node_modules,dist,build,target,coverage,vendor,vendors,lib,libs,locale,locales}/**' --glob '!*.min.*' "th:|<%@|jsp:|session\.|request\.|data-|window\.|location\.href|setInterval\(" <source>
-rg -n "createApp|createRouter|defineStore|axios|i18n|proxy|vite|webpack|element-plus|ant-design-vue|naive-ui|pinia" <host>
+rg -n --glob '!{node_modules,dist,build,target,coverage,reports,evidence,openspec,test,tests,e2e-tests,vendor,vendors,lib,libs,locale,locales}/**' --glob '!*.min.*' --glob '!*.spec.*' --glob '!*.test.*' "th:(text|if|each|href|src|class|object|field|value|action|replace|insert|fragment|with|unless|switch|case|include|attr)\b|<%@|jsp:|session\.|request\.|data-|window\.|location\.href|setInterval\(" <source>
+rg -n "createApp|createRouter|defineStore|axios|i18n|proxy|vite|webpack|scripts/getpage|element-plus|@opentiny/vue|ant-design-vue|naive-ui|pinia|jquery" <host>
 ```
 
 These commands discover candidates only. Read definitions, callers, templates, callbacks, API wrappers, and final consumers before drawing conclusions.
@@ -95,9 +100,11 @@ Include:
 - source revision and host revision
 - repo acquisition status, clone/fetch warnings, readable HEAD, and whether an existing repo was reused after acquisition failure
 - git hygiene summary: dirty entries, dependency/cache/build noise, lockfile changes, business/source changes, and stage usability
-- host stack summary: build, Node, lockfile, Vue version, router, state, API client, UI library, i18n, proxy, test gates
+- host stack summary: build, Node/Volta, lockfile, Vue version, router/MPA, MPA entry discovery, state, API client, UI library, i18n, proxy, host jQuery, test gates
 - source page-entry inventory with mixed-stack signals
-- A/B page comparison: unmigrated, partial-overlap, already-migrated, host-only, unknown
+- A/B page comparison: unmigrated, partial-overlap, already-migrated, host-page-only, host-component, host-shell, unknown
+- match basis, candidate score, human-correction flag, and host page/component classification
+- URL / entry mapping from source server route/template evidence to host MPA/router/menu entry
 - vendor-excluded coupling counts
 - suggested first migration units and why
 - gaps blocking implementation design
@@ -116,6 +123,7 @@ For one page or user behavior, include:
 - implementation slice order
 - verification checklist
 - unresolved edges with runtime checks
+- design-ready gate proving page closure, at least 1-2 filled core behavior flows, material variable/API chains, host reuse/change/create decisions, URL mapping, permission/API/rollback draft
 
 ### Verify
 

@@ -53,6 +53,64 @@ angular.module("legacyTask", []).controller("TaskController", function ($scope) 
             "angular.module('vendor').controller('Noise', function ($scope) {});",
         )
         write(source / "src/main/webapp/views/projectProgress.jsp", "<div th:text=\"${name}\"></div>")
+        write(
+            source / "src/main/resources/templates/thymeleaf/workBench/index.html",
+            "<section ng-controller=\"WorkBenchController\"><script>$(function(){ initWorkBench(); })</script></section>",
+        )
+        write(
+            source / "app/phone-list.template.html",
+            """
+<ul>
+  <li ng-repeat="phone in $ctrl.phones">
+    <a ng-href="#!/phones/{{phone.id}}">{{phone.name}}</a>
+    <img ng-src="{{phone.imageUrl}}">
+    <input ng-model="$ctrl.query">
+  </li>
+</ul>
+""",
+        )
+        write(
+            source / "app/app.config.js",
+            """
+angular.module('phonecatApp').config(function($routeProvider) {
+  $routeProvider.when('/phones', {
+    templateUrl: 'app/phone-list.template.html',
+    controller: 'PhoneListController'
+  }).when('/phones/:phoneId', {
+    templateUrl: 'app/phone-detail.template.html',
+    controller: 'PhoneDetailController'
+  });
+});
+""",
+        )
+        write(
+            source / "e2e-tests/phone-list.spec.js",
+            "browser.get('/'); element(by.css('a')).click(); element(by.css('x')).click();",
+        )
+        write(
+            source / "src/main/java/com/example/PageController.java",
+            """
+package com.example;
+
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+
+@Controller
+@RequestMapping("/hiapm")
+public class PageController {
+  @GetMapping("/workBench")
+  public String workBench() {
+    return "thymeleaf/workBench/index";
+  }
+
+  @RequestMapping("/taskManage")
+  public String taskManage() {
+    return "views/taskManage";
+  }
+}
+""",
+        )
 
         write(
             host / "package.json",
@@ -65,14 +123,27 @@ angular.module("legacyTask", []).controller("TaskController", function ($scope) 
                         "pinia": "^3.0.0",
                         "axios": "^1.0.0",
                         "element-plus": "^2.0.0",
+                        "@opentiny/vue": "^3.0.0",
+                        "jquery": "^3.7.0",
                     },
                     "devDependencies": {"vite": "^7.0.0"},
-                    "engines": {"node": ">=20"},
+                    "volta": {"node": "16.20.2"},
                 }
             ),
         )
         write(host / "package-lock.json", "{}")
-        write(host / "src/views/taskManage.vue", "<template><TaskTable /></template>")
+        write(host / "index.html", "<div id=\"app\"></div>")
+        write(host / "scripts/getpage.js", "export function getPages() { return ['workbench', 'taskManagement']; }")
+        write(host / "src/pages/workbench/workbench.ts", "import './workbench.html';")
+        write(host / "src/pages/workbench/workbench.html", "<div id=\"workbench\"></div>")
+        write(host / "src/pages/taskManagement/taskManagement.ts", "import './taskManagement.html';")
+        write(host / "src/pages/taskManagement/taskManagement.html", "<div id=\"task-management\"></div>")
+        write(host / "src/views/PhoneList.vue", "<template><ul><li v-for=\"phone in phones\" :key=\"phone.id\">{{ phone.name }}</li></ul></template>")
+        write(host / "src/components/TaskTable.vue", "<template><table /></template>")
+        write(
+            host / "openspec/changes/migrate-phone-detail-to-vue3-host/evidence/angularjs-hosted-vue3-migration/assess/assess-evidence.html",
+            "<html><body>phone detail evidence report</body></html>",
+        )
         write(host / "src/router/index.ts", "createRouter({ routes: [] }); router.beforeEach(authGuard);")
         write(host / "vite.config.ts", "export default { server: { proxy: { '/api': 'http://localhost' } } }")
         init_git_repo(source)
@@ -142,18 +213,52 @@ angular.module("legacyTask", []).controller("TaskController", function ($scope) 
             self.assertIn(["build tool", "Vite", "package.json/config files"], host_stack)
             self.assertTrue(any(row[0] == "state" and "pinia" in row[1] for row in host_stack))
             self.assertTrue(any(row[0] == "ui library" and "element-plus" in row[1] for row in host_stack))
+            self.assertTrue(any(row[0] == "ui library" and "@opentiny/vue" in row[1] for row in host_stack))
+            self.assertTrue(any(row[0] == "node" and "16.20.2" in row[1] for row in host_stack))
+            self.assertTrue(any(row[0] == "mpa" and "scripts/getpage.js" in row[1] for row in host_stack))
+            self.assertTrue(any(row[0] == "jquery" and "^3.7.0" in row[1] for row in host_stack))
 
             comparison = self.read_csv(output_dir / "csv" / "06-page-comparison.csv")
             comparison_text = "\n".join(",".join(row) for row in comparison)
             self.assertIn("partial-overlap", comparison_text)
             self.assertIn("unmigrated", comparison_text)
             self.assertIn("taskmanage", comparison_text.lower())
+            self.assertIn("token-overlap", comparison_text)
+            self.assertIn("human-correct mapping", comparison_text)
+            self.assertIn("host-component", comparison_text)
+            self.assertIn("host-shell", comparison_text)
+            self.assertIn("src/views/PhoneList.vue", comparison_text)
+            self.assertNotIn("assess-evidence.html", comparison_text)
 
-            couplings = self.read_csv(output_dir / "csv" / "07-source-couplings.csv")
+            url_mapping = self.read_csv(output_dir / "csv" / "07-url-entry-mapping.csv")
+            url_mapping_text = "\n".join(",".join(row) for row in url_mapping)
+            self.assertIn("/hiapm/workBench", url_mapping_text)
+            self.assertIn("#!/phones", url_mapping_text)
+            self.assertIn("app/phone-list.template.html", url_mapping_text)
+            self.assertIn("src/pages/workbench/workbench.ts", url_mapping_text)
+            self.assertIn("PageController.java", url_mapping_text)
+            self.assertNotIn("assess-evidence.html", url_mapping_text)
+
+            couplings = self.read_csv(output_dir / "csv" / "08-source-couplings.csv")
             coupling_text = "\n".join(",".join(row) for row in couplings)
             self.assertIn("angularjs", coupling_text)
             self.assertIn("jquery", coupling_text)
             self.assertNotIn("vendor", coupling_text)
+            jquery_row = next(row for row in couplings if row[0] == "jquery")
+            self.assertEqual("2", jquery_row[2])
+
+            source_pages = self.read_csv(output_dir / "csv" / "04-source-pages.csv")
+            source_pages_text = "\n".join(",".join(row) for row in source_pages)
+            self.assertIn("app/phone-list.template.html", source_pages_text)
+            self.assertIn("angularjs", source_pages_text)
+
+            host_pages = self.read_csv(output_dir / "csv" / "05-host-pages.csv")
+            host_pages_text = "\n".join(",".join(row) for row in host_pages)
+            self.assertIn("host-shell", host_pages_text)
+            self.assertNotIn("assess-evidence.html", host_pages_text)
+
+            recommended = self.read_csv(output_dir / "csv" / "09-recommended-units.csv")
+            self.assertNotEqual("index", recommended[1][1])
 
     def test_design_mode_emits_scoped_flow_contract_only_for_unit(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -165,11 +270,16 @@ angular.module("legacyTask", []).controller("TaskController", function ($scope) 
             markdown = (output_dir / "design-evidence.md").read_text(encoding="utf-8")
             self.assertIn("unit: `taskManage`", markdown)
             self.assertIn("Scoped FLOW/CHAIN Contracts", markdown)
+            self.assertIn("Design Ready Gate", markdown)
             self.assertIn("Business Flow", markdown)
             self.assertNotIn("FLOW-001", markdown)
 
-            business_flow = self.read_csv(output_dir / "csv" / "10-business-flow-contract.csv")
-            variable_chain = self.read_csv(output_dir / "csv" / "11-variable-chain-contract.csv")
+            design_gate = self.read_csv(output_dir / "csv" / "11-design-ready-gate.csv")
+            business_flow = self.read_csv(output_dir / "csv" / "12-business-flow-contract.csv")
+            variable_chain = self.read_csv(output_dir / "csv" / "13-variable-chain-contract.csv")
+            design_gate_text = "\n".join(",".join(row) for row in design_gate)
+            self.assertIn("core flows", design_gate_text)
+            self.assertIn("not-ready: empty-contract", design_gate_text)
             self.assertEqual([business_flow[0]], business_flow)
             self.assertEqual([variable_chain[0]], variable_chain)
 

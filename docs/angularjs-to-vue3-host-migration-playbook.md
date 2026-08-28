@@ -12,6 +12,8 @@
 ## 0. 编排结论
 
 主路径适用于“迁移目标已经明确：源仓 A 的某个页面/用户行为迁入 Vue3 宿主 B”。
+真实项目建议先选 1 个 UNIT 跑通 Wave 1→3，确认 A/B 对照、真实 URL 与 design-ready
+合同质量后，再进入 Frame 和批量实施。
 
 ```text
 Wave 1  建 change（无规格闸门）
@@ -84,6 +86,9 @@ trace_path → get_code_snippet → query_graph。
 
 <INDEX_MANIFEST> 记录 A/B graph project、repo path、revision、index mode、indexed_at。
 图谱 revision 与仓库当前 revision 不一致视为 stale；stale 证据不能用于 pass。
+首次进入真实 A/B 路径时必须按当前路径重建或刷新索引；旧路径索引只能作为历史线索，
+不能作为 pass 证据。若图谱缺 Route 节点，必须用 Java/Spring route、模板、菜单和
+MPA entry 扫描补证，不得由“图谱没有入口”推导为“入口不存在”。
 
 仓库获取与 revision 绑定：
 - clone/fetch 命令失败不必自动终止；若目标路径已经是有效 git repo 且 HEAD 可读，可以复用该仓库继续。
@@ -189,11 +194,17 @@ proposal 保持草稿。不要询问范围批准，不要写规格批准，不�
 当扫描具体 <UNIT> 时，同时读取 jQuery 与 variable-flow references。
 
 按 Skill 契约完成：
-- host stack summary：构建、Node、lockfile、Vue、router/MPA、state、API client、UI、i18n、proxy、测试门禁
+- host stack summary：构建、Node/Volta、lockfile、Vue、router/MPA、`scripts/getpage.js`、
+  `src/pages/*/*.ts`、state、API client、UI（含 `@opentiny/vue` 等）、i18n、proxy、
+  宿主侧 jQuery、测试门禁
 - source page-entry inventory：JSP/Thymeleaf/HTML、ng-app/ng-controller、AngularJS controller/service/directive、jQuery entry/Ajax/DOM/plugin
-- vendor/lib/locale/build 排除后的耦合计数
-- A/B page comparison：unmigrated / partial-overlap / already-migrated / host-only / unknown
-- <UNIT> 的候选 source entry 与 host landing point
+- vendor/lib/locale/build 以及 openspec/reports/evidence/test/e2e 排除后的耦合计数
+- A/B page comparison：unmigrated / partial-overlap / already-migrated / host-page-only / host-component / host-shell / unknown，
+  并包含 match_basis、candidate_score、needs_human_correction
+- URL / entry mapping：Java `@RequestMapping` / `@GetMapping` / `@PostMapping`、AngularJS
+  `$routeProvider.when(...)` / ui-router `.state(...)`、模板 return / `templateUrl`、
+  菜单或服务端入口 -> B 的 MPA HTML/TS、router/menu entry
+- <UNIT> 的候选 source entry、真实 source URL 与 host landing point
 - gaps blocking design
 - 推荐首个或当前迁移单元的依据
 
@@ -209,10 +220,16 @@ python angularjs-to-vue3-host-migration/scripts/generate_migration_plan.py asses
 
 脚本输出只是 evidence baseline；必须用代码证据复核，不得把通用表格当设计。
 Repo Acquisition 与 Git Hygiene 表必须进入 assess evidence；出现 dependency/cache/build noise 时，后续不得声明 commit-ready。
+A/B Page Comparison 是候选表，不是缺口真相；文件名/路径命中不能直接判 already-migrated。
+`.vue` 组件不能默认当页面，根 `index.html` 只能当 host-shell；宿主业务页必须有 MPA、
+router、menu 或 entry 证据。`openspec/`、报告 HTML、e2e/spec/test 文件不得进入页面清单。
+`workBench`/`workbench`、`taskManage`/`taskManagement` 等别名或近似命中必须标
+needs_human_correction，并由菜单、Java route 或 MPA entry 复核。
 
 生成 assess evidence packet 或 Markdown 摘要到 <DOMAIN_ROOT>，记录 path/digest、A/B revision、
-source/host page comparison、blockers。
+source/host page comparison、URL/entry mapping、blockers。
 
+若 <UNIT> 缺少真实 source URL 或 B host entry 证据，输出回流字段并停止，不进入 Wave 3。
 若 <UNIT> 在 A 或 B 中无法定位，输出回流字段并停止。
 否则说明下一步为 Wave 3，然后停止。
 ```
@@ -234,7 +251,8 @@ business-logic-variable-flow-analysis。
 围绕 <UNIT> 生成设计包：
 - page closure：源模板/fragments/scripts/controllers/services/APIs/assets
 - 同一页 AngularJS + jQuery + 服务端模板合并行为链，不拆成平行报告
-- FLOW/VAR/CHAIN 只针对 <UNIT> 的核心行为，不铺全仓空表
+- FLOW/VAR/CHAIN 只针对 <UNIT> 的核心行为，不铺全仓空表；至少填入 1～2 条核心行为链，
+  不能只交表头
 - host B 复用/改造/新建处置：entry/router/menu/permission/API/store/component/i18n/style/proxy
 - old URL -> new host entry mapping
 - permission/session/API parity requirements
@@ -244,6 +262,12 @@ business-logic-variable-flow-analysis。
 - unresolved edges 与运行时检查
 
 设计必须证明：
+- page closure 已填实，覆盖 source templates/fragments/scripts/controllers/services/APIs/assets
+- 至少 1～2 条核心 FLOW 已填，material variable/API chain 已填；无法静态确认的运行时检查
+  必须记录为非阻塞或阻塞项
+- old URL -> new host entry mapping 有 Java route、菜单、模板 return 或 MPA entry 证据
+- B 侧 entry/router/API/store/component/i18n/style 的复用/改造/新建决策明确
+- permission/session/API/rollback draft 已存在
 - 复用 B 的壳和鉴权
 - 不复制 A 的 JSP/Thymeleaf layout
 - 不引入 Vue2/@vue/compat
@@ -261,7 +285,10 @@ python angularjs-to-vue3-host-migration/scripts/generate_migration_plan.py desig
   --format all
 
 输出 design-ready domain evidence path/digest。
-若存在 implementation-blocking TBD，停止并给回流字段；不得进入 Frame 规格批准。
+脚本生成的空合同必须标 `not-ready: empty-contract`；只有人工或后续分析把 gate 填成
+evidence-backed ready，才能继续。
+若存在 implementation-blocking TBD、FLOW/CHAIN 只有空表头、URL/entry 缺少真实证据，
+或 design-ready gate 任一必填项未满足，停止并给回流字段；不得进入 Frame 规格批准。
 否则说明下一步为 Wave 4，然后停止。
 ```
 
@@ -274,7 +301,8 @@ python angularjs-to-vue3-host-migration/scripts/generate_migration_plan.py desig
 不要 Plan/Execute。本波不得修改 A/B 应用代码。
 
 应已存在：<CHANGE_DIR>、Wave 3 design-ready domain evidence path/digest。
-若只有 assess 或 design 未 ready，停止并回 Wave 3。
+若只有 assess、design 未 ready、FLOW/CHAIN 只有表头、URL/entry 缺少真实证据，
+或 design-ready gate 未通过，停止并回 Wave 3。
 
 从 domain evidence 摘要写入 external_artifacts：path、digest、A/B revision、<UNIT>、
 old URL、新 host entry 候选、rollback、blockers/residuals。

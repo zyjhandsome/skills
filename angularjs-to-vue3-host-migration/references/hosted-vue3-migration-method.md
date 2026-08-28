@@ -110,6 +110,14 @@ Read host B before designing landing code:
 
 Do not override host conventions unless the gap analysis proves they cannot support the page and the user approves a host change.
 
+Host discovery must include common hosted-MPA details:
+
+- `volta.node`, `.nvmrc`, `.node-version`, and `engines.node`
+- `scripts/getpage.js`, `src/pages/*/*.ts`, HTML entries, and page-specific boot files
+- `@opentiny/vue`, Element Plus, and any dual component-library setup
+- host-side jQuery usage, even in a Vue3 repository
+- axios/login store/cookie/gateway/session bridge conventions
+
 ## Source Page Inventory
 
 Find page entries first, then trace inward.
@@ -132,17 +140,43 @@ Exclude dependency noise:
 
 ## A/B Page Comparison
 
-Normalize page keys from URL, route, menu label, template filename, component filename, and directory context. Classify every candidate:
+Normalize page keys from URL, route, menu label, template filename, component filename, and directory context. Treat automated matching as a candidate map, not a truth table. Classify every candidate:
 
 | Status | Meaning |
 |---|---|
 | `unmigrated` | Source page exists; no host counterpart found. |
 | `partial-overlap` | Source and host overlap by name/route/domain but behavior is not proven equivalent. |
 | `already-migrated` | Host page exists and parity evidence exists or user confirms. |
-| `host-only` | Host page exists without source counterpart. |
+| `host-page-only` | Host page entry exists without source counterpart. |
+| `host-component` | Host reusable component exists without page-entry evidence. |
+| `host-shell` | Host bootstrap shell such as root `index.html`; not a business page by itself. |
 | `unknown` | Evidence is insufficient. |
 
-Each row should include old URL/template, new host entry when known, confidence, and next action.
+Each row should include old URL/template, new host entry when known, match basis, candidate score, confidence, human-correction flag, and next action.
+
+Rules:
+
+- Do not mark `already-migrated` from filename/path similarity.
+- `workBench` vs `workbench`, `taskManage` vs `taskManagement`, and similar token variants require human correction.
+- Host `.vue` files under components should be classified as component candidates, not host pages, unless route/menu/MPA evidence proves they are entries.
+- Root `index.html` and other shell/bootstrap files should be downgraded unless route/menu/runtime evidence proves they are the selected unit's landing point.
+- Exclude `openspec/`, `reports/`, `evidence/`, coverage output, generated report HTML, `e2e-tests/`, and `*.spec.*` / `*.test.*` files from page inventory and coupling counts.
+- Large host-component counts from reusable components are noise; include them only as page-closure dependencies.
+
+## URL And Entry Mapping
+
+Build a separate URL/entry map before design:
+
+| Field | Evidence |
+|---|---|
+| source URL | Java/Spring route annotation, menu config, gateway route, or server template entry. |
+| SPA/hash route | AngularJS `$routeProvider.when(...)` or ui-router `.state(..., { url })`. |
+| source template | JSP/Thymeleaf return value, `templateUrl`, view resolver target, or template path. |
+| server controller | Java file and line for `@RequestMapping`, `@GetMapping`, or equivalent. |
+| host entry | MPA HTML/TS entry, Vue Router route, menu registration, or shell mount. |
+| mapping status | candidate, confirmed, unresolved, host-only-candidate. |
+
+File-path URL guesses are low confidence. Do not use guessed URLs as acceptance criteria without route/menu/runtime evidence.
 
 ## Mixed-Stack Page Closure
 
@@ -175,11 +209,26 @@ Generate reports from repository evidence:
 - page inventory
 - host stack
 - page comparison
+- URL / entry mapping
 - coupling counts
 - page closures for selected units
 - validation gates
 
 Do not fill generic implementation templates without code evidence. Empty FLOW/VAR/CHAIN tables are allowed only for a specified unit as a contract, not for the whole repository.
+
+## Design-Ready Gate
+
+Do not enter Delivery framing from a header-only design contract. A unit is design-ready only when it has:
+
+- page closure: source templates/fragments/scripts/controllers/services/APIs/assets
+- at least 1-2 filled business-flow rows for material actions
+- material variable/API chains, or explicit unresolved edges with runtime checks
+- host reuse/change/create decisions
+- old source URL to new host entry mapping backed by Java/menu/MPA evidence
+- permission/session/API parity draft
+- rollback switch and condition
+
+If these are empty or only table headers, mark the design gate `not-ready: empty-contract` and remain in design.
 
 ## Concrete Gates
 
