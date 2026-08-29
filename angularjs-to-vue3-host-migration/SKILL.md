@@ -7,7 +7,7 @@ description: Use when assessing, designing, or verifying migration of AngularJS 
 
 Use this skill to produce evidence and page-level designs for moving AngularJS 1.x, jQuery, JSP, Thymeleaf, and server-rendered page islands into an existing Vue 3 host. Default to **hosted migration**: source repo A supplies legacy behavior; host repo B owns the final entry, shell, auth, build, API conventions, components, state, i18n, proxy, and runtime gates.
 
-This skill is independent. Do not depend on `delivery-*` or other migration skills. Reuse ideas only by restating the needed rule here.
+This skill is independent and read-only for application code. Do not depend on `delivery-*` or other migration skills, and do not edit source A or host B application files from this skill. Reuse ideas only by restating the needed rule here.
 
 ## Modes
 
@@ -16,7 +16,7 @@ This skill is independent. Do not depend on `delivery-*` or other migration skil
 - `verify`: define and/or run parity checks for behavior, permission, URL, API, display contract, visual evidence, rollback, and host build gates.
 - `greenfield`: use only when the user explicitly has no Vue3 host. This is not the default path.
 
-`design` accepts `profile=repair` when the host already has the unit's entry and the goal is source parity repair. See Shell-Page Repair in `references/hosted-vue3-migration-method.md`.
+`design` may be scoped as repair when the host already has the unit's entry and the goal is source parity repair, but it still produces evidence, matrix updates, and slice plans only. There is no execute mode. See Shell-Page Repair in `references/hosted-vue3-migration-method.md`.
 
 Default mode is `assess` unless the user names a page or asks for implementation design/verification.
 
@@ -96,6 +96,14 @@ These commands discover candidates only. Read definitions, callers, templates, c
 - Do not copy source A JSP/Thymeleaf global layout into host B. You **must** still extract the page-level CSS closure, including the shared `common.css` / sprite / plugin styles the page assumes, and reproduce it host-native and page-scoped in B. Never assume source global styles still exist.
 - Land source i18n text verbatim. Source `zh.json` / `en.json` entries are the acceptance baseline; do not paraphrase, shorten, or change punctuation. Any deviation needs its own matrix row with reason and approver.
 - Every visible number, list, label, and badge needs an API plus a field formula. Sums, joins, select-all titles, and derived counters belong in the chain tables, not in prose.
+- Apply `Source Contract Gates` from `references/hosted-vue3-migration-method.md`: navigation landing, comparison and identity mapping, shared modal modes, hit layer, selector-to-DOM binding, CSS utility closure, interruption hygiene, and contract test harness.
+- Strip source absolute URLs in menu/cache/`data-href`/open handlers to the current source path before deciding a host landing. If B is only a skeleton, keep the source URL until parity is proven, and make every UNIT exit share one landing function.
+- Preserve comparison operators, runtime types, and identity-field provenance. Do not replace source hidden/global/session/user fields with a nearby host store getter unless the mapping is proven.
+- Verify restored CSS against the rendered DOM and click targets: selectors must hit real B nodes, source utility classes used by the template must be present, and layout fixes must not cover other controls.
+- CSS closure must cover template utility classes, sprite/icon size classes, runtime-hidden switch classes, empty-state images, and cascade safety for source state classes.
+- In repair scope, use mounted wrapper evidence (`ui-view`, `ng-include`, directives, includes, routes, runtime) to decide which views are in the UNIT. Same-wrapper discoveries may extend repair design; different wrappers or API/permission/traffic changes escalate.
+- Without browser automation or equivalent runtime evidence, keep affected visibility, hit-layer, modal, sprite, and entry-wiring rows `wired-unverified`; manual refresh notes are not agent-owned verification.
+- Split public dialogs by mode when buttons, copy, validation, side effects, or navigation differ.
 - Treat an existing host shell page as `partial-overlap` and produce a display-contract matrix. One or two click flows do not release it.
 - A slice is complete only when the host entry mounts it, it calls its API, and the user can reach it in the browser. Adding `lib/` helpers or component files alone is not complete.
 - Do not default to creating a Vue3 skeleton. Use greenfield Vite/create-vue only when no host exists.
@@ -119,6 +127,7 @@ Read these host facts before landing code, and record them as parity requirement
 
 - `lintOnSave`, dev-server overlay scope, TS `noImplicitAny`/`strict`, Prettier/EditorConfig indentation.
 - Actual `node -v` versus host-declared Volta/`.nvmrc`/`engines.node`. A test or build run on a different Node is not verification evidence.
+- New or changed TS helpers in the selected UNIT must type callback parameters and empty arrays/objects when host strictness can infer implicit `any`, `any[]`, or `never[]`.
 - Do not reformat, retype, or otherwise "fix along the way" legacy files outside approved scope. Host `lintOnSave` can turn an unrelated dirty file into a full-page overlay; record those files as residuals with an owner instead of editing them.
 - A compile failure on the current unit's entry is blocking. A repo-wide overlay from unrelated files is a residual, and neither may be reported as a healthy dev server.
 

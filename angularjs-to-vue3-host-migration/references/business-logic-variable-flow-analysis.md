@@ -56,6 +56,7 @@ For each definition and use, record the owning scope/function and lifetime. Reso
 - controller, service, factory, provider, filter, and ordinary closure
 - function arguments, return values, callbacks, Promise handlers, and event payloads
 - jQuery `data-*`, hidden fields, plugin-managed state, and globals
+- comparison operators and runtime types when they affect branches, display, payloads, navigation, or permissions
 
 Do not assume an unqualified template expression resolves to a similarly named `$rootScope` path. Record the edge as unresolved until scope inheritance, binding, or runtime evidence proves it.
 

@@ -52,6 +52,8 @@ angular.module("legacyTask", []).controller("TaskController", function ($scope) 
             source / "src/main/webapp/libs/angular-1.6.6/angular.js",
             "angular.module('vendor').controller('Noise', function ($scope) {});",
         )
+        write(source / "src/main/webapp/lib/common.css", ".mg0{margin:0}.open{display:block}")
+        write(source / "src/main/webapp/locale/zh.json", "{\"query\":\"查询\"}")
         write(source / "src/main/webapp/views/projectProgress.jsp", "<div th:text=\"${name}\"></div>")
         write(
             source / "src/main/resources/templates/thymeleaf/workBench/index.html",
@@ -67,6 +69,15 @@ angular.module("legacyTask", []).controller("TaskController", function ($scope) 
     <input ng-model="$ctrl.query">
   </li>
 </ul>
+""",
+        )
+        write(
+            source / "app/phone-detail.template.html",
+            """
+<section>
+  <h1>{{$ctrl.phone.name}}</h1>
+  <p>{{$ctrl.phone.description}}</p>
+</section>
 """,
         )
         write(
@@ -144,7 +155,20 @@ public class PageController {
             host / "openspec/changes/migrate-phone-detail-to-vue3-host/evidence/angularjs-hosted-vue3-migration/assess/assess-evidence.html",
             "<html><body>phone detail evidence report</body></html>",
         )
-        write(host / "src/router/index.ts", "createRouter({ routes: [] }); router.beforeEach(authGuard);")
+        write(
+            host / "src/router/index.ts",
+            """
+import { createRouter } from 'vue-router';
+import PhoneList from '../views/PhoneList.vue';
+
+const router = createRouter({
+  routes: [
+    { path: '/phones', component: PhoneList },
+  ],
+});
+router.beforeEach(authGuard);
+""",
+        )
         write(host / "vite.config.ts", "export default { server: { proxy: { '/api': 'http://localhost' } } }")
         init_git_repo(source)
         init_git_repo(host)
@@ -238,6 +262,8 @@ public class PageController {
             self.assertIn("/hiapm/workBench", url_mapping_text)
             self.assertIn("#!/phones", url_mapping_text)
             self.assertIn("app/phone-list.template.html", url_mapping_text)
+            self.assertIn("Vue Router /phones", url_mapping_text)
+            self.assertIn("src/views/PhoneList.vue", url_mapping_text)
             self.assertIn("src/pages/workbench/workbench.ts", url_mapping_text)
             self.assertIn("PageController.java", url_mapping_text)
             self.assertNotIn("assess-evidence.html", url_mapping_text)
@@ -259,6 +285,16 @@ public class PageController {
             host_pages_text = "\n".join(",".join(row) for row in host_pages)
             self.assertIn("host-shell", host_pages_text)
             self.assertNotIn("assess-evidence.html", host_pages_text)
+
+            display_contract = self.read_csv(output_dir / "csv" / "15-display-contract.csv")
+            display_contract_text = "\n".join(",".join(row) for row in display_contract)
+            self.assertIn("DISP-", display_contract_text)
+            self.assertIn("wired-unverified", display_contract_text)
+
+            closure_resources = self.read_csv(output_dir / "csv" / "14-source-closure-resources.csv")
+            closure_resources_text = "\n".join(",".join(row) for row in closure_resources)
+            self.assertIn("src/main/webapp/lib/common.css", closure_resources_text)
+            self.assertIn("src/main/webapp/locale/zh.json", closure_resources_text)
 
             recommended = self.read_csv(output_dir / "csv" / "09-recommended-units.csv")
             self.assertNotEqual("index", recommended[1][1])
@@ -283,9 +319,85 @@ public class PageController {
             variable_chain = self.read_csv(output_dir / "csv" / "13-variable-chain-contract.csv")
             design_gate_text = "\n".join(",".join(row) for row in design_gate)
             self.assertIn("core flows", design_gate_text)
+            self.assertIn("display-contract matrix", design_gate_text)
+            self.assertIn("CSS closure", design_gate_text)
+            self.assertIn("source contract gates", design_gate_text)
             self.assertIn("not-ready: empty-contract", design_gate_text)
             self.assertEqual([business_flow[0]], business_flow)
             self.assertEqual([variable_chain[0]], variable_chain)
+
+    def test_source_only_assess_is_supported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source, _host = self.create_fixture(root)
+            output_dir = root / "reports"
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(GENERATOR),
+                    "--project-name",
+                    "source-only",
+                    "--source-repo",
+                    str(source),
+                    "--output-dir",
+                    str(output_dir),
+                    "--format",
+                    "all",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            markdown = (output_dir / "assess-evidence.md").read_text(encoding="utf-8")
+            self.assertIn("[not provided]", markdown)
+            acquisition = self.read_csv(output_dir / "csv" / "01-repo-acquisition.csv")
+            acquisition_text = "\n".join(",".join(row) for row in acquisition)
+            self.assertIn("not-provided", acquisition_text)
+            self.assertIn("source-only assess", acquisition_text)
+
+    def test_verify_unmigrated_unit_outputs_fail(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source, host = self.create_fixture(root)
+            output_dir = root / "reports"
+            self.run_generator(output_dir, source, host, "verify", "--unit", "phone-detail")
+
+            markdown = (output_dir / "verify-evidence.md").read_text(encoding="utf-8")
+            self.assertIn("领域复核结论", markdown)
+            self.assertIn("| fail | selected unit is unmigrated |", markdown)
+            verify_result = self.read_csv(output_dir / "csv" / "16-verify-result.csv")
+            self.assertIn(["fail", "selected unit is unmigrated"], verify_result)
+
+    def test_design_requires_unit_and_accepts_read_only_repair_profile(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source, host = self.create_fixture(root)
+            output_dir = root / "reports"
+
+            missing_unit = subprocess.run(
+                [
+                    sys.executable,
+                    str(GENERATOR),
+                    "design",
+                    "--source-repo",
+                    str(source),
+                    "--host-repo",
+                    str(host),
+                    "--output-dir",
+                    str(output_dir),
+                ],
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(0, missing_unit.returncode)
+            self.assertIn("design mode requires --unit", missing_unit.stderr)
+
+            self.run_generator(output_dir, source, host, "design", "--unit", "PhoneList", "--profile", "repair")
+            markdown = (output_dir / "design-evidence.md").read_text(encoding="utf-8")
+            self.assertIn("Profile：`repair`", markdown)
+            self.assertIn("只读合同/切片计划", markdown)
 
 
 if __name__ == "__main__":

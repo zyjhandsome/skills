@@ -9,9 +9,8 @@
 > `angularjs-to-vue3-host-migration` 仍保持独立：产出领域证据、页级设计和领域复核，不调用 Delivery。
 > Delivery Family 仍独立负责 OpenSpec、批准、计划、实施、Fresh Verification。
 >
-> 两条路径的 B 写权限不同：主路径（7 Wave）由 `delivery-execute-verify` 独占写 B；
-> 快路径（Wave 2.5 壳页对等修复）在用户明确授权且不越出源站对等范围时，在同一会话内写 B，
-> 不经过 Frame/Plan。其余所有 Wave 对 A/B 应用代码只读。
+> `delivery-execute-verify` 是唯一应用代码 mutation owner；其余 Wave 对 A/B 应用代码只读。
+> Wave 2.5 只产出壳页对等修复合同和切片计划，不直接写 B。
 
 ## 0. 编排结论
 
@@ -29,25 +28,28 @@ Wave 1  建 change（无规格闸门）
   → Wave 7  angularjs verify
 ```
 
-快路径（Wave 2.5 Repair）适用于“**B 已有该 UNIT 的入口壳页，目标是对照源站对等修复**”：
+壳页修复检查点（Wave 2.5 Repair Design）适用于“**B 已有该 UNIT 的入口壳页，目标是对照源站对等修复**”：
 
 ```text
 Wave 1  建 change
   → Wave 2  angularjs assess（必须产出控件矩阵）
-  → Wave 2.5  Repair：按区域切片修 B + 增量 display-contract verify
+  → Wave 2.5  Repair Design：补齐合同 + 按区域切片
+  → Wave 4  Delivery Frame 规格批准
+  → Wave 5  Delivery Plan + 实施 go
+  → Wave 6  Delivery Execute + Fresh Verification
   → Wave 7  angularjs verify
 ```
 
-选路判定（三条全真才走快路径）：
+选路判定（三条全真才走壳页修复检查点）：
 
-| 条件 | 快路径 | 主路径 |
+| 条件 | 壳页修复检查点 | 主路径 |
 |---|---|---|
 | B 已有该 UNIT 的 MPA/router 入口证据 | 是 | 否或未证明 |
 | 目标是源站对等修复，不新增 API 契约、不改权限模型、不涉及切流 | 是 | 否 |
-| 用户已授权本轮修改 B | 是 | 需先走 Frame/Plan 批准 |
+| 本轮是否修改 B 应用代码 | 否 | 否，直到 Wave 6 |
 
-快路径中一旦发现缺接口、要动权限模型、要加源站没有的行为，或源闭包当初漏扫了整个区域，
-立即停止并升级回 Wave 3/4。
+Wave 2.5 中同一 mounted wrapper 内后发现的源站区域可继续补合同；一旦发现缺接口、要动权限模型、
+要加源站没有的行为、不同页面/wrapper，或选定 wrapper 当初完全漏扫，立即停止并回到 Wave 3/4。
 
 ### 职责边界
 
@@ -56,14 +58,14 @@ Wave 1  建 change
 | `angularjs-to-vue3-host-migration` | 双仓领域事实：A/B 页面对照、混合栈闭包、AngularJS/jQuery/服务端模板行为链、URL/API/权限/回退合同、最终领域复核 |
 | `delivery-frame-spec` | 创建或恢复 OpenSpec change，写 proposal/spec，完成范围与规格批准 |
 | `delivery-plan-tasks` | 写 design/tasks、纵向切片、就绪审查、实施闸门 |
-| `delivery-execute-verify` | 主路径唯一应用代码 mutation owner；只修改 Vue3 宿主 B；完成 Fresh Verification、独立审查和 verified handoff |
-| Wave 2.5 Repair | 快路径唯一写 B 的会话；只做源站对等修复，越界即升级回 Wave 3/4 |
+| `delivery-execute-verify` | 唯一应用代码 mutation owner；只修改 Vue3 宿主 B；完成 Fresh Verification、独立审查和 verified handoff |
+| Wave 2.5 Repair Design | 壳页对等修复的只读领域检查点；补齐合同、切片计划和升级判定 |
 | OpenSpec change | Delivery 生命周期和批准状态真相 |
 | 本剧本 | 只规定会话顺序、提示词、工件交接和停止点 |
 
 固定原则：
 
-- A 始终只读；只有 Wave 6（主路径）或 Wave 2.5（快路径）可以修改 B 的应用代码。
+- A 始终只读；只有 Wave 6 可以修改 B 的应用代码。
 - 迁移默认 High 风险；迁移单元必须是独立可切换页面或用户行为，不能默认整仓迁。
 - 落地规则、控件矩阵、交互等价、i18n 原文、CSS 闭包、切片完成定义、宿主编译层：
   见 `angularjs-to-vue3-host-migration` 的 Hosted Migration Rules / Display Contract /
@@ -76,10 +78,10 @@ Wave 1  建 change
 ### 1.1 用户怎么使用
 
 1. 首次使用时，在“会话通用头”填写 A、B、UNIT 三个必填值。
-2. 每个 Wave 开一个全新会话，粘贴“会话通用头 + 当前 Wave 代码块”。
-3. 当前 Wave 完成并停止后，再开下一个 Wave。
+2. 默认每个 Wave 开一个全新会话，粘贴“会话通用头 + 当前 Wave 代码块”。
+3. 当前 Wave 完成并停止后，再开下一个 Wave；若用户在同一会话说“继续”，只能继续当前 Wave 的剩余工作，写权限仍按当前 Wave。
 4. Wave 2 结束时会给出选路结论：壳页对等修复走 Wave 2.5，其余走 Wave 3。
-5. 用户只处理真正阻塞的问题、规格批准、实施批准或对等修复范围批准；
+5. 用户只处理真正阻塞的问题、规格批准、隐藏/显示偏差批准或实施批准；
    不需要手工维护 digest、revision、任务状态。
 
 ### 1.2 会话通用头
@@ -125,9 +127,10 @@ Repo Acquisition And Revision Binding 与 Git Hygiene Gate 执行并记录。
 
 固定边界（本剧本唯一权限声明，其余落地规则见 Skill）：
 - A 始终只读；A 出现业务代码修改通常使领域证据 stale。
-- 主路径只有 Wave 6（delivery-execute-verify）可修改 B 应用代码；快路径只有 Wave 2.5 可修改 B。
+- 只有 Wave 6（delivery-execute-verify）可修改 B 应用代码。
 - 其余所有 Wave 对 A/B 应用代码只读。
-- 禁止新功能、无关重构、Vue2、@vue/compat、长期桥接依赖进入 B。
+- 禁止源站闭包外的新功能、无关重构、Vue2、@vue/compat、长期桥接依赖进入 B。
+- 源码存在但 SIT/运行时隐藏的闭包内功能默认保持隐藏；要显示或隐藏差异必须有 approved-deviation。
 - 禁止对获批范围外的遗留文件做格式化、缩进转换或“顺手”类型补全。
 - 部署、切流、A 下线、删除 fallback 不在本轮；保护 A/B 已有 staged/unstaged/untracked 用户改动。
 
@@ -170,7 +173,7 @@ OpenSpec 的 proposal、spec、design、tasks、verification、handoff 仍是 De
 
 应已存在：无。
 
-硬前提：B 的 OpenSpec 可写；Codebase Memory 可索引/查询 A/B。
+硬前提：B 的 OpenSpec 可写；优先使用 Codebase Memory 索引/查询 A/B，不可用时按 Skill fallback 并记录原因。
 openspec: cli-only 时按 Frame Skill 固定三行报告，并询问 initialize_repo；
 不得发明平行 Markdown 状态。
 
@@ -219,6 +222,8 @@ proposal 保持草稿。不要询问范围批准，不要写规格批准，不�
 - <UNIT> 的候选 source entry、真实 source URL 与 host landing point
 - 若 <UNIT> 判为 `partial-overlap`：把首轮控件矩阵写入 <MATRIX>，每行填 `B 现状`
   （missing / mismatched / wired-unverified / verified / approved-deviation）
+- 源站契约门禁首扫：模板/脚本比较运算、hidden/global/session 身份字段、`data-href`/菜单/缓存绝对 URL、
+  公共 modal 模式、模板实际使用的 CSS 工具类
 - gaps blocking design 与推荐迁移单元依据
 
 可运行脚本生成证据基线：
@@ -243,68 +248,71 @@ source/host page comparison、URL/entry mapping、host compile overlay、<MATRIX
 若 <UNIT> 缺少真实 source URL 或 B host entry 证据，输出回流字段并停止。
 若 <UNIT> 在 A 或 B 中无法定位，输出回流字段并停止。
 否则给出选路结论：
-- <UNIT> 判为 `partial-overlap`、B 入口已证明、且目标是对等修复 → 下一步 Wave 2.5 Repair
+- <UNIT> 判为 `partial-overlap`、B 入口已证明、且目标是对等修复 → 下一步 Wave 2.5 Repair Design
 - 其他情况 → 下一步 Wave 3 Design
 然后停止。
 ```
 
-## 3.5 Wave 2.5：壳页对等修复（快路径）
+## 3.5 Wave 2.5：壳页对等修复设计检查点
 
 只在 §0 选路三条件全真时使用。新会话粘贴“会话通用头”，再粘贴：
 
 ```text
-显式使用 angularjs-to-vue3-host-migration Skill，mode=design，unit=<UNIT>，profile=repair。
-本波是快路径下唯一允许修改 B 应用代码的 Wave；A 严格只读。
+显式使用 angularjs-to-vue3-host-migration Skill，mode=design，unit=<UNIT>，repair-scope。
+本波只产出壳页对等修复合同和切片计划，不修改 A/B 应用代码。
 
 应已存在：<CONFIG>、Wave 2 assess evidence、<MATRIX>、B 侧 <UNIT> 的 MPA/router 入口证据。
 缺任一项则回 Wave 2。
 
 读取 hosted-vue3-migration-method 的 Landing Rules、Interaction Equivalence Test、
 Display Contract Matrix、Page Init And Side Effects、CSS Closure、Host Compile Overlay、
-Shell-Page Repair；按需读取 jquery 与 variable-flow references。
+Shell-Page Repair、Source Contract Gates；按需读取 jquery 与 variable-flow references。
 不要读取 angularjs-vue3-migration-method（绿场）。
 
 准入校验，任一不成立就停止并转 Wave 3：
 - <UNIT> 在 B 已有入口且用户可访问
 - 目标是源站对等修复：不新增 API 契约、不改权限模型、不加源站没有的行为、不涉及切流或回退范围变更
-- 用户已授权本轮修改 B
 
-Step 1 补齐合同（只读）：
+Step 1 补齐合同：
 刷新 <MATRIX>，并补 page-init 表、源 i18n 原文表、CSS 闭包表。
 每个可见数字/列表必须写出 API + 字段公式（求和、拼接、全选标题都要写）。
-矩阵缺行、`B 现状` 空、或存在只有表头的表，禁止进入 Step 3。
+补齐源站契约门禁：身份字段、比较契约、命中层、选择器↔DOM、绝对 URL 剥源、
+B 骨架不改导航、同一 UNIT 所有出口共用落地函数。
+CSS 闭包必须盘点模板 utility、Bootstrap 形态 class、sprite/icon size、runtime-hidden switch、
+空态图文、状态类 cascade safety。源码有但 SIT/运行时隐藏的功能默认保持隐藏；若要显示，必须记录 approved-deviation。
+矩阵缺行、`B 现状` 空、或存在只有表头的表，禁止进入 Step 2。
 
-Step 2 一次范围批准：
-按区域列出切片顺序与每片涉及的 <MATRIX> 行 ID，询问一次“对等修复范围批准”，
-绑定当前 A/B revision 与 <MATRIX> digest。未获批准不得改 B。
-OpenSpec 记录可选；若已有 change，把 <MATRIX> path/digest 写入 external_artifacts。
+Step 2 产出 repair slice plan：
+按区域列出切片顺序、每片涉及的 <MATRIX> 行 ID、拟改 B 文件/入口/API/store/component、
+验证步骤、Source Contract Gates、可执行 display-contract 测试、无浏览器自动化 residual、
+升级条件、rollback/fallback 影响。
+若已有 change，把 <MATRIX> path/digest 和 repair slice plan 写入 external_artifacts。
 
-Step 3 逐片修复（可改 B）：
-每片按顺序执行，不并行：
-1. 复述该片的源合同：源文案原文、控件形态、字段公式、默认值/校验、几何、CSS 依赖、启动副作用
-2. 改 B，只动本片范围内文件
-3. 确认入口已挂载并被调用（未挂到入口的 helper/组件不算完成）
-4. 在浏览器走一遍：默认值、空态、校验、错误态；对可见文案与可见数字确认运行时真的可见
-   （DOM 存在不等于可见，注意 `font-size: 0`、sprite 缺失、被覆盖样式）
-5. 把该片 <MATRIX> 行原地更新为 verified / approved-deviation / 仍 mismatched，并写证据
+Step 3 design-ready 判定：
+对每片复述源合同：源文案原文、控件形态、字段公式、默认值/校验、几何、CSS 依赖、启动副作用。
+确认切片完成判据、entry-wiring 检查、运行时可见性检查、命中层/选择器↔DOM/导航落地/身份字段/比较契约检查都写进计划。
+确认闭包以已挂载 wrapper 为准：`ui-view`、`ng-include`、指令、server include、路由/菜单和运行时证据。
+计划不能把未实施行标为 verified；只能保留 missing / mismatched / wired-unverified / approved-deviation。
 
-Preflight 与卫生（每片都查）：
-- 当前入口能否编译；当前 UNIT 入口编译失败为阻塞
+Preflight 与卫生：
+- 中断恢复先扫重复弹窗、重复函数/落地 helper、重复 hash/route 写入、未闭合模板/脚本/样式
+- 记录当前入口是否已可编译；当前 UNIT 入口编译失败是后续 Execute 的阻塞项
 - 列出 `lintOnSave` 会扫到的范围外脏文件；这些文件记为 residual，禁止顺手格式化或补类型
 - 全仓无关 overlay 记 residual，不得声明 dev server 健康
-- 运行 git status 列出 intended files；依赖目录、构建产物、未解释 lockfile 变化一律阻塞
+- 运行 git status 记录 B 当前用户改动；本波没有 intended application files
 - 记录实测 `node -v` 与宿主声明基线；版本不符的运行结果不算验证证据
 
 升级条件（出现即停止，输出回流字段）：
 - 缺接口或接口契约需要变更 → Wave 4
 - 需要改权限模型或新增源站没有的行为 → Wave 4
-- 源闭包当初漏扫了整个区域 → Wave 3
+- 同一 wrapper 内后发现源站区域 → 留在本波补矩阵和 slice plan
+- 发现不同页面/wrapper，或源闭包当初没有扫到选定 wrapper → Wave 3
 - 需要切流、灰度或回退范围变更 → Wave 4
 
-结束输出：本波完成的切片、<MATRIX> 行状态统计、residual 与 blocker、
-intended files、node 版本、<MATRIX> path/digest。
+结束输出：repair slice plan、<MATRIX> 行状态统计、residual 与 blocker、
+node 版本、<MATRIX> path/digest、external_artifacts 更新位置。
 不要 archive、commit、push、PR、部署、切流。
-说明下一步为 Wave 7 领域 verify（或继续下一批切片），然后停止。
+说明下一步为 Wave 4 Frame；若不走 2.5，则走 Wave 3 Design。然后停止。
 ```
 
 ## 4. Wave 3：AngularJS 领域 Design
@@ -326,6 +334,9 @@ business-logic-variable-flow-analysis。不要读取 angularjs-vue3-migration-me
 - 同一页 AngularJS + jQuery + 服务端模板合并成一个闭包，不拆成平行报告
 - 控件矩阵写入 <MATRIX>；page-init 表、源 i18n 原文表、CSS 闭包表齐备
 - 每个可见数字/列表都有 API + 字段公式
+- 共享弹窗按模式分行；导航落地写清源 URL、剥源后路径、B 是否骨架、最终回源还是进 B
+- 源站契约门禁写入设计：身份字段、比较契约、命中层、选择器↔DOM、绝对 URL 剥源、
+  B 骨架不改导航、同一 UNIT 出口共用落地函数
 - 切片为纵向切片，完成判据是“入口已挂载且用户可点到”，不是“helper 文件已存在”
 - FLOW/VAR/CHAIN 只针对 <UNIT>，不铺全仓空表
 
@@ -361,9 +372,9 @@ design/verify 脚本为可选；只在需要合同基线骨架时运行。
 显式使用 delivery-frame-spec Skill。
 不要 Plan/Execute。本波不得修改 A/B 应用代码。
 
-应已存在：<CHANGE_DIR>、Wave 3 design-ready domain evidence path/digest。
+应已存在：<CHANGE_DIR>、Wave 3 design-ready domain evidence path/digest，或 Wave 2.5 repair design-ready evidence path/digest。
 若只有 assess、design 未 ready、FLOW/CHAIN 只有表头、URL/entry 缺少真实证据，
-或 design-ready gate 未通过，停止并回 Wave 3。
+或 design-ready gate 未通过，停止并回 Wave 3；若来自 Wave 2.5 则回 Wave 2.5。
 
 从 domain evidence 摘要写入 external_artifacts：path、digest、A/B revision、<UNIT>、
 old URL、新 host entry 候选、rollback、blockers/residuals。
@@ -447,11 +458,17 @@ Preflight：
 - 只改 B 获批范围
 - 禁止对范围外遗留文件做格式化、缩进转换或顺手类型补全；这些文件记为 residual
 - 切片完成判据：入口已挂载、已调用 API、用户在页面上可点到；只加 helper/组件文件不算完成
+- 每片执行 Source Contract Gates：身份字段、比较契约、命中层、选择器↔DOM、绝对 URL 剥源、
+  B 骨架不改导航、同一 UNIT 出口共用落地函数
+- 每片执行 CSS closure gates：模板 utility、Bootstrap 形态 class、sprite/icon size、runtime-hidden switch、
+  空态图文、状态类 cascade safety、模态框/富文本替换偏差
+- 新增/修改 TS helper 时立即标注回调参数和空数组/对象类型，避免 `noImplicitAny` / `never[]` 编译红
 - 验证通过后才勾选任务
 
 发现范围/验收问题回 Wave 4；发现设计/任务/rollback 问题回 Wave 5；
 发现 A baseline 或领域闭包错误回 Wave 2/3。回流使用通用头字段。
 在已批准范围内按 <MATRIX> 行补片属于本波增量修复，不回流。
+同一 mounted wrapper 内后发现的源站区域，可在本波按 <MATRIX> 增量补片；不同页面/wrapper 或 API/权限/切流变化必须回流。
 
 Fresh Verification Gate：
 - B lint/build/test 或仓库现有等价命令
@@ -460,6 +477,10 @@ Fresh Verification Gate：
 - page-init 对照：`run` 块、controller init、定时器/延迟弹窗、首屏请求、默认筛选值
 - display-contract parity：<MATRIX> 逐行过，检查源文案原文、控件形态、字段公式、默认值/校验、
   几何、CSS 依赖；对可见文案与可见数字确认运行时真的可见（DOM 存在不等于可见）
+- source-contract gates：身份字段、比较契约、共享弹窗模式、命中层、选择器↔DOM、
+  绝对 URL 剥源、B 骨架不改导航、同一 UNIT 出口落地一致、合约测试加载方式
+- executable display-contract tests：有则跑宿主工具链测试，覆盖文案、CSS class、API payload、公式、entry wiring；测试证据不替代 <MATRIX>
+- browser/runtime visibility：无浏览器自动化或无法自验时，输出需人工刷新项和未自验行；这些行保持 wired-unverified，不得标 verified
 - entry-wiring parity：每个切片已挂载、已调用、用户可达
 - rollback/fallback 演练
 - OpenSpec coherence
@@ -488,10 +509,8 @@ residual 清单、verification、handoff path/revision。说明下一步为 Wave
 显式使用 angularjs-to-vue3-host-migration Skill，mode=verify，unit=<UNIT>。
 本波不修改 A/B 应用代码。
 
-主路径应已存在：Delivery verification、verified handoff、当前 B 代码、领域 assess/design evidence。
+应已存在：Delivery verification、verified handoff、当前 B 代码、领域 assess/design evidence。
 Delivery 未 verified 则回 Wave 6，不得声称迁移完成。
-快路径应已存在：Wave 2.5 的范围批准记录、<MATRIX>、当前 B 代码、assess evidence；
-缺失则回 Wave 2.5。
 
 先校验：
 - A revision 是否仍等于领域证据绑定 revision；变化则回 Wave 2
@@ -506,6 +525,12 @@ Delivery 未 verified 则回 Wave 6，不得声称迁移完成。
 - entry-wiring parity
 - permission parity
 - URL parity
+- source-contract gates：身份字段、比较契约、共享弹窗模式、命中层、选择器↔DOM、
+  绝对 URL 剥源、B 骨架不改导航、同一 UNIT 所有出口落地一致、合约测试加载方式
+- CSS closure gates：模板 utility、Bootstrap 形态 class、sprite/icon size、runtime-hidden switch、
+  空态图文、状态类 cascade safety、模态框/富文本替换偏差
+- executable display-contract tests：有则引用宿主工具链测试结果；不替代 <MATRIX>
+- browser/runtime visibility：无浏览器自动化或无法自验的行保持 wired-unverified，Wave 7 不得 pass
 - API parity
 - visual measurement parity：只有存在截图/测量/差异证据才能下结论；否则标 manual-only，
   且 manual-only 不覆盖任何 display-contract 行
@@ -527,9 +552,8 @@ python angularjs-to-vue3-host-migration/scripts/generate_migration_plan.py verif
 URL、API、runtime/build、rollback 全部通过，且 visual 测量结论有证据或明确标为人工未证明，
 才能输出领域 pass / conditional pass。
 <MATRIX> 存在 `missing` 或 `mismatched` 行时不得 pass。
-领域 pass / conditional pass 仍不是完成声明；主路径必须同时引用 Delivery verified handoff、
-当前 host revision、Git Hygiene 无阻塞和无 blocking residual；快路径必须引用 Wave 2.5
-范围批准记录、当前 host revision 与同样的卫生结论。
+领域 pass / conditional pass 仍不是完成声明；必须同时引用 Delivery verified handoff、
+当前 host revision、Git Hygiene 无阻塞和无 blocking residual。
 
 结束输出：
 - final domain evidence path/digest 与 <MATRIX> path/digest
@@ -554,7 +578,7 @@ fail：不要直接改代码；按回流表返回对应 Wave，然后停止。
 | 目标、验收、范围、允许差异错误 | Wave 4 Frame |
 | 需要新增/变更 API 契约或权限模型 | Wave 4 Frame |
 | 技术方案、任务拆分、兼容、rollback、验证矩阵错误 | Wave 5 Plan |
-| 已批准范围内的 B 实现缺陷 | Wave 6 Execute / Wave 2.5 Repair |
+| 已批准范围内的 B 实现缺陷 | Wave 6 Execute |
 | 控件矩阵已有行不达标（文案、控件形态、默认值、几何、字段公式、CSS） | 当前实施波内增量补片，不回流 |
 | Delivery 未 verified | Wave 6 Execute |
 | A revision 变化 | Wave 2 Assess |
@@ -576,8 +600,7 @@ decision_needed / recommended_resolution / resume_point
 - B 为 Vue3 host-native 实现，未引入 Vue2 / `@vue/compat` / 长期桥接；
 - OpenSpec、批准、tasks、verification 和领域证据均绑定当前 revision；
 - A/B Codebase Memory 或 fallback 证据均绑定当前 revision；
-- 主路径：Delivery verified、High 独立审查、必要的 G9 或 manual-only 视觉说明完成；
-  快路径：Wave 2.5 范围批准记录有效，且未出现升级条件；
+- Delivery verified、High 独立审查、必要的 G9 或 manual-only 视觉说明完成；
 - <MATRIX> 每一行为 `verified` 或 `approved-deviation`，无 `missing` / `mismatched`；
 - 每个切片通过 entry-wiring parity：入口已挂载、已调用、用户可达；
 - AngularJS domain verify 的 behavior、page-init、display-contract、permission、URL、API、
@@ -597,7 +620,7 @@ decision_needed / recommended_resolution / resume_point
 
 - 三个必填值只填一次：A、B、UNIT。
 - 每个 Wave 只复制通用头和一个增量提示词。
-- 壳页对等修复走快路径：Wave 1 → 2 → 2.5 → 7，只需一次范围批准。
+- 壳页对等修复可走检查点路径：Wave 1 → 2 → 2.5 → 4 → 5 → 6 → 7。
 - 只处理阻塞问题、规格批准和实施批准。
 - 不需要手工维护 JSON、digest、revision 或任务状态。
 
@@ -605,7 +628,7 @@ decision_needed / recommended_resolution / resume_point
 
 - 每个 Wave 都有明确 Skill/mode、状态源、权限范围、输入工件、完成门禁和输出。
 - 领域证据与 Delivery 生命周期不争夺状态权威。
-- 只有 Wave 6（主路径）或 Wave 2.5（快路径）修改 B。
+- 只有 Wave 6 修改 B。
 - 显示合同在 <MATRIX> 单点维护，跨 Wave 只更新行状态，不重开分析。
 - revision/digest/approval 绑定防止用旧证据宣布完成。
 

@@ -38,6 +38,9 @@ EXCLUDED_DIRS = {
     "__tests__",
     "vendor",
     "vendors",
+}
+
+RESOURCE_CLOSURE_DIRS = {
     "lib",
     "libs",
     "locale",
@@ -69,6 +72,7 @@ SOURCE_PAGE_EXTS = {".jsp", ".jspx", ".html", ".htm", ".ftl", ".vm"}
 HOST_PAGE_EXTS = {".vue", ".html", ".htm", ".jsx", ".tsx"}
 SOURCE_CODE_EXTS = {".java", ".kt", ".groovy", ".xml", ".properties", ".yml", ".yaml", ".json", ".js", ".ts"}
 HOST_CODE_EXTS = {".js", ".ts", ".vue", ".json", ".mjs", ".cjs", ".html", ".htm"}
+CSS_I18N_EXTS = {".css", ".scss", ".less", ".sass", ".json", ".properties"}
 
 SOURCE_SIGNALS = {
     "angularjs": r"ng-app|ng-controller|ng-repeat|ng-model|ng-src|ng-href|ng-if|ng-show|ng-hide|ng-class|ng-click|ng-change|angular\.module|\.controller\(|\.component\(|\.directive\(",
@@ -133,6 +137,7 @@ GATE_ROWS = [
     ["behavior", "输入、校验、分支、成功/失败/空态/加载态", "待补证据"],
     ["permission", "菜单、路由、按钮隐藏/禁用、服务端拒绝", "待补证据"],
     ["url", "旧深链、query/hash、重定向、前进后退、外链", "待补证据"],
+    ["source contract gates", "导航落地、比较/身份、共享弹窗、命中层、选择器-DOM、测试加载方式", "待补证据"],
     ["api", "端点、方法、参数/body、响应码、失败处理", "待补证据"],
     ["visual", "截图或测量证据；否则标 manual-only", "未测量前仅人工核对"],
     ["runtime", "宿主 Node、lockfile、既有 lint/build/test 命令", "待跑宿主命令"],
@@ -143,11 +148,30 @@ GATE_ROWS = [
 
 DESIGN_READY_ROWS = [
     ["page closure", "已识别源仓模板/片段/脚本/controller/service/API/资产", "not-ready: empty-contract"],
+    ["display-contract matrix", "每个源区域有稳定 DISP 行，partial-overlap 已填 B 现状", "not-ready: empty-contract"],
+    ["page-init", "run/controller init/定时器/首屏请求/默认筛选值已列出", "not-ready: empty-contract"],
+    ["source i18n text", "源 zh/en 或模板文案原文已逐项记录，偏离有批准", "not-ready: empty-contract"],
+    ["CSS closure", "页级 CSS、common/sprite/plugin/工具类依赖及 B 落地方式已列出", "not-ready: empty-contract"],
     ["core flows", "选定单元至少填实 1-2 条核心业务 FLOW", "not-ready: empty-contract"],
     ["variable/API chains", "已填实请求/响应/状态/DOM 链，或标未决并给出运行时检查", "not-ready: empty-contract"],
+    ["source contract gates", "导航落地、比较/身份、共享弹窗模式、命中层、选择器-DOM、测试加载方式已处理", "not-ready: empty-contract"],
+    ["entry-wiring", "切片完成判据写到入口挂载、API 调用、用户可达", "not-ready: empty-contract"],
     ["host decisions", "已给出宿主入口/路由/API/store/组件/i18n/样式的复用/改动/新建决策", "not-ready: empty-contract"],
-    ["URL mapping", "旧源 URL 到新宿主入口有 Java/菜单/MPA 证据", "not-ready: empty-contract"],
+    ["URL mapping", "旧源 URL 到新宿主入口有 Java/菜单/MPA/Vue Router 证据", "not-ready: empty-contract"],
     ["permission/API/rollback", "已起草权限/会话/API 对等与回退条件", "not-ready: empty-contract"],
+]
+
+DISPLAY_CONTRACT_HEADERS = [
+    "DISP-ID",
+    "源区域",
+    "可见文案（源 i18n 原文）",
+    "控件形态",
+    "API + 字段/公式",
+    "默认值/校验",
+    "依赖 CSS（页级 + common + sprite）",
+    "启动副作用",
+    "B 现状",
+    "证据",
 ]
 
 
@@ -158,13 +182,16 @@ def read_text(path: Path) -> str:
         return ""
 
 
-def iter_files(root: Path) -> Iterable[Path]:
+def iter_files(root: Path, include_resource_closure_dirs: bool = False) -> Iterable[Path]:
     for path in root.rglob("*"):
         if not path.is_file():
             continue
         rel = path.relative_to(root)
         parts = {part.lower() for part in rel.parts[:-1]}
-        if parts & EXCLUDED_DIRS:
+        excluded = set(EXCLUDED_DIRS)
+        if not include_resource_closure_dirs:
+            excluded |= RESOURCE_CLOSURE_DIRS
+        if parts & excluded:
             continue
         rel_text = str(rel).replace("\\", "/")
         if TEST_FILE_RE.search(path.name) or ARTIFACT_HTML_RE.search(rel_text):
@@ -233,13 +260,29 @@ def is_lockfile(path: str) -> bool:
     return Path(path).name in LOCKFILES
 
 
-def repo_acquisition_rows(args, source: Path, host: Path) -> list[dict[str, str]]:
+def repo_acquisition_rows(args, source: Path, host: Path | None) -> list[dict[str, str]]:
     warnings = {
         "source": args.source_acquisition_warning or "",
         "host": args.host_acquisition_warning or "",
     }
     rows = []
-    for role, repo in (("source", source), ("host", host)):
+    repos: list[tuple[str, Path | None]] = [("source", source), ("host", host)]
+    for role, repo in repos:
+        if repo is None:
+            rows.append(
+                {
+                    "repo_role": role,
+                    "repo_path": "",
+                    "acquisition_status": "not-provided",
+                    "acquisition_warning": warnings[role],
+                    "revision": "source-only",
+                    "revision_source": "unavailable",
+                    "dirty_entries": "0",
+                    "usable_for_stage": "no",
+                    "notes": "source-only assess; host landing design cannot be completed",
+                }
+            )
+            continue
         git_repo = is_git_repo(repo)
         status_paths = git_status_paths(repo) if git_repo else []
         status = "existing-git-repo" if git_repo else "path-exists-not-git"
@@ -261,9 +304,24 @@ def repo_acquisition_rows(args, source: Path, host: Path) -> list[dict[str, str]
     return rows
 
 
-def git_hygiene_rows(source: Path, host: Path) -> list[dict[str, str]]:
+def git_hygiene_rows(source: Path, host: Path | None) -> list[dict[str, str]]:
     rows = []
-    for role, repo in (("source", source), ("host", host)):
+    repos: list[tuple[str, Path | None]] = [("source", source), ("host", host)]
+    for role, repo in repos:
+        if repo is None:
+            rows.append(
+                {
+                    "repo_role": role,
+                    "status_entries": "0",
+                    "business_changes": "0",
+                    "src_or_webapp_changes": "0",
+                    "lockfile_changes": "0",
+                    "dependency_noise": "0",
+                    "stage_status": "source-only",
+                    "notes": "host repo not provided; host hygiene unavailable",
+                }
+            )
+            continue
         paths = git_status_paths(repo) if is_git_repo(repo) else []
         dependency_noise = [path for path in paths if is_dependency_noise(path)]
         lockfiles = [path for path in paths if is_lockfile(path)]
@@ -338,6 +396,57 @@ def detect_node(root: Path, package: dict) -> str:
     return "not declared"
 
 
+def actual_node_version() -> str:
+    try:
+        result = subprocess.run(["node", "-v"], check=True, capture_output=True, text=True)
+        return result.stdout.strip()
+    except Exception:
+        return "not measured"
+
+
+def detect_lint_on_save(root: Path) -> str:
+    for filename in ("vue.config.js", "vue.config.cjs", "vue.config.mjs"):
+        path = root / filename
+        text = read_text(path)
+        if not text:
+            continue
+        match = re.search(r"\blintOnSave\s*:\s*([^,\n}]+)", text)
+        if match:
+            return f"{match.group(1).strip()} ({filename})"
+    return "not detected"
+
+
+def detect_ts_strict(root: Path) -> str:
+    path = root / "tsconfig.json"
+    if not path.exists():
+        return "tsconfig not found"
+    try:
+        config = json.loads(read_text(path))
+    except json.JSONDecodeError:
+        return "tsconfig unreadable"
+    options = config.get("compilerOptions", {}) if isinstance(config, dict) else {}
+    strict = options.get("strict", "not set") if isinstance(options, dict) else "not set"
+    no_implicit_any = options.get("noImplicitAny", "not set") if isinstance(options, dict) else "not set"
+    return f"strict={strict}; noImplicitAny={no_implicit_any}"
+
+
+def detect_formatter_config(root: Path) -> str:
+    found = [
+        filename
+        for filename in (
+            ".prettierrc",
+            ".prettierrc.json",
+            ".prettierrc.js",
+            ".prettierrc.cjs",
+            "prettier.config.js",
+            "prettier.config.cjs",
+            ".editorconfig",
+        )
+        if (root / filename).exists()
+    ]
+    return ", ".join(found) if found else "not detected"
+
+
 def search_host_signal(root: Path, pattern: str) -> int:
     regex = re.compile(pattern, re.I)
     count = 0
@@ -381,6 +490,7 @@ def detect_host_stack(host: Path) -> list[dict[str, str]]:
         {"area": "build tool", "value": build_tool, "evidence": "package.json/config files"},
         {"area": "lockfile", "value": detect_lockfile(host), "evidence": "repository root"},
         {"area": "node", "value": detect_node(host, package), "evidence": "package engines/.nvmrc"},
+        {"area": "node actual", "value": actual_node_version(), "evidence": "node -v"},
         {"area": "vue", "value": versions.get("vue", "not declared"), "evidence": "package.json"},
         {"area": "router", "value": versions.get("vue-router", signal_value(host, "router")), "evidence": "package.json/source scan"},
         {"area": "state", "value": detect_state(versions, host), "evidence": "package.json/source scan"},
@@ -390,6 +500,9 @@ def detect_host_stack(host: Path) -> list[dict[str, str]]:
         {"area": "i18n", "value": versions.get("vue-i18n", signal_value(host, "i18n")), "evidence": "package.json/source scan"},
         {"area": "proxy", "value": signal_value(host, "proxy"), "evidence": "vite/vue/webpack config scan"},
         {"area": "mpa", "value": detect_mpa(host), "evidence": "scripts/getpage.js and src/pages/*/*.ts scan"},
+        {"area": "lintOnSave", "value": detect_lint_on_save(host), "evidence": "vue.config.js scan"},
+        {"area": "ts strict", "value": detect_ts_strict(host), "evidence": "tsconfig.json compilerOptions"},
+        {"area": "formatter", "value": detect_formatter_config(host), "evidence": "Prettier/EditorConfig files"},
         {"area": "permission/auth", "value": signal_value(host, "permission"), "evidence": "source scan"},
         {"area": "scripts", "value": ", ".join(sorted(scripts)) if scripts else "not declared", "evidence": "package.json"},
     ]
@@ -753,6 +866,59 @@ def template_from_inline(template: str, component_templates: dict[str, str]) -> 
     return component_templates.get(tag_match.group(1).lower(), "")
 
 
+def resolve_import_path(root: Path, from_file: Path, import_value: str) -> str:
+    if not import_value.startswith("."):
+        return import_value
+    candidate = (from_file.parent / import_value).resolve()
+    suffixes = ["", ".vue", ".ts", ".js", ".tsx", ".jsx", "/index.vue", "/index.ts", "/index.js"]
+    for suffix in suffixes:
+        path = Path(str(candidate) + suffix)
+        if path.exists() and root in path.parents:
+            return str(path.relative_to(root)).replace("\\", "/")
+    if root in candidate.parents:
+        return str(candidate.relative_to(root)).replace("\\", "/")
+    return import_value
+
+
+def extract_vue_router_entries(host: Path) -> list[dict[str, str]]:
+    entries = []
+    route_path_re = re.compile(r"\bpath\s*:\s*[\"']([^\"']+)[\"']", re.I)
+    component_ident_re = re.compile(r"\bcomponent\s*:\s*([A-Za-z_$][\w$]*)", re.I)
+    component_import_re = re.compile(r"\bcomponent\s*:\s*\(?\s*\)\s*=>\s*import\(\s*[\"']([^\"']+)[\"']\s*\)", re.I | re.S)
+    import_re = re.compile(r"import\s+([A-Za-z_$][\w$]*)\s+from\s+[\"']([^\"']+)[\"']", re.I)
+
+    for path in iter_files(host):
+        rel = path.relative_to(host)
+        rel_text = str(rel).replace("\\", "/")
+        if path.suffix.lower() not in {".js", ".ts", ".mjs", ".cjs"}:
+            continue
+        text = read_text(path)
+        if "vue-router" not in text and "createRouter" not in text and "routes" not in text:
+            continue
+        imports = {
+            match.group(1): resolve_import_path(host, path, match.group(2))
+            for match in import_re.finditer(text)
+        }
+        for match in route_path_re.finditer(text):
+            block = text[match.start(): min(len(text), match.start() + 800)]
+            route_path = match.group(1)
+            component_path = ""
+            dynamic = component_import_re.search(block)
+            if dynamic:
+                component_path = resolve_import_path(host, path, dynamic.group(1))
+            else:
+                ident = component_ident_re.search(block)
+                if ident:
+                    component_path = imports.get(ident.group(1), ident.group(1))
+            entries.append({
+                "host_entry_html": "",
+                "host_entry_ts": component_path or rel_text,
+                "host_menu_or_route": f"Vue Router {route_path} ({rel_text}:{text[:match.start()].count(chr(10)) + 1})",
+                "host_entry_evidence": rel_text,
+            })
+    return entries
+
+
 def discover_host_entries(host: Path) -> list[dict[str, str]]:
     entries = []
     for path in iter_files(host):
@@ -779,14 +945,22 @@ def discover_host_entries(host: Path) -> list[dict[str, str]]:
                 "host_menu_or_route": "HTML entry candidate",
                 "host_entry_evidence": rel_text,
             })
-    return entries
+    seen = set()
+    unique_entries = []
+    for entry in entries + extract_vue_router_entries(host):
+        key = (entry.get("host_entry_html", ""), entry.get("host_entry_ts", ""), entry.get("host_menu_or_route", ""))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_entries.append(entry)
+    return unique_entries
 
 
-def build_url_entry_mapping(source: Path, host: Path, source_pages: list[dict[str, str]], host_pages: list[dict[str, str]]) -> list[dict[str, str]]:
+def build_url_entry_mapping(source: Path, host: Path | None, source_pages: list[dict[str, str]], host_pages: list[dict[str, str]]) -> list[dict[str, str]]:
     java_routes = extract_java_routes(source)
     angular_routes = extract_angular_routes(source)
     source_routes = java_routes + angular_routes
-    host_entries = discover_host_entries(host)
+    host_entries = discover_host_entries(host) if host else []
     rows = []
 
     for page in source_pages:
@@ -803,7 +977,7 @@ def build_url_entry_mapping(source: Path, host: Path, source_pages: list[dict[st
             "host_menu_or_route": entry.get("host_menu_or_route", ""),
             "mapping_status": "candidate" if route or entry else "unresolved",
             "confidence": "medium" if route and entry else "low",
-            "unresolved": "" if route and entry else "需要 Java/菜单/MPA 证据",
+            "unresolved": "" if route and entry else "需要 Java/菜单/MPA/Vue Router 证据",
         })
 
     for entry in host_entries:
@@ -847,7 +1021,7 @@ def best_host_entry_for_page(page: dict[str, str], page_tokens: set[str], host_e
     scored = []
     page_path = page["path"].lower()
     for entry in host_entries:
-        entry_text = entry["host_entry_html"] + "/" + entry["host_entry_ts"]
+        entry_text = entry["host_entry_html"] + "/" + entry["host_entry_ts"] + "/" + entry.get("host_menu_or_route", "")
         entry_tokens = last_token_set(entry_text)
         overlap = page_tokens & entry_tokens
         score = len(overlap) * 10
@@ -877,6 +1051,102 @@ def coupling_counts(root: Path, patterns: dict[str, str]) -> list[dict[str, str]
     ]
 
 
+def closure_resource_rows(root: Path) -> list[dict[str, str]]:
+    rows = []
+    for path in iter_files(root, include_resource_closure_dirs=True):
+        if path.suffix.lower() not in CSS_I18N_EXTS:
+            continue
+        rel = path.relative_to(root)
+        rel_text = str(rel).replace("\\", "/")
+        parts = {part.lower() for part in rel.parts[:-1]}
+        if not (parts & RESOURCE_CLOSURE_DIRS):
+            continue
+        kind = "i18n" if path.suffix.lower() in {".json", ".properties"} else "css"
+        rows.append(
+            {
+                "resource_type": kind,
+                "path": rel_text,
+                "closure_status": "scan-required",
+                "notes": "not a page candidate; include when a selected unit references this CSS/i18n resource",
+            }
+        )
+    return rows
+
+
+def slugify(value: str) -> str:
+    slug = token_key(value)
+    return slug or "unit"
+
+
+def unit_matches_row(unit: str, row: dict[str, str]) -> bool:
+    if not unit:
+        return False
+    unit_tokens = set(last_token_set(unit))
+    row_text = " ".join(
+        [
+            row.get("source_key", ""),
+            row.get("source_path", ""),
+            row.get("source_url", ""),
+            row.get("host_path", ""),
+            row.get("host_entry", ""),
+        ]
+    )
+    if unit.lower() in row_text.lower():
+        return True
+    row_tokens = set(last_token_set(row_text))
+    if len(unit_tokens) > 1:
+        return unit_tokens <= row_tokens
+    return bool(unit_tokens & row_tokens)
+
+
+def display_contract_rows(comparison: list[dict[str, str]], unit: str | None = None) -> list[dict[str, str]]:
+    rows = []
+    for row in comparison:
+        if row.get("status") != "partial-overlap":
+            continue
+        if unit and not unit_matches_row(unit, row):
+            continue
+        unit_slug = slugify(row.get("source_key", "") or unit or "unit")
+        rows.append(
+            {
+                "DISP-ID": f"DISP-{unit_slug}-region-1",
+                "源区域": row.get("source_key", ""),
+                "可见文案（源 i18n 原文）": "从源码填写",
+                "控件形态": "从源码填写",
+                "API + 字段/公式": "从源码填写",
+                "默认值/校验": "从源码填写",
+                "依赖 CSS（页级 + common + sprite）": "从源码填写",
+                "启动副作用": "从源码填写",
+                "B 现状": "wired-unverified",
+                "证据": f"{row.get('source_path', '')} -> {row.get('host_path', '')}",
+            }
+        )
+    return rows
+
+
+def verification_result(args, data: dict) -> dict[str, str]:
+    if args.mode != "verify":
+        return {"status": "not-applicable", "reason": "only emitted in verify mode"}
+    if not args.unit:
+        return {"status": "fail", "reason": "verify requires --unit to bind evidence"}
+    matches = [row for row in data["comparison"] if unit_matches_row(args.unit, row)]
+    if not matches:
+        return {"status": "fail", "reason": "selected unit has no source/host comparison row"}
+    if any(row.get("status") == "unmigrated" for row in matches):
+        return {"status": "fail", "reason": "selected unit is unmigrated"}
+    matrix_rows = display_contract_rows(data["comparison"], args.unit)
+    if not matrix_rows:
+        return {"status": "fail", "reason": "selected unit has no display-contract matrix rows"}
+    bad_statuses = [
+        row["B 现状"]
+        for row in matrix_rows
+        if row["B 现状"] not in {"verified", "approved-deviation"}
+    ]
+    if bad_statuses:
+        return {"status": "fail", "reason": "display-contract matrix is not verified"}
+    return {"status": "pass", "reason": "display-contract rows are verified or approved-deviation"}
+
+
 def source_shellish(row: dict[str, str]) -> bool:
     source_path = row.get("source_path", "").lower()
     source_key = row.get("source_key", "").lower()
@@ -886,40 +1156,57 @@ def source_shellish(row: dict[str, str]) -> bool:
 def route_mapping_strength(row: dict[str, str], url_mapping: list[dict[str, str]]) -> tuple[int, str]:
     source_path = row.get("source_path", "")
     source_key = row.get("source_key", "")
+    source_url = row.get("source_url", "")
+    row_tokens = set(last_token_set(" ".join([source_key, source_path, source_url])))
     best = 0
-    notes = []
+    best_notes: list[str] = []
     for mapping in url_mapping:
         haystack = " ".join([
             mapping.get("source_template", ""),
             mapping.get("source_url", ""),
             mapping.get("host_entry_html", ""),
             mapping.get("host_entry_ts", ""),
+            mapping.get("host_menu_or_route", ""),
         ]).lower()
+        mapping_tokens = set(last_token_set(haystack))
+        has_relation = False
+        score = 0
+        notes = []
         if source_path and source_path.lower() in haystack:
-            best += 25
+            has_relation = True
+            score += 25
             notes.append("source-template")
-        if source_key and set(last_token_set(source_key)) & set(last_token_set(haystack)):
-            best += 15
+        if source_url and source_url.lower() and source_url.lower() in haystack:
+            has_relation = True
+            score += 25
+            notes.append("source-url")
+        if row_tokens & mapping_tokens:
+            has_relation = True
+            score += 15
             notes.append("token-route")
-        if mapping.get("source_route_evidence") and mapping.get("source_route_evidence") != "url_guess only":
-            best += 25
+        if has_relation and mapping.get("source_route_evidence") and mapping.get("source_route_evidence") != "url_guess only":
+            score += 25
             notes.append("source-route")
-        if mapping.get("host_entry_html") or mapping.get("host_entry_ts"):
-            best += 20
+        if has_relation and (mapping.get("host_entry_html") or mapping.get("host_entry_ts")):
+            score += 20
             notes.append("host-entry")
-    return best, "+".join(sorted(set(notes))) if notes else "path-order"
+        if score > best:
+            best = score
+            best_notes = notes
+    return best, "+".join(sorted(set(best_notes))) if best else "path-order"
 
 
 def recommended_units(comparison: list[dict[str, str]], url_mapping: list[dict[str, str]]) -> list[dict[str, str]]:
-    candidates = [row for row in comparison if row["status"] in {"unmigrated", "partial-overlap"}]
+    candidates = [
+        row
+        for row in comparison
+        if row["status"] in {"unmigrated", "partial-overlap"} and not source_shellish(row)
+    ]
     scored = []
     for index, row in enumerate(candidates):
         score = 10 if row["status"] == "unmigrated" else 0
         route_score, route_reason = route_mapping_strength(row, url_mapping)
         score += route_score
-        if source_shellish(row):
-            score -= 50
-            route_reason = f"{route_reason}; shell/index 已降权"
         scored.append((score, index, route_reason, row))
     scored.sort(key=lambda item: (-item[0], item[1]))
     return [
@@ -965,7 +1252,7 @@ def build_markdown(args, data: dict) -> str:
         "## 修订绑定",
         table(["仓库", "路径", "修订"], [
             ["source", str(data["source_repo"]), data["source_revision"]],
-            ["host", str(data["host_repo"]), data["host_revision"]],
+            ["host", str(data["host_repo"]) if data["host_repo"] else "[not provided]", data["host_revision"]],
         ]),
         "",
         "## 仓库获取",
@@ -1041,7 +1328,7 @@ def build_markdown(args, data: dict) -> str:
         ]),
         "",
         "## URL / 入口映射",
-        "由文件路径猜出的 URL 在有 Java 路由、菜单或 MPA 入口证据前，置信度为低。",
+        "由文件路径猜出的 URL 在有 Java 路由、菜单、MPA 或 Vue Router 入口证据前，置信度为低。",
         labeled_table(data["url_entry_mapping"], [
             ("source_url", "源 URL"),
             ("source_route_evidence", "源路由证据"),
@@ -1056,11 +1343,20 @@ def build_markdown(args, data: dict) -> str:
         ]),
         "",
         "## 耦合计数",
-        "源仓计数已排除 vendor/lib/locale/构建产物。",
+        "源仓计数已排除 vendor/构建产物；lib/locale 不进页面对照，但可进入 CSS/i18n 闭包扫描。",
         labeled_table(data["source_couplings"], [
             ("signal", "信号"),
             ("matches", "命中数"),
             ("files", "文件数"),
+        ]),
+        "",
+        "## CSS / i18n 闭包资源候选",
+        "这些资源不是页面候选；只有被选定 UNIT 引用时才进入页面闭包。",
+        labeled_table(data["source_closure_resources"], [
+            ("resource_type", "类型"),
+            ("path", "路径"),
+            ("closure_status", "闭包状态"),
+            ("notes", "说明"),
         ]),
         "",
         "## 建议优先迁移单元",
@@ -1081,10 +1377,12 @@ def build_markdown(args, data: dict) -> str:
 
     if mode in {"design", "verify"}:
         unit = args.unit or "[缺少必填迁移单元]"
+        profile_note = f"- Profile：`{args.profile}`（只读合同/切片计划，不执行 B 修改）" if args.profile else ""
         lines.extend([
             "",
             f"## {mode_label}单元",
             f"- 单元：`{unit}`",
+            profile_note,
             "- 范围：一个可独立切换的页面或用户行为",
             "- 规则：复用宿主 shell/鉴权/API/状态/组件；不要复制源仓布局",
             "",
@@ -1102,6 +1400,26 @@ def build_markdown(args, data: dict) -> str:
             "## 设计就绪门禁",
             "脚本生成的仅表头合同为 `not-ready: empty-contract`。在用证据填实这些行、或把未决边标为非阻断原因之前，不得进入 Delivery Frame。",
             table(["门禁", "最低证据", "状态"], DESIGN_READY_ROWS),
+            "",
+            "## Display Contract Matrix 基线",
+            "脚本只生成 partial-overlap 的矩阵骨架。每行仍需按源代码和运行时证据填实；`wired-unverified` 不能作为通过证据。",
+            dict_table(data["display_contract"], DISPLAY_CONTRACT_HEADERS),
+        ])
+
+    if mode == "assess" and data["display_contract"]:
+        lines.extend([
+            "",
+            "## Partial-Overlap Display Contract Matrix 基线",
+            "脚本只生成矩阵骨架，防止壳页被误判为已迁完；设计前必须填实源文案、控件形态、字段公式、默认值、CSS 和启动副作用。",
+            dict_table(data["display_contract"], DISPLAY_CONTRACT_HEADERS),
+        ])
+
+    if mode == "verify":
+        result = data["verification_result"]
+        lines.extend([
+            "",
+            "## 领域复核结论",
+            table(["状态", "原因"], [[result["status"], result["reason"]]]),
         ])
 
     if mode == "design" and args.unit:
@@ -1156,31 +1474,35 @@ def write_html(path: Path, markdown_text: str) -> None:
 
 def collect_data(args) -> dict:
     source = Path(args.source_repo).resolve()
-    host = Path(args.host_repo).resolve()
+    host = Path(args.host_repo).resolve() if args.host_repo else None
     if not source.exists():
         raise SystemExit(f"source repo not found: {source}")
-    if not host.exists():
+    if host and not host.exists():
         raise SystemExit(f"host repo not found: {host}")
 
     source_pages = discover_pages(source, SOURCE_PAGE_EXTS, source=True)
-    host_pages = discover_pages(host, HOST_PAGE_EXTS, source=False)
+    host_pages = discover_pages(host, HOST_PAGE_EXTS, source=False) if host else []
     comparison = compare_pages(source_pages, host_pages)
     url_entry_mapping = build_url_entry_mapping(source, host, source_pages, host_pages)
-    return {
+    data = {
         "source_repo": source,
         "host_repo": host,
         "source_revision": git_revision(source),
-        "host_revision": git_revision(host),
+        "host_revision": git_revision(host) if host else "source-only",
         "repo_acquisition": repo_acquisition_rows(args, source, host),
         "git_hygiene": git_hygiene_rows(source, host),
-        "host_stack": detect_host_stack(host),
+        "host_stack": detect_host_stack(host) if host else [{"area": "source-only", "value": "host repo not provided", "evidence": "CLI --host-repo omitted"}],
         "source_pages": source_pages,
         "host_pages": host_pages,
         "comparison": comparison,
         "url_entry_mapping": url_entry_mapping,
         "source_couplings": coupling_counts(source, SOURCE_SIGNALS),
+        "source_closure_resources": closure_resource_rows(source),
         "recommended_units": recommended_units(comparison, url_entry_mapping),
     }
+    data["display_contract"] = display_contract_rows(comparison, args.unit)
+    data["verification_result"] = verification_result(args, data)
+    return data
 
 
 def write_outputs(args, data: dict) -> None:
@@ -1210,6 +1532,10 @@ def write_outputs(args, data: dict) -> None:
         write_dict_csv(csv_dir / "08-source-couplings.csv", data["source_couplings"], ["signal", "matches", "files"])
         write_dict_csv(csv_dir / "09-recommended-units.csv", data["recommended_units"], ["priority", "unit", "source_path", "status", "reason"])
         write_csv(csv_dir / "10-validation-gates.csv", ["gate", "check", "status"], GATE_ROWS)
+        write_dict_csv(csv_dir / "14-source-closure-resources.csv", data["source_closure_resources"], ["resource_type", "path", "closure_status", "notes"])
+        write_dict_csv(csv_dir / "15-display-contract.csv", data["display_contract"], DISPLAY_CONTRACT_HEADERS)
+        if args.mode == "verify":
+            write_dict_csv(csv_dir / "16-verify-result.csv", [data["verification_result"]], ["status", "reason"])
         if args.mode == "design" and args.unit:
             write_csv(csv_dir / "11-design-ready-gate.csv", ["gate", "minimum evidence", "status"], DESIGN_READY_ROWS)
             write_csv(csv_dir / "12-business-flow-contract.csv", FLOW_CONTRACT_HEADERS, [])
@@ -1222,8 +1548,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("mode", nargs="?", choices=["assess", "design", "verify"], default="assess")
     parser.add_argument("--project-name", default="hosted-angularjs-to-vue3")
     parser.add_argument("--source-repo", required=True, help="Legacy source repo A")
-    parser.add_argument("--host-repo", required=True, help="Existing Vue3 host repo B")
+    parser.add_argument("--host-repo", help="Existing Vue3 host repo B. Optional only for source-only assess.")
     parser.add_argument("--unit", help="Page, route, menu item, URL, or user behavior for design/verify")
+    parser.add_argument("--profile", choices=["repair"], help="Optional read-only design profile for shell-page repair contracts.")
     parser.add_argument("--output-dir", default="reports/angularjs-vue3-migration")
     parser.add_argument("--format", choices=["markdown", "html", "csv", "all"], default="all")
     parser.add_argument("--source-acquisition-warning", default="", help="Optional warning from source repo clone/fetch, recorded as evidence.")
@@ -1235,7 +1562,9 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
     if args.mode in {"design", "verify"} and not args.unit:
-        print(f"Warning: {args.mode} mode is most useful with --unit.", flush=True)
+        parser.error(f"{args.mode} mode requires --unit")
+    if args.mode in {"design", "verify"} and not args.host_repo:
+        parser.error(f"{args.mode} mode requires --host-repo")
     data = collect_data(args)
     write_outputs(args, data)
 

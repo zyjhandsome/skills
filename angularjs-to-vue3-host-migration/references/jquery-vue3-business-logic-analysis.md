@@ -67,7 +67,7 @@ rg -n "window\.|setInterval\(|setTimeout\(|location\.href|window\.location|histo
 
 | jQuery Pattern | Vue 3 Target | Migration Rule |
 |---|---|---|
-| `$("#id").val()` | `v-model`, refs, form object | create field mapping before changing submit payload |
+| `$("#id").val()` | `v-model`, refs, form object | create field mapping before changing submit payload; for identity fields, prove the source-to-host mapping and do not substitute a nearby store getter |
 | `.click()`, `.on()` | `@click`, `@change`, component events | preserve preconditions and downstream actions |
 | `$.ajax`, `$.get`, `$.post` | API module with `fetch`/`axios` | centralize auth, errors, timeout, response code handling |
 | `.show()`, `.hide()` | `v-if`, `v-show`, computed state | name the business state behind visibility |

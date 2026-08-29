@@ -4,6 +4,8 @@
 
 Default to migrating into an existing Vue3 host repository. The host owns the final entry, shell, auth, routing or MPA entry model, API client, state, component library, i18n, proxy, build, lockfile, Node baseline, and test gates.
 
+This method is read-only for application code. It produces evidence, page contracts, repair plans, and verification conclusions; implementation belongs to the approved execute owner outside this domain skill.
+
 Create a new Vite/create-vue project only when no host exists.
 
 ## Report Language
@@ -190,6 +192,60 @@ Build a separate URL/entry map before design:
 
 File-path URL guesses are low confidence. Do not use guessed URLs as acceptance criteria without route/menu/runtime evidence.
 
+## Source Contract Gates
+
+Carry these source contracts through `assess`, `design`, repair, execute, and `verify`. They are gates, not optional notes.
+
+### Navigation Landing
+
+- Normalize absolute menu/cache/`data-href`/`window.open`/`location.href` values to the current source path before deciding the host landing. Do not carry a source absolute origin into host code unchanged.
+- If the B landing is only a shell or skeleton and lacks the source page's full business body or page CSS closure, keep the source URL as the landing target until B parity is proven. Do not change navigation just to point at a Vue entry.
+- Use one landing function per UNIT for every outbound path: cards, menus, reminder dialogs, success callbacks, deep links, and upgrade/creation flows. Divergent ad hoc URL builders are a blocker.
+- Record a navigation landing row with source URL, normalized source path, candidate B entry, whether B is shell/skeleton/full parity, final landing target, and evidence.
+
+### Comparison And Identity
+
+- Treat comparison operators and runtime types as source contracts. Template `==`, JavaScript `===`, numeric strings from APIs, booleans encoded as strings, and empty-string/null branches must be preserved or recorded as approved deviations.
+- Map identity fields from source evidence: server-rendered hidden inputs, globals, session/request fields, DOM IDs, API response fields, and template variables. Do not replace an identity with a nearby host store getter unless the source-to-host field mapping is proven.
+- Put comparison and identity assumptions into FLOW/VAR/CHAIN conditions, payload mappings, and display-contract rows when they affect visible state, permissions, routing, or API payloads.
+
+### Shared Modal Modes
+
+- Split shared dialogs by source mode. First-time binding, add/edit, cancel, success, failure, redirect, and permission-limited variants need separate rows when copy, buttons, validation, side effects, or navigation differ.
+- Do not summarize a multi-mode public modal as one generic dialog unless all modes have the same source contract.
+
+### Hit Layer And Selector-DOM
+
+- When restoring `position:absolute`, `float`, `z-index`, negative margins, overlays, or expanded clickable containers, verify both visual stacking and click targets. A restored layout that covers a star, checkbox, link, or card action is not parity.
+- Bind source CSS selectors to the real rendered DOM in B. If a Bootstrap/jQuery selector was written for a source element but B renders a component-library wrapper, either adjust the DOM/host selector or record a deviation. A selector that matches no effective node is missing CSS.
+- Confirm hover/open/active utility classes used by the template, not just page-level files. Classes such as spacing helpers, visibility toggles, icon state classes, and sprite hooks belong in the CSS closure when the source DOM uses them.
+
+### Mounted View Closure
+
+- Scope a shell-page repair to views actually mounted by the selected wrapper: `ui-view`, `ng-include`, directive/component usage, server includes, router/menu landing, and runtime evidence. A template file present under `tpls/`, `views/`, or `pages/` is not a migrated or missing region unless the selected UNIT mounts it.
+- If a host repo is a Vue2-to-Vue3 upgrade repo and the legacy area is still an AngularJS island, use source A and SIT/runtime behavior as the acceptance baseline. The earlier Vue host can provide clues, but it does not override the source AngularJS contract.
+
+### Runtime-Hidden Source Functions
+
+- Treat source code that is present but hidden by runtime CSS or classes as its own display-contract row. Visibility toggles such as `display:none !important`, `*-hide`, collapsed tabs, role-hidden blocks, and feature flags must record source code presence and runtime visibility separately.
+- Default to SIT/runtime visibility for release parity. Showing a source-hidden function, or hiding a runtime-visible source function, requires an `approved-deviation` with reason and approver.
+
+### Interruption Hygiene
+
+- After an interrupted repair or execute session, scan the touched UNIT before continuing for duplicate modal instances, duplicate functions/helpers, repeated hash/route writes, unresolved merge fragments, and unclosed `<template>`/`<script>`/`<style>` blocks.
+- Record any finding as blocker or residual before resuming implementation; do not layer another partial fix over an unknown interrupted state.
+
+### Contract Test Harness
+
+- Run contract tests through the host toolchain when importing TS/Vue code: Vitest, ts-node/tsx configured for the repo, Vite test setup, or the host's existing equivalent.
+- Prefer executable display-contract tests for repair work when the contract can be checked without a browser: copy text, CSS class presence, API payload shape, derived formulas, and entry wiring. These tests are evidence for matrix rows, not a replacement for the matrix.
+- Do not strip TypeScript or Vue code with regex and then import the result as verification evidence. If the test cannot load through the host toolchain, isolate a pure-JS function or mark the contract test harness as unresolved.
+
+### Browser Automation Disposition
+
+- If browser automation or equivalent runtime inspection is unavailable, record the blocked runtime checks as residuals and keep affected matrix rows `wired-unverified` or `mismatched`. A user hard refresh or manual observation note is useful context, but it is not agent-owned verification evidence.
+- Do not mark runtime visibility, hit-layer, hover/open state, modal geometry, sprite rendering, or entry-wiring rows as `verified` without agent-obtained browser/runtime evidence or an explicit approved manual disposition.
+
 ## Mixed-Stack Page Closure
 
 For one page/user behavior, merge AngularJS, jQuery, and server template evidence into one closure instead of separate parallel reports.
@@ -283,7 +339,17 @@ Cover at minimum: `angular.module(...).run`, controller/directive init, `$timeou
 | 区域 | 页级 CSS | 依赖的共享样式 | 依赖类型 | B 落地方式 | 证据 |
 |---|---|---|---|---|---|
 
-Dependency types include shared base rules, sprite/background images, icon fonts, bootstrap/jQuery plugin styles, and visibility tricks such as `font-size: 0` or negative text-indent. Landing method must be host-native and page-scoped: a scoped fallback in B, a host token, or a host component style. Do not copy source global stylesheets wholesale, and do not assume they still load.
+Dependency types include shared base rules, template utility classes, sprite/background images, icon fonts, bootstrap/jQuery plugin styles, and visibility tricks such as `font-size: 0`, negative text-indent, `display:none !important`, and `*-hide` switch classes. Landing method must be host-native and page-scoped: a scoped fallback in B, a host token, or a host component style. Do not copy source global stylesheets wholesale, and do not assume they still load.
+
+Rules:
+
+- Inventory every utility class used by the selected source template, including Bootstrap-shaped classes such as `dropdown`, `modal`, `btn`, `pull-*`, grid/flex helpers, state classes, and project-local helpers. If host B does not load Bootstrap or the original utility sheet, each used class needs a B landing method.
+- Inventory every sprite/icon class used by the selected source template, including icon name, size class, background image, coordinate/position rule, and B landing method. Missing image, missing size, missing coordinate, or empty rendered icon is `mismatched`.
+- Preserve source cascade semantics. New legacy CSS must not add same-specificity default rules that override source state classes such as `status-*`, `font-*`, active/open/disabled classes, validation classes, or empty-state image classes.
+- Empty states are one display contract: visible copy, image/icon, spacing, and trigger condition. Correct text with a missing image or broken sprite is not `verified`.
+- Runtime-hidden source functions must be represented. If source markup exists but SIT hides it, default to hidden; making it visible requires `approved-deviation`.
+- A component-library overlay can host a migrated dialog, but it is not automatically equivalent to a Bootstrap/source modal. Width, title bar, footer buttons, iconography, destructive theme, close behavior, and success/error affordances must match or be recorded as deviations.
+- Rich text editor swaps are deviations unless the five-axis interaction equivalence test passes. Toolbar affordance, paste/upload behavior, validation, output format, and read-only rendering are part of the contract.
 
 ## Report From Code
 
@@ -336,6 +402,7 @@ Rules:
 
 - Do not reformat, retype, or opportunistically fix legacy files outside approved scope. Record them as residuals with an owner and file list.
 - A compile failure on the current unit's entry is blocking.
+- For new or changed TS helpers in the selected UNIT, annotate callback parameters and empty arrays/objects immediately when host `noImplicitAny` or `strict` can infer `any[]`, `never[]`, or implicit `any`. Do not leave this to a later compile pass.
 - A repo-wide overlay caused by unrelated files is a residual. Neither case may be reported as a healthy dev server.
 - Record the actual Node version used for each build/test run next to the host-declared baseline.
 
@@ -349,12 +416,13 @@ Rules:
 | Entry-wiring parity | Each slice is mounted at the host entry, calls its API, and is reachable by the user in the browser. |
 | Permission parity | Menu visibility, route access, button hide/disable, server-side rejection. |
 | URL parity | Old deep link, query/hash, redirects, browser back/forward, external links. |
+| Source contract gates | Navigation landing, comparison and identity mapping, shared modal modes, mounted view closure, runtime-hidden functions, hit layer, selector-to-DOM binding, CSS utility closure, interruption hygiene, contract test harness, and browser automation disposition. |
 | API parity | Endpoint, method, params/body, response codes, failure handling, messages. |
 | Visual measurement parity | Screenshots, measurements, diff threshold, or mark manual-only. Does not cover display-contract rows. |
 | Runtime parity | Host Node actually used vs declared baseline, lockfile, existing lint/build/test commands, host compile overlay disposition. |
 | Git hygiene | No dependency/cache/build directory noise in intended commit; source A unchanged; B changes scoped. |
 | Rollback | Switch, owner, affected URL/page, restore condition, data compatibility. |
-| Completion authority | Delivery verified or valid repair-scope approval + domain verify + current host revision + no blocking residuals. |
+| Completion authority | Delivery verified + domain verify + current host revision + no blocking residuals. |
 
 ## Completion Authority
 
@@ -362,7 +430,7 @@ Rules:
 
 Do not announce a page migration complete unless all are true:
 
-- The implementing path has a current authority record: a Delivery `verified` handoff on the full path, or a valid repair-scope approval with no escalation triggers on the shell-page repair path.
+- The implementing path has a current authority record: a Delivery `verified` handoff for the approved scope.
 - Domain verify evidence is current for the same source and host revisions.
 - Host B revision is the revision that was built, tested, and reviewed.
 - Git hygiene has no blocking dependency/cache/build noise.
@@ -372,22 +440,23 @@ Do not announce a page migration complete unless all are true:
 
 ## Shell-Page Repair
 
-Use this variant when the host already has the unit's entry and the goal is parity repair rather than a new landing.
+Use this read-only variant when the host already has the unit's entry and the goal is parity repair rather than a new landing.
 
 Entry conditions, all required:
 
 - the unit is `partial-overlap` with a proven host MPA/router entry
-- the user has authorized changes to host B
+- the user wants a repair-scoped design/verification packet
 - the goal is source parity only: no new API contract, no permission-model change, no traffic switch or rollback-scope change
 
 Method:
 
 1. Produce or refresh the display-contract matrix, page-init list, i18n text table, and CSS closure table.
 2. Slice by source region, one matrix group at a time.
-3. Per slice: restate the source contract, change B, confirm the entry is mounted and reachable, then walk the region in the browser against the same path on the source site.
-4. Update matrix rows in place and re-run display-contract parity incrementally.
+3. Per slice: restate the source contract, intended B files/entry points, verification steps, source-contract gates, residuals, and escalation triggers.
+4. Update matrix rows in place only for evidence-backed B status. Do not mark rows verified from planned work.
+5. Hand the repair slice plan to the approved execute owner before any B application code change.
 
-Escalate out of repair and back to full framing when any of these appear: a missing or changed API contract, a permission-model change, new behavior beyond source parity, or a discovery that the original source closure never scanned the region.
+Same-wrapper discoveries can stay in repair design: a source region found later under the same mounted wrapper may be added to the matrix and slice plan without restarting the whole assessment. Escalate out of repair and back to full framing when any of these appear: a different page or wrapper, a missing or changed API contract, a permission-model change, new behavior beyond source parity, traffic switching, rollback-scope change, or a discovery that the original source closure never scanned the selected wrapper.
 
 ## First Slice
 
