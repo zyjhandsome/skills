@@ -51,7 +51,7 @@ If only one repo is available, perform source-only assessment and state that hos
 9. Produce URL and entry mapping:
    - Prefer Java/Spring route annotations, menu config, server template returns, MPA `getPages()`/`src/pages/*/*.ts`, and host route/menu evidence over guessed file paths.
    - Mark file-derived URL guesses as low confidence until backed by route/menu/MPA evidence.
-10. Choose migration units as independently switchable pages or user behaviors, not whole-repo batches.
+10. Choose migration units as independently switchable pages or user behaviors, not whole-repo batches. `design` and `verify` accept up to 5 units per run (repeat or comma-separate `--unit`); a batch is several independent units, never one large page.
 11. For each selected unit, produce a page closure:
    - source templates/fragments/scripts/controllers/services/APIs/assets, including page CSS and the shared CSS/sprite/plugin styles it depends on
    - display-contract matrix rows for every source region of the unit
@@ -152,7 +152,7 @@ Field-level column definitions, status enums, and table headers live in `referen
 
 ### Design
 
-For one page or user behavior:
+For each selected page or user behavior (1 to 5 per run):
 
 - page closure including CSS closure
 - display-contract matrix with stable IDs
@@ -162,6 +162,7 @@ For one page or user behavior:
 - host reuse/change/create decisions, URL mapping, permission/session/API parity, rollback switch and condition
 - vertical slices whose completion criterion is entry mounted and user-reachable
 - design-ready gate: page closure, display-contract matrix, page-init list, i18n table, CSS closure table, 1-2 filled core flows, material chains, host decisions, URL mapping, permission/API/rollback draft. A shell page missing any one of these is `not-ready`.
+- for a batch: an admission table (units resolve to exactly one source page each, one shared design scope, no overlapping host landing) and a shared-host-surface table naming the single owner of router registration, menu, shared i18n, global stylesheets, and global store. Each unit keeps its own closure, matrix rows, and rollback switch; the gate is judged per unit and one `not-ready` unit blocks the batch.
 
 ### Verify
 
@@ -170,6 +171,7 @@ For one page or user behavior:
 - entry-wiring parity: each slice is mounted, called, and reachable
 - visual measurement parity: screenshots/measurements, otherwise `manual-only`. `manual-only` here does not exempt any display-contract row.
 - completion authority: domain verify evidence cannot by itself declare migration complete; require Delivery verified evidence, current host revision, and no blocking residuals
+- batch results are per unit and never averaged: report one conclusion per unit, and one failing unit fails the batch
 
 ## Bundled Resources
 

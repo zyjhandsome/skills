@@ -20,7 +20,7 @@ For hosted migration, collect:
 |---|---|---|
 | Source repo A | assess/design/verify | Legacy AngularJS/jQuery/JSP/Thymeleaf code. |
 | Host repo B | assess/design/verify | Existing Vue3 final export/entry. |
-| Migration unit | design/verify | Page, route, menu item, URL, or user behavior. |
+| Migration units | design/verify | 1 to 5 pages, routes, menu items, URLs, or user behaviors. See `Unit Batches`. |
 | Source revision | all source-based outputs | Commit or timestamp. |
 | Host revision | all host-based outputs | Commit or timestamp. |
 
@@ -76,7 +76,7 @@ Required outputs:
 
 ### design
 
-Goal: make one migration unit ready for implementation.
+Goal: make 1 to 5 migration units ready for implementation. Admission and per-unit obligations: `Unit Batches`.
 
 Required outputs:
 
@@ -95,7 +95,7 @@ Required outputs:
 
 ### verify
 
-Goal: prove migrated behavior is equivalent enough to release or identify gaps.
+Goal: prove migrated behavior is equivalent enough to release or identify gaps. One conclusion per unit; one failing unit fails the batch.
 
 Required outputs:
 
@@ -346,6 +346,7 @@ Rules:
 - DOM presence is not visibility. For rows carrying visible copy or visible numbers, confirm runtime visibility, since host or shared CSS can hide otherwise correct markup.
 - `manual-verified` closes only a runtime condition the agent could not obtain evidence for after a recorded failed attempt, and only with checker, checked condition, and date. It never covers copy, widget shape, field formulas, defaults, or geometry, which are all comparable in code.
 - One row per page is a skeleton, not a matrix. A generated whole-page row marked `(skeleton)` must be split by source region — search, filters, list, thumbnails, badges, empty state, deep links — before the unit can be design-ready.
+- The matrix is one ledger even for a batch. Every row carries the owning unit, so rows are filled, verified, and closed per unit rather than per batch.
 - A closed matrix means every row is `verified`, `manual-verified`, or `approved-deviation`. `wired-unverified` is an open row, not a soft pass.
 
 ## Source i18n Text Table
@@ -417,6 +418,24 @@ Do not enter Delivery framing from a header-only design contract. A unit is desi
 - rollback switch and condition
 
 If these are empty or only table headers, mark the design gate `not-ready: empty-contract` and remain in design. For a `partial-overlap` shell page, a missing display-contract matrix, page-init list, i18n table, or CSS closure table is `not-ready` on its own.
+
+## Unit Batches
+
+`design` and `verify` accept 1 to 5 units per run. A batch is several independent units sharing one artifact set, not one larger page, and it never relaxes a gate: the design-ready gate is judged per unit, one `not-ready` unit blocks the batch, and the fastest recovery is to drop that unit from the batch rather than hold the rest.
+
+Admission — all must hold, otherwise split the batch:
+
+| Rule | Why |
+|---|---|
+| At most 5 units | Beyond that the High cost/risk/rollback summary stops being reviewable. |
+| One shared design scope | `repair` and `new-landing` have different approval chains; a mixed batch would need both. |
+| Each unit resolves to exactly one source page | A unit name matching several pages has no definite scope. |
+| No two units share a host landing | Same-file units must be sequenced or merged. |
+| Every shared host surface has one owner | Router registration, menu, shared i18n, global stylesheets, and global store land once, as a prerequisite task group; other units depend on them read-only. |
+
+Per-unit properties a batch must preserve: page closure, matrix rows, i18n table, CSS closure, rollback switch, verify conclusion, and completion decision. Batch conclusions are never averaged.
+
+Pilot rule: the first unit of an A/B repo pair runs alone, because the host compile overlay, CSS closure landing method, entry-mounting pattern, and runtime-evidence feasibility are only proven by implementing and verifying once. Batching before that multiplies one wrong assumption by N. Remaining units may draft contracts in parallel with the pilot's implementation, but the pilot's change must be archived before the batch enters planning, or cross-change path overlap turns into a readiness blocker. Recorded measured evidence for those host facts, bound to the current host revision, can substitute for the pilot; nothing else can.
 
 ## Host Compile Overlay
 
