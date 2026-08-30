@@ -105,6 +105,7 @@ These commands discover candidates only. Read definitions, callers, templates, c
 - Attempt runtime evidence through the host toolchain before reporting it unavailable. Without agent-obtained runtime evidence, keep affected visibility, hit-layer, modal, sprite, and entry-wiring rows `wired-unverified`; manual refresh notes are not agent-owned verification. Such a row closes only as `manual-verified` per the Browser Automation Disposition rules in `references/hosted-vue3-migration-method.md`.
 - Split public dialogs by mode when buttons, copy, validation, side effects, or navigation differ.
 - Treat an existing host shell page as `partial-overlap` and produce a display-contract matrix. One or two click flows do not release it.
+- Repair scope requires a host entry proven by route, menu, or MPA registration, and a source route whose shape matches the host route. Filename similarity is not entry evidence, and `/phones/:id` never lands on `/phones`.
 - A slice is complete only when the host entry mounts it, it calls its API, and the user can reach it in the browser. Adding `lib/` helpers or component files alone is not complete.
 - Do not default to creating a Vue3 skeleton. Use greenfield Vite/create-vue only when no host exists.
 - Do not replace host B runtime stack unless the gap analysis proves a blocker and the user approves.
@@ -118,6 +119,7 @@ One matrix row per source region of the unit, with a stable `DISP-<unit>-<region
 Rules:
 
 - The matrix is one persisted artifact reused across `assess`, `design`, and `verify`. Incremental repairs update existing rows instead of starting a new analysis round.
+- A generated whole-page `(skeleton)` row is a placeholder, not a contract. Split it by source region before the unit can be design-ready.
 - Display-contract parity is code-comparable and mandatory. It is separate from pixel/screenshot measurement, and `manual-only` never excuses copy, widget shape, defaults, geometry, or field formulas.
 - DOM presence is not visibility. For rows marked as visible copy or visible numbers, confirm the element is actually visible at runtime, since host or shared CSS such as `font-size: 0` can hide correct markup.
 
@@ -143,7 +145,8 @@ Field-level column definitions, status enums, and table headers live in `referen
 - host stack summary including host compile overlay
 - host baseline gap table: which globals source A assumes (reset/base font, Bootstrap or other utility sheet, sprites, icon fonts, jQuery plugins, global JS libs, server-rendered globals) that host B does not provide
 - source page-entry inventory, A/B page comparison with match basis and human-correction flags
-- URL / entry mapping backed by Java route, menu, template return, or MPA entry
+- URL / entry mapping backed by Java route, menu, template return, or MPA entry, with route shape preserved and redirect hops excluded
+- design-scope decision per source page: comparison status, host entry, entry-evidence type, and `repair` / `new-landing` conclusion
 - vendor-excluded coupling counts, suggested first units, gaps, risks
 - for any `partial-overlap` unit: a first-pass display-contract matrix with `B 现状` filled, so shell presence is not mistaken for migration
 

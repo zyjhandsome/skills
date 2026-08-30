@@ -193,6 +193,8 @@ Each row should include old URL/template, new host entry when known, match basis
 Rules:
 
 - Do not mark `already-migrated` from filename/path similarity.
+- A host entry counts as proven only when route, menu, or MPA registration says so. Filename similarity, directory proximity, and matcher candidate scores are not entry evidence. Record which of the two a row rests on, because a `repair` decision made on a filename guess turns an unmigrated page into a phantom shell repair.
+- Route shape is part of identity. A source route with a dynamic segment (`/phones/:phoneId`) never maps to a host route without one (`/phones`), even when every filename token matches. Redirect records are hops, not landing points, and must not lend their target's component to the redirect path.
 - Treat `partial-overlap` as unmigrated work until a display-contract matrix exists. A present host shell proves layout only; data, copy, widget shape, defaults, and CSS are separately verifiable and are usually still missing.
 - `workBench` vs `workbench`, `taskManage` vs `taskManagement`, and similar token variants require human correction.
 - Host `.vue` files under components should be classified as component candidates, not host pages, unless route/menu/MPA evidence proves they are entries.
@@ -343,6 +345,7 @@ Rules:
 - `manual-only` may describe missing screenshot/measurement evidence. It never exempts copy, widget shape, defaults, geometry, or field formulas.
 - DOM presence is not visibility. For rows carrying visible copy or visible numbers, confirm runtime visibility, since host or shared CSS can hide otherwise correct markup.
 - `manual-verified` closes only a runtime condition the agent could not obtain evidence for after a recorded failed attempt, and only with checker, checked condition, and date. It never covers copy, widget shape, field formulas, defaults, or geometry, which are all comparable in code.
+- One row per page is a skeleton, not a matrix. A generated whole-page row marked `(skeleton)` must be split by source region — search, filters, list, thumbnails, badges, empty state, deep links — before the unit can be design-ready.
 - A closed matrix means every row is `verified`, `manual-verified`, or `approved-deviation`. `wired-unverified` is an open row, not a soft pass.
 
 ## Source i18n Text Table
@@ -400,7 +403,8 @@ Generated script tables are an evidence baseline. They never substitute for the 
 Do not enter Delivery framing from a header-only design contract. A unit is design-ready only when it has:
 
 - page closure: source templates/fragments/scripts/controllers/services/APIs/assets
-- display-contract matrix rows for every source region of the unit
+- display-contract matrix rows for every source region of the unit, split from any generated whole-page `(skeleton)` row
+- host baseline gap table with the A column filled, and a page-level landing method for every `host-missing` / `host-partial` baseline this page depends on
 - page-init and side-effect list
 - source i18n text table with any deviations recorded and approved
 - CSS closure table with a host-native landing method per dependency
@@ -471,7 +475,8 @@ Use this read-only variant when the host already has the unit's entry and the go
 
 Entry conditions, all required:
 
-- the unit is `partial-overlap` with a proven host MPA/router entry
+- the unit is `partial-overlap` with a host MPA/router entry proven by route, menu, or MPA registration, not by filename similarity
+- the source route and the host route have the same shape, so a detail page cannot be repaired against a list page
 - the user wants a repair-scoped design/verification packet
 - the goal is source parity only: no new API contract, no permission-model change, no traffic switch or rollback-scope change
 

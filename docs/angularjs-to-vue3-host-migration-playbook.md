@@ -33,14 +33,14 @@ Wave 1  建 change（无规格闸门）
   → Wave 7  angularjs verify
 ```
 
-**修复快车道**：B 已有该 UNIT 的入口壳页，目标只是对照源站对等修复。Frame 与 Plan 合并成一次批准，
-因为对等修复按定义不新增 API 契约、不改权限模型、不切流，拆成两次批准只会被绕开。
+**修复快车道**：B 已有该 UNIT 的入口壳页，目标只是对照源站对等修复。Frame 与 Plan 在同一会话内连跑，
+省掉一次换会话和重新建立上下文；两道闸门都保留，因为迁移固定 High，High 要求规格与实施两次批准。
 
 ```text
 Wave 1  建 change（已有 change 时只做恢复校验）
   → Wave 2  angularjs assess（必须产出控件矩阵）
   → Wave 3  angularjs design（design-scope=repair）
-  → Wave 4R Frame + Plan 合并批准（一次范围 + 实施 go）
+  → Wave 4R Frame + Plan 同会话连跑（规格闸门 + 实施 go，两次问询）
   → Wave 6  Delivery Execute + Fresh Verification
   → Wave 7  angularjs verify
 ```
@@ -49,13 +49,17 @@ Wave 1  建 change（已有 change 时只做恢复校验）
 
 | 条件 | repair | new-landing |
 |---|---|---|
-| B 已有该 UNIT 的 MPA/router 入口证据 | 是 | 否或未证明 |
+| 对照状态为 `partial-overlap` | 是 | 否 |
+| B 入口有 route / menu / MPA 证据，且源路由与宿主路由形状一致 | 是 | 否或未证明 |
 | 目标是源站对等修复，不新增 API 契约、不改权限模型、不涉及切流 | 是 | 否 |
 | 本轮是否修改 B 应用代码 | 否，直到 Wave 6 | 否，直到 Wave 6 |
 
+入口证据只认路由/菜单/MPA 注册。文件名相似、目录相近、匹配器给出的候选分都不是入口证据——
+一个 `unmigrated` 的详情页很容易被配到同名列表页的 `.vue` 上，据此开 `repair` 会把未迁页当成壳页修。
+
 `repair` scope 下，同一 mounted wrapper 内后发现的源站区域可继续补合同；一旦发现缺接口、
 要动权限模型、要加源站没有的行为、不同页面/wrapper，或选定 wrapper 当初完全漏扫，立即停止、
-撤销合并批准资格，按回流表改走主路径 Wave 4 + Wave 5。
+撤销快车道资格，按回流表改走主路径 Wave 4 + Wave 5。
 
 ### 职责边界
 
@@ -65,7 +69,7 @@ Wave 1  建 change（已有 change 时只做恢复校验）
 | `delivery-frame-spec` | 创建或恢复 OpenSpec change，写 proposal/spec，完成范围与规格批准 |
 | `delivery-plan-tasks` | 写 design/tasks、纵向切片、就绪审查、实施闸门 |
 | `delivery-execute-verify` | 唯一应用代码 mutation owner；只修改 Vue3 宿主 B；完成 Fresh Verification、独立审查和 verified handoff |
-| Wave 4R 合并批准 | 修复快车道唯一批准点；由 `delivery-frame-spec` + `delivery-plan-tasks` 在一次会话内完成规格与实施闸门 |
+| Wave 4R 同会话连跑 | 修复快车道的批准波；`delivery-frame-spec` + `delivery-plan-tasks` 在一次会话内顺序完成规格闸门与实施闸门，两道闸门都不省 |
 | OpenSpec change | Delivery 生命周期和批准状态真相 |
 | 本剧本 | 只规定会话顺序、提示词、工件交接和停止点 |
 
@@ -87,7 +91,7 @@ Wave 1  建 change（已有 change 时只做恢复校验）
 2. 默认每个 Wave 开一个全新会话，粘贴“会话通用头 + 当前 Wave 代码块”。
 3. 当前 Wave 完成并停止后，再开下一个 Wave；若用户在同一会话说“继续”，只能继续当前 Wave 的剩余工作，写权限仍按当前 Wave。
 4. Wave 2 结束时会给出 `design-scope` 结论：壳页对等修复用 `repair`，其余用 `new-landing`；
-   `repair` 在 Wave 3 之后走 Wave 4R 合并批准，`new-landing` 走 Wave 4 + Wave 5。
+   `repair` 在 Wave 3 之后走 Wave 4R 同会话连跑，`new-landing` 走 Wave 4 + Wave 5。两条路都是两次批准。
 5. 若 `<CONFIG>` 与 `<MATRIX>` 已存在且绑定当前 A/B revision，Wave 1 与 Wave 2 只做校验刷新，
    不重开建档与全量 assess；只有 revision 变化或工件缺损才重跑。
 6. 用户只处理真正阻塞的问题、规格批准、隐藏/显示偏差批准、运行时人工确认或实施批准；
@@ -164,8 +168,8 @@ decision_needed / recommended_resolution / resume_point
 | 3 Design | Assess evidence、A/B revisions、候选迁移单元、host stack、host baseline gap 表；`repair` scope 另需 <MATRIX> 与 B 已有入口证据 |
 | 4 Frame | Design-ready domain evidence（`new-landing`）、change 目录、意图草稿 |
 | 5 Plan | 已批准 Frame 规格、domain evidence path/digest、Frame handoff |
-| 4R 合并批准 | Wave 3 `repair` design-ready evidence、<MATRIX>、B 入口证据、change 目录 |
-| 6 Execute | design/tasks、实施 go、Plan handoff 或 `repair-combined` handoff、领域设计和运行时证据 |
+| 4R 同会话连跑 | Wave 3 `repair` design-ready evidence、<MATRIX>、B 入口证据（route/menu/MPA）、change 目录 |
+| 6 Execute | design/tasks、规格闸门 + 实施 go、Plan handoff 或 `lane=repair-fastlane` handoff、领域设计和运行时证据 |
 | 7 Verify | Delivery verification、当前 B 代码、G9/测试/构建证据、领域证据 |
 
 默认不得在 `<CHANGE_DIR>` 外另建第二状态源。`evidence/` 保存 path+digest 可校验的领域证据；
@@ -234,7 +238,9 @@ proposal 保持草稿。不要询问范围批准，不要写规格批准，不�
   这是宿主级事实，只做一次，后续每页复用，不允许在修页时才发现
 - <UNIT> 的候选 source entry、真实 source URL 与 host landing point
 - 若 <UNIT> 判为 `partial-overlap`：把首轮控件矩阵写入 <MATRIX>，每行填 `B 现状`
-  （missing / mismatched / wired-unverified / verified / approved-deviation）
+  （missing / mismatched / wired-unverified / verified / manual-verified / approved-deviation）；
+  脚本只给整页 `(skeleton)` 骨架行，必须按源区域拆分后才算矩阵
+- design-scope 判定表：逐页给出对照状态、宿主入口、入口证据类型和 `repair` / `new-landing` 结论
 - 源站契约门禁首扫：模板/脚本比较运算、hidden/global/session 身份字段、`data-href`/菜单/缓存绝对 URL、
   公共 modal 模式、模板实际使用的 CSS 工具类
 - gaps blocking design 与推荐迁移单元依据
@@ -261,9 +267,15 @@ source/host page comparison、URL/entry mapping、host compile overlay、host ba
 
 若 <UNIT> 缺少真实 source URL 或 B host entry 证据，输出回流字段并停止。
 若 <UNIT> 在 A 或 B 中无法定位，输出回流字段并停止。
-否则给出 `design-scope` 结论，下一步统一是 Wave 3 Design：
-- <UNIT> 判为 `partial-overlap`、B 入口已证明、且目标是对等修复 → `design-scope=repair`
-- 其他情况 → `design-scope=new-landing`
+否则给出 `design-scope` 结论，下一步统一是 Wave 3 Design。判定用硬规则，不用印象：
+- 同时满足「对照状态 = `partial-overlap`」和「宿主入口有 route / menu / MPA 证据」，
+  且目标是对等修复 → `design-scope=repair`
+- 对照状态是 `unmigrated` 时一律 `new-landing`，即使匹配器给它配上了某个 `.vue` 文件；
+  文件名相似不是入口证据
+- 宿主入口只有文件名猜测（脚本 `host_entry_evidence` 为 `filename guess only`）→ `new-landing`
+- 源路由与宿主路由形状不一致（例如 `/phones/:id` 对 `/phones`）→ 该行不成立，重新取证
+脚本 `csv/07b-design-scope-gate.csv` 给出逐页判定，但它是候选结论：
+下结论前必须人工核对 URL 表的源路由与宿主路由确实是同一个页面。
 然后停止。
 ```
 
@@ -306,6 +318,7 @@ Step 1 补齐合同：
 按 Skill 的 design 输出合同生成设计包并写盘，不要在本提示词里重述字段清单。
 - 同一页 AngularJS + jQuery + 服务端模板合并成一个闭包，不拆成平行报告
 - 控件矩阵写入 <MATRIX>；design-scope=repair 时为原地刷新，不重开分析
+- 矩阵必须按源区域拆行。脚本产出的整页 `(skeleton)` 行不是合同，留着即 `not-ready: skeleton-only-matrix`
 - page-init 表、源 i18n 原文表、CSS 闭包表齐备
 - 每个可见数字/列表都有 API + 字段公式（求和、拼接、全选标题都要写）
 - CSS 闭包盘点模板 utility、Bootstrap 形态 class、sprite/icon size、runtime-hidden switch、
@@ -359,12 +372,12 @@ python angularjs-to-vue3-host-migration/scripts/generate_migration_plan.py desig
 - design-scope=repair 且同一 wrapper 内后发现源站区域 → 留在本波补矩阵和切片计划
 - design-scope=repair 且发现不同页面/wrapper，或源闭包当初没有扫到选定 wrapper
   → 改用 new-landing 重做本波
-以上任一升级都会撤销 repair 的合并批准资格。
+以上任一升级都会撤销 repair 的快车道资格。
 
 结束输出：design-ready domain evidence path/digest、<MATRIX> path/digest 与行状态统计、
 切片计划、residual 与 blocker、实测 node 版本、external_artifacts 更新位置。
 不要 archive、commit、push、PR、部署、切流。
-design-scope=repair 且无升级条件 → 下一步 Wave 4R 合并批准；
+design-scope=repair 且无升级条件 → 下一步 Wave 4R 同会话连跑；
 否则 → 下一步 Wave 4 Frame。然后停止。
 ```
 
@@ -379,8 +392,8 @@ design-scope=repair 且无升级条件 → 下一步 Wave 4R 合并批准；
 应已存在：<CHANGE_DIR>、Wave 3 design-ready domain evidence path/digest。
 若只有 assess、design 未 ready、FLOW/CHAIN 只有表头、URL/entry 缺少真实证据，
 或 design-ready gate 未通过，停止并回 Wave 3。
-若 <UNIT> 的 design-scope 是 `repair` 且没有触发任何升级条件，本波不适用：改走 Wave 4R 合并批准。
-由 `repair` 升级而来的 UNIT 在本波按 new-landing 处理，并作废原合并批准资格。
+若 <UNIT> 的 design-scope 是 `repair` 且没有触发任何升级条件，本波不适用：改走 Wave 4R 同会话连跑。
+由 `repair` 升级而来的 UNIT 在本波按 new-landing 处理，并作废原快车道资格。
 
 从 domain evidence 摘要写入 external_artifacts：path、digest、A/B revision、<UNIT>、
 old URL、新 host entry 候选、rollback、blockers/residuals。
@@ -433,20 +446,29 @@ old URL、新 host entry 候选、rollback、blockers/residuals。
 说明下一步为 Wave 6，然后停止。
 ```
 
-## 7. Wave 4R：修复快车道 Frame + Plan 合并批准
+## 7. Wave 4R：修复快车道 Frame + Plan 同会话连跑
 
-只用于 `design-scope=repair` 且 Wave 3 未触发任何升级条件的 UNIT，替代主路径的 Wave 4 + Wave 5。
-合并的是批准次数，不是实施权限：B 应用代码仍然只能在 Wave 6 修改。
+只用于 `design-scope=repair` 且 Wave 3 未触发任何升级条件的 UNIT，替代主路径的 Wave 4 + Wave 5 两个会话。
+
+合并的是**会话**，不是闸门，也不是实施权限。迁移（含跨仓 host-port）在 `delivery-frame-spec`
+路由表里固定为 High，而 High 明确要求 spec gate 与 implementation go **两次**用户批准
+（`delivery-frame-spec` 的 Specification gate = one user ask，`delivery-plan-tasks` 的
+Implementation go = one user ask）。把两次问询压成一次会破坏契约，也会造成
+「就绪审查还没跑就要了实施 go」或「规格被追认批准」。因此本波保留两道闸门，只是在同一会话内顺序完成，
+这本来就是 `delivery-plan-tasks` chain relay 规则允许的用法。B 应用代码仍然只能在 Wave 6 修改。
 
 新会话粘贴“会话通用头”，再粘贴：
 
 ```text
 显式使用 delivery-frame-spec 与 delivery-plan-tasks 两个 Skill，在同一会话内先 Frame 段后 Plan 段。
+两个 Skill 各自的闸门都要保留：Frame 段问一次范围/规格批准，Plan 段就绪后再问一次实施 go。
+不得把两次问询压成一次。
 本波不得修改 A/B 应用代码，不要进入 Execute。
 
 应已存在：<CHANGE_DIR>、Wave 3 的 design-scope=repair design-ready evidence path/digest、
-<MATRIX>、B 侧 <UNIT> 入口证据。
-若 design-scope 是 new-landing、design 未 ready、FLOW/CHAIN 只有表头、URL/entry 缺少真实证据，
+<MATRIX>、B 侧 <UNIT> 的 route / menu / MPA 入口证据。
+若 design-scope 是 new-landing、design 未 ready、FLOW/CHAIN 只有表头、URL/entry 缺少真实证据、
+入口只有文件名猜测、<MATRIX> 仍是整页 (skeleton) 行，
 或 Wave 3 记录了任一升级条件，停止并改走 Wave 4 + Wave 5。
 
 Frame 段：
@@ -460,6 +482,8 @@ Frame 段：
 - 隐藏/显示偏差、控件替换偏差、模态框或富文本替换偏差逐条列为 approved-deviation 候选并写明理由
 - 禁止复制 A layout、禁止无关重构、禁止长期桥接
 迁移类变更固定 High。视觉对等没有测量链时只能写“manual-only / not proven”。
+Frame 段结束时按 Frame Skill 完成澄清并问一次范围/规格批准，绑定当前 artifact_revision，
+写入 State Source 和 handoff.json。未获批准不得进入 Plan 段。
 
 Plan 段：
 按 delivery-plan-tasks 契约写唯一权威 design.md/tasks.md，直接由 Wave 3 切片计划派生：
@@ -470,16 +494,18 @@ Plan 段：
 - 运行时证据获取方式；宿主工具链取不到时的 residual 处置与人工确认项
 - 视觉要求：有测量链则写 G9 证据计划；无测量链则标 manual-only
 - fallback/rollback 任务和演练命令
-就绪审查跑 G1–G3、G8、G5。存在阻塞项时不得询问批准。
+就绪审查跑 G1–G3、G8、G5。存在阻塞项时不得询问实施授权。
+就绪后按 High 契约问第二次：实施 go，附成本/风险/回退摘要，五个面向保持 Agent 内部核对，
+不做逐项问答。绑定当前 artifact_revision、A/B revision、批准人、时间、范围、验证义务、
+回退条件和 accepted warning IDs。
 
-合并闸门：
-只询问一次，同时取得范围批准与实施 go，绑定当前 artifact_revision、A/B revision、批准人、时间、
-范围、验证义务、回退条件和 accepted warning IDs，写入 State Source 和 handoff.json，
-并标注 gate_type=repair-combined。
-用户拒绝合并批准时，退回 Wave 4 + Wave 5 分开走。
+闸门记录：
+两条 gate 各自入账（规格闸门、实施闸门），handoff 标注 lane=repair-fastlane，
+说明两道闸门在同一会话顺序完成。
+任一闸门被拒绝或规格 artifact_revision 在 Plan 段发生变化时，实施 go 作废，退回对应闸门重走。
 
 结束输出：change id/dir、route/risk、proposal/spec、design/tasks、任务数量、readiness、
-验证矩阵、合并闸门记录、handoff path/revision。
+验证矩阵、两条闸门记录、handoff path/revision。
 说明下一步为 Wave 6，然后停止。
 ```
 
@@ -491,9 +517,10 @@ Plan 段：
 显式使用 delivery-execute-verify Skill。
 本波是唯一允许修改 B 应用代码的 Wave；A 严格只读。不要调用 angularjs-to-vue3-host-migration。
 
-应已存在：design/tasks、绑定当前 revision 的实施 go、领域设计和运行时证据，
-以及 Plan handoff（主路径）或 gate_type=repair-combined handoff（修复快车道）。
-缺失则回 Wave 5 或 Wave 4R；A/B revision 或 evidence stale 则回对应产生 Wave。
+应已存在：design/tasks、绑定当前 revision 的规格闸门与实施 go、领域设计和运行时证据，
+以及 Plan handoff（主路径）或 lane=repair-fastlane handoff（修复快车道）。
+两条路径都必须有两条闸门记录；只有一条即视为批准不完整，回 Wave 5 或 Wave 4R。
+A/B revision 或 evidence stale 则回对应产生 Wave。
 
 Preflight：
 - 实施 go 绑定当前 artifact_revision 与 A/B revision
@@ -524,7 +551,7 @@ Preflight：
 
 发现范围/验收问题回 Wave 4；发现设计/任务/rollback 问题回 Wave 5；
 发现 A baseline 或领域闭包错误回 Wave 2/3。回流使用通用头字段。
-修复快车道触发升级条件时，合并批准作废，改走主路径 Wave 4 + Wave 5，不得在本波继续实施。
+修复快车道触发升级条件时，快车道两条闸门一并作废，改走主路径 Wave 4 + Wave 5，不得在本波继续实施。
 在已批准范围内按 <MATRIX> 行补片属于本波增量修复，不回流。
 同一 mounted wrapper 内后发现的源站区域，可在本波按 <MATRIX> 增量补片；不同页面/wrapper 或 API/权限/切流变化必须回流。
 
@@ -639,7 +666,7 @@ fail：不要直接改代码；按回流表返回对应 Wave，然后停止。
 | 源闭包整个区域漏扫（例如从未扫到 `ngApp.run`） | Wave 3 Design，改用 `new-landing` |
 | 页级闭包、行为链、URL/API/权限/回退设计错误 | Wave 3 Design |
 | `repair` scope 同一 wrapper 内后发现源站区域 | Wave 3 内补矩阵和切片，不改 scope |
-| `repair` scope 触发升级条件（缺接口、改权限、切流、换 wrapper） | Wave 4 Frame + Wave 5 Plan，合并批准作废 |
+| `repair` scope 触发升级条件（缺接口、改权限、切流、换 wrapper） | Wave 4 Frame + Wave 5 Plan，快车道闸门作废 |
 | 目标、验收、范围、允许差异错误 | Wave 4 Frame，或修复快车道的 Wave 4R |
 | 需要新增/变更 API 契约或权限模型 | Wave 4 Frame |
 | 技术方案、任务拆分、兼容、rollback、验证矩阵错误 | Wave 5 Plan，或修复快车道的 Wave 4R |
@@ -666,8 +693,8 @@ decision_needed / recommended_resolution / resume_point
 - B 为 Vue3 host-native 实现，未引入 Vue2 / `@vue/compat` / 长期桥接；
 - OpenSpec、批准、tasks、verification 和领域证据均绑定当前 revision；
 - A/B Codebase Memory 或 fallback 证据均绑定当前 revision；
-- Delivery verified（主路径经 Wave 5 实施 go，快车道经 Wave 4R 合并闸门）、High 独立审查、
-  必要的 G9 或 manual-only 视觉说明完成；
+- Delivery verified，且规格闸门与实施 go 两条记录都在（主路径分布在 Wave 4/5，快车道同在 Wave 4R）、
+  High 独立审查、必要的 G9 或 manual-only 视觉说明完成；
 - <MATRIX> 每一行为 `verified`、`manual-verified` 或 `approved-deviation`，
   无 `missing` / `mismatched` / `wired-unverified`；
 - 每个切片通过 entry-wiring parity：入口已挂载、已调用、用户可达；
@@ -689,7 +716,7 @@ decision_needed / recommended_resolution / resume_point
 - 三个必填值只填一次：A、B、UNIT。
 - 每个 Wave 只复制通用头和一个增量提示词。
 - 主路径：Wave 1 → 2 → 3(new-landing) → 4 → 5 → 6 → 7。
-- 修复快车道：Wave 1 → 2 → 3(repair) → 4R → 6 → 7，全程只有一次批准。
+- 修复快车道：Wave 1 → 2 → 3(repair) → 4R → 6 → 7，少一次换会话，批准次数不变（规格 + 实施）。
 - 只处理阻塞问题、规格/实施批准、偏差批准和运行时人工确认。
 - 不需要手工维护 JSON、digest、revision 或任务状态。
 
