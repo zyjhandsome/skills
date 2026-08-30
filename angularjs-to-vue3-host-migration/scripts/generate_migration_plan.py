@@ -184,8 +184,28 @@ DESIGN_SCOPE_HEADERS = [
     "reason",
 ]
 
+MAX_BATCH_UNITS = 5
+
+BATCH_ADMISSION_HEADERS = [
+    "unit",
+    "matched_source_pages",
+    "comparison_status",
+    "design_scope",
+    "admission",
+    "reason",
+]
+
+BATCH_SHARED_SURFACE_HEADERS = [
+    "surface",
+    "host_path",
+    "shared_by",
+    "owner",
+    "sequencing",
+]
+
 DISPLAY_CONTRACT_HEADERS = [
     "DISP-ID",
+    "迁移单元",
     "源区域",
     "可见文案（源 i18n 原文）",
     "控件形态",
@@ -1238,6 +1258,106 @@ def repair_scope_gate(comparison: list[dict[str, str]]) -> list[dict[str, str]]:
     return rows
 
 
+def batch_admission_rows(
+    units: list[str],
+    comparison: list[dict[str, str]],
+    design_scope_gate: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    """Decide whether the requested units can run as one batch, before any approval is asked."""
+    if not units:
+        return []
+    scope_by_path = {row["source_path"]: row for row in design_scope_gate}
+    resolved = []
+    for unit in units:
+        matches = [row for row in comparison if row.get("source_path") and unit_matches_row(unit, row)]
+        scopes = sorted({scope_by_path[row["source_path"]]["design_scope"] for row in matches if row["source_path"] in scope_by_path})
+        resolved.append((unit, matches, scopes))
+
+    all_scopes = sorted({scope for _unit, _matches, scopes in resolved for scope in scopes})
+    mixed_scope = len(all_scopes) > 1
+
+    rows = []
+    for unit, matches, scopes in resolved:
+        status = ", ".join(sorted({row.get("status", "") for row in matches})) or "none"
+        scope = ", ".join(scopes) or "unknown"
+        if not matches:
+            admission, reason = "rejected", "该 unit 在 A/B 对照表里没有源页行，先校正 unit 名或补 assess"
+        elif len(matches) > 1:
+            admission, reason = "needs-human", f"unit 匹配到 {len(matches)} 个源页，范围不唯一，先收紧 unit 名"
+        elif mixed_scope:
+            admission, reason = "rejected", f"批次内 design-scope 不一致（{', '.join(all_scopes)}），按 scope 拆成两个批次"
+        else:
+            admission, reason = "admitted", f"唯一源页、design-scope={scope}，可与本批其他 unit 同批"
+        rows.append({
+            "unit": unit,
+            "matched_source_pages": ", ".join(row.get("source_path", "") for row in matches) or "none",
+            "comparison_status": status,
+            "design_scope": scope,
+            "admission": admission,
+            "reason": reason,
+        })
+    return rows
+
+
+HOST_SHARED_SURFACES = [
+    ("router registration", r"^src/router/|(^|/)routes?\.(ts|js)$"),
+    ("menu / navigation", r"(^|/)(menu|nav|sidebar|navigation)[^/]*\.(ts|js|json|vue)$"),
+    ("shared i18n catalog", r"(^|/)(locale|locales|i18n|lang)/"),
+    ("global stylesheet", r"(^|/)(common|global|base|reset|variables|theme)[^/]*\.(css|scss|less)$"),
+    ("global store", r"^src/(store|stores)/"),
+]
+
+
+def batch_shared_surface_rows(
+    host: Path | None,
+    admission: list[dict[str, str]],
+    comparison: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    """List host surfaces more than one batch unit will touch, so Plan can assign a single owner."""
+    admitted = [row["unit"] for row in admission if row["admission"] in {"admitted", "needs-human"}]
+    if len(admitted) < 2:
+        return []
+
+    rows = []
+    if host is not None:
+        for surface, pattern in HOST_SHARED_SURFACES:
+            regex = re.compile(pattern, re.I)
+            for path in iter_files(host, include_resource_closure_dirs=True):
+                rel = str(path.relative_to(host)).replace("\\", "/")
+                if not regex.search(rel):
+                    continue
+                rows.append({
+                    "surface": surface,
+                    "host_path": rel,
+                    "shared_by": "批次默认全体",
+                    "owner": "[未分配：Plan 必须指定唯一任务组]",
+                    "sequencing": "作为前置任务组先落地，其余 unit 只读依赖",
+                })
+
+    # Real overlap: two admitted units resolving to the same host page or entry.
+    by_host: dict[str, list[str]] = {}
+    for unit in admitted:
+        for row in comparison:
+            if not unit_matches_row(unit, row):
+                continue
+            key = row.get("host_path") or row.get("host_entry")
+            if key:
+                by_host.setdefault(key, [])
+                if unit not in by_host[key]:
+                    by_host[key].append(unit)
+    for key, owners in sorted(by_host.items()):
+        if len(owners) < 2:
+            continue
+        rows.append({
+            "surface": "同一宿主落点",
+            "host_path": key,
+            "shared_by": ", ".join(owners),
+            "owner": "[未分配：同落点的 unit 不得并行实施]",
+            "sequencing": "串行，或合并成一个 unit",
+        })
+    return rows
+
+
 def best_route_for_page(page: dict[str, str], page_tokens: set[str], source_routes: list[dict[str, str]]) -> dict[str, str]:
     scored = []
     page_path = page["path"].lower()
@@ -1354,17 +1474,24 @@ def unit_matches_row(unit: str, row: dict[str, str]) -> bool:
     return bool(unit_tokens & row_tokens)
 
 
-def display_contract_rows(comparison: list[dict[str, str]], unit: str | None = None) -> list[dict[str, str]]:
+def matching_units(units: list[str], row: dict[str, str]) -> list[str]:
+    return [unit for unit in units if unit_matches_row(unit, row)]
+
+
+def display_contract_rows(comparison: list[dict[str, str]], units: list[str] | None = None) -> list[dict[str, str]]:
+    selected = units or []
     rows = []
     for row in comparison:
         if row.get("status") != "partial-overlap":
             continue
-        if unit and not unit_matches_row(unit, row):
+        owners = matching_units(selected, row) if selected else []
+        if selected and not owners:
             continue
-        unit_slug = slugify(row.get("source_key", "") or unit or "unit")
+        unit_slug = slugify(row.get("source_key", "") or (owners[0] if owners else "unit"))
         rows.append(
             {
                 "DISP-ID": f"DISP-{unit_slug}-region-1 (skeleton)",
+                "迁移单元": "|".join(owners) if owners else "[未选定]",
                 "源区域": f"{row.get('source_key', '')}（整页骨架行，必须按源区域拆分后才算合同）",
                 "可见文案（源 i18n 原文）": "从源码填写",
                 "控件形态": "从源码填写",
@@ -1379,29 +1506,50 @@ def display_contract_rows(comparison: list[dict[str, str]], unit: str | None = N
     return rows
 
 
+def verify_one_unit(unit: str, comparison: list[dict[str, str]]) -> dict[str, str]:
+    matches = [row for row in comparison if unit_matches_row(unit, row)]
+    if not matches:
+        return {"unit": unit, "status": "fail", "reason": "selected unit has no source/host comparison row"}
+    if any(row.get("status") == "unmigrated" for row in matches):
+        return {"unit": unit, "status": "fail", "reason": "selected unit is unmigrated"}
+    matrix_rows = display_contract_rows(comparison, [unit])
+    if not matrix_rows:
+        return {"unit": unit, "status": "fail", "reason": "selected unit has no display-contract matrix rows"}
+    if any("(skeleton)" in row["DISP-ID"] for row in matrix_rows):
+        return {
+            "unit": unit,
+            "status": "fail",
+            "reason": "display-contract matrix is still a whole-page skeleton row; split it by source region first",
+        }
+    if any(row["B 现状"] not in MATRIX_CLOSED_STATUSES for row in matrix_rows):
+        return {"unit": unit, "status": "fail", "reason": "display-contract matrix is not verified"}
+    return {
+        "unit": unit,
+        "status": "pass",
+        "reason": "display-contract rows are verified, manual-verified, or approved-deviation",
+    }
+
+
+def verification_unit_results(args, data: dict) -> list[dict[str, str]]:
+    if args.mode != "verify":
+        return []
+    return [verify_one_unit(unit, data["comparison"]) for unit in args.units]
+
+
 def verification_result(args, data: dict) -> dict[str, str]:
     if args.mode != "verify":
         return {"status": "not-applicable", "reason": "only emitted in verify mode"}
-    if not args.unit:
+    if not args.units:
         return {"status": "fail", "reason": "verify requires --unit to bind evidence"}
-    matches = [row for row in data["comparison"] if unit_matches_row(args.unit, row)]
-    if not matches:
-        return {"status": "fail", "reason": "selected unit has no source/host comparison row"}
-    if any(row.get("status") == "unmigrated" for row in matches):
-        return {"status": "fail", "reason": "selected unit is unmigrated"}
-    matrix_rows = display_contract_rows(data["comparison"], args.unit)
-    if not matrix_rows:
-        return {"status": "fail", "reason": "selected unit has no display-contract matrix rows"}
-    if any("(skeleton)" in row["DISP-ID"] for row in matrix_rows):
-        return {"status": "fail", "reason": "display-contract matrix is still a whole-page skeleton row; split it by source region first"}
-    bad_statuses = [
-        row["B 现状"]
-        for row in matrix_rows
-        if row["B 现状"] not in MATRIX_CLOSED_STATUSES
-    ]
-    if bad_statuses:
-        return {"status": "fail", "reason": "display-contract matrix is not verified"}
-    return {"status": "pass", "reason": "display-contract rows are verified, manual-verified, or approved-deviation"}
+    per_unit = data["verification_units"]
+    failed = [result["unit"] for result in per_unit if result["status"] != "pass"]
+    if failed:
+        # One failing unit fails the batch. A batch never averages its units.
+        return {"status": "fail", "reason": f"units not verified: {', '.join(failed)}"}
+    return {
+        "status": "pass",
+        "reason": f"all {len(per_unit)} unit(s) verified, manual-verified, or approved-deviation",
+    }
 
 
 def source_shellish(row: dict[str, str]) -> bool:
@@ -1649,15 +1797,24 @@ def build_markdown(args, data: dict) -> str:
     ]
 
     if mode in {"design", "verify"}:
-        unit = args.unit or "[缺少必填迁移单元]"
+        units = args.units or ["[缺少必填迁移单元]"]
+        unit_label = "、".join(f"`{unit}`" for unit in units)
         profile_note = f"- Profile：`{args.profile}`（只读合同/切片计划，不执行 B 修改）" if args.profile else ""
         lines.extend([
             "",
             f"## {mode_label}单元",
-            f"- 单元：`{unit}`",
+            f"- 单元（{len(units)} 个，上限 {MAX_BATCH_UNITS}）：{unit_label}",
             profile_note,
-            "- 范围：一个可独立切换的页面或用户行为",
+            "- 范围：每个单元都是一个可独立切换的页面或用户行为",
             "- 规则：复用宿主 shell/鉴权/API/状态/组件；不要复制源仓布局",
+            "",
+            "## 批次准入",
+            "批次内 design-scope 必须一致；`rejected` 或 `needs-human` 未清空前不得进入 Frame。",
+            labeled_table(data["batch_admission"], [(header, header) for header in BATCH_ADMISSION_HEADERS]),
+            "",
+            "## 共享宿主面 ownership",
+            "多个 unit 会碰的宿主面必须由唯一任务组独占修改，并作为前置组先落地；其余 unit 只读依赖。",
+            labeled_table(data["batch_shared_surface"], [(header, header) for header in BATCH_SHARED_SURFACE_HEADERS]),
             "",
             "## 页面闭包合同",
             table(["项", "证据"], [
@@ -1672,6 +1829,7 @@ def build_markdown(args, data: dict) -> str:
             "",
             "## 设计就绪门禁",
             "脚本生成的仅表头合同为 `not-ready: empty-contract`。在用证据填实这些行、或把未决边标为非阻断原因之前，不得进入 Delivery Frame。",
+            "批次模式下每条门禁按 unit 逐个判定：任一 unit 未就绪，整批不得进入 Frame。",
             table(["门禁", "最低证据", "状态"], DESIGN_READY_ROWS),
             "",
             "## Display Contract Matrix 基线",
@@ -1692,10 +1850,18 @@ def build_markdown(args, data: dict) -> str:
         lines.extend([
             "",
             "## 领域复核结论",
+            "批次结论不取平均：任一 unit 未结清，整批为 fail。",
             table(["状态", "原因"], [[result["status"], result["reason"]]]),
+            "",
+            "### 逐单元结论",
+            labeled_table(data["verification_units"], [
+                ("unit", "单元"),
+                ("status", "状态"),
+                ("reason", "原因"),
+            ]),
         ])
 
-    if mode == "design" and args.unit:
+    if mode == "design" and args.units:
         lines.extend([
             "",
             "## 限定范围的 FLOW/CHAIN 合同",
@@ -1776,7 +1942,10 @@ def collect_data(args) -> dict:
         "host_baseline_gap": host_baseline_gap_rows(host),
         "design_scope_gate": repair_scope_gate(comparison),
     }
-    data["display_contract"] = display_contract_rows(comparison, args.unit)
+    data["batch_admission"] = batch_admission_rows(args.units, comparison, data["design_scope_gate"])
+    data["batch_shared_surface"] = batch_shared_surface_rows(host, data["batch_admission"], comparison)
+    data["display_contract"] = display_contract_rows(comparison, args.units)
+    data["verification_units"] = verification_unit_results(args, data)
     data["verification_result"] = verification_result(args, data)
     return data
 
@@ -1812,9 +1981,13 @@ def write_outputs(args, data: dict) -> None:
         write_csv(csv_dir / "10-validation-gates.csv", ["gate", "check", "status"], GATE_ROWS)
         write_dict_csv(csv_dir / "14-source-closure-resources.csv", data["source_closure_resources"], ["resource_type", "path", "closure_status", "notes"])
         write_dict_csv(csv_dir / "15-display-contract.csv", data["display_contract"], DISPLAY_CONTRACT_HEADERS)
+        if args.units:
+            write_dict_csv(csv_dir / "17-batch-admission.csv", data["batch_admission"], BATCH_ADMISSION_HEADERS)
+            write_dict_csv(csv_dir / "18-batch-shared-surface.csv", data["batch_shared_surface"], BATCH_SHARED_SURFACE_HEADERS)
         if args.mode == "verify":
             write_dict_csv(csv_dir / "16-verify-result.csv", [data["verification_result"]], ["status", "reason"])
-        if args.mode == "design" and args.unit:
+            write_dict_csv(csv_dir / "16b-verify-units.csv", data["verification_units"], ["unit", "status", "reason"])
+        if args.mode == "design" and args.units:
             write_csv(csv_dir / "11-design-ready-gate.csv", ["gate", "minimum evidence", "status"], DESIGN_READY_ROWS)
             write_csv(csv_dir / "12-business-flow-contract.csv", FLOW_CONTRACT_HEADERS, [])
             write_csv(csv_dir / "13-variable-chain-contract.csv", VARIABLE_CHAIN_HEADERS, [])
@@ -1827,7 +2000,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--project-name", default="hosted-angularjs-to-vue3")
     parser.add_argument("--source-repo", required=True, help="Legacy source repo A")
     parser.add_argument("--host-repo", help="Existing Vue3 host repo B. Optional only for source-only assess.")
-    parser.add_argument("--unit", help="Page, route, menu item, URL, or user behavior for design/verify")
+    parser.add_argument(
+        "--unit",
+        action="append",
+        default=[],
+        help=(
+            "Page, route, menu item, URL, or user behavior for design/verify. "
+            f"Repeat or comma-separate to run a batch of at most {MAX_BATCH_UNITS} units."
+        ),
+    )
     parser.add_argument("--profile", choices=["repair"], help="Optional read-only design profile for shell-page repair contracts.")
     parser.add_argument("--output-dir", default="reports/angularjs-vue3-migration")
     parser.add_argument("--format", choices=["markdown", "html", "csv", "all"], default="all")
@@ -1836,11 +2017,27 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def parse_units(raw_units: list[str]) -> list[str]:
+    units = []
+    for value in raw_units:
+        for piece in value.split(","):
+            unit = piece.strip()
+            if unit and unit not in units:
+                units.append(unit)
+    return units
+
+
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
-    if args.mode in {"design", "verify"} and not args.unit:
+    args.units = parse_units(args.unit)
+    if args.mode in {"design", "verify"} and not args.units:
         parser.error(f"{args.mode} mode requires --unit")
+    if len(args.units) > MAX_BATCH_UNITS:
+        parser.error(
+            f"batch of {len(args.units)} units exceeds the cap of {MAX_BATCH_UNITS}; "
+            "split it so the High cost/risk/rollback summary stays reviewable"
+        )
     if args.mode in {"design", "verify"} and not args.host_repo:
         parser.error(f"{args.mode} mode requires --host-repo")
     data = collect_data(args)

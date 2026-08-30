@@ -374,7 +374,7 @@ router.beforeEach(authGuard);
             self.run_generator(output_dir, source, host, "design", "--unit", "taskManage")
 
             markdown = (output_dir / "design-evidence.md").read_text(encoding="utf-8")
-            self.assertIn("单元：`taskManage`", markdown)
+            self.assertIn("单元（1 个，上限 5）：`taskManage`", markdown)
             self.assertIn("限定范围的 FLOW/CHAIN 合同", markdown)
             self.assertIn("设计就绪门禁", markdown)
             self.assertIn("业务流", markdown)
@@ -435,7 +435,118 @@ router.beforeEach(authGuard);
             self.assertIn("领域复核结论", markdown)
             self.assertIn("| fail | selected unit is unmigrated |", markdown)
             verify_result = self.read_csv(output_dir / "csv" / "16-verify-result.csv")
-            self.assertIn(["fail", "selected unit is unmigrated"], verify_result)
+            self.assertIn(["fail", "units not verified: phone-detail"], verify_result)
+            verify_units = self.read_csv(output_dir / "csv" / "16b-verify-units.csv")
+            self.assertIn(["phone-detail", "fail", "selected unit is unmigrated"], verify_units)
+
+    def test_batch_verify_fails_when_any_unit_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source, host = self.create_fixture(root)
+            output_dir = root / "reports"
+            self.run_generator(output_dir, source, host, "verify", "--unit", "taskManage,phone-detail")
+
+            verify_units = self.read_csv(output_dir / "csv" / "16b-verify-units.csv")
+            units = {row[0]: row[1] for row in verify_units[1:]}
+            self.assertEqual({"taskManage", "phone-detail"}, set(units))
+            self.assertEqual("fail", units["phone-detail"])
+
+            verify_result = self.read_csv(output_dir / "csv" / "16-verify-result.csv")
+            aggregate = verify_result[1]
+            self.assertEqual("fail", aggregate[0])
+            self.assertIn("phone-detail", aggregate[1])
+
+    def test_batch_design_reports_admission_and_shared_surface_ownership(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source, host = self.create_fixture(root)
+            output_dir = root / "reports"
+            self.run_generator(
+                output_dir,
+                source,
+                host,
+                "design",
+                "--unit",
+                "taskManage",
+                "--unit",
+                "workBench",
+            )
+
+            markdown = (output_dir / "design-evidence.md").read_text(encoding="utf-8")
+            self.assertIn("单元（2 个，上限 5）", markdown)
+            self.assertIn("批次准入", markdown)
+            self.assertIn("共享宿主面 ownership", markdown)
+
+            admission = self.read_csv(output_dir / "csv" / "17-batch-admission.csv")
+            header = admission[0]
+            unit_column = header.index("unit")
+            scope_column = header.index("design_scope")
+            admission_column = header.index("admission")
+            rows = {row[unit_column]: row for row in admission[1:]}
+            self.assertEqual({"taskManage", "workBench"}, set(rows))
+            for row in rows.values():
+                self.assertEqual("repair", row[scope_column])
+                self.assertEqual("admitted", row[admission_column])
+
+            shared = self.read_csv(output_dir / "csv" / "18-batch-shared-surface.csv")
+            shared_text = "\n".join(",".join(row) for row in shared)
+            self.assertIn("router registration", shared_text)
+            self.assertIn("src/router/index.ts", shared_text)
+            self.assertIn("[未分配：Plan 必须指定唯一任务组]", shared_text)
+
+    def test_batch_rejects_mixed_design_scope(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source, host = self.create_fixture(root)
+            output_dir = root / "reports"
+            self.run_generator(
+                output_dir,
+                source,
+                host,
+                "design",
+                "--unit",
+                "taskManage",
+                "--unit",
+                "projectProgress",
+            )
+
+            admission = self.read_csv(output_dir / "csv" / "17-batch-admission.csv")
+            header = admission[0]
+            admission_column = header.index("admission")
+            reason_column = header.index("reason")
+            self.assertTrue(
+                all(row[admission_column] == "rejected" for row in admission[1:]),
+                "a mixed-scope batch must not be admitted",
+            )
+            self.assertTrue(any("design-scope 不一致" in row[reason_column] for row in admission[1:]))
+
+    def test_batch_larger_than_cap_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source, host = self.create_fixture(root)
+            output_dir = root / "reports"
+
+            over_cap = subprocess.run(
+                [
+                    sys.executable,
+                    str(GENERATOR),
+                    "design",
+                    "--project-name",
+                    "over-cap",
+                    "--source-repo",
+                    str(source),
+                    "--host-repo",
+                    str(host),
+                    "--unit",
+                    "a,b,c,d,e,f",
+                    "--output-dir",
+                    str(output_dir),
+                ],
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(0, over_cap.returncode)
+            self.assertIn("exceeds the cap of 5", over_cap.stderr)
 
     def test_design_requires_unit_and_accepts_read_only_repair_profile(self):
         with tempfile.TemporaryDirectory() as tmp:
