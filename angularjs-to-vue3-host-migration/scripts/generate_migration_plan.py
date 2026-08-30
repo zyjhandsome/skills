@@ -149,6 +149,8 @@ GATE_ROWS = [
 DESIGN_READY_ROWS = [
     ["page closure", "已识别源仓模板/片段/脚本/controller/service/API/资产", "not-ready: empty-contract"],
     ["display-contract matrix", "每个源区域有稳定 DISP 行，partial-overlap 已填 B 现状", "not-ready: empty-contract"],
+    ["matrix region split", "矩阵已按源区域拆行；仅有整页 (skeleton) 行即不合格", "not-ready: skeleton-only-matrix"],
+    ["host baseline gap", "宿主全局基线缺口表已填 A 侧依赖，host-missing/partial 项在本页有落地方式", "not-ready: empty-contract"],
     ["page-init", "run/controller init/定时器/首屏请求/默认筛选值已列出", "not-ready: empty-contract"],
     ["source i18n text", "源 zh/en 或模板文案原文已逐项记录，偏离有批准", "not-ready: empty-contract"],
     ["CSS closure", "页级 CSS、common/sprite/plugin/工具类依赖及 B 落地方式已列出", "not-ready: empty-contract"],
@@ -159,6 +161,27 @@ DESIGN_READY_ROWS = [
     ["host decisions", "已给出宿主入口/路由/API/store/组件/i18n/样式的复用/改动/新建决策", "not-ready: empty-contract"],
     ["URL mapping", "旧源 URL 到新宿主入口有 Java/菜单/MPA/Vue Router 证据", "not-ready: empty-contract"],
     ["permission/API/rollback", "已起草权限/会话/API 对等与回退条件", "not-ready: empty-contract"],
+]
+
+MATRIX_CLOSED_STATUSES = {"verified", "manual-verified", "approved-deviation"}
+
+HOST_BASELINE_HEADERS = [
+    "基线类别",
+    "A 假定的全局依赖",
+    "A 证据",
+    "B 是否提供",
+    "B 落地方式",
+    "状态",
+]
+
+DESIGN_SCOPE_HEADERS = [
+    "source_key",
+    "source_path",
+    "status",
+    "host_entry",
+    "host_entry_evidence",
+    "design_scope",
+    "reason",
 ]
 
 DISPLAY_CONTRACT_HEADERS = [
@@ -405,15 +428,42 @@ def actual_node_version() -> str:
 
 
 def detect_lint_on_save(root: Path) -> str:
-    for filename in ("vue.config.js", "vue.config.cjs", "vue.config.mjs"):
-        path = root / filename
-        text = read_text(path)
+    findings = []
+    for filename in ("vue.config.js", "vue.config.cjs", "vue.config.mjs", "vue.config.ts"):
+        text = read_text(root / filename)
         if not text:
             continue
         match = re.search(r"\blintOnSave\s*:\s*([^,\n}]+)", text)
         if match:
-            return f"{match.group(1).strip()} ({filename})"
-    return "not detected"
+            findings.append(f"lintOnSave={match.group(1).strip()} ({filename})")
+
+    # A Vite host has no lintOnSave, but an ESLint/checker plugin produces the same blocking overlay.
+    for filename in ("vite.config.ts", "vite.config.js", "vite.config.mts", "vite.config.mjs", "vite.config.cjs"):
+        text = read_text(root / filename)
+        if not text:
+            continue
+        plugins = [
+            name
+            for name in ("vite-plugin-eslint", "vite-plugin-checker", "@vitejs/plugin-legacy", "unplugin-eslint")
+            if name in text
+        ]
+        if plugins:
+            findings.append(f"vite overlay plugins: {', '.join(plugins)} ({filename})")
+        overlay = re.search(r"\boverlay\s*:\s*(true|false)", text)
+        if overlay:
+            findings.append(f"server.hmr overlay={overlay.group(1)} ({filename})")
+
+    package = load_package_json(root)
+    versions = package_versions(package)
+    dep_plugins = [
+        name
+        for name in ("vite-plugin-eslint", "vite-plugin-checker", "eslint-webpack-plugin", "fork-ts-checker-webpack-plugin")
+        if name in versions
+    ]
+    if dep_plugins:
+        findings.append(f"declared overlay tooling: {', '.join(dep_plugins)} (package.json)")
+
+    return "; ".join(findings) if findings else "not detected"
 
 
 def detect_ts_strict(root: Path) -> str:
@@ -500,12 +550,61 @@ def detect_host_stack(host: Path) -> list[dict[str, str]]:
         {"area": "i18n", "value": versions.get("vue-i18n", signal_value(host, "i18n")), "evidence": "package.json/source scan"},
         {"area": "proxy", "value": signal_value(host, "proxy"), "evidence": "vite/vue/webpack config scan"},
         {"area": "mpa", "value": detect_mpa(host), "evidence": "scripts/getpage.js and src/pages/*/*.ts scan"},
-        {"area": "lintOnSave", "value": detect_lint_on_save(host), "evidence": "vue.config.js scan"},
+        {"area": "lintOnSave / dev overlay", "value": detect_lint_on_save(host), "evidence": "vue.config.*/vite.config.*/package.json scan"},
         {"area": "ts strict", "value": detect_ts_strict(host), "evidence": "tsconfig.json compilerOptions"},
         {"area": "formatter", "value": detect_formatter_config(host), "evidence": "Prettier/EditorConfig files"},
         {"area": "permission/auth", "value": signal_value(host, "permission"), "evidence": "source scan"},
         {"area": "scripts", "value": ", ".join(sorted(scripts)) if scripts else "not declared", "evidence": "package.json"},
     ]
+    return rows
+
+
+HOST_BASELINE_CATEGORIES = [
+    ("css reset/base", ("normalize.css", "reset.css", "sanitize.css", "@unocss/reset"), r"(normalize|reset|sanitize)\.(css|scss|less)|font-size\s*:\s*0"),
+    ("bootstrap/utility sheet", ("bootstrap", "bootstrap-vue", "tailwindcss", "@unocss/core"), r"\bbootstrap(\.min)?\.(css|js)\b|\bpull-(left|right)\b|\bcol-(xs|sm|md|lg)-\d"),
+    ("sprite/icon assets", ("@element-plus/icons-vue", "@ant-design/icons-vue", "vite-plugin-svg-icons"), r"sprite|icon-?font|background-position\s*:|\.svg#"),
+    ("jquery + plugins", ("jquery", "jquery-ui", "bootstrap-datepicker", "select2", "layer"), r"\$\(|jquery"),
+    ("global js libs", ("moment", "dayjs", "lodash", "echarts", "chart.js", "tinymce", "@tinymce/tinymce-vue"), r"\b(moment|dayjs|lodash|echarts|tinymce)\b"),
+    ("server-rendered globals", (), r"window\.[A-Za-z_$][\w$]*\s*="),
+]
+
+
+def host_baseline_gap_rows(host: Path | None) -> list[dict[str, str]]:
+    """Emit the host baseline gap table skeleton. Detection covers B only; the A column stays human-filled."""
+    rows = []
+    if host is None:
+        for category, _packages, _pattern in HOST_BASELINE_CATEGORIES:
+            rows.append({
+                "基线类别": category,
+                "A 假定的全局依赖": "[从源模板填写]",
+                "A 证据": "[file:line]",
+                "B 是否提供": "[not provided] host repo 未提供",
+                "B 落地方式": "[待宿主分析]",
+                "状态": "unknown",
+            })
+        return rows
+
+    versions = package_versions(load_package_json(host))
+    for category, packages, pattern in HOST_BASELINE_CATEGORIES:
+        declared = [name for name in packages if name in versions]
+        signal_hits = search_host_signal(host, pattern) if pattern else 0
+        if declared:
+            provided = f"declared: {', '.join(declared)}"
+            status = "host-provides"
+        elif signal_hits:
+            provided = f"source signals only ({signal_hits})"
+            status = "host-partial"
+        else:
+            provided = "not detected"
+            status = "host-missing"
+        rows.append({
+            "基线类别": category,
+            "A 假定的全局依赖": "[从源模板填写]",
+            "A 证据": "[file:line]",
+            "B 是否提供": provided,
+            "B 落地方式": "[待填：页级 scoped 落地或宿主 token]",
+            "状态": status,
+        })
     return rows
 
 
@@ -880,11 +979,77 @@ def resolve_import_path(root: Path, from_file: Path, import_value: str) -> str:
     return import_value
 
 
+def enclosing_object_literal(text: str, index: int) -> tuple[int, int]:
+    """Return the [start, end) span of the object literal that directly contains index."""
+    depth = 0
+    start = -1
+    for i in range(index, -1, -1):
+        char = text[i]
+        if char == "}":
+            depth += 1
+        elif char == "{":
+            if depth == 0:
+                start = i
+                break
+            depth -= 1
+    if start < 0:
+        return (-1, -1)
+    depth = 0
+    for i in range(start, len(text)):
+        char = text[i]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return (start, i + 1)
+    return (start, len(text))
+
+
+def own_level_text(object_text: str) -> str:
+    """Strip nested objects/arrays so key lookups only see this object's own properties."""
+    body = object_text[1:-1] if len(object_text) >= 2 else object_text
+    out = []
+    depth = 0
+    for char in body:
+        if char in "{[":
+            depth += 1
+            continue
+        if char in "}]":
+            depth = max(0, depth - 1)
+            continue
+        if depth == 0:
+            out.append(char)
+    return "".join(out)
+
+
+def normalize_route_path(value: str) -> str:
+    path = value.strip().lower()
+    for prefix in ("#!", "#"):
+        if path.startswith(prefix):
+            path = path[len(prefix):]
+    path = path.split("?")[0]
+    if not path.startswith("/"):
+        path = "/" + path
+    if len(path) > 1:
+        path = path.rstrip("/")
+    return path
+
+
+def route_path_shape(value: str) -> tuple[int, int]:
+    """Return (segment count, dynamic segment count) so /phones and /phones/:id cannot match."""
+    path = normalize_route_path(value)
+    segments = [segment for segment in path.split("/") if segment]
+    dynamic = sum(1 for segment in segments if segment.startswith(":") or segment.startswith("*"))
+    return (len(segments), dynamic)
+
+
 def extract_vue_router_entries(host: Path) -> list[dict[str, str]]:
     entries = []
-    route_path_re = re.compile(r"\bpath\s*:\s*[\"']([^\"']+)[\"']", re.I)
+    route_path_re = re.compile(r"\bpath\s*:\s*[\"']([^\"']*)[\"']", re.I)
     component_ident_re = re.compile(r"\bcomponent\s*:\s*([A-Za-z_$][\w$]*)", re.I)
     component_import_re = re.compile(r"\bcomponent\s*:\s*\(?\s*\)\s*=>\s*import\(\s*[\"']([^\"']+)[\"']\s*\)", re.I | re.S)
+    redirect_re = re.compile(r"\bredirect\s*:", re.I)
     import_re = re.compile(r"import\s+([A-Za-z_$][\w$]*)\s+from\s+[\"']([^\"']+)[\"']", re.I)
 
     for path in iter_files(host):
@@ -900,19 +1065,28 @@ def extract_vue_router_entries(host: Path) -> list[dict[str, str]]:
             for match in import_re.finditer(text)
         }
         for match in route_path_re.finditer(text):
-            block = text[match.start(): min(len(text), match.start() + 800)]
+            start, end = enclosing_object_literal(text, match.start())
+            if start < 0:
+                continue
+            own = own_level_text(text[start:end])
+            if not route_path_re.search(own):
+                continue
             route_path = match.group(1)
             component_path = ""
-            dynamic = component_import_re.search(block)
+            dynamic = component_import_re.search(own)
             if dynamic:
                 component_path = resolve_import_path(host, path, dynamic.group(1))
             else:
-                ident = component_ident_re.search(block)
+                ident = component_ident_re.search(own)
                 if ident:
                     component_path = imports.get(ident.group(1), ident.group(1))
+            if not component_path and redirect_re.search(own):
+                # A redirect record is a hop, not a landing point. Never let it borrow the next route's component.
+                continue
             entries.append({
                 "host_entry_html": "",
                 "host_entry_ts": component_path or rel_text,
+                "host_route_path": route_path,
                 "host_menu_or_route": f"Vue Router {route_path} ({rel_text}:{text[:match.start()].count(chr(10)) + 1})",
                 "host_entry_evidence": rel_text,
             })
@@ -928,6 +1102,7 @@ def discover_host_entries(host: Path) -> list[dict[str, str]]:
             entries.append({
                 "host_entry_html": "",
                 "host_entry_ts": rel_text,
+                "host_route_path": "",
                 "host_menu_or_route": "MPA getPages helper",
                 "host_entry_evidence": rel_text,
             })
@@ -935,6 +1110,7 @@ def discover_host_entries(host: Path) -> list[dict[str, str]]:
             entries.append({
                 "host_entry_html": "",
                 "host_entry_ts": rel_text,
+                "host_route_path": "",
                 "host_menu_or_route": "src/pages MPA entry",
                 "host_entry_evidence": rel_text,
             })
@@ -942,6 +1118,7 @@ def discover_host_entries(host: Path) -> list[dict[str, str]]:
             entries.append({
                 "host_entry_html": rel_text,
                 "host_entry_ts": "",
+                "host_route_path": "",
                 "host_menu_or_route": "HTML entry candidate",
                 "host_entry_evidence": rel_text,
             })
@@ -966,14 +1143,21 @@ def build_url_entry_mapping(source: Path, host: Path | None, source_pages: list[
     for page in source_pages:
         page_tokens = last_token_set(page["path"])
         route = best_route_for_page(page, page_tokens, source_routes)
-        entry = best_host_entry_for_page(page, page_tokens, host_entries)
+        entry = best_host_entry_for_page(
+            page,
+            page_tokens,
+            host_entries,
+            route.get("source_url", ""),
+        )
         rows.append({
+            "source_page_path": page["path"],
             "source_url": route.get("source_url", page["url_guess"]),
             "source_route_evidence": route.get("source_route_evidence", "url_guess only"),
             "source_template": route.get("source_template", page["path"]),
             "server_controller": route.get("server_controller", ""),
             "host_entry_html": entry.get("host_entry_html", ""),
             "host_entry_ts": entry.get("host_entry_ts", ""),
+            "host_route_path": entry.get("host_route_path", ""),
             "host_menu_or_route": entry.get("host_menu_or_route", ""),
             "mapping_status": "candidate" if route or entry else "unresolved",
             "confidence": "medium" if route and entry else "low",
@@ -990,10 +1174,66 @@ def build_url_entry_mapping(source: Path, host: Path | None, source_pages: list[
             "server_controller": "",
             "host_entry_html": entry.get("host_entry_html", ""),
             "host_entry_ts": entry.get("host_entry_ts", ""),
+            "host_route_path": entry.get("host_route_path", ""),
             "host_menu_or_route": entry.get("host_menu_or_route", ""),
             "mapping_status": "host-page-only-candidate",
             "confidence": "low",
             "unresolved": "确认源仓对应页",
+        })
+    return rows
+
+
+def reconcile_comparison_entries(comparison: list[dict[str, str]], url_entry_mapping: list[dict[str, str]]) -> None:
+    """Write the proven router/MPA entry back into the comparison table instead of leaving a filename guess."""
+    by_source_path = {
+        row.get("source_page_path", ""): row
+        for row in url_entry_mapping
+        if row.get("source_page_path")
+    }
+    for row in comparison:
+        mapping = by_source_path.get(row.get("source_path", ""))
+        if not mapping:
+            continue
+        route = mapping.get("host_menu_or_route", "")
+        entry = mapping.get("host_entry_ts", "") or mapping.get("host_entry_html", "")
+        if route:
+            row["host_entry"] = route
+            row["host_entry_evidence"] = "route/menu/MPA evidence"
+        elif entry:
+            row["host_entry"] = entry
+            row["host_entry_evidence"] = "host entry file evidence"
+        else:
+            row["host_entry_evidence"] = "filename guess only"
+            row["needs_human_correction"] = "yes"
+        if row.get("status") == "partial-overlap" and not route:
+            row["next_action"] = "入口证据不足：仅文件名相似，不得据此给 design-scope=repair"
+
+
+def repair_scope_gate(comparison: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Decide design-scope per source page so an unmigrated page cannot inherit a nearby Vue file's entry."""
+    rows = []
+    for row in comparison:
+        if not row.get("source_path"):
+            continue
+        status = row.get("status", "")
+        has_route_evidence = row.get("host_entry_evidence", "") == "route/menu/MPA evidence"
+        if status == "partial-overlap" and has_route_evidence:
+            scope = "repair"
+            reason = "partial-overlap 且宿主入口有 route/menu/MPA 证据"
+        elif status == "partial-overlap":
+            scope = "new-landing"
+            reason = "partial-overlap 但入口只有文件名猜测，不足以判定 B 已有入口"
+        else:
+            scope = "new-landing"
+            reason = f"对照状态为 {status or 'unknown'}，不满足 repair 准入"
+        rows.append({
+            "source_key": row.get("source_key", ""),
+            "source_path": row.get("source_path", ""),
+            "status": status,
+            "host_entry": row.get("host_entry", ""),
+            "host_entry_evidence": row.get("host_entry_evidence", ""),
+            "design_scope": scope,
+            "reason": reason,
         })
     return rows
 
@@ -1017,9 +1257,15 @@ def best_route_for_page(page: dict[str, str], page_tokens: set[str], source_rout
     return scored[0][1] if scored else {}
 
 
-def best_host_entry_for_page(page: dict[str, str], page_tokens: set[str], host_entries: list[dict[str, str]]) -> dict[str, str]:
+def best_host_entry_for_page(
+    page: dict[str, str],
+    page_tokens: set[str],
+    host_entries: list[dict[str, str]],
+    source_route_path: str = "",
+) -> dict[str, str]:
     scored = []
     page_path = page["path"].lower()
+    source_shape = route_path_shape(source_route_path) if source_route_path else None
     for entry in host_entries:
         entry_text = entry["host_entry_html"] + "/" + entry["host_entry_ts"] + "/" + entry.get("host_menu_or_route", "")
         entry_tokens = last_token_set(entry_text)
@@ -1027,7 +1273,16 @@ def best_host_entry_for_page(page: dict[str, str], page_tokens: set[str], host_e
         score = len(overlap) * 10
         if entry_text and any(piece and piece in entry_text.lower() for piece in page_path.split("/")):
             score += 25
-        if score:
+        host_route = entry.get("host_route_path", "")
+        if source_shape and host_route:
+            # Route-path alignment outranks filename tokens: /phones and /phones/:phoneId are different pages.
+            if normalize_route_path(source_route_path) == normalize_route_path(host_route):
+                score += 120
+            elif route_path_shape(host_route)[1] != source_shape[1]:
+                score -= 60
+            elif route_path_shape(host_route)[0] != source_shape[0]:
+                score -= 20
+        if score > 0:
             scored.append((score, entry))
     scored.sort(key=lambda item: item[0], reverse=True)
     return scored[0][1] if scored else {}
@@ -1109,8 +1364,8 @@ def display_contract_rows(comparison: list[dict[str, str]], unit: str | None = N
         unit_slug = slugify(row.get("source_key", "") or unit or "unit")
         rows.append(
             {
-                "DISP-ID": f"DISP-{unit_slug}-region-1",
-                "源区域": row.get("source_key", ""),
+                "DISP-ID": f"DISP-{unit_slug}-region-1 (skeleton)",
+                "源区域": f"{row.get('source_key', '')}（整页骨架行，必须按源区域拆分后才算合同）",
                 "可见文案（源 i18n 原文）": "从源码填写",
                 "控件形态": "从源码填写",
                 "API + 字段/公式": "从源码填写",
@@ -1137,14 +1392,16 @@ def verification_result(args, data: dict) -> dict[str, str]:
     matrix_rows = display_contract_rows(data["comparison"], args.unit)
     if not matrix_rows:
         return {"status": "fail", "reason": "selected unit has no display-contract matrix rows"}
+    if any("(skeleton)" in row["DISP-ID"] for row in matrix_rows):
+        return {"status": "fail", "reason": "display-contract matrix is still a whole-page skeleton row; split it by source region first"}
     bad_statuses = [
         row["B 现状"]
         for row in matrix_rows
-        if row["B 现状"] not in {"verified", "approved-deviation"}
+        if row["B 现状"] not in MATRIX_CLOSED_STATUSES
     ]
     if bad_statuses:
         return {"status": "fail", "reason": "display-contract matrix is not verified"}
-    return {"status": "pass", "reason": "display-contract rows are verified or approved-deviation"}
+    return {"status": "pass", "reason": "display-contract rows are verified, manual-verified, or approved-deviation"}
 
 
 def source_shellish(row: dict[str, str]) -> bool:
@@ -1289,6 +1546,10 @@ def build_markdown(args, data: dict) -> str:
             ("evidence", "证据"),
         ]),
         "",
+        "## Host 全局基线缺口",
+        "源页假定这些全局依赖存在。B 侧为脚本探测，A 侧必须按源模板人工填写；`host-missing` / `host-partial` 是后续每一页的长期约束。",
+        labeled_table(data["host_baseline_gap"], [(header, header) for header in HOST_BASELINE_HEADERS]),
+        "",
         "## 源仓页面清单",
         labeled_table(data["source_pages"], [
             ("key", "标识"),
@@ -1340,6 +1601,18 @@ def build_markdown(args, data: dict) -> str:
             ("mapping_status", "映射状态"),
             ("confidence", "置信度"),
             ("unresolved", "未决"),
+        ]),
+        "",
+        "## design-scope 选路判定",
+        "`repair` 只在对照状态为 `partial-overlap` 且宿主入口有 route/menu/MPA 证据时给出。仅文件名相似不足以判定 B 已有入口。",
+        labeled_table(data["design_scope_gate"], [
+            ("source_key", "源页"),
+            ("source_path", "源路径"),
+            ("status", "对照状态"),
+            ("host_entry", "宿主入口"),
+            ("host_entry_evidence", "入口证据"),
+            ("design_scope", "design-scope"),
+            ("reason", "依据"),
         ]),
         "",
         "## 耦合计数",
@@ -1484,6 +1757,7 @@ def collect_data(args) -> dict:
     host_pages = discover_pages(host, HOST_PAGE_EXTS, source=False) if host else []
     comparison = compare_pages(source_pages, host_pages)
     url_entry_mapping = build_url_entry_mapping(source, host, source_pages, host_pages)
+    reconcile_comparison_entries(comparison, url_entry_mapping)
     data = {
         "source_repo": source,
         "host_repo": host,
@@ -1499,6 +1773,8 @@ def collect_data(args) -> dict:
         "source_couplings": coupling_counts(source, SOURCE_SIGNALS),
         "source_closure_resources": closure_resource_rows(source),
         "recommended_units": recommended_units(comparison, url_entry_mapping),
+        "host_baseline_gap": host_baseline_gap_rows(host),
+        "design_scope_gate": repair_scope_gate(comparison),
     }
     data["display_contract"] = display_contract_rows(comparison, args.unit)
     data["verification_result"] = verification_result(args, data)
@@ -1525,10 +1801,12 @@ def write_outputs(args, data: dict) -> None:
         write_dict_csv(csv_dir / "01-repo-acquisition.csv", data["repo_acquisition"], ["repo_role", "repo_path", "acquisition_status", "acquisition_warning", "revision", "revision_source", "dirty_entries", "usable_for_stage", "notes"])
         write_dict_csv(csv_dir / "02-git-hygiene.csv", data["git_hygiene"], ["repo_role", "status_entries", "business_changes", "src_or_webapp_changes", "lockfile_changes", "dependency_noise", "stage_status", "notes"])
         write_dict_csv(csv_dir / "03-host-stack.csv", data["host_stack"], ["area", "value", "evidence"])
+        write_dict_csv(csv_dir / "03b-host-baseline-gap.csv", data["host_baseline_gap"], HOST_BASELINE_HEADERS)
         write_dict_csv(csv_dir / "04-source-pages.csv", data["source_pages"], ["key", "kind", "tokens", "path", "url_guess", "signals", "line_count"])
         write_dict_csv(csv_dir / "05-host-pages.csv", data["host_pages"], ["key", "kind", "tokens", "path", "url_guess", "signals", "line_count"])
-        write_dict_csv(csv_dir / "06-page-comparison.csv", data["comparison"], ["status", "match_basis", "candidate_score", "needs_human_correction", "source_key", "source_path", "source_url", "host_path", "host_entry", "confidence", "next_action"])
-        write_dict_csv(csv_dir / "07-url-entry-mapping.csv", data["url_entry_mapping"], ["source_url", "source_route_evidence", "source_template", "server_controller", "host_entry_html", "host_entry_ts", "host_menu_or_route", "mapping_status", "confidence", "unresolved"])
+        write_dict_csv(csv_dir / "06-page-comparison.csv", data["comparison"], ["status", "match_basis", "candidate_score", "needs_human_correction", "source_key", "source_path", "source_url", "host_path", "host_entry", "host_entry_evidence", "confidence", "next_action"])
+        write_dict_csv(csv_dir / "07-url-entry-mapping.csv", data["url_entry_mapping"], ["source_page_path", "source_url", "source_route_evidence", "source_template", "server_controller", "host_entry_html", "host_entry_ts", "host_route_path", "host_menu_or_route", "mapping_status", "confidence", "unresolved"])
+        write_dict_csv(csv_dir / "07b-design-scope-gate.csv", data["design_scope_gate"], DESIGN_SCOPE_HEADERS)
         write_dict_csv(csv_dir / "08-source-couplings.csv", data["source_couplings"], ["signal", "matches", "files"])
         write_dict_csv(csv_dir / "09-recommended-units.csv", data["recommended_units"], ["priority", "unit", "source_path", "status", "reason"])
         write_csv(csv_dir / "10-validation-gates.csv", ["gate", "check", "status"], GATE_ROWS)

@@ -163,6 +163,7 @@ import PhoneList from '../views/PhoneList.vue';
 
 const router = createRouter({
   routes: [
+    { path: '/', redirect: '/phones' },
     { path: '/phones', component: PhoneList },
   ],
 });
@@ -298,6 +299,72 @@ router.beforeEach(authGuard);
 
             recommended = self.read_csv(output_dir / "csv" / "09-recommended-units.csv")
             self.assertNotEqual("index", recommended[1][1])
+
+            baseline_gap = self.read_csv(output_dir / "csv" / "03b-host-baseline-gap.csv")
+            baseline_text = "\n".join(",".join(row) for row in baseline_gap)
+            self.assertIn("bootstrap/utility sheet", baseline_text)
+            self.assertIn("host-missing", baseline_text)
+            self.assertTrue(any(row[0] == "jquery + plugins" and row[5] == "host-provides" for row in baseline_gap[1:]))
+
+    def test_redirect_route_never_becomes_a_landing_entry(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source, host = self.create_fixture(root)
+            output_dir = root / "reports"
+            self.run_generator(output_dir, source, host)
+
+            url_mapping = self.read_csv(output_dir / "csv" / "07-url-entry-mapping.csv")
+            header = url_mapping[0]
+            route_column = header.index("host_route_path")
+            menu_column = header.index("host_menu_or_route")
+            route_paths = {row[route_column] for row in url_mapping[1:]}
+            self.assertIn("/phones", route_paths)
+            self.assertNotIn("/", route_paths)
+            self.assertFalse(
+                any(row[menu_column].startswith("Vue Router / (") for row in url_mapping[1:]),
+                "a redirect record must not borrow the next route's component",
+            )
+
+    def test_detail_route_is_not_mapped_to_the_list_page(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source, host = self.create_fixture(root)
+            output_dir = root / "reports"
+            self.run_generator(output_dir, source, host)
+
+            url_mapping = self.read_csv(output_dir / "csv" / "07-url-entry-mapping.csv")
+            header = url_mapping[0]
+            page_column = header.index("source_page_path")
+            url_column = header.index("source_url")
+            entry_column = header.index("host_entry_ts")
+
+            detail = next(row for row in url_mapping[1:] if row[page_column].endswith("phone-detail.template.html"))
+            self.assertEqual("#!/phones/:phoneId", detail[url_column])
+            self.assertNotEqual("src/views/PhoneList.vue", detail[entry_column])
+
+            listing = next(row for row in url_mapping[1:] if row[page_column].endswith("phone-list.template.html"))
+            self.assertEqual("#!/phones", listing[url_column])
+            self.assertEqual("src/views/PhoneList.vue", listing[entry_column])
+
+    def test_design_scope_gate_withholds_repair_without_route_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source, host = self.create_fixture(root)
+            output_dir = root / "reports"
+            self.run_generator(output_dir, source, host)
+
+            gate = self.read_csv(output_dir / "csv" / "07b-design-scope-gate.csv")
+            header = gate[0]
+            status_column = header.index("status")
+            scope_column = header.index("design_scope")
+            evidence_column = header.index("host_entry_evidence")
+
+            for row in gate[1:]:
+                if row[scope_column] == "repair":
+                    self.assertEqual("partial-overlap", row[status_column])
+                    self.assertEqual("route/menu/MPA evidence", row[evidence_column])
+                if row[status_column] == "unmigrated":
+                    self.assertEqual("new-landing", row[scope_column])
 
     def test_design_mode_emits_scoped_flow_contract_only_for_unit(self):
         with tempfile.TemporaryDirectory() as tmp:
