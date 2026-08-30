@@ -66,6 +66,7 @@ Goal: decide what can be migrated and in what order.
 Required outputs:
 
 - host stack summary, including host compile overlay
+- host baseline gap table
 - source page-entry inventory
 - A/B page comparison
 - coupling counts excluding vendor
@@ -103,6 +104,7 @@ Required outputs:
 - entry-wiring parity per slice
 - visual measurement evidence only when screenshots or measurements exist
 - manual-only label when visual measurement is missing, which never exempts a display-contract row
+- a recorded runtime-evidence attempt whenever browser automation is reported unavailable
 
 ## Host-First Discovery
 
@@ -117,6 +119,7 @@ Read host B before designing landing code:
 | Auth/session | route guards, token/cookie/session use, 401/403 handling, refresh/logout. |
 | State | Pinia, Vuex, composables, globals, cache. |
 | UI | component library, table/form/modal/date/upload/chart wrappers. |
+| CSS/asset baseline | Global stylesheets actually loaded, reset/normalize, utility or grid sheet presence, sprite sheets and coordinate maps, icon fonts, base font stack. |
 | i18n | vue-i18n or host-specific translation helper. |
 | Proxy/env | dev proxy, gateway path, env variables. |
 | Tests | lint/build/test scripts, Playwright/Cypress/Vitest/Jest gates. |
@@ -130,6 +133,26 @@ Host discovery must include common hosted-MPA details:
 - `@opentiny/vue`, Element Plus, and any dual component-library setup
 - host-side jQuery usage, even in a Vue3 repository
 - axios/login store/cookie/gateway/session bridge conventions
+
+### Host Baseline Gap Table
+
+Source pages assume a global environment that the host usually does not provide. Capture this once per host repository during `assess`, not once per page, so later units do not rediscover the same gap through broken rendering.
+
+| 基线类别 | A 假定的全局依赖 | A 证据 | B 是否提供 | B 落地方式 | 状态 |
+|---|---|---|---|---|---|
+
+Cover at minimum:
+
+- CSS reset/normalize and global base rules, including base font stack and any rule such as `font-size: 0` that hides otherwise correct markup
+- Bootstrap or another utility/grid sheet, plus the version the template's class names were written against
+- sprite sheets with their coordinate/size maps, icon fonts, and empty-state images
+- jQuery and the jQuery plugin styles/behaviors the template boots
+- global JS libraries the template assumes, such as date, table, chart, validation, or dialog helpers
+- server-rendered globals, hidden inputs, and session/request values injected into `window`
+
+Status enum: `host-provides`, `host-partial`, `host-missing`, `not-needed`.
+
+A `host-missing` or `host-partial` row is a standing constraint for every page closure in this host: each source region depending on it needs an explicit B landing method in its CSS closure row. Discovering a missing global baseline while repairing a page is a symptom of a skipped assess step, not a new finding.
 
 ## Source Page Inventory
 
@@ -243,8 +266,10 @@ Carry these source contracts through `assess`, `design`, repair, execute, and `v
 
 ### Browser Automation Disposition
 
-- If browser automation or equivalent runtime inspection is unavailable, record the blocked runtime checks as residuals and keep affected matrix rows `wired-unverified` or `mismatched`. A user hard refresh or manual observation note is useful context, but it is not agent-owned verification evidence.
-- Do not mark runtime visibility, hit-layer, hover/open state, modal geometry, sprite rendering, or entry-wiring rows as `verified` without agent-obtained browser/runtime evidence or an explicit approved manual disposition.
+- Attempt runtime evidence through the host toolchain before declaring it unavailable: an existing Playwright/Cypress/Puppeteer setup, the host dev server plus a one-off headless screenshot or DOM-dump script, or any runtime inspection the host already supports. Record the attempt and the concrete failure reason. "No browser automation" is a finding that must be earned, not a default.
+- Only after a recorded failed attempt may runtime checks be treated as blocked. Then keep affected matrix rows `wired-unverified` or `mismatched` and record the blocked checks as residuals. A user hard refresh or manual observation note is useful context, but it is not agent-owned verification evidence.
+- Do not mark runtime visibility, hit-layer, hover/open state, modal geometry, sprite rendering, or entry-wiring rows as `verified` without agent-obtained browser/runtime evidence.
+- A row that can never get agent-obtained evidence closes only as `manual-verified`, recording who checked it, the exact runtime condition checked, and when. This is a human release decision, not an agent conclusion, and it may not be applied in bulk to a whole region.
 
 ## Mixed-Stack Page Closure
 
@@ -310,13 +335,15 @@ Column rules:
 - 依赖 CSS: page CSS plus every shared style the region assumes, including sprites and rules such as `font-size: 0`.
 - 启动副作用: which page-init step populates this region on first paint.
 
-`B 现状` enum: `missing`, `mismatched`, `wired-unverified`, `verified`, `approved-deviation`.
+`B 现状` enum: `missing`, `mismatched`, `wired-unverified`, `verified`, `manual-verified`, `approved-deviation`.
 
 Rules:
 
 - Display-contract parity is code-comparable and mandatory in `verify`. It is separate from pixel/screenshot measurement.
 - `manual-only` may describe missing screenshot/measurement evidence. It never exempts copy, widget shape, defaults, geometry, or field formulas.
 - DOM presence is not visibility. For rows carrying visible copy or visible numbers, confirm runtime visibility, since host or shared CSS can hide otherwise correct markup.
+- `manual-verified` closes only a runtime condition the agent could not obtain evidence for after a recorded failed attempt, and only with checker, checked condition, and date. It never covers copy, widget shape, field formulas, defaults, or geometry, which are all comparable in code.
+- A closed matrix means every row is `verified`, `manual-verified`, or `approved-deviation`. `wired-unverified` is an open row, not a soft pass.
 
 ## Source i18n Text Table
 
@@ -434,7 +461,7 @@ Do not announce a page migration complete unless all are true:
 - Domain verify evidence is current for the same source and host revisions.
 - Host B revision is the revision that was built, tested, and reviewed.
 - Git hygiene has no blocking dependency/cache/build noise.
-- Every display-contract row is `verified` or `approved-deviation`.
+- Every display-contract row is `verified`, `manual-verified`, or `approved-deviation`.
 - Every slice passes entry-wiring parity.
 - Behavior, page-init, permission, URL, API, runtime/build, rollback, and visual/manual-only disposition have no blocking residuals.
 
@@ -455,6 +482,8 @@ Method:
 3. Per slice: restate the source contract, intended B files/entry points, verification steps, source-contract gates, residuals, and escalation triggers.
 4. Update matrix rows in place only for evidence-backed B status. Do not mark rows verified from planned work.
 5. Hand the repair slice plan to the approved execute owner before any B application code change.
+
+A repair packet that already carries scope, acceptance, and a slice plan may be approved through a single combined scope-and-implementation gate, because repair scope by definition adds no API contract, no permission-model change, and no traffic switch. The combined gate changes how many approvals are needed, not who implements: application code changes still belong to the approved execute owner, and the completion authority record is unchanged. Any escalation trigger below cancels the combined gate and returns the unit to full framing.
 
 Same-wrapper discoveries can stay in repair design: a source region found later under the same mounted wrapper may be added to the matrix and slice plan without restarting the whole assessment. Escalate out of repair and back to full framing when any of these appear: a different page or wrapper, a missing or changed API contract, a permission-model change, new behavior beyond source parity, traffic switching, rollback-scope change, or a discovery that the original source closure never scanned the selected wrapper.
 

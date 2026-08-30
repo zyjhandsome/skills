@@ -102,7 +102,7 @@ These commands discover candidates only. Read definitions, callers, templates, c
 - Verify restored CSS against the rendered DOM and click targets: selectors must hit real B nodes, source utility classes used by the template must be present, and layout fixes must not cover other controls.
 - CSS closure must cover template utility classes, sprite/icon size classes, runtime-hidden switch classes, empty-state images, and cascade safety for source state classes.
 - In repair scope, use mounted wrapper evidence (`ui-view`, `ng-include`, directives, includes, routes, runtime) to decide which views are in the UNIT. Same-wrapper discoveries may extend repair design; different wrappers or API/permission/traffic changes escalate.
-- Without browser automation or equivalent runtime evidence, keep affected visibility, hit-layer, modal, sprite, and entry-wiring rows `wired-unverified`; manual refresh notes are not agent-owned verification.
+- Attempt runtime evidence through the host toolchain before reporting it unavailable. Without agent-obtained runtime evidence, keep affected visibility, hit-layer, modal, sprite, and entry-wiring rows `wired-unverified`; manual refresh notes are not agent-owned verification. Such a row closes only as `manual-verified` per the Browser Automation Disposition rules in `references/hosted-vue3-migration-method.md`.
 - Split public dialogs by mode when buttons, copy, validation, side effects, or navigation differ.
 - Treat an existing host shell page as `partial-overlap` and produce a display-contract matrix. One or two click flows do not release it.
 - A slice is complete only when the host entry mounts it, it calls its API, and the user can reach it in the browser. Adding `lib/` helpers or component files alone is not complete.
@@ -141,6 +141,7 @@ Field-level column definitions, status enums, and table headers live in `referen
 
 - source/host revision, repo acquisition status and warnings, git hygiene summary
 - host stack summary including host compile overlay
+- host baseline gap table: which globals source A assumes (reset/base font, Bootstrap or other utility sheet, sprites, icon fonts, jQuery plugins, global JS libs, server-rendered globals) that host B does not provide
 - source page-entry inventory, A/B page comparison with match basis and human-correction flags
 - URL / entry mapping backed by Java route, menu, template return, or MPA entry
 - vendor-excluded coupling counts, suggested first units, gaps, risks
