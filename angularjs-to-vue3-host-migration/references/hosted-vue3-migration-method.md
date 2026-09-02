@@ -44,6 +44,28 @@ Record acquisition evidence:
 
 Do not make `sslVerify=false` a default strategy. If it was used during diagnosis, record it as a warning and bind the final evidence to the reused repository revision.
 
+## Revision Freshness Gate
+
+Bind every migration packet to the current source and host revisions, and also to the concrete files that supplied the page contract. Repository HEAD equality is required but not sufficient when the page contract rests on generated inventories or earlier conclusions.
+
+Before each wave that consumes older evidence, refresh these sources when they exist:
+
+| Source | Examples | Stale Effect |
+|---|---|---|
+| Source routes | Java/Spring `@RequestMapping`, AngularJS route/ui-router states, JSP/template returns | URL, unit identity, and page closure stale |
+| Source copy | `zh.json`, `en.json`, JSP/template literals, server-rendered labels | i18n table and display-contract copy stale |
+| Source behavior/API | controllers, services, jQuery handlers, request payload builders | FLOW/VAR/CHAIN and API parity stale |
+| Host entries | `scripts/getpage.js`, `src/pages/*/*.ts`, Vue Router, menu/permission registration | host landing and entry-wiring evidence stale |
+| Host runtime | `package.json`, lockfile, Node version files, build/test config, lint overlay config | runtime/build verification stale |
+
+Record a `freshness_manifest` with path, digest or timestamp, repository revision, and evidence owner for each source. If a digest changes, do not reuse the previous "decided" value as a gate against the current source. Re-open the affected MATRIX rows or design section and quote the current evidence.
+
+Common stale traps:
+
+- Source copy changing from one business term to another invalidates old acceptance text.
+- A newly added AngularJS hash/state invalidates an earlier "source has no such route" conclusion.
+- A host MPA page added on `develop` can be `develop-native` for a different contract, not automatic parity for this hash.
+
 ## Git Hygiene Gate
 
 Before implementation planning, execution, verification, commit, or completion claims, review git status separately for source A and host B.
@@ -134,6 +156,14 @@ Host discovery must include common hosted-MPA details:
 - host-side jQuery usage, even in a Vue3 repository
 - axios/login store/cookie/gateway/session bridge conventions
 
+Codebase Memory false negatives require fallback evidence before conclusions:
+
+- Zero Route nodes does not prove there are no entries in an MPA host. Use `getPages()`, `src/pages/*/*.ts`, HTML entries, menus, and route guards.
+- A graph snippet showing `route_path: '/'` can be a bootstrap shell or parser artifact. Verify Java annotations, route objects, or menu records before using it as a landing.
+- `static/`, `scripts/`, `src/i18n`, generated route tables, and JSP/Thymeleaf templates may be excluded or under-indexed. Read files for those contracts and record the fallback reason.
+- Empty Vue SFC inbound traces do not prove a component is unused. Check imports, route lazy loaders, page boot files, and template registrations.
+- Same-named Java methods, controllers, or API wrappers can represent different pages or flows. Compare URL, params, caller, and response fields before treating them as evidence.
+
 ### Host Baseline Gap Table
 
 Source pages assume a global environment that the host usually does not provide. Capture this once per host repository during `assess`, not once per page, so later units do not rediscover the same gap through broken rendering.
@@ -182,7 +212,12 @@ Normalize page keys from URL, route, menu label, template filename, component fi
 |---|---|
 | `unmigrated` | Source page exists; no host counterpart found. |
 | `partial-overlap` | Source and host overlap by name/route/domain but behavior is not proven equivalent. |
-| `already-migrated` | Host page exists and parity evidence exists or user confirms. |
+| `already-migrated` | Host page has closed source parity, outbound traffic points to it when authorized, and it is independently reachable at runtime. |
+| `dest-built-unwired` | Host destination page or helper exists, but source/host outbound navigation still lands on A or on an unapproved fallback. |
+| `wired-hidden` | Host entry or tab is wired, but runtime flags, permissions, `v-if`, feature switches, or parent shell state make it unreachable or invisible. |
+| `develop-native` | Host `develop` has a native page, but its route/hash/query contract is not this source unit. Treat as a candidate, not parity. |
+| `orphan-mpa` | MPA HTML/TS entry exists, but no matching source contract or reachable menu/route proves it is the selected unit. |
+| `deprecated-removed` | Source unit was removed from scope/SDD by decision. Do not restore it without a new approved change. |
 | `host-page-only` | Host page entry exists without source counterpart. |
 | `host-component` | Host reusable component exists without page-entry evidence. |
 | `host-shell` | Host bootstrap shell such as root `index.html`; not a business page by itself. |
@@ -196,6 +231,9 @@ Rules:
 - A host entry counts as proven only when route, menu, or MPA registration says so. Filename similarity, directory proximity, and matcher candidate scores are not entry evidence. Record which of the two a row rests on, because a `repair` decision made on a filename guess turns an unmigrated page into a phantom shell repair.
 - Route shape is part of identity. A source route with a dynamic segment (`/phones/:phoneId`) never maps to a host route without one (`/phones`), even when every filename token matches. Redirect records are hops, not landing points, and must not lend their target's component to the redirect path.
 - Treat `partial-overlap` as unmigrated work until a display-contract matrix exists. A present host shell proves layout only; data, copy, widget shape, defaults, and CSS are separately verifiable and are usually still missing.
+- Treat `dest-built-unwired`, `wired-hidden`, `develop-native`, and `orphan-mpa` as open states. They can support planning, but they cannot be counted as migrated or used to close archive/completion gates.
+- A tab label, hash alias, query parameter, or destination HTML file with a similar name is not a route-shape match. Keep one source hash/URL as one UNIT unless current route evidence proves they are the same runtime view.
+- `deprecated-removed` is a scope decision. Restoring it is a new requirement, not a repair.
 - `workBench` vs `workbench`, `taskManage` vs `taskManagement`, and similar token variants require human correction.
 - Host `.vue` files under components should be classified as component candidates, not host pages, unless route/menu/MPA evidence proves they are entries.
 - Root `index.html` and other shell/bootstrap files should be downgraded unless route/menu/runtime evidence proves they are the selected unit's landing point.
@@ -217,6 +255,12 @@ Build a separate URL/entry map before design:
 
 File-path URL guesses are low confidence. Do not use guessed URLs as acceptance criteria without route/menu/runtime evidence.
 
+Evidence source branches:
+
+- If Java/Spring routes are absent, AngularJS `$routeProvider`, ui-router states, hash routes, `templateUrl`, or runtime menu hash values are valid source URL evidence when tied to the selected template.
+- If MPA helpers are absent, Vue Router route records and menu route records are valid host entry evidence.
+- If neither source nor host has explicit route records, file paths remain guesses until runtime, menu, server return, or user-provided environment evidence confirms the landing.
+
 ## Source Contract Gates
 
 Carry these source contracts through `assess`, `design`, repair, execute, and `verify`. They are gates, not optional notes.
@@ -227,6 +271,12 @@ Carry these source contracts through `assess`, `design`, repair, execute, and `v
 - If the B landing is only a shell or skeleton and lacks the source page's full business body or page CSS closure, keep the source URL as the landing target until B parity is proven. Do not change navigation just to point at a Vue entry.
 - Use one landing function per UNIT for every outbound path: cards, menus, reminder dialogs, success callbacks, deep links, and upgrade/creation flows. Divergent ad hoc URL builders are a blocker.
 - Record a navigation landing row with source URL, normalized source path, candidate B entry, whether B is shell/skeleton/full parity, final landing target, and evidence.
+- Treat outbound switching as its own authorized slice. Building a destination page or helper is `dest-built-unwired` until every approved outbound path is changed and verified; when switch authorization is absent, contract tests should assert that theoretical B HTML targets do not appear in active href/open locations.
+- Distinguish URL semantics by destination:
+  - app-internal navigation may strip origin and normalize duplicate legacy context paths while preserving query and hash;
+  - iframe chrome may intentionally keep the source origin, and that `keepOrigin` behavior can be the completed contract;
+  - emails, cached external links, and user-copyable absolute links must usually remain absolute with the source/root path proven by current code.
+- Query and hash fields are contracts. Preserve fields such as `iframe`, `associate`, entity IDs, and task/detail IDs by source provenance; do not substitute a nearby project/user field unless the mapping is proven.
 
 ### Comparison And Identity
 
@@ -283,7 +333,7 @@ Include:
 - rendered globals, hidden fields, session/request-dependent values
 - AngularJS module/controller/service/directive/filter/template expressions
 - jQuery entry functions, events, DOM operations, plugin lifecycle
-- page-init and side effects, including `run` blocks, timers, and first-paint requests
+- page-init and side effects, including `run` blocks, timers, animation hooks, plugin scripts, global enhancement scripts, and first-paint requests
 - page CSS and the shared CSS/sprite/plugin styles it depends on
 - source i18n keys and their verbatim text
 - API endpoints, request fields, response-code handling
@@ -304,7 +354,7 @@ Do not reuse host B table/select/modal components to replace a source page's cus
 
 Do not copy source A JSP/Thymeleaf global layout into host B. You **must** still extract the page-level CSS closure, including shared `common.css` / sprite / bootstrap-plugin styles the page assumes, and reproduce it host-native and page-scoped in B. Never assume source global styles are still present.
 
-Land source i18n text verbatim. Keep migration units independently switchable and rollbackable.
+Land source i18n text verbatim. If no source i18n files exist, visible template literals and server-rendered literals are the copy baseline. Keep migration units independently switchable and rollbackable.
 
 ### Interaction Equivalence Test
 
@@ -487,6 +537,8 @@ Do not announce a page migration complete unless all are true:
 - Every display-contract row is `verified`, `manual-verified`, or `approved-deviation`.
 - Every slice passes entry-wiring parity.
 - Behavior, page-init, permission, URL, API, runtime/build, rollback, and visual/manual-only disposition have no blocking residuals.
+- No UNIT remains in `dest-built-unwired`, `wired-hidden`, `develop-native`, `orphan-mpa`, or other open comparison states.
+- Known formula, row-order, API-payload, URL, permission, or entry-wiring residuals prevent a green completion/archive status. A packet with zero verified MATRIX rows can be archived only as an explicit partial/residual handoff, not as parity complete.
 
 ## Shell-Page Repair
 
@@ -507,7 +559,9 @@ Method:
 4. Update matrix rows in place only for evidence-backed B status. Do not mark rows verified from planned work.
 5. Hand the repair slice plan to the approved execute owner before any B application code change.
 
-A repair packet that already carries scope, acceptance, and a slice plan may be approved through a single combined scope-and-implementation gate, because repair scope by definition adds no API contract, no permission-model change, and no traffic switch. The combined gate changes how many approvals are needed, not who implements: application code changes still belong to the approved execute owner, and the completion authority record is unchanged. Any escalation trigger below cancels the combined gate and returns the unit to full framing.
+`partial-overlap` is allowed to enter repair design because the host has a plausible mounted entry. It is still open work: until MATRIX rows, page-init, URL/API, CSS, and runtime reachability close, it must not be labeled `already-migrated`.
+
+A repair packet still requires two approval records for High migration work: one scope/specification approval and one implementation-go approval. The repair fast lane may run Frame and Plan in the same session, but it must not collapse the two gates into one. Application code changes still belong to the approved execute owner, and the completion authority record is unchanged. Any escalation trigger below cancels the repair fast lane and returns the unit to full framing.
 
 Same-wrapper discoveries can stay in repair design: a source region found later under the same mounted wrapper may be added to the matrix and slice plan without restarting the whole assessment. Escalate out of repair and back to full framing when any of these appear: a different page or wrapper, a missing or changed API contract, a permission-model change, new behavior beyond source parity, traffic switching, rollback-scope change, or a discovery that the original source closure never scanned the selected wrapper.
 

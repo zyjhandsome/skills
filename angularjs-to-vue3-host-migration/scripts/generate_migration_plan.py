@@ -146,6 +146,14 @@ GATE_ROWS = [
     ["completion authority", "领域复核只是证据；完成需要 Delivery verified + 领域复核 + 当前宿主修订", "待两边门禁"],
 ]
 
+ARTIFACT_STATUS_ROWS = [
+    {
+        "artifact_level": "baseline-only",
+        "authority": "evidence scaffold, not design-ready",
+        "handoff_rule": "human-filled MATRIX/FLOW/CHAIN/design-ready packet must be written back to DOMAIN_ROOT",
+    }
+]
+
 DESIGN_READY_ROWS = [
     ["page closure", "已识别源仓模板/片段/脚本/controller/service/API/资产", "not-ready: empty-contract"],
     ["display-contract matrix", "每个源区域有稳定 DISP 行，partial-overlap 已填 B 现状", "not-ready: empty-contract"],
@@ -714,6 +722,8 @@ def last_token_set(value: str) -> set[str]:
 def page_kind(root: Path, rel: Path, source: bool) -> str:
     parts = [part.lower() for part in rel.parts]
     if source:
+        if len(rel.parts) == 1 and rel.name.lower() in {"index.html", "index.htm", "main.html", "app.html"}:
+            return "source-shell"
         return "source-page"
     rel_text = str(rel).replace("\\", "/")
     if rel.suffix.lower() in {".html", ".htm"} and re.match(r"src/pages/[^/]+/[^/]+\.html?$", rel_text):
@@ -1652,6 +1662,11 @@ def build_markdown(args, data: dict) -> str:
         "",
         "本文件是证据基线。对照源仓与宿主代码复核之前，任何一行都不得当作实施设计。",
         "",
+        "## 脚本证据级别",
+        "- artifact_level: `baseline-only`",
+        "- authority: evidence scaffold, not design-ready",
+        "- handoff_rule: human-filled MATRIX/FLOW/CHAIN/design-ready packet must be written back to `<DOMAIN_ROOT>`",
+        "",
         "> 状态枚举、路径、命令、URL、CSV 字段名保持英文原文；章节标题、表头与说明默认简体中文。",
         "",
         "## 修订绑定",
@@ -1967,6 +1982,7 @@ def write_outputs(args, data: dict) -> None:
 
     if args.format in {"csv", "all"}:
         csv_dir = out / "csv"
+        write_dict_csv(csv_dir / "00-artifact-status.csv", ARTIFACT_STATUS_ROWS, ["artifact_level", "authority", "handoff_rule"])
         write_dict_csv(csv_dir / "01-repo-acquisition.csv", data["repo_acquisition"], ["repo_role", "repo_path", "acquisition_status", "acquisition_warning", "revision", "revision_source", "dirty_entries", "usable_for_stage", "notes"])
         write_dict_csv(csv_dir / "02-git-hygiene.csv", data["git_hygiene"], ["repo_role", "status_entries", "business_changes", "src_or_webapp_changes", "lockfile_changes", "dependency_noise", "stage_status", "notes"])
         write_dict_csv(csv_dir / "03-host-stack.csv", data["host_stack"], ["area", "value", "evidence"])

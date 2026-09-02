@@ -54,6 +54,7 @@ angular.module("legacyTask", []).controller("TaskController", function ($scope) 
         )
         write(source / "src/main/webapp/lib/common.css", ".mg0{margin:0}.open{display:block}")
         write(source / "src/main/webapp/locale/zh.json", "{\"query\":\"查询\"}")
+        write(source / "index.html", "<html><body><div id=\"app\"></div></body></html>")
         write(source / "src/main/webapp/views/projectProgress.jsp", "<div th:text=\"${name}\"></div>")
         write(
             source / "src/main/resources/templates/thymeleaf/workBench/index.html",
@@ -281,6 +282,7 @@ router.beforeEach(authGuard);
             source_pages_text = "\n".join(",".join(row) for row in source_pages)
             self.assertIn("app/phone-list.template.html", source_pages_text)
             self.assertIn("angularjs", source_pages_text)
+            self.assertIn("source-shell", source_pages_text)
 
             host_pages = self.read_csv(output_dir / "csv" / "05-host-pages.csv")
             host_pages_text = "\n".join(",".join(row) for row in host_pages)
@@ -299,6 +301,12 @@ router.beforeEach(authGuard);
 
             recommended = self.read_csv(output_dir / "csv" / "09-recommended-units.csv")
             self.assertNotEqual("index", recommended[1][1])
+            self.assertFalse(any(row[1] == "index" for row in recommended[1:]))
+
+            artifact_status = self.read_csv(output_dir / "csv" / "00-artifact-status.csv")
+            artifact_status_text = "\n".join(",".join(row) for row in artifact_status)
+            self.assertIn("baseline-only", artifact_status_text)
+            self.assertIn("not design-ready", artifact_status_text)
 
             baseline_gap = self.read_csv(output_dir / "csv" / "03b-host-baseline-gap.csv")
             baseline_text = "\n".join(",".join(row) for row in baseline_gap)
@@ -374,6 +382,8 @@ router.beforeEach(authGuard);
             self.run_generator(output_dir, source, host, "design", "--unit", "taskManage")
 
             markdown = (output_dir / "design-evidence.md").read_text(encoding="utf-8")
+            self.assertIn("artifact_level: `baseline-only`", markdown)
+            self.assertIn("not design-ready", markdown)
             self.assertIn("单元（1 个，上限 5）：`taskManage`", markdown)
             self.assertIn("限定范围的 FLOW/CHAIN 合同", markdown)
             self.assertIn("设计就绪门禁", markdown)

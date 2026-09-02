@@ -11,6 +11,8 @@
 >
 > `delivery-execute-verify` 是唯一应用代码 mutation owner；其余 Wave 对 A/B 应用代码只读。
 > Wave 3 无论 `new-landing` 还是 `repair` scope，都只产出合同和切片计划，不直接写 B。
+>
+> 项目专有误判钉子放在 `docs/angularjs-host-migration-hiapm-appendix.md`。通用粘贴块只保留可泛化规则。
 
 ## 0. 编排结论
 
@@ -56,6 +58,27 @@ Wave 1  建 change（已有 change 时只做恢复校验）
 
 入口证据只认路由/菜单/MPA 注册。文件名相似、目录相近、匹配器给出的候选分都不是入口证据——
 一个 `unmigrated` 的详情页很容易被配到同名列表页的 `.vue` 上，据此开 `repair` 会把未迁页当成壳页修。
+
+### 完成态与开口状态
+
+目的页建出来、Tab 接上、change 勾完，都不等于迁完。每个 UNIT 必须显式落在下面的状态之一：
+
+| 状态 | 含义 | 是否可完成 |
+|---|---|---|
+| `already-migrated` | 闭包对等、出站已按授权切到 B、运行时可独立到达，且 MATRIX 已结清 | 是 |
+| `dest-built-unwired` | B 目的页/组件/helper 已存在，但出站仍落 A 或未授权切流 | 否 |
+| `wired-hidden` | Tab/入口已接，但被 `v-if`、权限、feature flag、父壳状态或运行时隐藏 | 否 |
+| `develop-native` | B `develop` 有原生页，但不是本源 hash/URL/query 合同 | 否 |
+| `orphan-mpa` | 有 MPA HTML/TS，但没有匹配源合同或可达入口证据 | 否 |
+| `deprecated-removed` | 已由范围/SDD 决定废弃删除，禁止在 repair 中恢复 | 否，除非新 change 批准 |
+
+T16（出站切 B）是独立授权切片。未授权时，合同测试要断言理论 B HTML/hash 不出现在 active href/open 中；
+已授权时，必须逐出口证明卡片、菜单、Tab、弹窗、成功回调、deep link 都走同一落地函数。
+
+### 项目反例附录
+
+通用规则只记录模式：壳存在不等于迁完、详情抽屉不等于独立页、隐藏入口不等于可达、
+iframe/mail/external URL 与应用内跳转语义不同。hiapm -> apmweb3 的专有页面名、URL 和 T16 反例见附录。
 
 ### UNIT 批次
 
@@ -154,6 +177,8 @@ Wave 1  建 change（已有 change 时只做恢复校验）
 <UNIT>  = 引用单个成员时使用；<UNITS> 只有一个成员时两者等价
 
 自动派生并保持稳定：
+- canonical_skill_id：`angularjs-to-vue3-host-migration`。CONFIG、handoff、next_skill、报告 Skill 字段必须原样使用；
+  不得缩写成相近名称。
 - <SLUG>：批次大小为 1 时由 <UNIT> 规范化；批次更大时由 <UNITS> 首个成员加 `-batch<N>` 规范化；过长时追加短 SHA-256
 - <CHANGE_ID>：migrate-<SLUG>-to-vue3-host
 - <CHANGE_DIR>：openspec\changes\<CHANGE_ID>
@@ -162,10 +187,14 @@ Wave 1  建 change（已有 change 时只做恢复校验）
 - <CONFIG>：<DOMAIN_ROOT>\migration-run-config.json
 - <INDEX_MANIFEST>：<DOMAIN_ROOT>\codebase-index-manifest.json
 - <RUNTIME_MANIFEST>：<DOMAIN_ROOT>\runtime-service-manifest.json
+- <FRESHNESS_MANIFEST>：<DOMAIN_ROOT>\freshness-manifest.json
 - <MATRIX>：<DOMAIN_ROOT>\display-contract-<SLUG>.md（控件矩阵唯一台账，跨 Wave 只更新不重开；
   批次模式下每行带「迁移单元」列，一个台账覆盖整批）
 
 <CONFIG> 存在后以其记录为准；与本次输入不一致时停止。
+唯一状态源是 `<CHANGE_DIR>` 与其 `<DOMAIN_ROOT>`。`_live-eval*`、临时报表目录、复制到 change 外的 Markdown/CSV
+只能作为实验室证据，不能作为 Wave 恢复、批准、verify 或完成判定权威。人填 MATRIX、freshness、design-ready packet
+必须写回 `<DOMAIN_ROOT>` 并记录 path/digest。
 
 代码发现默认 Codebase Memory MCP：
 index_repository（需要时）→ get_architecture → search_graph / search_code →
@@ -178,6 +207,12 @@ trace_path → get_code_snippet → query_graph。
 首次进入真实 A/B 路径时必须按当前路径重建或刷新索引；旧路径索引只能作为历史线索，
 不能作为 pass 证据。若图谱缺 Route 节点，必须用 Java/Spring route、模板、菜单和
 MPA entry 扫描补证，不得由“图谱没有入口”推导为“入口不存在”。
+
+<FRESHNESS_MANIFEST> 记录当前 A/B revision 下真正支撑合同的文件 digest：
+A Java route、AngularJS route/ui-router/hash、A i18n、A controller/service/jQuery payload、
+B `scripts/getpage.js` / `src/pages/*/*.ts`、B menu/permission、B package/lockfile/build config。
+任一 digest 变化，对应 MATRIX、FLOW/VAR/CHAIN、URL/entry、i18n 或 runtime 证据 stale；
+禁止用上一波“已决结论”压当前源事实。
 
 仓库获取、revision 绑定、Git 卫生门禁：按
 `angularjs-to-vue3-host-migration/references/hosted-vue3-migration-method.md` 的
@@ -212,7 +247,7 @@ decision_needed / recommended_resolution / resume_point
 |---|---|
 | 1 建 change | 无；创建或恢复 change、Config、evidence 目录 |
 | 2 Assess | Config、change 目录；规格尚未批准为正常 |
-| 3 Design | Assess evidence、A/B revisions、候选迁移单元、host stack、host baseline gap 表；`repair` scope 另需 <MATRIX> 与 B 已有入口证据；批次另需准入判定与试点 archive 状态 |
+| 3 Design | Assess evidence、A/B revisions、<FRESHNESS_MANIFEST>、候选迁移单元、host stack、host baseline gap 表；`repair` scope 另需 <MATRIX> 与 B 已有入口证据；批次另需准入判定与试点 archive 状态 |
 | 4 Frame | Design-ready domain evidence（`new-landing`）、change 目录、意图草稿 |
 | 5 Plan | 已批准 Frame 规格、domain evidence path/digest、Frame handoff；批次另需试点 change 已 archive |
 | 4R 同会话连跑 | Wave 3 `repair` design-ready evidence、<MATRIX>、B 入口证据（route/menu/MPA）、change 目录；批次另需试点 change 已 archive |
@@ -244,8 +279,9 @@ openspec: cli-only 时按 Frame Skill 固定三行报告，并询问 initialize_
 若 HEAD 不可读或路径不是 git repo，停止。
 
 正式创建或恢复唯一 <CHANGE_DIR>，并创建 <DOMAIN_ROOT>、<CONFIG>、
-<INDEX_MANIFEST>、<RUNTIME_MANIFEST> 初始结构。
+<INDEX_MANIFEST>、<RUNTIME_MANIFEST>、<FRESHNESS_MANIFEST> 初始结构。
 <CONFIG> 或初始 evidence 必须包含 repo acquisition 表与 git hygiene 摘要。
+<CONFIG> 必须写入 canonical_skill_id=`angularjs-to-vue3-host-migration`；handoff/next_skill 不得使用缩写。
 本波不得安装依赖或启动 A/B。
 
 只写意图草稿：
@@ -286,6 +322,8 @@ assess 是全仓一次扫完的，不按 UNIT 收费：一次运行同时覆盖 
   jQuery 及插件、全局 JS 库、服务端注入的全局变量）在 B 是否存在；
   这是宿主级事实，只做一次，后续每页复用，不允许在修页时才发现
 - <UNITS> 每个成员的候选 source entry、真实 source URL 与 host landing point
+- <FRESHNESS_MANIFEST>：逐成员绑定 A route/hash/i18n/API 行为文件与 B MPA/menu/permission/runtime 文件 digest；
+  A i18n、ui-router/hash、Java `@RequestMapping` 或 B MPA entry 与旧 evidence 不一致时，直接标旧 MATRIX/packet stale
 - 若某成员判为 `partial-overlap`：把首轮控件矩阵写入 <MATRIX>，每行填「迁移单元」和 `B 现状`
   （missing / mismatched / wired-unverified / verified / manual-verified / approved-deviation）；
   脚本只给整页 `(skeleton)` 骨架行，必须按源区域拆分后才算矩阵
@@ -304,11 +342,14 @@ python angularjs-to-vue3-host-migration/scripts/generate_migration_plan.py asses
   --output-dir "<DOMAIN_ROOT>\\assess" \
   --format all
 
-脚本输出只是 evidence baseline；必须用代码证据复核，不得把通用表格当设计，
-也不得用脚本表替代控件矩阵。
+脚本输出只是 evidence baseline，artifact_level=baseline-only；必须用代码证据复核，不得把通用表格当设计，
+也不得用脚本表替代控件矩阵。`_live-eval*` 输出不能作为恢复权威，合格包必须写回 <DOMAIN_ROOT>。
 仓库获取与 Git 卫生表必须进入 assess evidence；出现 dependency/cache/build noise 时，后续不得声明 commit-ready。
 A/B 页面对照与页面分类规则按 Skill 与 hosted-method 执行（文件名不等于 already-migrated、
 `.vue` 不默认当页面、根 `index.html` 只能当 host-shell、别名近似命中标 needs_human_correction）。
+额外填每个成员的完成态枚举：`already-migrated` / `dest-built-unwired` / `wired-hidden` /
+`develop-native` / `orphan-mpa` / `deprecated-removed` / 其他 hosted-method 状态。
+`dest-built-unwired`、`wired-hidden`、`develop-native`、`orphan-mpa` 都不得作为完成态或 archive 绿灯。
 
 生成 assess evidence packet 或 Markdown 摘要到 <DOMAIN_ROOT>，记录 path/digest、A/B revision、
 source/host page comparison、URL/entry mapping、host compile overlay、host baseline gap 表、
@@ -345,7 +386,7 @@ source/host page comparison、URL/entry mapping、host compile overlay、host ba
 design-scope=<new-landing|repair>（取 Wave 2 的结论，整批同一个 scope）。
 本波只产出合同与切片计划，不修改 A/B 应用代码。
 
-应已存在：<CONFIG>、Wave 2 assess evidence、A/B revision、host stack、host baseline gap 表、
+应已存在：<CONFIG>、Wave 2 assess evidence、A/B revision、<FRESHNESS_MANIFEST>、host stack、host baseline gap 表、
 A/B page comparison。design-scope=repair 另需 <MATRIX> 与每个成员在 B 侧的 MPA/router 入口证据。
 缺失或 stale 则回 Wave 2。
 
@@ -386,11 +427,18 @@ Step 1 补齐合同：
   gap 表标 `host-missing` / `host-partial` 的基线，本页用到就必须有显式落地方式
 - 源码存在但 SIT/运行时隐藏的功能默认保持隐藏；要显示必须记录 approved-deviation
 - 共享弹窗按模式分行；导航落地写清源 URL、剥源后路径、B 是否骨架、最终回源还是进 B
+- 出站切 B 单独成片：未获 T16/切流授权时，所有 active href/open 仍应落 A 或既有 fallback，
+  测试反向断言不得出现理论 B HTML/hash；获授权后才逐出口切同一 landing helper
+- URL 按目的分三类：应用内跳转可剥源并保留 query/hash；iframe chrome 可 `keepOrigin`；
+  邮件/外链/可复制链接默认保留绝对 `rootPath`，除非当前源证据证明可相对化
 - 源站契约门禁写入设计：身份字段、比较契约、命中层、选择器↔DOM、绝对 URL 剥源、
   B 骨架不改导航、同一 UNIT 出口共用落地函数
 - 闭包以已挂载 wrapper 为准：`ui-view`、`ng-include`、指令、server include、路由/菜单和运行时证据
 - FLOW/VAR/CHAIN 逐成员分节，只针对 <UNITS> 成员，不铺全仓空表
 - 批次模式：每个成员各自一套页面闭包、矩阵行、page-init、i18n、CSS 闭包，不允许合并成一份共用合同
+- 一 hash/URL/query 合同一 UNIT。文件名相近、Tab 参数相近、同一报表中心内多个 hash，都不能合成一个 UNIT。
+输出必须是人填 design-ready packet：具名 <MATRIX>、<FRESHNESS_MANIFEST>、填过的 design-ready 表、
+FLOW/VAR/CHAIN 与 URL/entry 证据都写回 <DOMAIN_ROOT>；脚本 baseline-only 目录不能直接交给 Wave 4。
 矩阵缺行、`B 现状` 空、或存在只有表头的表，禁止进入 Step 2。
 
 Step 2 产出切片计划：
@@ -443,7 +491,7 @@ python angularjs-to-vue3-host-migration/scripts/generate_migration_plan.py desig
   → 改用 new-landing 重做本波
 以上任一升级都会撤销 repair 的快车道资格。
 
-结束输出：design-ready domain evidence path/digest、<MATRIX> path/digest 与行状态统计、
+结束输出：人填 design-ready domain evidence path/digest、<MATRIX> path/digest 与行状态统计、
 切片计划、residual 与 blocker、实测 node 版本、external_artifacts 更新位置。
 不要 archive、commit、push、PR、部署、切流。
 design-scope=repair 且无升级条件 → 下一步 Wave 4R 同会话连跑；
@@ -458,9 +506,10 @@ design-scope=repair 且无升级条件 → 下一步 Wave 4R 同会话连跑；
 显式使用 delivery-frame-spec Skill。
 不要 Plan/Execute。本波不得修改 A/B 应用代码。
 
-应已存在：<CHANGE_DIR>、Wave 3 design-ready domain evidence path/digest。
+应已存在：<CHANGE_DIR>、Wave 3 人填 design-ready domain evidence path/digest。
 若只有 assess、design 未 ready、FLOW/CHAIN 只有表头、URL/entry 缺少真实证据，
-或 design-ready gate 未通过，停止并回 Wave 3。
+<MATRIX> 仍是脚本 skeleton、artifact_level=baseline-only 未被人填 packet 覆盖，或 design-ready gate 未通过，
+停止并回 Wave 3。
 若批次的 design-scope 是 `repair` 且没有触发任何升级条件，本波不适用：改走 Wave 4R 同会话连跑。
 由 `repair` 升级而来的成员在本波按 new-landing 处理，并作废原快车道资格。
 
@@ -520,6 +569,8 @@ design-scope=repair 且无升级条件 → 下一步 Wave 4R 同会话连跑；
 就绪审查跑 G1–G3、G8、G5。存在阻塞项时不得询问实施授权。
 就绪后只询问一次实施 go，一次覆盖整批，并绑定当前 artifact_revision、A/B revision、批准人、
 时间、范围、验证义务、回退条件和 accepted warning IDs。
+若已有 go 记录为 denied、expired、simulated、stub 或绑定旧 artifact_revision，不得进入 Wave 6。
+需要改授权时重新进入 Wave 5：刷新 design/tasks、重跑就绪审查、重新询问实施 go，并作废旧 execute stub/handoff。
 
 结束输出：design/tasks、任务数量、前置任务组与并行分组、readiness、验证矩阵、实施闸门、
 handoff path/revision。
@@ -609,6 +660,8 @@ A/B revision 或 evidence stale 则回对应产生 Wave。
 
 Preflight：
 - 实施 go 绑定当前 artifact_revision 与 A/B revision
+- <FRESHNESS_MANIFEST> 中 A route/hash/i18n/API 与 B MPA/menu/permission/runtime digest 仍匹配当前 revision；
+  不匹配则回 Wave 2/3，不得按旧文案或旧 hash 实施
 - B 用户改动受保护
 - 任务路径无未接受冲突
 - baseline/runtime/evidence 有效
@@ -620,6 +673,8 @@ Preflight：
   Prettier/EditorConfig 缩进配置；列出 `lintOnSave` 会扫到的范围外脏文件
 - 任一成员入口编译失败为阻塞；全仓无关文件造成的 overlay 记 residual，
   两种情况都不得声明 dev server 健康
+- 若 lint 基线已有范围外错误，记录 lint 基线命令、错误数和文件范围；可使用获批的替代验证命令覆盖本 UNIT，
+  但不得把 lint 基线坏说成通过。若 dev proxy 会拦截 `public/` 或静态 mock 路径，先记录并调整验证路径。
 
 严格按 tasks.md 执行：
 - 适用时 RED → GREEN → REFACTOR
@@ -629,6 +684,8 @@ Preflight：
 - 只改 B 获批范围
 - 禁止对范围外遗留文件做格式化、缩进转换或顺手类型补全；这些文件记为 residual
 - 切片完成判据：入口已挂载、已调用 API、用户在页面上可点到；只加 helper/组件文件不算完成
+- T16 / 出站切 B 若未在 tasks.md 中授权，禁止把 active href/open 指向理论 B 目的页；
+  若已授权，切换任务必须逐出口列 evidence，并保留邮件/外链绝对 URL 例外
 - 每片执行 Source Contract Gates：身份字段、比较契约、命中层、选择器↔DOM、绝对 URL 剥源、
   B 骨架不改导航、同一 UNIT 出口共用落地函数
 - 每片执行 CSS closure gates：模板 utility、Bootstrap 形态 class、sprite/icon size、runtime-hidden switch、
@@ -649,6 +706,7 @@ Fresh Verification Gate：
 - Requirement/Scenario 对照
 - 行为/权限/URL/API/错误
 - page-init 对照：`run` 块、controller init、定时器/延迟弹窗、首屏请求、默认筛选值
+- 页闭包包含动画脚本、插件脚本、全局增强脚本和运行时 CSS/JS 开关；漏扫这些文件导致的行为差异回 Wave 2/3
 - display-contract parity：<MATRIX> 逐行过，检查源文案原文、控件形态、字段公式、默认值/校验、
   几何、CSS 依赖；对可见文案与可见数字确认运行时真的可见（DOM 存在不等于可见）
 - source-contract gates：身份字段、比较契约、共享弹窗模式、命中层、选择器↔DOM、
@@ -658,6 +716,7 @@ Fresh Verification Gate：
   或 dev server + 一次性 headless 截图/DOM dump 脚本），记录尝试与失败原因；
   确实取不到时输出需人工确认项，这些行保持 wired-unverified，不得标 verified，也不得由 agent 自行标 manual-verified
 - entry-wiring parity：每个切片已挂载、已调用、用户可达
+- outbound parity：T16 未授权时验证仍不切 B；T16 已授权时验证所有出站入口都走同一 B landing，且 iframe/mail/external URL 例外有证据
 - rollback/fallback 演练
 - OpenSpec coherence
 - High 独立审查
@@ -687,11 +746,13 @@ residual 清单、verification、handoff path/revision。说明下一步为 Wave
 批次结论不取平均：逐成员出结论，任一成员未结清则整批 fail。
 
 应已存在：Delivery verification、verified handoff、当前 B 代码、领域 assess/design evidence。
-Delivery 未 verified 则回 Wave 6，不得声称迁移完成。
+Delivery 未 verified 则回 Wave 6，不得声称迁移完成。Delivery verified_with_residuals 只能作为有残留交付证据，
+不能满足本波完成候选。
 
 先校验：
 - A revision 是否仍等于领域证据绑定 revision；变化则回 Wave 2
 - B revision 是否等于 Delivery verified revision；变化则回 Wave 6 或重新验证
+- <FRESHNESS_MANIFEST> 中 A route/hash/i18n/API 与 B MPA/menu/permission/runtime digest 是否仍匹配；变化则回对应 Wave
 - Codebase Memory 图谱是否绑定当前 revision；stale 则重新 index_repository
 - domain evidence path/digest 是否完整
 
@@ -702,6 +763,7 @@ Delivery 未 verified 则回 Wave 6，不得声称迁移完成。
 - entry-wiring parity
 - permission parity
 - URL parity
+- outbound/T16 parity：未授权不切，已授权逐出口切；目的页存在、Tab 接上、helper 存在都不能替代出站证据
 - source-contract gates：身份字段、比较契约、共享弹窗模式、命中层、选择器↔DOM、
   绝对 URL 剥源、B 骨架不改导航、同一 UNIT 所有出口落地一致、合约测试加载方式
 - CSS closure gates：模板 utility、Bootstrap 形态 class、sprite/icon size、runtime-hidden switch、
@@ -806,6 +868,9 @@ decision_needed / recommended_resolution / resume_point
 - 像素/截图类视觉结论有测量证据；没有测量链时明确不是 visual pass，且 manual-only 不覆盖任何
   display-contract 行；
 - fallback/rollback 已演练或清楚记录未演练 blocker，且该 UNIT 的回退开关独立于同批其他成员；
+- UNIT 不处于 `dest-built-unwired`、`wired-hidden`、`develop-native`、`orphan-mpa`、`unknown` 等开口状态；
+- MATRIX `verified=0`、已知公式/行序/API payload/URL/query/权限 residual、或 visual 只有 manual-only 且 display-contract 未结清时，
+  不得把页面清单标绿或 archive 成对等完成；
 - 无 blocking residual。
 
 此时仍不自动 archive、commit、push、PR、部署、切流、删除 fallback 或下线 A。

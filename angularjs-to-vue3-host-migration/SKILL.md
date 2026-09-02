@@ -1,6 +1,6 @@
 ---
 name: angularjs-to-vue3-host-migration
-description: Use when assessing, designing, or verifying migration of AngularJS 1.x/jQuery/JSP/Thymeleaf mixed legacy pages into an existing Vue 3 host repository. Supports dual-repo source-vs-host comparison, page-level migration units, business-flow and variable-chain reconstruction, host-stack gap analysis, URL/permission/API rollback gates, and evidence reports for projects like hiapm -> apmweb3. Not for greenfield Vue 3 creation unless no host repository exists.
+description: Use when assessing, designing, or verifying migration of AngularJS 1.x/jQuery/JSP/Thymeleaf mixed legacy pages or user behaviors into an existing Vue 3 host repository. Use for dual-repo source-to-host parity work, shell-page repair packets, or final domain verification. Not for greenfield Vue 3 creation unless no host repository exists.
 ---
 
 # AngularJS To Vue 3 Host Migration
@@ -12,7 +12,7 @@ This skill is independent and read-only for application code. Do not depend on `
 ## Modes
 
 - `assess`: compare source A and Vue3 host B, identify overlaps, gaps, risks, and candidate migration units.
-- `design`: produce an implementation-ready page/user-behavior design for one specified migration unit.
+- `design`: produce an implementation-ready page/user-behavior design for 1 to 5 specified migration units.
 - `verify`: define and/or run parity checks for behavior, permission, URL, API, display contract, visual evidence, rollback, and host build gates.
 - `greenfield`: use only when the user explicitly has no Vue3 host. This is not the default path.
 
@@ -44,12 +44,14 @@ If only one repo is available, perform source-only assessment and state that hos
    - JSP, Thymeleaf, HTML, server templates, page-level `ng-app`/`ng-controller`, AngularJS modules/controllers/services/directives/filters, jQuery entry functions, Ajax, DOM operations, plugins.
    - Exclude dependency and evidence noise: `.git`, `node_modules`, `dist`, `build`, `target`, `coverage`, `reports`, `evidence`, `openspec`, `test`, `tests`, `e2e-tests`, `vendor`, `vendors`, `lib`, `libs`, `locale`, `locales`, generated bundles, minified files, `*.spec.*`, `*.test.*`, `*.e2e.*`.
 8. Produce A/B page comparison:
-   - `unmigrated`, `partial-overlap`, `already-migrated`, `host-page-only`, `host-component`, `host-shell`, `unknown`.
+   - `unmigrated`, `partial-overlap`, `already-migrated`, `dest-built-unwired`, `wired-hidden`, `develop-native`, `orphan-mpa`, `deprecated-removed`, `host-page-only`, `host-component`, `host-shell`, `unknown`.
    - Include old URL/template and new host entry/route when evidence exists.
    - Treat filename/path matches as candidates only. Include match basis, candidate score, and whether human correction is required. Never mark `already-migrated` from filename matching alone.
+   - Mark `already-migrated` only when source parity is closed, authorized outbound traffic lands on B, and the unit is independently reachable at runtime.
    - Distinguish host pages/entries from reusable components and shell files. Do not treat every `.vue` file or root `index.html` as a page.
 9. Produce URL and entry mapping:
    - Prefer Java/Spring route annotations, menu config, server template returns, MPA `getPages()`/`src/pages/*/*.ts`, and host route/menu evidence over guessed file paths.
+   - When Java/Spring routes are absent, AngularJS `$routeProvider`, ui-router states, hash routes, or template URL mappings are source URL evidence. When MPA is absent, Vue Router route records are host entry evidence. When i18n files are absent, visible template literals are the source copy baseline.
    - Mark file-derived URL guesses as low confidence until backed by route/menu/MPA evidence.
 10. Choose migration units as independently switchable pages or user behaviors, not whole-repo batches. `design` and `verify` accept up to 5 units per run (repeat or comma-separate `--unit`); a batch is several independent units, never one large page.
 11. For each selected unit, produce a page closure:
@@ -98,10 +100,13 @@ These commands discover candidates only. Read definitions, callers, templates, c
 - Every visible number, list, label, and badge needs an API plus a field formula. Sums, joins, select-all titles, and derived counters belong in the chain tables, not in prose.
 - Apply `Source Contract Gates` from `references/hosted-vue3-migration-method.md`: navigation landing, comparison and identity mapping, shared modal modes, hit layer, selector-to-DOM binding, CSS utility closure, interruption hygiene, and contract test harness.
 - Strip source absolute URLs in menu/cache/`data-href`/open handlers to the current source path before deciding a host landing. If B is only a skeleton, keep the source URL until parity is proven, and make every UNIT exit share one landing function.
+- Treat outbound switching as a separately authorized slice. Destination files, tabs, helpers, or theoretical hash mappings are `dest-built-unwired` until all approved exits land on B; when switch authorization is absent, tests should prove active links still do not point at the theoretical B page.
+- Preserve URL semantics by destination: app-internal navigation may strip origin, iframe chrome may intentionally keep origin, and email/external/user-copyable links usually remain absolute. Preserve query/hash identity fields by source provenance.
 - Preserve comparison operators, runtime types, and identity-field provenance. Do not replace source hidden/global/session/user fields with a nearby host store getter unless the mapping is proven.
 - Verify restored CSS against the rendered DOM and click targets: selectors must hit real B nodes, source utility classes used by the template must be present, and layout fixes must not cover other controls.
 - CSS closure must cover template utility classes, sprite/icon size classes, runtime-hidden switch classes, empty-state images, and cascade safety for source state classes.
 - In repair scope, use mounted wrapper evidence (`ui-view`, `ng-include`, directives, includes, routes, runtime) to decide which views are in the UNIT. Same-wrapper discoveries may extend repair design; different wrappers or API/permission/traffic changes escalate.
+- `partial-overlap` may enter repair design only when entry evidence and route shape match; before the MATRIX is closed, it must not be reported as `already-migrated`.
 - Attempt runtime evidence through the host toolchain before reporting it unavailable. Without agent-obtained runtime evidence, keep affected visibility, hit-layer, modal, sprite, and entry-wiring rows `wired-unverified`; manual refresh notes are not agent-owned verification. Such a row closes only as `manual-verified` per the Browser Automation Disposition rules in `references/hosted-vue3-migration-method.md`.
 - Split public dialogs by mode when buttons, copy, validation, side effects, or navigation differ.
 - Treat an existing host shell page as `partial-overlap` and produce a display-contract matrix. One or two click flows do not release it.
@@ -109,7 +114,8 @@ These commands discover candidates only. Read definitions, callers, templates, c
 - A slice is complete only when the host entry mounts it, it calls its API, and the user can reach it in the browser. Adding `lib/` helpers or component files alone is not complete.
 - Do not default to creating a Vue3 skeleton. Use greenfield Vite/create-vue only when no host exists.
 - Do not replace host B runtime stack unless the gap analysis proves a blocker and the user approves.
-- Bind evidence to source and host revisions. If either repo changes, affected evidence and design decisions expire.
+- Bind evidence to source and host revisions and to the concrete route/i18n/API/MPA/menu files that supplied the contract. If repo revisions or those file digests change, affected MATRIX rows and design decisions expire.
+- Treat Codebase Memory as the preferred discovery surface, but never as a sole negative proof for entries, routes, i18n, scripts, static assets, Vue SFC inbound usage, or same-named Java/API flows. Use file-level fallback evidence for those cases and record why.
 - Keep FLOW/VAR/CHAIN tables scoped to the selected page/user behavior. Do not emit whole-repo empty chains.
 
 ## Display Contract
@@ -171,6 +177,8 @@ For each selected page or user behavior (1 to 5 per run):
 - entry-wiring parity: each slice is mounted, called, and reachable
 - visual measurement parity: screenshots/measurements, otherwise `manual-only`. `manual-only` here does not exempt any display-contract row.
 - completion authority: domain verify evidence cannot by itself declare migration complete; require Delivery verified evidence, current host revision, and no blocking residuals
+- delivery boundary: completion reports may name downstream Delivery evidence as a required authority, but this skill must not load or call `delivery-*`
+- open-state block: no selected unit may remain `dest-built-unwired`, `wired-hidden`, `develop-native`, `orphan-mpa`, `unknown`, or any other non-closed status
 - batch results are per unit and never averaged: report one conclusion per unit, and one failing unit fails the batch
 
 ## Bundled Resources
