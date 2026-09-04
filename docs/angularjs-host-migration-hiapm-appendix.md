@@ -13,3 +13,7 @@
 - `TaskDetailDrawer` 不是 `taskDetail.do` 独立页；详情 URL 缺 `taskId` 时不能用项目码顶替。
 - 顶栏 `keepOrigin: true` 挂 A `top_bar.do` 可以是完成态；不要把 native 顶栏当目标。
 - 邮件体、外链、用户可复制链接要先证明是否必须保留绝对 `rootPath`，不要机械套应用内剥源函数。
+- `fieldConfig` / `projectInformation` 是 `develop-native`：develop 上的原生 Vue3 页，不是 `#!/field/field` 的合同，
+  本轮不扩 `ipConfig` / `fieldConfig` / `permissionConfig`。
+- B dest 侧仍有旧文案残差「事项字段配置」「事项详情」；当前 A `develop` 已改成「任务*」，验收跟新 A，
+  不要拿旧 A 的「事项*」当基线。

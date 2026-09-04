@@ -127,6 +127,7 @@ Required outputs:
 - visual measurement evidence only when screenshots or measurements exist
 - manual-only label when visual measurement is missing, which never exempts a display-contract row
 - a recorded runtime-evidence attempt whenever browser automation is reported unavailable
+- an archive gate row per unit: completion state, verified/total matrix count, unresolved row IDs, carried degradation labels, archive disposition
 
 ## Host-First Discovery
 
@@ -281,7 +282,9 @@ Carry these source contracts through `assess`, `design`, repair, execute, and `v
 ### Comparison And Identity
 
 - Treat comparison operators and runtime types as source contracts. Template `==`, JavaScript `===`, numeric strings from APIs, booleans encoded as strings, and empty-string/null branches must be preserved or recorded as approved deviations.
-- Map identity fields from source evidence: server-rendered hidden inputs, globals, session/request fields, DOM IDs, API response fields, and template variables. Do not replace an identity with a nearby host store getter unless the source-to-host field mapping is proven.
+- Map identity fields from source evidence: server-rendered hidden inputs, globals, session/request fields, DOM IDs, API response fields, and template variables. Do not replace an identity with a nearby host store getter unless the source-to-host field mapping is proven. A composite identity such as `enName + ' ' + employeeNumber` is one contract: reproduce the whole expression, not one of its parts.
+- Permission codes are identity fields. A host permission point with a similar name is not the source permission point until the mapping is proven, and a page gate, a button gate, and a menu gate may each use a different code in the same flow.
+- Route, permission, and gateway allow-lists are additive during migration: append the B path and keep the A path until the rollback switch is formally retired. Replacing the A entry inside an allow-list removes the fallback the rollback plan depends on.
 - Put comparison and identity assumptions into FLOW/VAR/CHAIN conditions, payload mappings, and display-contract rows when they affect visible state, permissions, routing, or API payloads.
 
 ### Shared Modal Modes
@@ -300,10 +303,22 @@ Carry these source contracts through `assess`, `design`, repair, execute, and `v
 - Scope a shell-page repair to views actually mounted by the selected wrapper: `ui-view`, `ng-include`, directive/component usage, server includes, router/menu landing, and runtime evidence. A template file present under `tpls/`, `views/`, or `pages/` is not a migrated or missing region unless the selected UNIT mounts it.
 - If a host repo is a Vue2-to-Vue3 upgrade repo and the legacy area is still an AngularJS island, use source A and SIT/runtime behavior as the acceptance baseline. The earlier Vue host can provide clues, but it does not override the source AngularJS contract.
 
-### Runtime-Hidden Source Functions
+### Runtime-Hidden And Host-Extra Regions
 
-- Treat source code that is present but hidden by runtime CSS or classes as its own display-contract row. Visibility toggles such as `display:none !important`, `*-hide`, collapsed tabs, role-hidden blocks, and feature flags must record source code presence and runtime visibility separately.
-- Default to SIT/runtime visibility for release parity. Showing a source-hidden function, or hiding a runtime-visible source function, requires an `approved-deviation` with reason and approver.
+Two opposite directions, both resolved by the source contract:
+
+- Source present, runtime hidden. Treat source code that is present but hidden by runtime CSS or classes as its own display-contract row. Visibility toggles such as `display:none !important`, `*-hide`, collapsed tabs, role-hidden blocks, and feature flags must record source code presence and runtime visibility separately. Default to SIT/runtime visibility for release parity. Showing a source-hidden function, or hiding a runtime-visible source function, requires an `approved-deviation` with reason and approver.
+- Host present, source absent. Regions, controls, colors, series, columns, and buttons the host added beyond the source closure are not parity. Default to removing or hiding them inside the unit; keeping one visible requires an `approved-deviation` with reason and approver. An extra chart series color, an extra toolbar button, or an extra tab is a deviation row, not a free improvement.
+
+Neither direction is a bug fix. Do not "correct" a source quirk while migrating it: a `colspan` that does not match the column count, an off-by-one label, or an odd sort order is the contract until a deviation is approved.
+
+### Formula, Empty State, And Payload Scope
+
+- Reproduce the source's own empty path. If the source renders an empty list, an empty-state block, or a zero-row table, land that branch. Do not pad a fake row, a placeholder matrix, or a single default image to make the region look populated, and do not treat one generic empty image as the empty state for every region.
+- Get JavaScript truthiness right in review and in code. An empty array is truthy, an empty string and `0` are falsy, and `null` and `undefined` differ from both. Emptiness checks must be explicit: `length === 0`, `!== null`, or the source's own condition. A review claim that `[]` is falsy is wrong and must not become a matrix row.
+- Scope request fields to the endpoint that defines them. A field proven on a list/detail endpoint is not automatically valid on the matching count/summary endpoint; sending it there is a wrong-field defect even when the response looks correct.
+- Every visible number keeps its source formula, including the rounding, the unit, the sign convention, and the branch used when an input is missing. Day-count, delay, percentage, and rollup formulas are the most frequently blocked rows in independent review.
+- A missing relative import of a locally-named file is a unit-scoped compile blocker: remove or restore the local import inside the unit. Never edit a shared host component that happens to have the same filename to satisfy it.
 
 ### Interruption Hygiene
 
@@ -315,6 +330,7 @@ Carry these source contracts through `assess`, `design`, repair, execute, and `v
 - Run contract tests through the host toolchain when importing TS/Vue code: Vitest, ts-node/tsx configured for the repo, Vite test setup, or the host's existing equivalent.
 - Prefer executable display-contract tests for repair work when the contract can be checked without a browser: copy text, CSS class presence, API payload shape, derived formulas, and entry wiring. These tests are evidence for matrix rows, not a replacement for the matrix.
 - Do not strip TypeScript or Vue code with regex and then import the result as verification evidence. If the test cannot load through the host toolchain, isolate a pure-JS function or mark the contract test harness as unresolved.
+- A contract test must import the real shipped module. When the unit's logic already lives in a plain `.mjs`/`.js` helper, import that file directly through the host runner; a rewritten, inlined, or transformed copy of the logic tests the copy, not the unit.
 
 ### Browser Automation Disposition
 
@@ -483,6 +499,18 @@ Admission — all must hold, otherwise split the batch:
 | No two units share a host landing | Same-file units must be sequenced or merged. |
 | Every shared host surface has one owner | Router registration, menu, shared i18n, global stylesheets, and global store land once, as a prerequisite task group; other units depend on them read-only. |
 
+Shared host surfaces are not only framework files. In hosted migration the contended files are usually migration-specific, and each needs one named writer for the whole batch:
+
+| Shared surface | Typical file shape | Other units may |
+|---|---|---|
+| Outbound landing helper | the single URL-landing function every UNIT exit calls | import and assert only |
+| Shell chrome components | tab bars, headers, side menus that host several units' entries | import and assert only |
+| Route/MPA registration and menu | `getPages()`, `src/pages/*/*.ts`, menu/permission records | depend read-only |
+| Shared i18n and global stylesheets | shared copy files, `common` CSS, token files | depend read-only |
+| Contract test file | the shared display-contract/landing test module | add cases in an owned block only |
+
+A second writer on any of these is a blocker even inside one change, because the second edit silently redefines the first unit's proven contract.
+
 Per-unit properties a batch must preserve: page closure, matrix rows, i18n table, CSS closure, rollback switch, verify conclusion, and completion decision. Batch conclusions are never averaged.
 
 Pilot rule: the first unit of an A/B repo pair runs alone, because the host compile overlay, CSS closure landing method, entry-mounting pattern, and runtime-evidence feasibility are only proven by implementing and verifying once. Batching before that multiplies one wrong assumption by N. Remaining units may draft contracts in parallel with the pilot's implementation, but the pilot's change must be archived before the batch enters planning, or cross-change path overlap turns into a readiness blocker. Recorded measured evidence for those host facts, bound to the current host revision, can substitute for the pilot; nothing else can.
@@ -516,12 +544,13 @@ Rules:
 | Entry-wiring parity | Each slice is mounted at the host entry, calls its API, and is reachable by the user in the browser. |
 | Permission parity | Menu visibility, route access, button hide/disable, server-side rejection. |
 | URL parity | Old deep link, query/hash, redirects, browser back/forward, external links. |
-| Source contract gates | Navigation landing, comparison and identity mapping, shared modal modes, mounted view closure, runtime-hidden functions, hit layer, selector-to-DOM binding, CSS utility closure, interruption hygiene, contract test harness, and browser automation disposition. |
+| Source contract gates | Navigation landing, comparison and identity mapping, shared modal modes, mounted view closure, runtime-hidden and host-extra regions, formula/empty-state/payload scope, hit layer, selector-to-DOM binding, CSS utility closure, interruption hygiene, contract test harness, and browser automation disposition. |
 | API parity | Endpoint, method, params/body, response codes, failure handling, messages. |
 | Visual measurement parity | Screenshots, measurements, diff threshold, or mark manual-only. Does not cover display-contract rows. |
 | Runtime parity | Host Node actually used vs declared baseline, lockfile, existing lint/build/test commands, host compile overlay disposition. |
 | Git hygiene | No dependency/cache/build directory noise in intended commit; source A unchanged; B changes scoped. |
 | Rollback | Switch, owner, affected URL/page, restore condition, data compatibility. |
+| Archive gate | One filled row per unit: completion state, verified/total row count, unresolved row IDs, carried degradation labels, archive disposition. |
 | Completion authority | Delivery verified + domain verify + current host revision + no blocking residuals. |
 
 ## Completion Authority
@@ -539,6 +568,25 @@ Do not announce a page migration complete unless all are true:
 - Behavior, page-init, permission, URL, API, runtime/build, rollback, and visual/manual-only disposition have no blocking residuals.
 - No UNIT remains in `dest-built-unwired`, `wired-hidden`, `develop-native`, `orphan-mpa`, or other open comparison states.
 - Known formula, row-order, API-payload, URL, permission, or entry-wiring residuals prevent a green completion/archive status. A packet with zero verified MATRIX rows can be archived only as an explicit partial/residual handoff, not as parity complete.
+
+## Archive Gate
+
+Every gate above is already stated somewhere in this method, and every one of them has still been passed by narration. Closing a unit therefore requires a filled table, not a prose summary. Emit one row per unit at the end of `verify`, before any archive decision:
+
+| 迁移单元 | 完成态 | MATRIX verified / 总行 | 未结清行 ID | 降级标签 | archive 处置 |
+|---|---|---|---|---|---|
+
+Rules:
+
+- `完成态` uses the A/B comparison enum. Only `already-migrated` supports a parity-complete archive.
+- `MATRIX verified / 总行` is a count, written as a count. `verified=0` with a green page list is the exact failure this table exists to catch.
+- `未结清行 ID` lists every `missing`, `mismatched`, and `wired-unverified` row ID. An empty cell must mean zero such rows, not an unexamined matrix.
+- `降级标签` carries the honest-degradation labels forward verbatim: `visual-manual-only-not-proven`, `node-mismatch-not-verify-evidence`, `compile-not-run`, `lintonsave-out-of-unit-dirty`. Once recorded, a label stays attached to the unit in the archive record and in every later status report. Restating a labeled unit as "parity reached" is a reporting defect.
+- `archive 处置` enum: `parity-complete`, `repair-done-partial`, `blocked`. `repair-done-partial` is the required disposition whenever the unit is functionally shipped but known formula, row-order, copy, confirmation-step, or dead-code residuals remain; it names the residual owner and the follow-up condition.
+
+Known deviations must enter the MATRIX **before** archive, not after. If a deviation is already known while the archive decision is being made, it belongs in this table as an unresolved row; deferring it to "we will open a repair next" converts a recorded residual into a rediscovered defect.
+
+After archive, the unit is closed. A newly found deviation opens a new change with its own approvals; it may not be back-filled into the archived packet, and the archived unit may not be re-listed as an active member of a later batch.
 
 ## Shell-Page Repair
 

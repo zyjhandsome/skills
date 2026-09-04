@@ -75,6 +75,12 @@ Wave 1  建 change（已有 change 时只做恢复校验）
 T16（出站切 B）是独立授权切片。未授权时，合同测试要断言理论 B HTML/hash 不出现在 active href/open 中；
 已授权时，必须逐出口证明卡片、菜单、Tab、弹窗、成功回调、deep link 都走同一落地函数。
 
+收口不靠叙述：Wave 7 必须按 hosted-method 的 `Archive Gate` 逐 UNIT 输出一行
+（完成态、MATRIX verified/总行、未结清行 ID、降级标签、archive 处置）。
+archive 处置只有 `parity-complete` / `repair-done-partial` / `blocked` 三种；
+已知偏差必须在 archive **之前**进 MATRIX，不能留到次日另开 repair change。
+archive 之后该 UNIT 即关闭：新发现只能开新 change，不得回填旧包，也不得把它再列进后续批次。
+
 ### 项目反例附录
 
 通用规则只记录模式：壳存在不等于迁完、详情抽屉不等于独立页、隐藏入口不等于可达、
@@ -426,6 +432,10 @@ Step 1 补齐合同：
   空态图文、状态类 cascade safety，并逐条对照 host baseline gap 表给出 B 落地方式；
   gap 表标 `host-missing` / `host-partial` 的基线，本页用到就必须有显式落地方式
 - 源码存在但 SIT/运行时隐藏的功能默认保持隐藏；要显示必须记录 approved-deviation
+- 反方向同样处理：宿主多出、源站没有的区域/按钮/配色/列默认删除或隐藏，保留需 approved-deviation；
+  源站怪异写法（列数对不上的 `colspan`、奇怪排序）是合同，不得当 bug 顺手修
+- 空态与公式按源分支落地：空数组是 truthy，空判断要显式 `length`/`!== null`，
+  禁止垫伪行或用一张通用空图盖所有区域；请求字段按 endpoint 归属，列表/详情字段不得带到 count 接口
 - 共享弹窗按模式分行；导航落地写清源 URL、剥源后路径、B 是否骨架、最终回源还是进 B
 - 出站切 B 单独成片：未获 T16/切流授权时，所有 active href/open 仍应落 A 或既有 fallback，
   测试反向断言不得出现理论 B HTML/hash；获授权后才逐出口切同一 landing helper
@@ -446,7 +456,8 @@ Step 2 产出切片计划：
 不是“helper 文件已存在”。每片列出：涉及的 <MATRIX> 行 ID、拟改 B 文件/入口/API/store/component、
 验证步骤、Source Contract Gates、可执行 display-contract 测试、rollback/fallback 影响。
 批次模式还要标出每片归属哪个成员，并把共享宿主面（路由注册、菜单、共享 i18n、common CSS、
-全局 store）单独列为**前置切片组**：唯一 owner、先落地、其余成员只读依赖。
+全局 store，以及迁移专有的出站落地 helper、Tab/Header 壳组件、共享合同测试文件）
+单独列为**前置切片组**：唯一 owner、先落地、其余成员只 import / 只断言。
 回退开关必须逐成员独立，不允许整批一个开关。
 运行时证据先按宿主工具链尝试（既有 Playwright/Cypress/Puppeteer，或 dev server + 一次性 headless
 截图/DOM dump 脚本）；尝试失败必须记录失败原因，相关行保持 wired-unverified，不得直接标 verified。
@@ -560,8 +571,10 @@ design-scope=repair 且无升级条件 → 下一步 Wave 4R 同会话连跑；
 - fallback/rollback 任务和演练命令
 
 批次模式的任务组织：
-- 共享宿主面（路由注册、菜单、共享 i18n、common CSS、全局 store）作为**前置任务组**，
-  指定唯一 owner 先落地；`csv/18-batch-shared-surface.csv` 的 `[未分配]` 必须在此清空
+- 共享宿主面（路由注册、菜单、共享 i18n、common CSS、全局 store，以及出站落地 helper、
+  Tab/Header 壳组件、共享合同测试文件）作为**前置任务组**，指定唯一 owner 先落地；
+  `csv/18-batch-shared-surface.csv` 的 `[未分配]` 必须在此清空。这些文件一文件一写者，
+  其余成员只 import / 只断言，第二个写者即阻塞项
 - 其余成员的页面实现按成员分组，组间无重叠文件即可并行，重叠则串行
 - 每个任务标注归属成员、ownership/conflict note、独立回退开关
 - 就绪审查的「并行安全」栏必须列出独立任务组和共享文件，不能留空
@@ -683,6 +696,9 @@ Preflight：
   跨成员并行只允许在 tasks.md 已声明无重叠文件的任务组之间进行
 - 只改 B 获批范围
 - 禁止对范围外遗留文件做格式化、缩进转换或顺手类型补全；这些文件记为 residual
+- 禁止全仓 `lint --fix` / `prettier --write`；格式化命令只能限定到本 UNIT 获批文件，
+  否则独立审查会把全仓格式化 diff 判成阻塞项
+- 共享宿主面（出站落地 helper、Tab/Header 壳、共享合同测试文件）只有前置任务组的 owner 能写
 - 切片完成判据：入口已挂载、已调用 API、用户在页面上可点到；只加 helper/组件文件不算完成
 - T16 / 出站切 B 若未在 tasks.md 中授权，禁止把 active href/open 指向理论 B 目的页；
   若已授权，切换任务必须逐出口列 evidence，并保留邮件/外链绝对 URL 例外
@@ -711,7 +727,11 @@ Fresh Verification Gate：
   几何、CSS 依赖；对可见文案与可见数字确认运行时真的可见（DOM 存在不等于可见）
 - source-contract gates：身份字段、比较契约、共享弹窗模式、命中层、选择器↔DOM、
   绝对 URL 剥源、B 骨架不改导航、同一 UNIT 出口落地一致、合约测试加载方式
-- executable display-contract tests：有则跑宿主工具链测试，覆盖文案、CSS class、API payload、公式、entry wiring；测试证据不替代 <MATRIX>
+- executable display-contract tests：有则跑宿主工具链测试，覆盖文案、CSS class、API payload、公式、entry wiring；测试证据不替代 <MATRIX>。
+  测试必须 import 真实发布模块（纯 JS/`.mjs` helper 直接由宿主 runner 载入），改写副本或 regex 剥 TS 的产物不算证据
+- 独立审查预检清单（这三类最常一轮被 block）：调用了错的 API/字段、空态与公式走了非源分支、
+  出现全仓格式化 diff；另加一条：邮件体/外链/用户可复制链接必须逐条确认是否保留绝对 `rootPath`，
+  不得被应用内剥源函数机械套用
 - browser/runtime visibility：先按宿主工具链尝试取得运行时证据（既有 Playwright/Cypress/Puppeteer，
   或 dev server + 一次性 headless 截图/DOM dump 脚本），记录尝试与失败原因；
   确实取不到时输出需人工确认项，这些行保持 wired-unverified，不得标 verified，也不得由 agent 自行标 manual-verified
@@ -803,6 +823,11 @@ URL、API、runtime/build、rollback 全部通过，且 visual 测量结论有�
 结束输出：
 - final domain evidence path/digest 与 <MATRIX> path/digest
 - functional/page-init/display-contract/entry-wiring/permission/url/api/runtime/visual/rollback 结果
+- **archive gate 表**：逐 UNIT 一行，列「完成态 / MATRIX verified 数与总行数 / 未结清行 ID /
+  降级标签（`visual-manual-only-not-proven`、`node-mismatch-not-verify-evidence`、`compile-not-run`、
+  `lintonsave-out-of-unit-dirty`）/ archive 处置（`parity-complete`、`repair-done-partial`、`blocked`）」。
+  verified 必须写成数字；`verified=0` 不得配 `parity-complete`。已知公式/行序/文案/二次确认/死代码 residual
+  未清时处置只能是 `repair-done-partial`，并写明 residual owner 与后续条件
 - blockers/residuals
 - migration_completion_candidate
 
@@ -870,8 +895,13 @@ decision_needed / recommended_resolution / resume_point
 - fallback/rollback 已演练或清楚记录未演练 blocker，且该 UNIT 的回退开关独立于同批其他成员；
 - UNIT 不处于 `dest-built-unwired`、`wired-hidden`、`develop-native`、`orphan-mpa`、`unknown` 等开口状态；
 - MATRIX `verified=0`、已知公式/行序/API payload/URL/query/权限 residual、或 visual 只有 manual-only 且 display-contract 未结清时，
-  不得把页面清单标绿或 archive 成对等完成；
+  不得把页面清单标绿或 archive 成对等完成；此时 archive 处置只能是 `repair-done-partial`；
+- archive gate 表已逐 UNIT 填完，降级标签原样带进 archive 记录；此后任何状态汇报都必须保留这些标签，
+  不得把带标签的 UNIT 叙述成「已对等」；
 - 无 blocking residual。
+
+archive 之后该 UNIT 关闭：新发现的偏差只能开新 change 并重走闸门，不得回填已 archive 的包，
+也不得把已 archive 的 UNIT 再列进后续批次的 `<UNITS>`。
 
 此时仍不自动 archive、commit、push、PR、部署、切流、删除 fallback 或下线 A。
 
