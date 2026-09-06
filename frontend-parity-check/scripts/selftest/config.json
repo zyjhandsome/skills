@@ -5,7 +5,11 @@
   "dataParity": "same-data",
   "styleIntent": "pixel-parity",
   "baseline": { "label": "old", "baseUrl": "http://127.0.0.1:9401" },
-  "candidate": { "label": "new", "baseUrl": "http://127.0.0.1:9402" },
+  "candidate": {
+    "label": "new",
+    "baseUrl": "http://127.0.0.1:9402",
+    "pathOverrides": { "dashboard": "/shell-v2", "dashboard-notices": "/shell-v2" }
+  },
   "context": {
     "viewports": [{ "name": "desktop", "width": 1280, "height": 800 }],
     "locale": "zh-CN",
@@ -30,6 +34,21 @@
           ]
         }
       ]
+    },
+    {
+      "id": "dashboard",
+      "path": "/shell",
+      "waitFor": { "selector": ".ann-item" }
+    },
+    {
+      "id": "login-gate",
+      "path": "/gate",
+      "waitFor": { "selector": ".wrap" }
+    },
+    {
+      "id": "bogus-anchor",
+      "path": "/",
+      "waitFor": { "selector": ".definitely-missing", "timeout": 2000 }
     }
   ],
   "journeys": [
@@ -47,6 +66,16 @@
         { "type": "waitFor", "selector": ".detail-panel h2", "timeout": 5000 },
         { "type": "expectText", "id": "detail-title", "selector": ".detail-panel h2" },
         { "type": "expectUrl", "id": "detail-url" }
+      ]
+    },
+    {
+      "id": "dashboard-notices",
+      "startPath": "/shell",
+      "waitFor": { "selector": ".ann-item" },
+      "steps": [
+        { "type": "expectCount", "id": "notices", "selector": ".ann-item" },
+        { "type": "expectUrl", "id": "shell-url" },
+        { "type": "capture", "id": "board" }
       ]
     }
   ]

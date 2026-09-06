@@ -34,6 +34,8 @@ const run = (script, extra) => spawnSync(process.execPath,
   [path.join(here, '..', script), '--config', config, ...extra],
   { stdio: ['ignore', 'pipe', 'inherit'], encoding: 'utf8' });
 
+const unit = spawnSync(process.execPath, [path.join(here, 'unit.mjs')], { stdio: 'inherit' });
+
 try {
   for (const side of ['baseline', 'candidate']) {
     const r = run('capture.mjs', ['--side', side, '--keepGoing']);
@@ -60,13 +62,32 @@ const expected = [
   ['主题色 / 圆角漂移', /background-color: rgb\(64, 158, 255\)/],
   ['字号漂移', /font-size: 14px → 13px/],
   ['像素差异超阈值', /像素差异/],
+  ['落地在登录页即作废', /采集失败[\s\S]{0,240}禁止模式/],
+  ['waitFor 未命中即作废', /采集失败[\s\S]{0,240}waitFor 未命中/],
+  ['iframe 顶栏里缺失的链接被发现', /缺失的链接[\s\S]{0,160}帮助/],
+];
+
+// Regressions this skill must NOT report — the three false positives from the field run.
+const forbidden = [
+  ['隐藏 ng-hide 节点不再制造计数误报', /notices 观测值/],
+  ['已声明的路径迁移不再误判 expectUrl', /shell-url 观测值/],
+  ['已声明的路径迁移不再误判流程结束 URL', /journey:dashboard-notices","item":"流程结束 URL/],
 ];
 
 let failed = 0;
+if (unit.status !== 0) {
+  failed++;
+  console.log('FAIL  unit.mjs（判定规则单测）');
+}
 for (const [label, re] of expected) {
   const ok = re.test(text);
   if (!ok) failed++;
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`);
+}
+for (const [label, re] of forbidden) {
+  const ok = !re.test(text);
+  if (!ok) failed++;
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}（不应出现）`);
 }
 console.log(`\nverdict=${summary.verdict} counts=${JSON.stringify(summary.counts)}`);
 if (summary.verdict !== 'fail') {

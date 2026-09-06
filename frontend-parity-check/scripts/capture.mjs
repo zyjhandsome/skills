@@ -4,7 +4,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { loadPlaywright, ensureDir, writeJson, readJson, parseArgs, slug } from './lib/pw.mjs';
-import { domDigestFn, styleProbeFn, DEFAULT_PROBES, STYLE_PROPS } from './lib/probes.mjs';
+import { domDigestFn, styleProbeFn, visibleCountFn, DEFAULT_PROBES, STYLE_PROPS } from './lib/probes.mjs';
+import { landingVerdict, resolveProbes, mergeDomDigests } from './lib/parity-core.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 const side = args.side;
@@ -43,15 +44,24 @@ if (!pw) {
 }
 
 const browserName = cfg.browser || 'chromium';
-const browser = await pw[browserName].launch({ headless: !args.headed });
+// `channel` / `executablePath` let a locked-down machine drive its own Chrome/Edge
+// when the bundled Chromium cannot be downloaded. See references/playwright-setup.md.
+const channel = args.channel || cfg.channel || null;
+const executablePath = args.executablePath || cfg.executablePath || null;
+const launchOptions = { headless: !args.headed };
+if (channel) launchOptions.channel = channel;
+if (executablePath) launchOptions.executablePath = executablePath;
+const browser = await pw[browserName].launch(launchOptions);
 const sideDir = path.join(outRoot, side);
 ensureDir(sideDir);
+
+const assertLanded = { ...(cfg.assertLanded || {}) };
 
 const runLog = {
   schema: 'parity-capture/v1',
   side,
   baseUrl: sideCfg.baseUrl,
-  browser: `${browserName} ${browser.version()}`,
+  browser: `${browserName}${channel ? ':' + channel : ''} ${browser.version()}`,
   capturedAt: new Date().toISOString(),
   context: { ...ctx, viewports },
   states: [],
@@ -104,7 +114,15 @@ async function newContext(viewport) {
   }
   if (sideCfg.auth?.actions && !(storageState && fs.existsSync(storageState))) {
     const page = await context.newPage();
-    await runActions(page, sideCfg.auth.actions, { record: [], baseUrl: sideCfg.baseUrl });
+    const record = await runActions(page, sideCfg.auth.actions, { record: [], baseUrl: sideCfg.baseUrl });
+    // A silently failed login makes every later state capture a login page, so it aborts the side.
+    const failed = record.find((s) => s.status === 'fail');
+    if (failed) {
+      const at = `#${failed.index} ${failed.type} ${failed.id || ''}`.trim();
+      throw new Error(`登录动作失败（${at}）：${failed.error} — 本侧证据作废，请修正 auth.actions 后重跑`);
+    }
+    const landed = landingVerdict(page.url(), assertLanded);
+    if (!landed.ok) throw new Error(`登录后仍停留在登录/跳转页：${landed.reason}`);
     if (storageState) await context.storageState({ path: storageState });
     await page.close();
   }
@@ -132,9 +150,11 @@ async function runActions(page, actions = [], acc) {
     const step = { index: i, type: a.type, id: a.id || a.selector || a.path, status: 'ok' };
     try {
       switch (a.type) {
-        case 'goto':
-          await page.goto(new URL(a.path, acc.baseUrl).href, { waitUntil: a.waitUntil || 'networkidle' });
+        case 'goto': {
+          const target = (a.id && acc.pathOverrides?.[a.id]) || a.path;
+          await page.goto(new URL(target, acc.baseUrl).href, { waitUntil: a.waitUntil || 'networkidle' });
           break;
+        }
         case 'click': await loc.click({ force: a.force }); break;
         case 'dblclick': await loc.dblclick(); break;
         case 'hover': await loc.hover(); break;
@@ -157,9 +177,15 @@ async function runActions(page, actions = [], acc) {
         case 'expectText':
           step.observed = ((await loc.innerText()) || '').replace(/\s+/g, ' ').trim().slice(0, 300);
           break;
-        case 'expectCount':
-          step.observed = await page.locator(a.selector).count();
+        case 'expectCount': {
+          // Default counts only what a user can see: `ng-hide` / `display:none` leftovers in the
+          // old page used to inflate the count and produce a phantom "少了一项" finding.
+          const nodes = page.locator(a.selector);
+          step.observedTotal = await nodes.count();
+          step.visibleOnly = a.visibleOnly !== false;
+          step.observed = step.visibleOnly ? await nodes.evaluateAll(visibleCountFn) : step.observedTotal;
           break;
+        }
         case 'expectValue':
           step.observed = await loc.inputValue();
           break;
@@ -182,11 +208,24 @@ async function runActions(page, actions = [], acc) {
   return acc.record;
 }
 
-async function settle(page, route) {
+/**
+ * Wait for the page to be comparable.
+ * `strict` (right after navigation): a missed `waitFor` means we are not on the page
+ * under test, so it throws instead of producing evidence for the wrong page.
+ * Non-strict (after in-page actions): records a warning, since actions may have
+ * legitimately navigated away from the anchor selector.
+ */
+async function settle(page, route, { strict = false, warnings = null } = {}) {
   if (route?.waitFor?.selector) {
-    await page.locator(route.waitFor.selector).first()
-      .waitFor({ state: route.waitFor.state || 'visible', timeout: route.waitFor.timeout || 15000 })
-      .catch(() => {});
+    const sel = route.waitFor.selector;
+    try {
+      await page.locator(sel).first()
+        .waitFor({ state: route.waitFor.state || 'visible', timeout: route.waitFor.timeout || 15000 });
+    } catch (e) {
+      const detail = `waitFor 未命中（selector=${sel}，当前 URL=${page.url()}）：${String(e.message || e).split('\n')[0]}`;
+      if (strict) throw new Error(detail);
+      warnings?.push(detail);
+    }
   }
   await page.addStyleTag({ content: STABILIZE_CSS }).catch(() => {});
   await page.evaluate(() => document.fonts?.ready).catch(() => {});
@@ -194,12 +233,59 @@ async function settle(page, route) {
   await page.waitForTimeout(Number(thresholds.settleMs ?? 400));
 }
 
-async function snapshot(page, dir, { route, stateId, viewport, sink }) {
+/** Hard gate: refuse to treat a login / SSO redirect page as evidence. */
+function assertLandedOn(page, route) {
+  const rules = { ...assertLanded, ...(route?.assertLanded || {}) };
+  const landed = landingVerdict(page.url(), rules);
+  if (!landed.ok) throw new Error(landed.reason);
+  return landed;
+}
+
+/** Screenshot + URL of a state that failed, so the operator can see *why* without a rerun. */
+async function failureEvidence(page, dir, info) {
+  try {
+    ensureDir(dir);
+    await page.screenshot({ path: path.join(dir, 'failure.png'), animations: 'disabled', caret: 'hide' });
+    writeJson(path.join(dir, 'failure.json'), {
+      ...info, url: page.url(), title: await page.title().catch(() => null), capturedAt: new Date().toISOString(),
+    });
+  } catch { /* the page may already be gone; the log entry still carries the error */ }
+}
+
+/**
+ * Semantic digest of the main frame plus every readable iframe.
+ * Hosted legacy shells put the top bar / menu inside an iframe; reading only the main
+ * frame reported those links as "missing". Frames we genuinely cannot read are labelled
+ * `unreadable` so compare.mjs can say "unknown" instead of "missing".
+ */
+async function collectDom(page) {
+  const main = await page.evaluate(domDigestFn).catch((e) => ({ error: String(e.message) }));
+  const frames = [];
+  for (const frame of page.frames()) {
+    if (frame === page.mainFrame()) continue;
+    const url = frame.url();
+    if (!url || url === 'about:blank') continue;
+    try {
+      const el = await frame.frameElement();
+      const box = await el.boundingBox();
+      await el.dispose();
+      if (!box || box.width < 20 || box.height < 20) continue; // tracking / hidden iframes
+    } catch { /* detached from its parent; still try to read it */ }
+    try {
+      frames.push({ url, status: 'read', digest: await frame.evaluate(domDigestFn) });
+    } catch (e) {
+      frames.push({ url, status: 'unreadable', error: String(e.message || e).split('\n')[0].slice(0, 200) });
+    }
+  }
+  return mergeDomDigests(main, frames);
+}
+
+async function snapshot(page, dir, { route, stateId, viewport, sink, warnings = [] }) {
   ensureDir(dir);
-  const probes = [...DEFAULT_PROBES, ...(cfg.styleProbes || []), ...(route?.styleProbes || [])];
+  const probes = resolveProbes(cfg, route || {}, DEFAULT_PROBES);
   const masks = [...(cfg.masks || []), ...(route?.masks || [])];
 
-  const dom = await page.evaluate(domDigestFn).catch((e) => ({ error: String(e.message) }));
+  const dom = await collectDom(page);
   const styles = await page.evaluate(styleProbeFn, { probes, props: STYLE_PROPS }).catch((e) => ({ error: String(e.message) }));
 
   const shot = path.join(dir, 'shot.png');
@@ -218,11 +304,16 @@ async function snapshot(page, dir, { route, stateId, viewport, sink }) {
   writeJson(path.join(dir, 'runtime.json'), { console: sink.console, network: sink.network });
   writeJson(path.join(dir, 'meta.json'), {
     side, stateId, routeId: route?.id, viewport, url: page.url(),
-    title: await page.title().catch(() => null), masks, capturedAt: new Date().toISOString(),
+    title: await page.title().catch(() => null), masks,
+    probes: probes.map((p) => p.id),
+    frames: dom.frames || [],
+    warnings,
+    capturedAt: new Date().toISOString(),
   });
-  return { shot, url: page.url() };
+  return { shot, url: page.url(), frames: dom.frames || [] };
 }
 
+try {
 for (const viewport of viewports) {
   const context = await newContext(viewport);
 
@@ -236,22 +327,30 @@ for (const viewport of viewports) {
       const page = await context.newPage();
       attachObservers(page, sink);
       const entry = { id: stateId, routeId: route.id, stateId: state.id, viewport: viewport.name, dir: path.relative(outRoot, dir) };
+      const warnings = [];
       try {
         const url = new URL(routePath, sideCfg.baseUrl).href;
         const resp = await page.goto(url, { waitUntil: route.waitUntil || 'networkidle', timeout: ctx.navTimeoutMs || 45000 });
         entry.httpStatus = resp?.status() ?? null;
-        await settle(page, route);
+        assertLandedOn(page, route);
+        await settle(page, route, { strict: true });
         const preActions = [...(cfg.beforeEachState || []), ...(state.actions || [])];
         if (preActions.length) {
-          entry.actions = await runActions(page, preActions, { record: [], baseUrl: sideCfg.baseUrl });
-          await settle(page, route);
+          entry.actions = await runActions(page, preActions,
+            { record: [], baseUrl: sideCfg.baseUrl, pathOverrides: sideCfg.pathOverrides });
+          await settle(page, route, { warnings });
+          assertLandedOn(page, route);
         }
-        const s = await snapshot(page, dir, { route, stateId, viewport: viewport.name, sink });
+        const s = await snapshot(page, dir, { route, stateId, viewport: viewport.name, sink, warnings });
         entry.url = s.url;
+        entry.frames = s.frames;
+        if (warnings.length) entry.warnings = warnings;
         entry.status = 'ok';
       } catch (e) {
         entry.status = 'error';
         entry.error = String(e.message || e).split('\n')[0].slice(0, 400);
+        entry.url = page.url();
+        await failureEvidence(page, dir, { stateId, routeId: route.id, error: entry.error, waitFor: route.waitFor });
         runLog.errors.push({ state: stateId, error: entry.error });
       }
       runLog.states.push(entry);
@@ -267,29 +366,40 @@ for (const viewport of viewports) {
       attachObservers(page, sink);
       const record = [];
       const captures = [];
+      const warnings = [];
+      let fatal = null;
       try {
-        const start = journey.startPath || journey.path || '/';
+        // A journey start path migrates just like a route path, so it honours pathOverrides too.
+        const start = sideCfg.pathOverrides?.[journey.id]
+          || journey[`${side}StartPath`] || journey.startPath || journey.path || '/';
         await page.goto(new URL(start, sideCfg.baseUrl).href, { waitUntil: 'networkidle', timeout: ctx.navTimeoutMs || 45000 });
-        await settle(page, journey);
+        assertLandedOn(page, journey);
+        await settle(page, journey, { strict: true });
         for (let i = 0; i < (journey.steps || []).length; i++) {
           const step = journey.steps[i];
-          await runActions(page, [step], { record, baseUrl: sideCfg.baseUrl });
+          await runActions(page, [step], { record, baseUrl: sideCfg.baseUrl, pathOverrides: sideCfg.pathOverrides });
           if (step.type === 'capture') {
-            await settle(page, journey);
+            await settle(page, journey, { warnings });
             const dir = path.join(sideDir, slug(viewport.name), slug(`${journey.id}__${step.id || i}`));
-            await snapshot(page, dir, { route: journey, stateId: `${journey.id}__${step.id || i}`, viewport: viewport.name, sink });
+            await snapshot(page, dir, { route: journey, stateId: `${journey.id}__${step.id || i}`, viewport: viewport.name, sink, warnings });
             captures.push(path.relative(outRoot, dir));
           }
           if (record[record.length - 1]?.status === 'fail') break;
         }
       } catch (e) {
-        record.push({ type: 'journey', status: 'fail', error: String(e.message || e).split('\n')[0].slice(0, 300) });
+        fatal = String(e.message || e).split('\n')[0].slice(0, 300);
+        record.push({ type: 'journey', status: 'fail', error: fatal });
+        await failureEvidence(page, path.join(sideDir, slug(viewport.name), slug(`${journey.id}__failure`)),
+          { journeyId: journey.id, error: fatal, waitFor: journey.waitFor });
       }
       const entry = {
         id: journey.id, viewport: viewport.name, steps: record, captures,
         finalUrl: page.url(), console: sink.console, network: sink.network,
+        warnings: warnings.length ? warnings : undefined,
+        invalid: fatal ? fatal : undefined,
         status: record.some((s) => s.status === 'fail') ? 'fail' : 'ok',
       };
+      if (fatal) runLog.errors.push({ state: `journey:${journey.id}`, error: fatal });
       runLog.journeys.push(entry);
       console.error(`[${side}] journey ${journey.id}: ${entry.status}`);
       await page.close();
@@ -298,11 +408,20 @@ for (const viewport of viewports) {
 
   await context.close();
 }
+} catch (e) {
+  // Context-level failures (broken login, unusable browser) invalidate the whole side:
+  // there is no point capturing 20 states of a login page.
+  runLog.fatal = String(e.message || e).split('\n')[0].slice(0, 400);
+  runLog.errors.push({ state: `side:${side}`, error: runLog.fatal });
+  console.error(`[${side}] FATAL ${runLog.fatal}`);
+}
 
 await browser.close();
 writeJson(path.join(sideDir, 'capture-log.json'), runLog);
 console.log(JSON.stringify({
   side, outDir: sideDir, states: runLog.states.length,
   journeys: runLog.journeys.length, errors: runLog.errors.length,
+  fatal: runLog.fatal || null,
 }, null, 2));
+if (runLog.fatal) process.exit(1);
 process.exit(runLog.errors.length && !args.keepGoing ? 1 : 0);

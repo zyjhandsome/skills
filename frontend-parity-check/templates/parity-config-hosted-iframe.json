@@ -1,0 +1,120 @@
+{
+  "$schema": "parity-config/v1",
+  "name": "portal-dashboard-migration",
+  "outputDir": "./parity-run",
+
+  "browser": "chromium",
+  "channel": "chrome",
+
+  "dataParity": "different-data",
+  "styleIntent": "pixel-parity",
+
+  "defaultProbes": ["heading", "primary-button", "table-header-cell", "table-body-cell", "card"],
+
+  "assertLanded": {
+    "requireUrl": "(dashboard|project|portal)",
+    "allowUrl": []
+  },
+
+  "urlNormalizeRules": [
+    { "pattern": "\\.do(?=$|[?#])", "replace": "" },
+    { "pattern": "([?&])(projectId|tenantId)=[^&#]*", "replace": "$1$2={id}" }
+  ],
+
+  "baseline": {
+    "label": "旧门户 (AngularJS + JSP，顶栏在 iframe 里)",
+    "baseUrl": "https://portal-old.example.com",
+    "auth": { "storageState": "./auth/baseline.json" }
+  },
+  "candidate": {
+    "label": "新宿主 (Vue3 原生托管)",
+    "baseUrl": "https://portal-new.example.com",
+    "auth": { "storageState": "./auth/candidate.json" },
+    "pathOverrides": {
+      "dashboard": "/workspace/project/dashboard",
+      "notice-list": "/workspace/notice",
+      "open-notice-detail": "/workspace/project/dashboard"
+    }
+  },
+
+  "context": {
+    "viewports": [{ "name": "desktop", "width": 1440, "height": 900 }],
+    "deviceScaleFactor": 1,
+    "locale": "zh-CN",
+    "timezoneId": "Asia/Shanghai",
+    "colorScheme": "light",
+    "freezeTime": "2026-01-01T09:00:00+08:00",
+    "seedRandom": 42,
+    "timeoutMs": 20000,
+    "navTimeoutMs": 60000
+  },
+
+  "masks": [
+    ".chart-canvas",
+    "canvas",
+    ".refresh-time",
+    ".kpi-trend-spark",
+    "#nprogress"
+  ],
+  "maskTextPatterns": ["更新于\\s*\\S+", "\\b\\d+(\\.\\d+)?%"],
+
+  "styleProbes": [
+    { "id": "kpi-card", "selector": ".kpi-card, .stat-card" },
+    { "id": "kpi-value", "selector": ".kpi-card .value, .stat-card .num" },
+    { "id": "chart-wrap", "selector": ".chart-wrap, .echarts-container" },
+    { "id": "notice-item", "selector": ".notice-list li, .ann-item" },
+    { "id": "side-menu", "selector": ".side-menu, .el-menu" }
+  ],
+
+  "thresholds": {
+    "pixelDiffRatio": 0.008,
+    "pixelChannelTolerance": 32,
+    "layoutTolerancePx": 3,
+    "layoutToleranceRatio": 0.02,
+    "settleMs": 800,
+    "styleAggregateMinProbes": 3
+  },
+
+  "routes": [
+    {
+      "id": "dashboard",
+      "path": "/hiapm/project/dashboard.do",
+      "waitFor": { "selector": ".kpi-card", "state": "visible" },
+      "masks": [".kpi-trend-spark"],
+      "states": [
+        { "id": "default", "actions": [] },
+        {
+          "id": "quarter-filter",
+          "actions": [
+            { "type": "click", "selector": ".period-filter" },
+            { "type": "click", "selector": "text=本季度" },
+            { "type": "waitFor", "selector": ".kpi-card" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "notice-list",
+      "path": "/hiapm/notice.do",
+      "waitFor": { "selector": ".notice-list li" }
+    }
+  ],
+
+  "journeys": [
+    {
+      "id": "open-notice-detail",
+      "startPath": "/hiapm/project/dashboard.do",
+      "waitFor": { "selector": ".kpi-card" },
+      "steps": [
+        { "type": "expectCount", "id": "notices-visible", "selector": ".notice-list li" },
+        { "type": "expectText", "id": "first-notice", "selector": ".notice-list li >> nth=0" },
+        { "type": "capture", "id": "board" },
+        { "type": "click", "selector": ".notice-list li >> nth=0" },
+        { "type": "waitFor", "selector": ".notice-detail, .el-dialog__body" },
+        { "type": "expectText", "id": "detail-title", "selector": ".notice-detail h2, .el-dialog__title" },
+        { "type": "expectUrl", "id": "detail-url", "ignorePath": true },
+        { "type": "capture", "id": "notice-detail" }
+      ]
+    }
+  ]
+}

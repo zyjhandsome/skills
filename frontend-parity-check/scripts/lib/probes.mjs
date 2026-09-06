@@ -24,6 +24,19 @@ export const DEFAULT_PROBES = [
   { id: 'link', selector: 'a[href]' },
 ];
 
+/**
+ * How many of the matched nodes a user can actually see.
+ * Runs via `locator.evaluateAll`, so it must stay a standalone closure-free function.
+ */
+export function visibleCountFn(els) {
+  return els.filter((el) => {
+    const r = el.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return false;
+    const s = getComputedStyle(el);
+    return s.visibility !== 'hidden' && s.display !== 'none' && s.opacity !== '0';
+  }).length;
+}
+
 /** Compact semantic snapshot of what a user can see and interact with. */
 export function domDigestFn() {
   const clip = (s, n) => (s || '').replace(/\s+/g, ' ').trim().slice(0, n);

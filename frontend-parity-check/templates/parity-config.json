@@ -24,7 +24,8 @@
     "baseUrl": "https://new.example.com",
     "auth": { "storageState": "./auth/candidate.json" },
     "pathOverrides": {
-      "order-list": "/order/list"
+      "order-list": "/order/list",
+      "search-then-open-detail": "/order/list"
     }
   },
 
@@ -41,6 +42,11 @@
     "seedRandom": 42,
     "timeoutMs": 20000,
     "navTimeoutMs": 45000
+  },
+
+  "assertLanded": {
+    "allowUrl": [],
+    "requireUrl": ""
   },
 
   "masks": [".timestamp", "#nprogress", ".el-loading-mask"],

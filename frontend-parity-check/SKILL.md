@@ -38,18 +38,22 @@ description: >
 node scripts/preflight.mjs
 ```
 
-- 退出码 `0`：环境就绪，直接进入工作流。
+- 退出码 `0`：环境就绪。`useConfig` 字段给出该机器可用的启动配置，照抄进配置文件。
 - 退出码 `3`：输出 JSON 的 `install` 字段列出候选命令。此时**停下来**，用
-  `AskQuestion` 让用户选择：项目内安装 / 全局安装 / 只装浏览器内核 / 用户自己装。
+  `AskQuestion` 让用户选择：项目内安装 / 全局安装 / 只装浏览器内核 /
+  **改用本机 Chrome·Edge**（`install.useSystemBrowser`）/ 用户自己装。
   拿到明确授权后才执行；被拒绝就停在这里，不要用截图以外的手段假装完成。
 
-细节（离线内网、镜像源、Linux 系统依赖、CI）见 `references/playwright-setup.md`。
+企业环境常见的是**装得上 npm 包、下不来浏览器内核**（自签证书拦截、代理 DNS 失败）。
+preflight 已自动尝试本机 `chrome` / `msedge`，可用时直接在配置里写
+`"channel": "chrome"`（或 `"executablePath"`），不必再折腾内核下载。
+细节（企业证书与代理、离线镜像、Linux 系统依赖、CI）见 `references/playwright-setup.md`。
 
-想在接触真实站点前确认工具链可用，跑一次内置自检（自带两个故意有差异的本地页面，
-约 30 秒，全部 PASS 即环境正常）：
+想在接触真实站点前确认工具链可用，跑一次内置自检（判定规则单测 + 两个故意有差异的
+本地页面走完整流水线，约 60 秒，全部 PASS 即环境正常）：
 
 ```bash
-node scripts/selftest/run.mjs
+node scripts/selftest/run.mjs     # 含 unit.mjs；也可单独跑 node scripts/selftest/unit.mjs
 ```
 
 ## 工作流
@@ -60,7 +64,11 @@ node scripts/selftest/run.mjs
 
 1. **两个 URL**：baseline（升级前）与 candidate（升级后）的可访问地址；若路由不同，
    给出每个页面的路径映射。
-2. **登录方式**：免登录 / 提供测试账号 / 提供 Cookie 或 storageState 文件。
+2. **登录方式**：免登录 / 测试账号 / 现成的 storageState 文件 /
+   **从用户已登录的浏览器导出**（企业 SSO 常见，见下）。
+   - "我已经在浏览器里登录了"**不等于**脚本已登录：Playwright 默认是干净会话。
+     这种情况用 `scripts/export-storage-state.mjs` 从用户那个浏览器把会话导出来。
+   - 说"免登录"也要验证：内网站点经常静默跳 SSO。技能会自己拦（见第 3 步）。
 3. **数据前提** `dataParity`：两侧是否连**同一套数据**。
    - `same-data`：行数、文案、链接差异都算真实缺陷。
    - `different-data`（默认）：数据类差异降级为参考项，**此时不能宣称"内容一致"**。
@@ -73,15 +81,25 @@ node scripts/selftest/run.mjs
 
 ### 第 2 步：写配置文件
 
-复制 `templates/parity-config.json` 到工作目录，按实际情况填 `routes`（要比的页面 +
-每个页面要覆盖的**状态**）和 `journeys`（要验证的**用户流程**）。
+按被测页面的形态挑一份模板复制到工作目录：
+
+| 模板 | 适用 |
+|---|---|
+| `templates/parity-config.json` | 列表 + 查询 + 详情的表单/表格类页面 |
+| `templates/parity-config-hosted-iframe.json` | 托管页 / 门户壳：iframe 顶栏或菜单、看板、图表 |
+
+然后填 `routes`（要比的页面 + 每个页面要覆盖的**状态**）和 `journeys`（要验证的**用户流程**）。
 
 覆盖面的最低要求：
 
 - 每个页面至少 `default` 一个状态；含搜索/表格的页面补 `search-filled`、`table-empty`。
 - 至少一条 `journey` 走完"查询 → 打开详情/提交表单"的主链路——
   **只截图不点，等于没验功能。**
-- 明显会漂移的元素（时间戳、进度条、轮播、验证码）写进 `masks`。
+- 明显会漂移的元素（时间戳、进度条、轮播、验证码、canvas 图表）写进 `masks`。
+- **两侧路由不同就必须声明** `pathOverrides`（route 和 journey 都认这份映射）。
+  没声明的路径差异会被判为跳转缺陷——这是有意的。
+- `waitFor` 填一个**只有目标页才有**的选择器：它同时是"页面已就绪"和
+  "确实到了这一页"的判据，命中不了整个状态作废。
 
 字段与动作词表见 `references/config-reference.md`。
 
@@ -92,11 +110,28 @@ node scripts/capture.mjs --config parity-config.json --side baseline
 node scripts/capture.mjs --config parity-config.json --side candidate
 ```
 
-每个状态落盘：`shot.png`、`dom.json`（语义摘要）、`styles.json`（探针计算样式）、
-`runtime.json`（控制台/失败请求）、`meta.json`。两侧共用同一份视口、locale、时区、
-冻结时间与随机种子，保证可比。
+每个状态落盘：`shot.png`、`dom.json`（语义摘要，含可读 iframe 的内容）、
+`styles.json`（探针计算样式）、`runtime.json`（控制台/失败请求）、`meta.json`。
+两侧共用同一份视口、locale、时区、冻结时间与随机种子，保证可比。
 
-采集报错先修配置再重跑；**不要拿半截证据出结论**。
+采集有三道硬闸，任一触发即该状态（或整侧）**作废**并落一张 `failure.png` 供排查：
+
+1. 落地 URL 命中登录/SSO 特征（`/login`、`login-beta.`、`redirect_uri=` 等）；
+2. `waitFor` 选择器在导航后没命中；
+3. `auth.actions` 登录序列有任何一步失败。
+
+作废的状态不参与比对，报告顶部会列出来。**看到"证据作废"先修登录态或路径映射再重跑，
+不要拿半截证据出结论。** 被测页本身就是登录页时，用 `assertLanded.allowUrl` 显式放行。
+
+如果用户说"我浏览器里已经登录了"，从那个浏览器导出会话：
+
+```bash
+# 先让用户带调试端口重启浏览器并完成登录：chrome.exe --remote-debugging-port=9222
+node scripts/export-storage-state.mjs --out auth/candidate.json --url https://new.example.com/home
+```
+
+导出的文件填进 `<side>.auth.storageState`。该脚本连的是用户自己的浏览器，
+**不会**也不允许 `browser.close()`。
 
 ### 第 4 步：比对与出报告
 
@@ -135,6 +170,8 @@ node scripts/compare.mjs --config parity-config.json
 
 - 未获授权就执行 `npm install` / `npx playwright install`。
 - 两侧采集环境不同（视口、缩放、时区、登录态不一致）却给出 parity 结论。
+- 拿**作废的证据**（登录页、落地页错误、`waitFor` 未命中）出任何一致性结论，
+  或为了让报告变绿而放宽 `assertLanded`。
 - `dataParity=different-data` 时把行数或文案差异当作缺陷上报。
 - 只跑截图、不跑 journey，就宣称"功能一致"。
 - 把 base64 截图或整份报告贴进对话，而不是给路径。
@@ -145,5 +182,7 @@ node scripts/compare.mjs --config parity-config.json
 - `references/ask-template.md`：给用户的提问/填表模板
 - `references/parity-ladder.md`：六层判定标准与验收口径
 - `references/config-reference.md`：配置字段、动作词表、常见故障排查
-- `references/playwright-setup.md`：安装授权、登录态、内网与 CI
-- `templates/parity-config.json`：可直接复制的完整配置样例
+- `references/playwright-setup.md`：安装授权、企业浏览器兜底、登录态导出、内网与 CI
+- `templates/parity-config.json`：列表/表单页的完整配置样例
+- `templates/parity-config-hosted-iframe.json`：托管页 + iframe 壳 + 看板的配置样例
+- `scripts/export-storage-state.mjs`：从用户已登录的浏览器导出 `storageState`
