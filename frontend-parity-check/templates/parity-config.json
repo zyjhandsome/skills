@@ -1,0 +1,111 @@
+{
+  "$schema": "parity-config/v1",
+  "name": "order-module-migration",
+  "outputDir": "./parity-run",
+  "browser": "chromium",
+  "dataParity": "different-data",
+
+  "baseline": {
+    "label": "升级前 (Vue2 / 旧栈)",
+    "baseUrl": "https://old.example.com",
+    "auth": {
+      "storageState": "./auth/baseline.json",
+      "actions": [
+        { "type": "goto", "path": "/login" },
+        { "type": "fill", "selector": "input[name=username]", "value": "qa_user" },
+        { "type": "fill", "selector": "input[name=password]", "value": "REPLACE_ME" },
+        { "type": "click", "selector": "button[type=submit]" },
+        { "type": "waitForUrl", "pattern": "/home" }
+      ]
+    }
+  },
+  "candidate": {
+    "label": "升级后 (Vue3 / 新栈)",
+    "baseUrl": "https://new.example.com",
+    "auth": { "storageState": "./auth/candidate.json" },
+    "pathOverrides": {
+      "order-list": "/order/list"
+    }
+  },
+
+  "context": {
+    "viewports": [
+      { "name": "desktop", "width": 1440, "height": 900 },
+      { "name": "laptop", "width": 1280, "height": 800 }
+    ],
+    "deviceScaleFactor": 1,
+    "locale": "zh-CN",
+    "timezoneId": "Asia/Shanghai",
+    "colorScheme": "light",
+    "freezeTime": "2026-01-01T09:00:00+08:00",
+    "seedRandom": 42,
+    "timeoutMs": 20000,
+    "navTimeoutMs": 45000
+  },
+
+  "masks": [".timestamp", "#nprogress", ".el-loading-mask"],
+  "maskTextPatterns": ["订单号\\s*\\S+", "\\b\\d{11}\\b"],
+
+  "styleProbes": [
+    { "id": "search-bar", "selector": ".search-form" },
+    { "id": "pagination", "selector": ".el-pagination" }
+  ],
+
+  "thresholds": {
+    "pixelDiffRatio": 0.005,
+    "pixelChannelTolerance": 32,
+    "layoutTolerancePx": 2,
+    "layoutToleranceRatio": 0.02,
+    "settleMs": 400
+  },
+
+  "routes": [
+    {
+      "id": "order-list",
+      "path": "/order/list.html",
+      "waitFor": { "selector": ".el-table__row", "state": "visible" },
+      "fullPage": false,
+      "masks": [".update-time"],
+      "styleProbes": [{ "id": "toolbar", "selector": ".table-toolbar" }],
+      "states": [
+        { "id": "default", "actions": [] },
+        {
+          "id": "search-filled",
+          "actions": [
+            { "type": "fill", "selector": "input[name=keyword]", "value": "A001" },
+            { "type": "click", "selector": ".search-form .el-button--primary" },
+            { "type": "waitFor", "selector": ".el-table__row" }
+          ]
+        },
+        {
+          "id": "select-open",
+          "actions": [
+            { "type": "click", "selector": ".el-select" },
+            { "type": "waitFor", "selector": ".el-select-dropdown__item" }
+          ]
+        }
+      ]
+    }
+  ],
+
+  "journeys": [
+    {
+      "id": "search-then-open-detail",
+      "startPath": "/order/list.html",
+      "waitFor": { "selector": ".el-table__row" },
+      "steps": [
+        { "type": "expectCount", "id": "rows-initial", "selector": ".el-table__row" },
+        { "type": "fill", "selector": "input[name=keyword]", "value": "A001" },
+        { "type": "click", "selector": ".search-form .el-button--primary" },
+        { "type": "waitFor", "selector": ".el-table__row" },
+        { "type": "expectCount", "id": "rows-after-search", "selector": ".el-table__row" },
+        { "type": "capture", "id": "after-search" },
+        { "type": "click", "selector": ".el-table__row .detail-link" },
+        { "type": "waitFor", "selector": ".detail-panel" },
+        { "type": "expectUrl", "id": "detail-url" },
+        { "type": "expectText", "id": "detail-title", "selector": ".detail-panel h2" },
+        { "type": "capture", "id": "detail" }
+      ]
+    }
+  ]
+}

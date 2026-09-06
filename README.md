@@ -135,13 +135,28 @@ Plan go、Execute，最后 migrate `verify`。
 - [`docs/vue2-pages-to-vue3-host-migration-playbook.md`](./docs/vue2-pages-to-vue3-host-migration-playbook.md)（A→B 用户粘贴剧本；每步独立会话）
 - [`docs/vue2-pages-to-vue3-host-migration-usage.md`](./docs/vue2-pages-to-vue3-host-migration-usage.md)（解耦原则与交接字段；顺序以剧本为准）
 
-## UI 栈视觉 parity（升级后样式）
+## 前端 parity 验收
 
-独立 skill：针对「功能基本可用、搜索/表格/表单样式仍乱」做定界；也用于 A→B 迁入后与源仓 A 的样式对齐。**默认不改代码**，仅在用户对当前定界包明确 go 后允许改 CSS/配置（不装包、不升依赖、不重开 Vue2→3 路径选择；跨仓时只改 candidate/host）。
+两个独立 skill，输入不同，不要混用。
 
 | 技能 | 说明 |
 |------|------|
-| [frontend-ui-stack-visual-parity](./frontend-ui-stack-visual-parity/SKILL.md) | UI 栈视觉 parity：Tailwind Preflight×Element 等共存定界；go 后最小 CSS/配置修复 |
+| [frontend-parity-check](./frontend-parity-check/SKILL.md) | 两个可访问 URL 的黑盒比对（功能 + 样式六层）；只读、不改业务代码 |
+| [frontend-ui-stack-visual-parity](./frontend-ui-stack-visual-parity/SKILL.md) | 仓内 CSS 根因定界（Tailwind Preflight×Element 等）；go 后最小 CSS/配置修复 |
+
+**有两个能打开的 URL，要验收「新页是否与旧页一致」**
+
+```text
+/frontend-parity-check
+baseline：<升级前 URL>
+candidate：<升级后 URL>
+# 登录态 / 是否同一套数据 / 是否允许改版：没给就先问齐
+# 只截图不点 journey，不能宣称功能一致
+```
+
+**只有仓库代码，功能可用但样式乱**
+
+独立 skill：针对「功能基本可用、搜索/表格/表单样式仍乱」做定界；也用于 A→B 迁入后与源仓 A 的样式对齐。**默认不改代码**，仅在用户对当前定界包明确 go 后允许改 CSS/配置（不装包、不升依赖、不重开 Vue2→3 路径选择；跨仓时只改 candidate/host）。
 
 ```text
 /frontend-ui-stack-visual-parity
@@ -287,6 +302,12 @@ frontend-ui-stack-visual-parity/
 ├── scripts/              # validate_visual_report / validate_visual_summary
 ├── templates/
 └── tests/
+
+frontend-parity-check/
+├── SKILL.md              # 技能加载器（双 URL、六层判定、Playwright 授权）
+├── references/           # 提问模板、配置字段、判定阶梯、安装与登录
+├── scripts/              # preflight / capture / compare + 内置自检
+└── templates/            # parity-config.json
 
 content-structuring/
 ├── SKILL.md              # 加载器（v5.28）

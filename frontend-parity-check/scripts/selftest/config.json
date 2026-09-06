@@ -1,0 +1,53 @@
+{
+  "$schema": "parity-config/v1",
+  "name": "selftest",
+  "outputDir": "./parity-run",
+  "dataParity": "same-data",
+  "styleIntent": "pixel-parity",
+  "baseline": { "label": "old", "baseUrl": "http://127.0.0.1:9401" },
+  "candidate": { "label": "new", "baseUrl": "http://127.0.0.1:9402" },
+  "context": {
+    "viewports": [{ "name": "desktop", "width": 1280, "height": 800 }],
+    "locale": "zh-CN",
+    "timezoneId": "Asia/Shanghai",
+    "freezeTime": "2026-01-01T09:00:00+08:00",
+    "seedRandom": 42
+  },
+  "thresholds": { "pixelDiffRatio": 0.002, "settleMs": 200 },
+  "routes": [
+    {
+      "id": "order-list",
+      "path": "/",
+      "waitFor": { "selector": ".el-table__row" },
+      "states": [
+        { "id": "default", "actions": [] },
+        {
+          "id": "search-filled",
+          "actions": [
+            { "type": "fill", "selector": "#kw", "value": "A001" },
+            { "type": "click", "selector": ".el-button--primary" },
+            { "type": "waitFor", "selector": ".el-table__row" }
+          ]
+        }
+      ]
+    }
+  ],
+  "journeys": [
+    {
+      "id": "search-open-detail",
+      "startPath": "/",
+      "waitFor": { "selector": ".el-table__row" },
+      "steps": [
+        { "type": "expectCount", "id": "rows-initial", "selector": ".el-table__row" },
+        { "type": "fill", "selector": "#kw", "value": "A001" },
+        { "type": "click", "selector": ".el-button--primary" },
+        { "type": "expectCount", "id": "rows-after-search", "selector": ".el-table__row" },
+        { "type": "capture", "id": "after-search" },
+        { "type": "click", "selector": ".detail-link" },
+        { "type": "waitFor", "selector": ".detail-panel h2", "timeout": 5000 },
+        { "type": "expectText", "id": "detail-title", "selector": ".detail-panel h2" },
+        { "type": "expectUrl", "id": "detail-url" }
+      ]
+    }
+  ]
+}
