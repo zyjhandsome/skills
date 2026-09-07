@@ -38,9 +38,12 @@ export function landingVerdict(url, assertLanded = {}) {
   const allowed = !!(assertLanded.allowUrl?.length && matchesAny(u, assertLanded.allowUrl));
   const hit = firstMatch(u, assertLanded.forbidUrl ?? DEFAULT_FORBID_URL);
   // allowUrl is only an exception to forbidUrl. It must never bypass requireUrl.
-  if (hit && !allowed) return { ok: false, pattern: hit, url: u, reason: `落地 URL 命中禁止模式 /${hit}/ — ${u}` };
+  if (hit && !allowed) return {
+    ok: false, gate: 'forbid-url', pattern: hit, url: u,
+    reason: `落地 URL 命中禁止模式 /${hit}/ — ${u}`,
+  };
   if (assertLanded.requireUrl && !matchesAny(u, [assertLanded.requireUrl])) {
-    return { ok: false, pattern: assertLanded.requireUrl, url: u,
+    return { ok: false, gate: 'require-url', pattern: assertLanded.requireUrl, url: u,
       reason: `落地 URL 不满足 requireUrl /${assertLanded.requireUrl}/ — ${u}` };
   }
   return { ok: true, ...(allowed ? { allowed: true } : {}) };
@@ -132,6 +135,7 @@ export function resolveSurface(cfg = {}, route = {}, side) {
 /** styleProbes execute in document.querySelectorAll, not Playwright's selector engine. */
 export function configValidationErrors(cfg = {}) {
   const errors = [];
+  if (cfg.channel && cfg.executablePath) errors.push('channel 与 executablePath 只能配置一个');
   const playwrightOnly = /:has-text\s*\(|(^|[\s,])text=|>>|(^|[\s,])role=/i;
   const inspect = (p, where) => {
     if (!p?.id) errors.push(`${where}.id 必填`);
@@ -165,7 +169,23 @@ export function configValidationErrors(cfg = {}) {
     }
   };
   for (const side of ['baseline', 'candidate']) {
-    (cfg[side]?.auth?.actions || []).forEach((a, i) => inspectAction(a, `${side}.auth.actions[${i}]`));
+    const auth = cfg[side]?.auth || {};
+    if (auth.mode && auth.mode !== 'auto-interactive') {
+      errors.push(`${side}.auth.mode 不支持：${auth.mode}（当前仅需为交互模式显式设置 auto-interactive）`);
+    }
+    if (auth.mode === 'auto-interactive' && auth.actions?.length) {
+      errors.push(`${side}.auth 不能同时使用 mode=auto-interactive 与 actions`);
+    }
+    if (auth.interactive?.channel && auth.interactive?.executablePath) {
+      errors.push(`${side}.auth.interactive.channel 与 executablePath 只能配置一个`);
+    }
+    for (const key of ['timeoutMs', 'probeTimeoutMs', 'readinessTimeoutMs']) {
+      const value = auth.interactive?.[key];
+      if (value !== undefined && (!Number.isFinite(Number(value)) || Number(value) <= 0)) {
+        errors.push(`${side}.auth.interactive.${key} 必须是正数`);
+      }
+    }
+    (auth.actions || []).forEach((a, i) => inspectAction(a, `${side}.auth.actions[${i}]`));
   }
   (cfg.beforeEachState || []).forEach((a, i) => inspectAction(a, `beforeEachState[${i}]`));
   (cfg.routes || []).forEach((r, ri) => (r.states || []).forEach((s, si) =>

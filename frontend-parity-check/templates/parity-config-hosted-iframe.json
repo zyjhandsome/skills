@@ -45,12 +45,20 @@
   "baseline": {
     "label": "旧门户 (AngularJS + JSP，顶栏在 iframe 里)",
     "baseUrl": "https://portal-old.example.com",
-    "auth": { "storageState": "./auth/baseline.json" }
+    "auth": {
+      "mode": "auto-interactive",
+      "storageState": "./auth/baseline.json",
+      "interactive": { "timeoutMs": 600000, "probeTimeoutMs": 8000 }
+    }
   },
   "candidate": {
     "label": "新宿主 (Vue3 原生托管)",
     "baseUrl": "https://portal-new.example.com",
-    "auth": { "storageState": "./auth/candidate.json" },
+    "auth": {
+      "mode": "auto-interactive",
+      "storageState": "./auth/candidate.json",
+      "interactive": { "timeoutMs": 600000, "probeTimeoutMs": 8000 }
+    },
     "pathOverrides": {
       "dashboard": "/workspace/project/dashboard",
       "notice-list": "/workspace/notice",

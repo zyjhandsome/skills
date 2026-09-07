@@ -192,7 +192,8 @@ baseline：<升级前 URL>
 candidate：<升级后 URL>
 # 登录态 / 是否同一套数据 / 是否允许改版：没给就先问齐
 # 一侧是宿主壳内 iframe 时声明 compareSurface（frame/root + URL pattern）
-# 企业 SSO 已在本机浏览器登录：用 scripts/export-storage-state.mjs 导出会话
+# 默认 auto-interactive：先探测，需要登录时打开专用浏览器由用户自行登录
+# 只有明确要复用已打开的浏览器时，才用 scripts/export-storage-state.mjs
 # 只截图不点 journey，不能宣称功能一致
 ```
 
@@ -356,7 +357,7 @@ frontend-ui-stack-visual-parity/
 frontend-parity-check/
 ├── SKILL.md              # 技能加载器（双 URL、六层判定、Playwright 授权）
 ├── references/           # 提问模板、配置字段、判定阶梯、安装与登录
-├── scripts/              # preflight / capture / compare / export-storage-state + 内置自检
+├── scripts/              # preflight / prepare-auth / capture / compare / export-storage-state + 内置自检
 └── templates/            # parity-config.json、parity-config-hosted-iframe.json
 
 content-structuring/

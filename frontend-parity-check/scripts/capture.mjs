@@ -8,6 +8,7 @@ import { domDigestFn, styleProbeFn, visibleCountFn, DEFAULT_PROBES, STYLE_PROPS 
 import {
   landingVerdict, resolveProbes, mergeDomDigests, resolveSurface, configValidationErrors,
 } from './lib/parity-core.mjs';
+import { AUTO_INTERACTIVE_AUTH, authStoragePath } from './lib/auth.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 const side = args.side;
@@ -57,6 +58,13 @@ if ((cfg.fullPage === true || (cfg.routes || []).some((r) => r.fullPage === true
   configWarnings.push('图表/显式比较面开启 fullPage 容易放大壳层与长页噪声；优先截业务 root 或首屏');
 }
 for (const warning of configWarnings) console.error(`[config warning] ${warning}`);
+
+const preparedStorageState = authStoragePath(configPath, side, sideCfg);
+if (sideCfg.auth?.mode === AUTO_INTERACTIVE_AUTH && !fs.existsSync(preparedStorageState)) {
+  console.error(`缺少已验证的交互式登录态：${preparedStorageState}`);
+  console.error(`请先运行：node scripts/prepare-auth.mjs --config ${configPath} --side ${side}`);
+  process.exit(4);
+}
 
 const pw = await loadPlaywright(process.cwd());
 if (!pw) {
@@ -133,7 +141,9 @@ async function newContext(viewport) {
   };
   if (sideCfg.userAgent) options.userAgent = sideCfg.userAgent;
   if (sideCfg.extraHTTPHeaders) options.extraHTTPHeaders = sideCfg.extraHTTPHeaders;
-  const storageState = sideCfg.auth?.storageState && path.resolve(path.dirname(configPath), sideCfg.auth.storageState);
+  const storageState = sideCfg.auth?.mode === AUTO_INTERACTIVE_AUTH
+    ? preparedStorageState
+    : sideCfg.auth?.storageState && path.resolve(path.dirname(configPath), sideCfg.auth.storageState);
   if (storageState && fs.existsSync(storageState)) options.storageState = storageState;
 
   const context = await browser.newContext(options);

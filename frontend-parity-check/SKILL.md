@@ -64,11 +64,15 @@ node scripts/selftest/run.mjs     # 含 unit.mjs；也可单独跑 node scripts/
 
 1. **两个 URL**：baseline（升级前）与 candidate（升级后）的可访问地址；若路由不同，
    给出每个页面的路径映射。
-2. **登录方式**：免登录 / 测试账号 / 现成的 storageState 文件 /
-   **从用户已登录的浏览器导出**（企业 SSO 常见，见下）。
-   - "我已经在浏览器里登录了"**不等于**脚本已登录：Playwright 默认是干净会话。
-     这种情况用 `scripts/export-storage-state.mjs` 从用户那个浏览器把会话导出来。
-   - 说"免登录"也要验证：内网站点经常静默跳 SSO。技能会自己拦（见第 3 步）。
+2. **登录方式**：首选 **自动探测 + 打开专用浏览器让用户登录**（`auto-interactive`）；
+   其余选项是免登录、从用户现有浏览器导出会话、测试账号、其他。
+   - 用户未指定时默认 `auto-interactive`：先用干净无头会话探测；页面可直接访问就不打扰用户，
+     确认跳到登录/SSO 或目标页未就绪时才打开可见浏览器。用户完成扫码、MFA 或账号登录后，
+     脚本自动验证目标页、保存 `storageState` 并只关闭自己启动的窗口。
+   - 专用浏览器使用 Skill 独立 profile，不复用用户日常 Chrome/Edge profile，也不要求固定调试端口。
+   - "我已经在浏览器里登录了"**不等于**脚本已登录；若用户坚持复用现有窗口，才使用
+     `scripts/export-storage-state.mjs` 的 CDP 方案。
+   - 说"免登录"也要验证：内网站点经常静默跳 SSO。自动探测正是这道校验。
 3. **数据前提** `dataParity`：两侧是否连**同一套数据**。
    - `same-data`：行数、文案、链接差异都算真实缺陷。
    - `different-data`（默认）：数据类差异降级为参考项，**此时不能宣称"内容一致"**。
@@ -114,6 +118,18 @@ node scripts/selftest/run.mjs     # 含 unit.mjs；也可单独跑 node scripts/
 
 ### 第 3 步：双侧采集
 
+`auth.mode=auto-interactive` 时，先准备并验证两侧登录态：
+
+```bash
+node scripts/prepare-auth.mjs --config parity-config.json --side baseline
+node scripts/prepare-auth.mjs --config parity-config.json --side candidate
+```
+
+无须登录或现有会话仍有效时，两条命令会无头完成；确实需要登录时会打开一个专用浏览器，
+用户在其中完成登录即可，**不需要把密码交给 AI，也不需要回复“登录好了”**。脚本会自动等待
+首个 route/journey 的落地与就绪判据，成功后写入 `auth/<side>.json`。等待期间应明确告诉用户
+正在等他操作；超时、窗口被关闭或仍停在 SSO 页时不得继续采集。
+
 ```bash
 node scripts/capture.mjs --config parity-config.json --side baseline
 node scripts/capture.mjs --config parity-config.json --side candidate
@@ -123,17 +139,17 @@ node scripts/capture.mjs --config parity-config.json --side candidate
 `styles.json`（探针计算样式）、`runtime.json`（控制台/失败请求）、`meta.json`。
 两侧共用同一份视口、locale、时区、冻结时间与随机种子，保证可比。
 
-采集有三道硬闸，任一触发即该状态（或整侧）**作废**并落一张 `failure.png` 供排查：
+采集有四道硬闸，任一触发即该状态（或整侧）**作废**并落一张 `failure.png` 供排查：
 
 1. 落地 URL 命中登录/SSO 特征（`/login`、`login-beta.`、`redirect_uri=` 等）；
 2. 声明的 `compareSurface` frame/root/URL pattern 没命中；
 3. `waitFor` 选择器在导航后没命中；
-4. `auth.actions` 登录序列有任何一步失败。
+4. `auth.actions` 登录序列有任何一步失败，或 `auto-interactive` 尚未生成已验证的会话。
 
 作废的状态不参与比对，报告顶部会列出来。**看到"证据作废"先修登录态或路径映射再重跑，
 不要拿半截证据出结论。** 被测页本身就是登录页时，用 `assertLanded.allowUrl` 显式放行。
 
-如果用户说"我浏览器里已经登录了"，从那个浏览器导出会话：
+只有用户明确选择复用现有浏览器时，才从那个浏览器导出会话：
 
 ```bash
 # 先让用户带调试端口重启浏览器并完成登录：chrome.exe --remote-debugging-port=9222
@@ -200,3 +216,4 @@ node scripts/compare.mjs --config parity-config.json
 - `templates/parity-config.json`：列表/表单页的完整配置样例
 - `templates/parity-config-hosted-iframe.json`：托管页 + iframe 壳 + 看板的配置样例
 - `scripts/export-storage-state.mjs`：从用户已登录的浏览器导出 `storageState`
+- `scripts/prepare-auth.mjs`：无头探测；必要时打开专用浏览器供用户登录并自动保存会话

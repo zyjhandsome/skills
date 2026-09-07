@@ -67,7 +67,51 @@ preflight 报出可用 channel 后，写进配置（两侧共用，保证可比�
 
 ## 登录态
 
-优先用 `storageState`，避免每个状态都重登：
+### 推荐：自动探测，必要时打开专用浏览器
+
+默认选择 `auth.mode=auto-interactive`，既覆盖免登录页面，也覆盖账号密码、扫码、MFA、企业 SSO：
+
+```bash
+node scripts/prepare-auth.mjs --config parity-config.json --side baseline
+node scripts/prepare-auth.mjs --config parity-config.json --side candidate
+```
+
+执行顺序：
+
+1. 有旧 `storageState` 就先验证它；没有则用干净无头会话探测首个 route/journey。
+2. URL、`compareSurface` 与 `waitFor` 都通过时直接保存/复用会话，不打开窗口。
+3. 探测结果命中登录 URL 或登录表单时才启动可见的 Skill 专用浏览器。用户在窗口里自行登录，无需把密码交给 AI，
+   也无需另行回复“登录好了”。
+4. 脚本轮询相同的落地与就绪条件；成功后写 `storageState`，只关闭自己启动的浏览器。
+
+默认等待 10 分钟，profile 保存在 `auth/profiles/<name>/<side>`，状态保存在
+`auth/<side>.json`；二者都应被 Git 忽略。不要把 `profileDir` 指向日常 Chrome/Edge 用户目录，
+脚本会主动拒绝。此方案不需要 `--remote-debugging-port`，也不会关闭用户已有浏览器。
+若探测失败更像 404、目标路径不通或 `waitFor` 配错，脚本会退出而不是开窗。确认是未识别的
+自定义登录页后再加 `--force-interactive`，或配置 `interactive.openOnUnready:true`。
+如果首个 route 的 `waitFor` 依赖数据行、异步报表等不稳定内容，用
+`interactive.readySelector` 改成稳定的应用根节点，并用 `successUrlPattern` 锁定成功 URL。
+
+配置示例：
+
+```jsonc
+{
+  "auth": {
+    "mode": "auto-interactive",
+    "storageState": "./auth/candidate.json",
+    "interactive": {
+      "startPath": "/home",
+      "successUrlPattern": "/home",
+      "readySelector": "#app",
+      "timeoutMs": 600000
+    }
+  }
+}
+```
+
+### 备选：脚本化测试账号
+
+有稳定测试账号且不含 MFA 时，可以省略 `mode`，用 `storageState` 避免每个状态都重登：
 
 1. 配置 `auth.storageState` 指向一个文件路径 + `auth.actions` 写登录步骤。
 2. 首次 capture 时文件不存在 → 执行登录 → 自动保存。
@@ -81,10 +125,10 @@ preflight 报出可用 channel 后，写进配置（两侧共用，保证可比�
 两侧登录到的**用户与权限必须相同**，否则菜单、按钮、数据范围都会不同，
 这类差异会污染 L2 判定。若两侧只能用不同账号，必须在报告里写明。
 
-### 用户"已经登录了"：从他的浏览器导出会话
+### 备选：用户明确要求复用已经打开的浏览器
 
-企业 SSO（多因子、扫码、证书）往往没法用 `auth.actions` 脚本化，但用户自己的浏览器
-里已经有会话了。Playwright 默认是干净会话，**不会**共享它——必须显式导出：
+只有当用户明确不想在专用窗口重新登录、而要复用现有浏览器会话时，才使用 CDP 导出。
+Playwright 默认不会共享那个会话，必须显式导出：
 
 ```bash
 # 1) 让用户完全退出浏览器，再带调试端口启动，并正常登录被测系统

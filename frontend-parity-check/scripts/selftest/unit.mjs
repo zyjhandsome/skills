@@ -7,6 +7,7 @@ import {
   resolveSurface, configValidationErrors,
 } from '../lib/parity-core.mjs';
 import { DEFAULT_PROBES } from '../lib/probes.mjs';
+import { firstAuthTarget } from '../lib/auth.mjs';
 
 let failed = 0;
 const check = (label, cond, extra = '') => {
@@ -77,6 +78,16 @@ check('styleProbes 拒绝 Playwright :has-text 语法',
   configValidationErrors({ styleProbes: [{ id: 'send', selector: 'button:has-text("发送")' }] }).length === 1);
 check('未知 journey 动作在采集前即报配置错误',
   configValidationErrors({ journeys: [{ id: 'x', steps: [{ type: 'magicClick', selector: 'button' }] }] }).length === 1);
+check('交互登录不能与脚本登录混用',
+  configValidationErrors({ baseline: { auth: { mode: 'auto-interactive', actions: [{ type: 'goto', path: '/' }] } } }).length === 1);
+check('交互登录超时必须为正数',
+  configValidationErrors({ candidate: { auth: { mode: 'auto-interactive', interactive: { timeoutMs: 0 } } } }).length === 1);
+eq('交互登录探测遵守首个路由的分侧路径映射',
+  firstAuthTarget({
+    candidate: { baseUrl: 'https://new.example.com/app/', pathOverrides: { list: '/list-v2' } },
+    routes: [{ id: 'list', path: '/list-v1' }],
+  }, 'candidate').url,
+  'https://new.example.com/list-v2');
 
 eq('比较面合并共享与分侧配置',
   resolveSurface({ compareSurface: { exclude: ['.header'], baseline: { frame: '#old-frame' }, candidate: { root: '#new' } } }, {}, 'baseline'),

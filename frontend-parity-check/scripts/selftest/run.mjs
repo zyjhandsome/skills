@@ -30,14 +30,58 @@ if (!(await reachable())) {
   process.exit(1);
 }
 
-const run = (script, extra) => spawnSync(process.execPath,
-  [path.join(here, '..', script), '--config', config, ...extra],
-  { stdio: ['ignore', 'pipe', 'inherit'], encoding: 'utf8' });
+const run = (script, extra, configFile = config, captureStderr = false) => spawnSync(process.execPath,
+  [path.join(here, '..', script), '--config', configFile, ...extra],
+  { stdio: ['ignore', 'pipe', captureStderr ? 'pipe' : 'inherit'], encoding: 'utf8' });
 
 const unit = spawnSync(process.execPath, [path.join(here, 'unit.mjs')], { stdio: 'inherit' });
 
 try {
+  // Auth gate behavior: a login page opens the interactive browser; a broken readiness anchor does not.
+  const authCase = (name, routePath, selector) => {
+    const file = path.join(outDir, `${name}.json`);
+    fs.mkdirSync(outDir, { recursive: true });
+    fs.writeFileSync(file, JSON.stringify({
+      name,
+      baseline: {
+        baseUrl: 'http://127.0.0.1:9401',
+        auth: {
+          mode: 'auto-interactive',
+          storageState: `./${name}-state.json`,
+          interactive: {
+            timeoutMs: 600, probeTimeoutMs: 600, readinessTimeoutMs: 150,
+            profileDir: `./${name}-profile`,
+          },
+        },
+      },
+      routes: [{ id: name, path: routePath, waitFor: { selector } }],
+    }, null, 2));
+    return file;
+  };
+  const loginCase = run('prepare-auth.mjs', ['--side', 'baseline', '--headless-interactive'],
+    authCase('auth-login-detection', '/gate', '.wrap'), true);
+  if (loginCase.status !== 4 || !loginCase.stderr.includes('正在打开 Skill 专用浏览器')) {
+    throw new Error('prepare-auth did not open interactive mode for a detected login page');
+  }
+  const brokenCase = run('prepare-auth.mjs', ['--side', 'baseline', '--headless-interactive'],
+    authCase('auth-broken-page', '/', '.definitely-missing'), true);
+  if (brokenCase.status !== 4 || !brokenCase.stderr.includes('未识别出登录页')
+    || brokenCase.stderr.includes('正在打开 Skill 专用浏览器')) {
+    throw new Error('prepare-auth treated a broken readiness anchor as a login page');
+  }
+  console.log('PASS  登录页自动开窗；普通未就绪不会误开窗');
+
   for (const side of ['baseline', 'candidate']) {
+    // Baseline forces the persistent-context branch in headless mode; candidate covers the clean probe branch.
+    const authArgs = side === 'baseline'
+      ? ['--side', side, '--force-interactive', '--headless-interactive']
+      : ['--side', side];
+    const auth = run('prepare-auth.mjs', authArgs);
+    if (auth.status !== 0) throw new Error(`prepare-auth ${side} exited ${auth.status}`);
+    const expectedMode = side === 'baseline' ? 'interactive' : 'headless-probe';
+    if (!auth.stdout.includes(`\"mode\": \"${expectedMode}\"`)) {
+      throw new Error(`prepare-auth ${side} did not exercise ${expectedMode}`);
+    }
     const r = run('capture.mjs', ['--side', side, '--keepGoing']);
     if (r.status !== 0) throw new Error(`capture ${side} exited ${r.status}`);
   }

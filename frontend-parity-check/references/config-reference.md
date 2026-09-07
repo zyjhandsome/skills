@@ -69,8 +69,10 @@
 | `pathOverrides` | `{ id: "/新路径" }`，处理两侧路由不一致。**key 可以是 route id、journey id，或带 `id` 的 `goto` 动作 id** |
 | `urlTokens` | `{ "/legacy/detail.do": "{detail}" }`，声明不属于任何 route 的等价路径 |
 | `userAgent` / `extraHTTPHeaders` | 需要指定 UA 或注入网关头时使用 |
-| `auth.storageState` | Cookie/localStorage 文件路径；存在则直接复用。可用 `scripts/export-storage-state.mjs` 从已登录浏览器生成 |
-| `auth.actions` | 文件不存在时执行的登录动作序列，成功后自动写入该文件。**任一步失败即整侧作废** |
+| `auth.mode` | 推荐 `auto-interactive`：先无头验证，必要时打开专用可见浏览器供用户登录；省略则沿用 `storageState` / `actions` 旧流程 |
+| `auth.storageState` | Cookie/localStorage 文件路径；`auto-interactive` 默认 `./auth/<side>.json` |
+| `auth.interactive` | `{startPath,successUrlPattern,readySelector,timeoutMs,probeTimeoutMs,readinessTimeoutMs,profileDir,channel,executablePath,openOnUnready}`；profile 必须是 Skill 专用目录 |
+| `auth.actions` | 非交互备选：文件不存在时执行登录动作，成功后自动写入。**不能与 `auto-interactive` 混用，任一步失败即整侧作废** |
 
 也可以在 `routes[].baselinePath` / `routes[].candidatePath`、
 `journeys[].baselineStartPath` / `journeys[].candidateStartPath` 上做单页路径覆盖。
@@ -78,6 +80,40 @@
 **声明过的路径迁移不会被判为缺陷**：比对前 `pathOverrides` / `<side>Path` / `urlTokens`
 里的路径会被换成 `{route:id}` 这样的占位符，两侧因此相等；**没声明**的路径差异仍然按
 跳转缺陷阻断。所以路由变了就写进配置，不要靠人工在报告里划掉。
+
+### `auth.mode=auto-interactive`
+
+```jsonc
+{
+  "auth": {
+    "mode": "auto-interactive",
+    "storageState": "./auth/candidate.json",
+    "interactive": {
+      "startPath": "/order/list",
+      "successUrlPattern": "/order/list",
+      "readySelector": "#order-app",
+      "timeoutMs": 600000,
+      "probeTimeoutMs": 8000
+    }
+  }
+}
+```
+
+先运行 `node scripts/prepare-auth.mjs --config parity-config.json --side candidate`。脚本会先用
+现有 `storageState`（若有）或干净会话无头探测。首个 route/journey 的 URL、比较面和 `waitFor`
+全部通过就直接结束；否则打开隔离的持久化浏览器，让用户自行完成账号、扫码、MFA 或证书登录。
+成功后自动保存会话并关闭自己启动的窗口。`capture.mjs` 发现该模式缺少状态文件时退出码为 `4`，
+不会悄悄采集登录页。
+
+脚本只在 URL 规则或登录表单表明“很可能需要登录”时自动开窗。若失败更像 404、服务异常、
+比较面或 `waitFor` 配错，会退出并要求先排查，避免让用户对着坏页面等待。少数自定义登录页识别不到时，
+确认后使用 `--force-interactive`；只有确实希望所有“未就绪”都开窗时才设 `openOnUnready:true`。
+
+默认 profile 在 `./auth/profiles/<name>/<side>`，与用户日常浏览器隔离；配置若指向 Chrome/Edge
+日常用户目录会被拒绝。通常无需设置端口。`channel` / `executablePath` 仅在交互登录要使用与
+正式采集不同于顶层配置的浏览器二进制时覆盖；同一轮两侧仍应使用相同浏览器。
+若首个 route 的 `waitFor` 依赖“必须有数据行”等不稳定条件，请显式给一个稳定的
+`interactive.readySelector`；`successUrlPattern` 可把登录成功限定在指定 URL。
 
 ## `assertLanded`
 
@@ -274,7 +310,7 @@ node scripts/selftest/unit.mjs     # 只跑判定规则单测（无浏览器，1
 |---|---|
 | 状态 `error`，超时在 `waitFor` | 选择器在新版已改名；看 `failure.png` 确认落地页，再用 `--headed` 观察后修正 |
 | 报告顶部提示"证据作废：落地 URL 命中禁止模式" | 站点静默跳了 SSO。补 `auth.storageState`（可用 `export-storage-state.mjs` 从已登录浏览器导出）；被测页本身是登录页则配 `assertLanded.allowUrl` |
-| 用户说"我已经登录了"但脚本还是跳登录页 | Playwright 用的是干净会话，与用户浏览器不共享。带 `--remote-debugging-port=9222` 重启浏览器登录后导出 `storageState`；导出脚本不会关用户的浏览器 |
+| 用户说"我已经登录了"但脚本还是跳登录页 | 默认运行 `prepare-auth.mjs`，在 Skill 专用窗口重新登录；只有明确要复用原窗口时才带 `--remote-debugging-port=9222` 导出 |
 | 托管页顶栏/菜单链接被报"缺失"，截图里明明有 | 内容在 iframe 里。现已自动合并可读 iframe；若报告标了 `iframe 不可读`，说明该 frame 禁脚本或已 detach，按"读不到"处理，不要当缺陷 |
 | 计数类差异"6 对 5"但页面上看着一样 | 旧版把隐藏项留在 DOM（`ng-hide`/`v-show`），新版 `v-if` 不渲染。`expectCount` 默认已只数可见节点；看 `observedTotal` 确认 |
 | `expectUrl` 被判阻断，但地址本来就该不同 | 路径迁移没声明。写进 `<side>.pathOverrides` / `urlTokens`，或给该步加 `ignorePath: true` |

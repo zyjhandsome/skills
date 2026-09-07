@@ -4,10 +4,19 @@
   "outputDir": "./parity-run",
   "dataParity": "same-data",
   "styleIntent": "pixel-parity",
-  "baseline": { "label": "old", "baseUrl": "http://127.0.0.1:9401" },
+  "baseline": {
+    "label": "old",
+    "baseUrl": "http://127.0.0.1:9401",
+    "auth": {
+      "mode": "auto-interactive",
+      "storageState": "./parity-run/auth-baseline.json",
+      "interactive": { "profileDir": "./parity-run/auth-profile-baseline" }
+    }
+  },
   "candidate": {
     "label": "new",
     "baseUrl": "http://127.0.0.1:9402",
+    "auth": { "mode": "auto-interactive", "storageState": "./parity-run/auth-candidate.json" },
     "pathOverrides": { "dashboard": "/shell-v2", "dashboard-notices": "/shell-v2" }
   },
   "context": {

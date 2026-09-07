@@ -9,20 +9,19 @@
     "label": "升级前 (Vue2 / 旧栈)",
     "baseUrl": "https://old.example.com",
     "auth": {
+      "mode": "auto-interactive",
       "storageState": "./auth/baseline.json",
-      "actions": [
-        { "type": "goto", "path": "/login" },
-        { "type": "fill", "selector": "input[name=username]", "value": "qa_user" },
-        { "type": "fill", "selector": "input[name=password]", "valueEnv": "PARITY_QA_PASSWORD" },
-        { "type": "click", "selector": "button[type=submit]" },
-        { "type": "waitForUrl", "pattern": "/home" }
-      ]
+      "interactive": { "timeoutMs": 600000, "probeTimeoutMs": 8000 }
     }
   },
   "candidate": {
     "label": "升级后 (Vue3 / 新栈)",
     "baseUrl": "https://new.example.com",
-    "auth": { "storageState": "./auth/candidate.json" },
+    "auth": {
+      "mode": "auto-interactive",
+      "storageState": "./auth/candidate.json",
+      "interactive": { "timeoutMs": 600000, "probeTimeoutMs": 8000 }
+    },
     "pathOverrides": {
       "order-list": "/order/list",
       "search-then-open-detail": "/order/list"
