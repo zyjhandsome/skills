@@ -76,21 +76,22 @@ node scripts/prepare-auth.mjs --config parity-config.json --side baseline
 node scripts/prepare-auth.mjs --config parity-config.json --side candidate
 ```
 
-执行顺序：
+执行顺序（每个网址最多弹一次登录窗）：
 
 1. 有旧 `storageState` 就先验证它；没有则用干净无头会话对首个 route/journey 做短探测。
-2. URL、`compareSurface` 与 `waitFor` 都通过时直接保存/复用会话，不打开窗口。
+2. URL、`compareSurface` 与 `waitFor` / `readySelector` 先通过，再保持 `readyHoldMs` 后仍通过，才保存/复用，不打开窗口。
 3. 未就绪（含登录 URL、登录表单、扫码/SSO、waitFor 没命中）立刻打开 Skill 专用浏览器。
    用户在窗口里自行登录，无需把密码交给 AI，也无需回复“登录好了”。
-4. 用户已说“我来登录”时用 `--force-interactive`，跳过无头探测。
-5. 脚本轮询相同的落地与就绪条件；成功后写 `storageState`，只关闭自己启动的浏览器。
+4. `--force-interactive` 只保证第 3 步会开窗，**不跳过**第 1–2 步。采集作废后重跑不要加这个开关。
+5. 关窗前用刚写出的 `storageState` 冷启动再打开目标 URL；仍通过才报 `ready`。假就绪不落盘，窗口保持打开继续等。
 
 默认等待 10 分钟，profile 保存在 `auth/profiles/<name>/<side>`，状态保存在
 `auth/<side>.json`；二者都应被 Git 忽略。不要把 `profileDir` 指向日常 Chrome/Edge 用户目录，
 脚本会主动拒绝。此方案不需要 `--remote-debugging-port`，也不会关闭用户已有浏览器。
 只有确认未就绪是路径/`waitFor` 配错、不要开窗打扰用户时，才设 `openOnUnready: false`。
-如果首个 route 的 `waitFor` 依赖数据行、异步报表等不稳定内容，用
-`interactive.readySelector` 改成稳定的应用根节点，并用 `successUrlPattern` 锁定成功 URL。
+`readySelector` 必须是登录后才出现的节点，禁止 `#app` / Header / 面包屑 / 登录前标题。
+若首个 route 的 `waitFor` 依赖数据行、异步报表等不稳定内容，另给一个稳定的登录后锚点，
+并用 `successUrlPattern` 锁定成功 URL。
 
 配置示例：
 
@@ -102,7 +103,7 @@ node scripts/prepare-auth.mjs --config parity-config.json --side candidate
     "interactive": {
       "startPath": "/home",
       "successUrlPattern": "/home",
-      "readySelector": "#app",
+      "readySelector": ".el-table",
       "timeoutMs": 600000
     }
   }

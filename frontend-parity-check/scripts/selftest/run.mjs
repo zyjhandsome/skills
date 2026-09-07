@@ -75,12 +75,32 @@ try {
     || refuseCase.stderr.includes('正在打开登录窗口')) {
     throw new Error('prepare-auth ignored explicit openOnUnready=false');
   }
+  const flashCase = run('prepare-auth.mjs', ['--side', 'baseline', '--headless-interactive'],
+    authCase('auth-flash-shell', '/flash-shell', '.cus-item-title', {
+      probeTimeoutMs: 4000, readyHoldMs: 1200, timeoutMs: 1500,
+    }), true);
+  if (flashCase.status === 0 || flashCase.stdout.includes('"status": "ready"')) {
+    throw new Error('prepare-auth treated a pre-login shell flash as ready');
+  }
+  if (!flashCase.stderr.includes('壳节点')) {
+    throw new Error('prepare-auth did not warn that .cus-item-title is a pre-login shell');
+  }
+  const forceStillProbes = run('prepare-auth.mjs',
+    ['--side', 'baseline', '--force-interactive', '--headless-interactive'],
+    authCase('auth-force-still-probes', '/', '.wrap'), true);
+  if (forceStillProbes.status !== 0 || !forceStillProbes.stdout.includes('"mode": "headless-probe"')) {
+    throw new Error('--force-interactive skipped the headless probe on a public page');
+  }
+  if (forceStillProbes.stderr.includes('正在打开登录窗口')) {
+    throw new Error('--force-interactive opened a window even though the probe succeeded');
+  }
   console.log('PASS  未就绪默认开登录窗；显式 openOnUnready=false 才拒绝');
+  console.log('PASS  登录前壳节点闪现不落盘；--force-interactive 仍先探测');
 
   for (const side of ['baseline', 'candidate']) {
-    // Baseline forces the persistent-context branch in headless mode; candidate covers the clean probe branch.
+    // Baseline uses --skip-probe to exercise the persistent-context branch; candidate covers the clean probe.
     const authArgs = side === 'baseline'
-      ? ['--side', side, '--force-interactive', '--headless-interactive']
+      ? ['--side', side, '--skip-probe', '--headless-interactive']
       : ['--side', side];
     const auth = run('prepare-auth.mjs', authArgs);
     if (auth.status !== 0) throw new Error(`prepare-auth ${side} exited ${auth.status}`);
@@ -91,6 +111,17 @@ try {
     const r = run('capture.mjs', ['--side', side, '--keepGoing']);
     if (r.status !== 0) throw new Error(`capture ${side} exited ${r.status}`);
   }
+  const reuse = run('prepare-auth.mjs',
+    ['--side', 'baseline', '--force-interactive', '--headless-interactive'],
+    config, true);
+  if (reuse.status !== 0 || !reuse.stdout.includes('"mode": "headless-probe"')
+    || !reuse.stdout.includes('"reused": true')) {
+    throw new Error('--force-interactive did not reuse a valid storageState');
+  }
+  if (reuse.stderr.includes('正在打开登录窗口')) {
+    throw new Error('--force-interactive reopened a login window despite a valid session');
+  }
+  console.log('PASS  已有会话时 --force-interactive 复用，不再开窗');
   run('compare.mjs', []);
 } finally {
   fixture.kill();

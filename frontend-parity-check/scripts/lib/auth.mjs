@@ -14,6 +14,45 @@ export function shouldOpenInteractive({
   return openOnUnready !== false;
 }
 
+/** Headless probe runs unless an explicit --skip-probe. --force-interactive never skips reuse. */
+export function shouldProbeFirst({ skipProbe = false } = {}) {
+  return !skipProbe;
+}
+
+/** Persist storageState only when the live window AND a cold-start reload both look ready. */
+export function shouldCommitAuthState({ windowReady = false, coldStartReady = false } = {}) {
+  return !!(windowReady && coldStartReady);
+}
+
+const EARLY_AUTH_READY = [
+  'html', 'body', '#app', '#root', '#__nuxt', '#__next', '#__vue',
+  '.cus-item-title', 'header', 'nav', '.el-header', '.el-aside',
+  '.breadcrumb', '.el-breadcrumb', '.el-menu',
+];
+
+function selectorLooksEarly(selector, token) {
+  const s = String(selector).trim().toLowerCase();
+  const t = token.toLowerCase();
+  return s === t || s.startsWith(`${t} `) || s.startsWith(`${t}.`) || s.startsWith(`${t}#`) || s.startsWith(`${t}[`);
+}
+
+/** Shell/header nodes exist before SSO finishes; they must not count as login success. */
+export function earlyAuthReadyWarning(selector) {
+  if (!selector) return null;
+  const hit = EARLY_AUTH_READY.find((token) => selectorLooksEarly(selector, token));
+  if (!hit) return null;
+  return `就绪选择器「${selector}」像登录前就有的壳节点（${hit}）。请改成登录后才出现的节点，否则会把未完成的登录存成 ready。`;
+}
+
+export function resolvedAuthReadySelector(cfg, side) {
+  const { item, surface, readySelector } = firstAuthTarget(cfg, side);
+  return readySelector
+    || surface.readySelector
+    || item?.waitFor?.[`${side}Selector`]
+    || item?.waitFor?.selector
+    || null;
+}
+
 export function authStoragePath(configPath, side, sideCfg = {}) {
   const configured = sideCfg.auth?.storageState || `./auth/${side}.json`;
   return path.resolve(path.dirname(configPath), configured);

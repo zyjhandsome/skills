@@ -7,7 +7,10 @@ import {
   resolveSurface, configValidationErrors,
 } from '../lib/parity-core.mjs';
 import { DEFAULT_PROBES } from '../lib/probes.mjs';
-import { firstAuthTarget, shouldOpenInteractive } from '../lib/auth.mjs';
+import {
+  firstAuthTarget, shouldOpenInteractive, shouldProbeFirst, shouldCommitAuthState,
+  earlyAuthReadyWarning,
+} from '../lib/auth.mjs';
 
 let failed = 0;
 const check = (label, cond, extra = '') => {
@@ -84,12 +87,32 @@ check('交互登录超时必须为正数',
   configValidationErrors({ candidate: { auth: { mode: 'auto-interactive', interactive: { timeoutMs: 0 } } } }).length === 1);
 eq('未就绪默认直接开窗，不先自行排查',
   shouldOpenInteractive({ loginLikely: false }), true);
-eq('用户已要求登录时跳过无头探测直接开窗',
+eq('用户已要求登录时，未就绪必须开窗（仍先探测）',
   shouldOpenInteractive({ forceInteractive: true, loginLikely: false, openOnUnready: false }), true);
 eq('识别到登录页时即使关闭 openOnUnready 也开窗',
   shouldOpenInteractive({ loginLikely: true, openOnUnready: false }), true);
 eq('显式关闭 openOnUnready 时，未识别登录页不开窗',
   shouldOpenInteractive({ loginLikely: false, openOnUnready: false }), false);
+eq('--force-interactive 仍先探测已有会话',
+  shouldProbeFirst({ forceInteractive: true, hasStorageState: true }), true);
+eq('没有旧会话时 --force-interactive 也先短探测',
+  shouldProbeFirst({ forceInteractive: true, hasStorageState: false }), true);
+eq('仅 --skip-probe 才跳过探测',
+  shouldProbeFirst({ skipProbe: true, forceInteractive: false }), false);
+eq('冷启动未通过则不落盘',
+  shouldCommitAuthState({ windowReady: true, coldStartReady: false }), false);
+eq('窗口未就绪即使冷启动通过也不落盘',
+  shouldCommitAuthState({ windowReady: false, coldStartReady: true }), false);
+eq('窗口就绪且冷启动通过才落盘',
+  shouldCommitAuthState({ windowReady: true, coldStartReady: true }), true);
+eq('壳节点就绪选择器要警告',
+  !!earlyAuthReadyWarning('.cus-item-title'), true);
+eq('#app 作为登录就绪选择器要警告',
+  !!earlyAuthReadyWarning('#app'), true);
+eq('面包屑就绪选择器要警告',
+  !!earlyAuthReadyWarning('.el-breadcrumb'), true);
+eq('登录后才有的节点不警告',
+  earlyAuthReadyWarning('.tab-list') == null, true);
 
 eq('交互登录探测遵守首个路由的分侧路径映射',
   firstAuthTarget({

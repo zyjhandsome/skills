@@ -71,7 +71,7 @@
 | `userAgent` / `extraHTTPHeaders` | 需要指定 UA 或注入网关头时使用 |
 | `auth.mode` | 推荐 `auto-interactive`：先无头验证，必要时打开专用可见浏览器供用户登录；省略则沿用 `storageState` / `actions` 旧流程 |
 | `auth.storageState` | Cookie/localStorage 文件路径；`auto-interactive` 默认 `./auth/<side>.json` |
-| `auth.interactive` | `{startPath,successUrlPattern,readySelector,timeoutMs,probeTimeoutMs,readinessTimeoutMs,profileDir,channel,executablePath,openOnUnready}`；profile 必须是 Skill 专用目录 |
+| `auth.interactive` | `{startPath,successUrlPattern,readySelector,timeoutMs,probeTimeoutMs,readinessTimeoutMs,readyHoldMs,profileDir,channel,executablePath,openOnUnready}`；profile 必须是 Skill 专用目录；`readySelector` 必须是登录后才出现的节点 |
 | `auth.actions` | 非交互备选：文件不存在时执行登录动作，成功后自动写入。**不能与 `auto-interactive` 混用，任一步失败即整侧作废** |
 
 也可以在 `routes[].baselinePath` / `routes[].candidatePath`、
@@ -91,18 +91,22 @@
     "interactive": {
       "startPath": "/order/list",
       "successUrlPattern": "/order/list",
-      "readySelector": "#order-app",
+      "readySelector": ".tab-list",
       "timeoutMs": 600000,
-      "probeTimeoutMs": 4000
+      "probeTimeoutMs": 4000,
+      "readyHoldMs": 1500
     }
   }
 }
 ```
 
 先运行 `node scripts/prepare-auth.mjs --config parity-config.json --side candidate`。脚本会先用
-现有 `storageState`（若有）或干净会话做短探测（默认约 4 秒）。首个 route/journey 的 URL、比较面和 `waitFor`
-全部通过就直接结束；未就绪则立刻打开隔离的持久化浏览器，让用户自行完成账号、扫码、MFA 或证书登录。
-用户已明确要登录时加 `--force-interactive`，跳过无头探测。成功后自动保存会话并关闭自己启动的窗口。
+现有 `storageState`（若有）或干净会话做短探测（默认约 4 秒）。首个 route/journey 的 URL、比较面和
+`waitFor` / `readySelector` 先通过、再保持一小段时间（`readyHoldMs`，默认 1.5 秒）仍通过，才算就绪。
+未就绪则立刻打开隔离的持久化浏览器，让用户自行完成账号、扫码、MFA 或证书登录。
+`--force-interactive` 只表示未就绪必须开窗，**不跳过**已有会话的无头验证。只有自检/调试才用
+`--skip-probe`。关窗前会用刚写出的 `storageState` 冷启动再打开目标 URL，仍通过才报 `ready` 并落盘；
+假就绪（壳子闪一下）会删掉这份文件并继续等。
 `capture.mjs` 发现该模式缺少状态文件时退出码为 `4`，不会悄悄采集登录页。
 
 默认 `openOnUnready` 为开：扫码页、自定义 SSO、登录表单识别不到时也开窗，避免 agent 自行探究。
@@ -111,8 +115,9 @@
 默认 profile 在 `./auth/profiles/<name>/<side>`，与用户日常浏览器隔离；配置若指向 Chrome/Edge
 日常用户目录会被拒绝。通常无需设置端口。`channel` / `executablePath` 仅在交互登录要使用与
 正式采集不同于顶层配置的浏览器二进制时覆盖；同一轮两侧仍应使用相同浏览器。
-若首个 route 的 `waitFor` 依赖“必须有数据行”等不稳定条件，请显式给一个稳定的
-`interactive.readySelector`；`successUrlPattern` 可把登录成功限定在指定 URL。
+`readySelector` 必须是**登录后才出现**的节点，默认跟首个 route/journey 的 `waitFor` 对齐。
+禁止用 `#app` / `#root`、Header、面包屑、登录前就画出的标题；也不要用“必须有数据行”的选择器。
+`successUrlPattern` 可把登录成功限定在指定 URL。
 
 ## `assertLanded`
 
@@ -178,7 +183,8 @@
 
 `route.waitFor` 有两重身份：既是"页面渲染完了"的信号，也是"确实到了这一页"的判据。
 导航后未命中直接作废（不会再产出可比证据）；动作执行后未命中只记 `warning`，
-因为动作本身可能就是要离开这个锚点。
+因为动作本身可能就是要离开这个锚点。登录就绪与采集共用这份选择器时，它还必须是
+**登录后才出现**的节点：登录前就会画出的壳、Header、面包屑不能当成功。
 
 ## `journeys[]`
 
@@ -281,6 +287,8 @@ Journey 只在**第一个视口**执行一次。默认定位在该 journey 的 `
 | `--only <id,id>` | capture | 只跑指定 route/journey，调试用 |
 | `--headed` | capture | 有头模式，观察脚本卡在哪一步 |
 | `--keepGoing` | capture | 有状态采集失败也返回 0 |
+| `--force-interactive` | prepare-auth | 未就绪必须开窗；**仍先探测**已有会话，通过则不开窗 |
+| `--skip-probe` | prepare-auth | 跳过无头探测。仅自检/调试；正式跑禁用 |
 | `--channel <chrome\|msedge>` | capture / compare | 覆盖配置里的 `channel`，用本机浏览器 |
 | `--executablePath <path>` | capture / compare | 覆盖配置里的 `executablePath` |
 
@@ -309,7 +317,9 @@ node scripts/selftest/unit.mjs     # 只跑判定规则单测（无浏览器，1
 |---|---|
 | 状态 `error`，超时在 `waitFor` | 选择器在新版已改名；看 `failure.png` 确认落地页，再用 `--headed` 观察后修正 |
 | 报告顶部提示"证据作废：落地 URL 命中禁止模式" | 站点静默跳了 SSO。补 `auth.storageState`（可用 `export-storage-state.mjs` 从已登录浏览器导出）；被测页本身是登录页则配 `assertLanded.allowUrl` |
-| 用户说"我已经登录了"但脚本还是跳登录页 | 默认运行 `prepare-auth.mjs`，在 Skill 专用窗口重新登录；只有明确要复用原窗口时才带 `--remote-debugging-port=9222` 导出 |
+| 用户说"我已经登录了"但脚本还是跳登录页 | 先无头跑 `prepare-auth.mjs` 验证已有 `storageState`；探测失败再开 Skill 专用窗口。不要加 `--skip-probe`。只有明确要复用原窗口时才带 `--remote-debugging-port=9222` 导出 |
+| 刚登录成功，采集却跳到 `login-beta` / SSO | 就绪选择器太早（登录前就有的壳）。改成登录后才出现的节点，重跑 `prepare-auth`（不加 `--force-interactive`） |
+| 同一网址登录了两次 | `--force-interactive` 已不再跳过探测。重跑不要加 `--skip-probe`；已有会话应静默复用 |
 | 托管页顶栏/菜单链接被报"缺失"，截图里明明有 | 内容在 iframe 里。现已自动合并可读 iframe；若报告标了 `iframe 不可读`，说明该 frame 禁脚本或已 detach，按"读不到"处理，不要当缺陷 |
 | 计数类差异"6 对 5"但页面上看着一样 | 旧版把隐藏项留在 DOM（`ng-hide`/`v-show`），新版 `v-if` 不渲染。`expectCount` 默认已只数可见节点；看 `observedTotal` 确认 |
 | `expectUrl` 被判阻断，但地址本来就该不同 | 路径迁移没声明。写进 `<side>.pathOverrides` / `urlTokens`，或给该步加 `ignorePath: true` |

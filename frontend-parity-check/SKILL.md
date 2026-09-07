@@ -64,12 +64,14 @@ node scripts/selftest/run.mjs     # 含 unit.mjs；也可单独跑 node scripts/
 
 1. **两个 URL**：baseline（升级前）与 candidate（升级后）的可访问地址；若路由不同，
    给出每个页面的路径映射。
-2. **登录方式**：首选 **自动探测 + 打开专用浏览器让用户登录**（`auto-interactive`）；
+2. **登录方式**：首选 **自动探测 + 未就绪才开窗**（`auto-interactive`）；
    其余选项是免登录、从用户现有浏览器导出会话、测试账号、其他。
-   - 用户未指定时默认 `auto-interactive`：先用干净无头会话做**短探测**（几秒）；
-     页面可直接访问就不打扰用户。未就绪就**立刻打开专用登录窗口**，由用户扫码 / SSO / 输入账号。
-   - 用户已经说“我来登录 / 需要登录”时，`prepare-auth` 加 `--force-interactive`，跳过无头探测，直接开窗。
-   - 专用浏览器使用 Skill 独立 profile，不复用用户日常 Chrome/Edge profile，也不要求固定调试端口。
+   - **每址最多弹一次登录窗。** 固定顺序：已有 `storageState` → 无头验证 → 通过则静默结束 →
+     失败才开窗。用户说“我来登录”只保证第三步会开窗，**不跳过复用**。
+   - 不要加 `--skip-probe`（自检/调试专用）。不要因为用户说了“我来登录”就加
+     `--force-interactive` 去跳过探测——该开关现在只表示「未就绪必须开窗」。
+   - 采集因 SSO 作废后重跑：先 `prepare-auth`（不加 force / skip-probe）。探测失败再开窗。
+   - 专用浏览器使用 Skill 独立 profile，不复用用户日常 Chrome/Edge profile。
    - "我已经在浏览器里登录了"**不等于**脚本已登录；若用户坚持复用现有窗口，才使用
      `scripts/export-storage-state.mjs` 的 CDP 方案。
    - 说"免登录"也要验证：内网站点经常静默跳 SSO。短探测通不过就开窗，不要自己点站排查。
@@ -107,8 +109,10 @@ node scripts/selftest/run.mjs     # 含 unit.mjs；也可单独跑 node scripts/
 - 明显会漂移的元素（时间戳、进度条、轮播、验证码、canvas 图表）写进 `masks`。
 - **两侧路由不同就必须声明** `pathOverrides`（route 和 journey 都认这份映射）。
   没声明的路径差异会被判为跳转缺陷——这是有意的。
-- `waitFor` 填一个**只有目标页才有**的选择器：它同时是"页面已就绪"和
-  "确实到了这一页"的判据，命中不了整个状态作废。
+- `waitFor` / `interactive.readySelector` 必须是**登录后才出现**的节点（例如权限接口成功后的
+  `.tab-list`、业务表）。禁止用整页壳、`#app` / `#root`、Header、面包屑、登录前就有的标题。
+  登录前会先画出的壳节点当成功，会把空会话存成 `ready`，采集立刻被打回 SSO。
+  也不要用“必须有数据行”的选择器当登录成功。命中不了整个状态作废。
 - `outputDir` 必须带页面或模块名，例如 `./parity-runs/task-report`。每次采集会写
   `run-manifest.json` 与配置指纹；目录属于另一份契约时会拒绝覆盖。
 - `styleProbes` 只能使用浏览器原生 CSS；页面动作使用 Playwright selector。
@@ -121,15 +125,14 @@ node scripts/selftest/run.mjs     # 含 unit.mjs；也可单独跑 node scripts/
 `auth.mode=auto-interactive` 时，写完配置后**立刻**准备两侧登录态，不要先自己打开目标站探究：
 
 ```bash
-# 用户已说“我来登录”时两侧都加 --force-interactive
 node scripts/prepare-auth.mjs --config parity-config.json --side baseline
 node scripts/prepare-auth.mjs --config parity-config.json --side candidate
 ```
 
 启动前先告诉用户：**如果弹出浏览器，请在该窗口登录；不用回复「登录好了」，也不要把密码发给我。**
-无须登录或现有会话仍有效时，命令会在几秒内无头结束；未就绪会马上打开专用窗口。
-脚本自己等待落地与就绪判据，成功后写入 `auth/<side>.json` 并只关闭自己启动的窗口。
-超时、窗口被关闭或仍停在 SSO 页时不得继续采集。
+已有会话仍有效、或页面免登录时，命令会在几秒内无头结束，不再开窗。未就绪才打开专用窗口。
+脚本在关窗前会用刚写出的 `storageState` 再冷启动校验一次，通过才报 `ready`。
+超时、窗口被关闭、仍停在 SSO 页、或冷启动失败时不得继续采集。
 
 **禁止**用 WebSearch、浏览器工具或手动点页面来“搞清楚怎么登录”。那是用户的事，不是探测循环。
 
@@ -210,6 +213,8 @@ node scripts/compare.mjs --config parity-config.json
 - 把 base64 截图或整份报告贴进对话，而不是给路径。
 - 修改被测站点的任何源码——本技能只做取证与判定。
 - 目标页未就绪时自己探究 SSO / 改 waitFor / 反复无头重试，而不是打开登录窗口让用户登录。
+- 已有 `storageState` 时为了「用户说过要登录」再弹一次窗。重跑先探测；只有探测失败再开窗。
+- 用登录前就存在的壳节点当登录成功，或把未通过冷启动校验的会话当成 `ready`。
 
 ## 参考文件
 
@@ -220,4 +225,4 @@ node scripts/compare.mjs --config parity-config.json
 - `templates/parity-config.json`：列表/表单页的完整配置样例
 - `templates/parity-config-hosted-iframe.json`：托管页 + iframe 壳 + 看板的配置样例
 - `scripts/export-storage-state.mjs`：从用户已登录的浏览器导出 `storageState`
-- `scripts/prepare-auth.mjs`：无头探测；必要时打开专用浏览器供用户登录并自动保存会话
+- `scripts/prepare-auth.mjs`：先探测已有会话；未就绪才开窗；关窗前冷启动校验，假就绪不落盘

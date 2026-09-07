@@ -103,6 +103,21 @@ const frameReportPage = () => `<!doctype html>
 const previewPage = () => `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>报表预览</title></head>
 <body><h1>报表预览</h1><p>预览已生成</p></body></html>`;
 
+// Unauthenticated shell that paints a title immediately, then bounces to SSO.
+// A too-early readySelector (.cus-item-title) must not be saved as login success.
+const flashShellPage = () => `<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>评审点</title></head>
+<body>
+<h1 class="cus-item-title">评审点</h1>
+<script>
+setTimeout(function () {
+  if (document.cookie.indexOf('parity_auth=1') === -1) {
+    location.href = '/login?redirect=%2Fflash-shell';
+  }
+}, 400);
+</script>
+</body></html>`;
+
 const VARIANTS = {
   9401: { title: '订单列表 - 旧版', primaryBg: '#409eff', radius: '4px', extraBtn: true, missingField: false, colName: '客户名称', fontSize: '14px', brokenJs: false, topbarHelp: true, hiddenMore: true },
   9402: { title: '订单列表 - 新版', primaryBg: '#1668dc', radius: '10px', extraBtn: false, missingField: true, colName: '客户', fontSize: '13px', brokenJs: true, topbarHelp: false, hiddenMore: false },
@@ -125,6 +140,7 @@ export function startFixture() {
       if (pathname === '/frame-shell') return send(frameShellPage());
       if (pathname === '/frame-report') return send(frameReportPage());
       if (pathname === '/preview') return send(previewPage());
+      if (pathname === '/flash-shell') return send(flashShellPage());
       if (pathname === '/shell' || pathname === '/shell-v2') return send(shellPage(v));
       return send(page(v));
     }).listen(Number(port)));
