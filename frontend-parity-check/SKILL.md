@@ -66,13 +66,13 @@ node scripts/selftest/run.mjs     # 含 unit.mjs；也可单独跑 node scripts/
    给出每个页面的路径映射。
 2. **登录方式**：首选 **自动探测 + 打开专用浏览器让用户登录**（`auto-interactive`）；
    其余选项是免登录、从用户现有浏览器导出会话、测试账号、其他。
-   - 用户未指定时默认 `auto-interactive`：先用干净无头会话探测；页面可直接访问就不打扰用户，
-     确认跳到登录/SSO 或目标页未就绪时才打开可见浏览器。用户完成扫码、MFA 或账号登录后，
-     脚本自动验证目标页、保存 `storageState` 并只关闭自己启动的窗口。
+   - 用户未指定时默认 `auto-interactive`：先用干净无头会话做**短探测**（几秒）；
+     页面可直接访问就不打扰用户。未就绪就**立刻打开专用登录窗口**，由用户扫码 / SSO / 输入账号。
+   - 用户已经说“我来登录 / 需要登录”时，`prepare-auth` 加 `--force-interactive`，跳过无头探测，直接开窗。
    - 专用浏览器使用 Skill 独立 profile，不复用用户日常 Chrome/Edge profile，也不要求固定调试端口。
    - "我已经在浏览器里登录了"**不等于**脚本已登录；若用户坚持复用现有窗口，才使用
      `scripts/export-storage-state.mjs` 的 CDP 方案。
-   - 说"免登录"也要验证：内网站点经常静默跳 SSO。自动探测正是这道校验。
+   - 说"免登录"也要验证：内网站点经常静默跳 SSO。短探测通不过就开窗，不要自己点站排查。
 3. **数据前提** `dataParity`：两侧是否连**同一套数据**。
    - `same-data`：行数、文案、链接差异都算真实缺陷。
    - `different-data`（默认）：数据类差异降级为参考项，**此时不能宣称"内容一致"**。
@@ -118,17 +118,20 @@ node scripts/selftest/run.mjs     # 含 unit.mjs；也可单独跑 node scripts/
 
 ### 第 3 步：双侧采集
 
-`auth.mode=auto-interactive` 时，先准备并验证两侧登录态：
+`auth.mode=auto-interactive` 时，写完配置后**立刻**准备两侧登录态，不要先自己打开目标站探究：
 
 ```bash
+# 用户已说“我来登录”时两侧都加 --force-interactive
 node scripts/prepare-auth.mjs --config parity-config.json --side baseline
 node scripts/prepare-auth.mjs --config parity-config.json --side candidate
 ```
 
-无须登录或现有会话仍有效时，两条命令会无头完成；确实需要登录时会打开一个专用浏览器，
-用户在其中完成登录即可，**不需要把密码交给 AI，也不需要回复“登录好了”**。脚本会自动等待
-首个 route/journey 的落地与就绪判据，成功后写入 `auth/<side>.json`。等待期间应明确告诉用户
-正在等他操作；超时、窗口被关闭或仍停在 SSO 页时不得继续采集。
+启动前先告诉用户：**如果弹出浏览器，请在该窗口登录；不用回复「登录好了」，也不要把密码发给我。**
+无须登录或现有会话仍有效时，命令会在几秒内无头结束；未就绪会马上打开专用窗口。
+脚本自己等待落地与就绪判据，成功后写入 `auth/<side>.json` 并只关闭自己启动的窗口。
+超时、窗口被关闭或仍停在 SSO 页时不得继续采集。
+
+**禁止**用 WebSearch、浏览器工具或手动点页面来“搞清楚怎么登录”。那是用户的事，不是探测循环。
 
 ```bash
 node scripts/capture.mjs --config parity-config.json --side baseline
@@ -206,6 +209,7 @@ node scripts/compare.mjs --config parity-config.json
 - 只跑截图、不跑 journey，就宣称"功能一致"。
 - 把 base64 截图或整份报告贴进对话，而不是给路径。
 - 修改被测站点的任何源码——本技能只做取证与判定。
+- 目标页未就绪时自己探究 SSO / 改 waitFor / 反复无头重试，而不是打开登录窗口让用户登录。
 
 ## 参考文件
 

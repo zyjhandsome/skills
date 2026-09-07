@@ -93,21 +93,20 @@
       "successUrlPattern": "/order/list",
       "readySelector": "#order-app",
       "timeoutMs": 600000,
-      "probeTimeoutMs": 8000
+      "probeTimeoutMs": 4000
     }
   }
 }
 ```
 
 先运行 `node scripts/prepare-auth.mjs --config parity-config.json --side candidate`。脚本会先用
-现有 `storageState`（若有）或干净会话无头探测。首个 route/journey 的 URL、比较面和 `waitFor`
-全部通过就直接结束；否则打开隔离的持久化浏览器，让用户自行完成账号、扫码、MFA 或证书登录。
-成功后自动保存会话并关闭自己启动的窗口。`capture.mjs` 发现该模式缺少状态文件时退出码为 `4`，
-不会悄悄采集登录页。
+现有 `storageState`（若有）或干净会话做短探测（默认约 4 秒）。首个 route/journey 的 URL、比较面和 `waitFor`
+全部通过就直接结束；未就绪则立刻打开隔离的持久化浏览器，让用户自行完成账号、扫码、MFA 或证书登录。
+用户已明确要登录时加 `--force-interactive`，跳过无头探测。成功后自动保存会话并关闭自己启动的窗口。
+`capture.mjs` 发现该模式缺少状态文件时退出码为 `4`，不会悄悄采集登录页。
 
-脚本只在 URL 规则或登录表单表明“很可能需要登录”时自动开窗。若失败更像 404、服务异常、
-比较面或 `waitFor` 配错，会退出并要求先排查，避免让用户对着坏页面等待。少数自定义登录页识别不到时，
-确认后使用 `--force-interactive`；只有确实希望所有“未就绪”都开窗时才设 `openOnUnready:true`。
+默认 `openOnUnready` 为开：扫码页、自定义 SSO、登录表单识别不到时也开窗，避免 agent 自行探究。
+只有确认未就绪是 404 / `waitFor` 配错、且不要打扰用户时，才设 `openOnUnready: false`。
 
 默认 profile 在 `./auth/profiles/<name>/<side>`，与用户日常浏览器隔离；配置若指向 Chrome/Edge
 日常用户目录会被拒绝。通常无需设置端口。`channel` / `executablePath` 仅在交互登录要使用与

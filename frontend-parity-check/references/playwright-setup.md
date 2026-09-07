@@ -78,17 +78,17 @@ node scripts/prepare-auth.mjs --config parity-config.json --side candidate
 
 执行顺序：
 
-1. 有旧 `storageState` 就先验证它；没有则用干净无头会话探测首个 route/journey。
+1. 有旧 `storageState` 就先验证它；没有则用干净无头会话对首个 route/journey 做短探测。
 2. URL、`compareSurface` 与 `waitFor` 都通过时直接保存/复用会话，不打开窗口。
-3. 探测结果命中登录 URL 或登录表单时才启动可见的 Skill 专用浏览器。用户在窗口里自行登录，无需把密码交给 AI，
-   也无需另行回复“登录好了”。
-4. 脚本轮询相同的落地与就绪条件；成功后写 `storageState`，只关闭自己启动的浏览器。
+3. 未就绪（含登录 URL、登录表单、扫码/SSO、waitFor 没命中）立刻打开 Skill 专用浏览器。
+   用户在窗口里自行登录，无需把密码交给 AI，也无需回复“登录好了”。
+4. 用户已说“我来登录”时用 `--force-interactive`，跳过无头探测。
+5. 脚本轮询相同的落地与就绪条件；成功后写 `storageState`，只关闭自己启动的浏览器。
 
 默认等待 10 分钟，profile 保存在 `auth/profiles/<name>/<side>`，状态保存在
 `auth/<side>.json`；二者都应被 Git 忽略。不要把 `profileDir` 指向日常 Chrome/Edge 用户目录，
 脚本会主动拒绝。此方案不需要 `--remote-debugging-port`，也不会关闭用户已有浏览器。
-若探测失败更像 404、目标路径不通或 `waitFor` 配错，脚本会退出而不是开窗。确认是未识别的
-自定义登录页后再加 `--force-interactive`，或配置 `interactive.openOnUnready:true`。
+只有确认未就绪是路径/`waitFor` 配错、不要开窗打扰用户时，才设 `openOnUnready: false`。
 如果首个 route 的 `waitFor` 依赖数据行、异步报表等不稳定内容，用
 `interactive.readySelector` 改成稳定的应用根节点，并用 `successUrlPattern` 锁定成功 URL。
 

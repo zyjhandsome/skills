@@ -8,7 +8,8 @@ import {
 } from './lib/pw.mjs';
 import { configValidationErrors } from './lib/parity-core.mjs';
 import {
-  authProfilePath, authStoragePath, firstAuthTarget, inspectAuthReadiness, unsafeDailyProfileReason,
+  authProfilePath, authStoragePath, firstAuthTarget, inspectAuthReadiness,
+  shouldOpenInteractive, unsafeDailyProfileReason,
 } from './lib/auth.mjs';
 
 const args = parseArgs(process.argv.slice(2));
@@ -69,7 +70,7 @@ if (sideCfg.userAgent) contextOptions.userAgent = sideCfg.userAgent;
 if (sideCfg.extraHTTPHeaders) contextOptions.extraHTTPHeaders = sideCfg.extraHTTPHeaders;
 
 const { url: targetUrl } = firstAuthTarget(cfg, side);
-const probeTimeoutMs = Number(interactive.probeTimeoutMs || 8000);
+const probeTimeoutMs = Number(interactive.probeTimeoutMs || 4000);
 const loginTimeoutMs = Number(interactive.timeoutMs || 600000);
 const readinessTimeoutMs = Number(interactive.readinessTimeoutMs || 1200);
 
@@ -141,16 +142,21 @@ if (probeResult?.ok) {
   process.exit(0);
 }
 
-if (!args['force-interactive'] && !probeResult?.loginLikely && !interactive.openOnUnready) {
+if (!shouldOpenInteractive({
+  forceInteractive: !!args['force-interactive'],
+  loginLikely: !!probeResult?.loginLikely,
+  openOnUnready: interactive.openOnUnready,
+})) {
   console.error(`[auth:${side}] 无头探测未就绪，但未识别出登录页：${probeResult?.reason || '未知原因'}`);
-  console.error(`[auth:${side}] 这更可能是路径、服务或 waitFor 问题。确认确实需要人工操作后，可加 --force-interactive。`);
+  console.error(`[auth:${side}] 已显式设置 openOnUnready=false。确认是登录问题后去掉该开关，或加 --force-interactive。`);
   process.exit(4);
 }
 
 ensureDir(profileDir);
 console.error(`[auth:${side}] 无头探测未通过：${probeResult?.reason || '已要求交互登录'}`);
-console.error(`[auth:${side}] 正在打开 Skill 专用浏览器。请在该窗口完成登录，并让页面回到：${targetUrl}`);
-console.error(`[auth:${side}] 登录成功会自动保存会话并关闭这个专用窗口；最长等待 ${Math.round(loginTimeoutMs / 60000)} 分钟。`);
+console.error(`[auth:${side}] 正在打开登录窗口。请在该窗口完成登录（扫码 / SSO / 账号均可），不用回复「登录好了」。`);
+console.error(`[auth:${side}] 登录后请让页面回到：${targetUrl}`);
+console.error(`[auth:${side}] 成功后会自动保存会话并关闭这个专用窗口；最长等待 ${Math.round(loginTimeoutMs / 60000)} 分钟。`);
 
 let persistent = null;
 try {

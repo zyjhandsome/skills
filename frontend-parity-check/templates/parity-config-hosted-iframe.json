@@ -48,7 +48,7 @@
     "auth": {
       "mode": "auto-interactive",
       "storageState": "./auth/baseline.json",
-      "interactive": { "timeoutMs": 600000, "probeTimeoutMs": 8000 }
+      "interactive": { "timeoutMs": 600000, "probeTimeoutMs": 4000 }
     }
   },
   "candidate": {
@@ -57,7 +57,7 @@
     "auth": {
       "mode": "auto-interactive",
       "storageState": "./auth/candidate.json",
-      "interactive": { "timeoutMs": 600000, "probeTimeoutMs": 8000 }
+      "interactive": { "timeoutMs": 600000, "probeTimeoutMs": 4000 }
     },
     "pathOverrides": {
       "dashboard": "/workspace/project/dashboard",

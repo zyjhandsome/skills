@@ -4,6 +4,16 @@ import { landingVerdict, resolveSurface } from './parity-core.mjs';
 
 export const AUTO_INTERACTIVE_AUTH = 'auto-interactive';
 
+/** Unready pages open a login window by default. Only an explicit false keeps the old refuse-first gate. */
+export function shouldOpenInteractive({
+  forceInteractive = false,
+  loginLikely = false,
+  openOnUnready,
+} = {}) {
+  if (forceInteractive || loginLikely) return true;
+  return openOnUnready !== false;
+}
+
 export function authStoragePath(configPath, side, sideCfg = {}) {
   const configured = sideCfg.auth?.storageState || `./auth/${side}.json`;
   return path.resolve(path.dirname(configPath), configured);

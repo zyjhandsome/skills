@@ -38,7 +38,7 @@ const unit = spawnSync(process.execPath, [path.join(here, 'unit.mjs')], { stdio:
 
 try {
   // Auth gate behavior: a login page opens the interactive browser; a broken readiness anchor does not.
-  const authCase = (name, routePath, selector) => {
+  const authCase = (name, routePath, selector, extraInteractive = {}) => {
     const file = path.join(outDir, `${name}.json`);
     fs.mkdirSync(outDir, { recursive: true });
     fs.writeFileSync(file, JSON.stringify({
@@ -51,6 +51,7 @@ try {
           interactive: {
             timeoutMs: 600, probeTimeoutMs: 600, readinessTimeoutMs: 150,
             profileDir: `./${name}-profile`,
+            ...extraInteractive,
           },
         },
       },
@@ -60,16 +61,21 @@ try {
   };
   const loginCase = run('prepare-auth.mjs', ['--side', 'baseline', '--headless-interactive'],
     authCase('auth-login-detection', '/gate', '.wrap'), true);
-  if (loginCase.status !== 4 || !loginCase.stderr.includes('正在打开 Skill 专用浏览器')) {
+  if (loginCase.status !== 4 || !loginCase.stderr.includes('正在打开登录窗口')) {
     throw new Error('prepare-auth did not open interactive mode for a detected login page');
   }
-  const brokenCase = run('prepare-auth.mjs', ['--side', 'baseline', '--headless-interactive'],
-    authCase('auth-broken-page', '/', '.definitely-missing'), true);
-  if (brokenCase.status !== 4 || !brokenCase.stderr.includes('未识别出登录页')
-    || brokenCase.stderr.includes('正在打开 Skill 专用浏览器')) {
-    throw new Error('prepare-auth treated a broken readiness anchor as a login page');
+  const unreadyCase = run('prepare-auth.mjs', ['--side', 'baseline', '--headless-interactive'],
+    authCase('auth-unready-opens', '/', '.definitely-missing'), true);
+  if (unreadyCase.status !== 4 || !unreadyCase.stderr.includes('正在打开登录窗口')) {
+    throw new Error('prepare-auth did not open a login window when the page was unready');
   }
-  console.log('PASS  登录页自动开窗；普通未就绪不会误开窗');
+  const refuseCase = run('prepare-auth.mjs', ['--side', 'baseline', '--headless-interactive'],
+    authCase('auth-broken-page', '/', '.definitely-missing', { openOnUnready: false }), true);
+  if (refuseCase.status !== 4 || !refuseCase.stderr.includes('未识别出登录页')
+    || refuseCase.stderr.includes('正在打开登录窗口')) {
+    throw new Error('prepare-auth ignored explicit openOnUnready=false');
+  }
+  console.log('PASS  未就绪默认开登录窗；显式 openOnUnready=false 才拒绝');
 
   for (const side of ['baseline', 'candidate']) {
     // Baseline forces the persistent-context branch in headless mode; candidate covers the clean probe branch.

@@ -7,7 +7,7 @@ import {
   resolveSurface, configValidationErrors,
 } from '../lib/parity-core.mjs';
 import { DEFAULT_PROBES } from '../lib/probes.mjs';
-import { firstAuthTarget } from '../lib/auth.mjs';
+import { firstAuthTarget, shouldOpenInteractive } from '../lib/auth.mjs';
 
 let failed = 0;
 const check = (label, cond, extra = '') => {
@@ -82,6 +82,15 @@ check('交互登录不能与脚本登录混用',
   configValidationErrors({ baseline: { auth: { mode: 'auto-interactive', actions: [{ type: 'goto', path: '/' }] } } }).length === 1);
 check('交互登录超时必须为正数',
   configValidationErrors({ candidate: { auth: { mode: 'auto-interactive', interactive: { timeoutMs: 0 } } } }).length === 1);
+eq('未就绪默认直接开窗，不先自行排查',
+  shouldOpenInteractive({ loginLikely: false }), true);
+eq('用户已要求登录时跳过无头探测直接开窗',
+  shouldOpenInteractive({ forceInteractive: true, loginLikely: false, openOnUnready: false }), true);
+eq('识别到登录页时即使关闭 openOnUnready 也开窗',
+  shouldOpenInteractive({ loginLikely: true, openOnUnready: false }), true);
+eq('显式关闭 openOnUnready 时，未识别登录页不开窗',
+  shouldOpenInteractive({ loginLikely: false, openOnUnready: false }), false);
+
 eq('交互登录探测遵守首个路由的分侧路径映射',
   firstAuthTarget({
     candidate: { baseUrl: 'https://new.example.com/app/', pathOverrides: { list: '/list-v2' } },
