@@ -3,7 +3,10 @@
 // Usage: node compare.mjs --config parity-config.json [--out DIR]
 import fs from 'node:fs';
 import path from 'node:path';
-import { loadPlaywright, ensureDir, writeJson, readJson, parseArgs, normalizeText } from './lib/pw.mjs';
+import {
+  loadPlaywright, ensureDir, writeJson, readJson, parseArgs, normalizeText,
+  configFingerprint, stableStringify, slug,
+} from './lib/pw.mjs';
 import {
   buildPathTokens, normalizeRouteUrl, landingVerdict, aggregateStyleDrift, unreadableFrames,
 } from './lib/parity-core.mjs';
@@ -17,7 +20,7 @@ const configPath = path.resolve(args.config);
 const cfg = readJson(configPath) || {};
 const outRoot = args.out
   ? path.resolve(args.out)
-  : path.resolve(path.dirname(configPath), cfg.outputDir || 'parity-run');
+  : path.resolve(path.dirname(configPath), cfg.outputDir || path.join('parity-runs', slug(cfg.name || 'unnamed')));
 const baseDir = path.join(outRoot, 'baseline');
 const candDir = path.join(outRoot, 'candidate');
 
@@ -35,6 +38,7 @@ const LAYOUT_TOL = Number(th.layoutTolerancePx ?? 2);
 const SIZE_TOL_RATIO = Number(th.layoutToleranceRatio ?? 0.02);
 const DATA_PARITY = cfg.dataParity || 'different-data'; // same-data | different-data
 const STYLE_INTENT = cfg.styleIntent || 'pixel-parity'; // pixel-parity | redesign-allowed
+const RUNTIME_POLICY = cfg.runtimePolicy || {};
 const HIGH_IMPACT_PROPS = ['font-family', 'font-size', 'font-weight', 'color', 'background-color', 'display', 'line-height'];
 const MASK_PATTERNS = cfg.maskTextPatterns || [];
 const ORIGINS = [cfg.baseline?.baseUrl, cfg.candidate?.baseUrl]
@@ -46,6 +50,25 @@ const findings = [];
 const SEV_ORDER = { block: 0, major: 1, minor: 2, info: 3 };
 const add = (f) => findings.push(f);
 const nText = (s) => normalizeText(s, MASK_PATTERNS);
+const CURRENT_FINGERPRINT = configFingerprint(cfg);
+const contractIssues = [];
+for (const [side, log] of [['baseline', baseLog], ['candidate', candLog]]) {
+  if (!log.configFingerprint) contractIssues.push(`${side} capture 缺少 configFingerprint，请重新采集`);
+  else if (log.configFingerprint !== CURRENT_FINGERPRINT) contractIssues.push(`${side} capture 使用了不同配置`);
+}
+if (baseLog.browser !== candLog.browser) {
+  contractIssues.push(`浏览器环境不同：baseline=${baseLog.browser} / candidate=${candLog.browser}`);
+}
+if (stableStringify(baseLog.context) !== stableStringify(candLog.context)) {
+  contractIssues.push('两侧 context（视口/locale/timezone 等）不同');
+}
+const contractComparable = contractIssues.length === 0;
+if (!contractComparable) {
+  add({
+    layer: 'L0', severity: 'block', state: 'contract', item: '采集契约不一致', invalidates: true,
+    detail: `${contractIssues.join('；')} — 禁止混用证据，请用同一配置重新采集两侧`,
+  });
+}
 
 // A declared route migration (`pathOverrides` / `<side>Path` / `urlTokens`) is collapsed to a
 // side-independent token, so "/order/list.do" vs "/orders" stops reading as a navigation defect
@@ -71,6 +94,18 @@ function setDiff(a = [], b = []) {
   for (const [k, n] of ca) if ((cb.get(k) || 0) < n) onlyBaseline.push(k);
   for (const [k, n] of cb) if ((ca.get(k) || 0) < n) onlyCandidate.push(k);
   return { onlyBaseline, onlyCandidate };
+}
+
+const patternHit = (value, patterns = []) => [].concat(patterns || []).some((pattern) => {
+  try { return new RegExp(pattern, 'i').test(value); } catch { return false; }
+});
+
+function networkSeverity(entry) {
+  if (patternHit(entry.url, RUNTIME_POLICY.ignoreRequestPatterns)) return 'info';
+  if (patternHit(entry.url, RUNTIME_POLICY.blockRequestPatterns)) return 'block';
+  if (patternHit(entry.url, RUNTIME_POLICY.majorRequestPatterns)) return 'major';
+  if (entry.navigation && entry.resourceType === 'document') return 'block';
+  return 'major';
 }
 
 // ---------- L5: pixel diff, computed inside Playwright's own Chromium ----------
@@ -215,19 +250,32 @@ function compareRuntime(stateId, a, b) {
   const rb = rt(b.dir);
   const errs = (r) => r.console.filter((c) => c.type !== 'warning').map((c) => nText(c.text));
   const d = setDiff(errs(ra), errs(rb));
-  if (d.onlyCandidate.length) {
+  const ignoredErrors = d.onlyCandidate.filter((message) => patternHit(message, RUNTIME_POLICY.ignoreConsolePatterns));
+  const blockingErrors = d.onlyCandidate.filter((message) => !patternHit(message, RUNTIME_POLICY.ignoreConsolePatterns));
+  if (blockingErrors.length) {
     add({ layer: 'L0', severity: 'block', state: stateId, item: '新增 JS 报错',
-      detail: d.onlyCandidate.slice(0, 5).join(' ¶ ') });
+      detail: blockingErrors.slice(0, 5).join(' ¶ ') });
+  }
+  if (ignoredErrors.length) {
+    add({ layer: 'L0', severity: 'info', state: stateId, item: '新增 JS 报错（策略忽略）',
+      detail: ignoredErrors.slice(0, 5).join(' ¶ ') });
   }
   if (d.onlyBaseline.length) {
     add({ layer: 'L0', severity: 'info', state: stateId, item: '旧版存在、新版消失的报错',
       detail: d.onlyBaseline.slice(0, 3).join(' ¶ ') });
   }
-  const net = (r, side) => r.network.map((n) => `${n.status} ${nUrl(n.url, side).replace(/^https?:\/\/[^/]+/, '')}`);
-  const nd = setDiff(net(ra, 'baseline'), net(rb, 'candidate'));
+  const netKey = (n, side) => `${n.status} ${nUrl(n.url, side).replace(/^https?:\/\/[^/]+/, '')}`;
+  const nd = setDiff(ra.network.map((n) => netKey(n, 'baseline')), rb.network.map((n) => netKey(n, 'candidate')));
   if (nd.onlyCandidate.length) {
-    add({ layer: 'L0', severity: 'major', state: stateId, item: '新增失败请求',
-      detail: nd.onlyCandidate.slice(0, 5).join(' ¶ ') });
+    for (const key of nd.onlyCandidate.slice(0, 8)) {
+      const entry = rb.network.find((n) => netKey(n, 'candidate') === key) || { url: key };
+      const severity = networkSeverity(entry);
+      add({
+        layer: 'L0', severity, state: stateId,
+        item: severity === 'info' ? '新增失败请求（策略忽略）' : '新增失败请求',
+        detail: `${key}${entry.resourceType ? `；resourceType=${entry.resourceType}` : ''}${entry.frameUrl ? `；frame=${nUrl(entry.frameUrl, 'candidate')}` : ''}`,
+      });
+    }
   }
   return true;
 }
@@ -256,14 +304,14 @@ function compareDom(stateId, a, b) {
       detail: `${da.title} → ${db.title}` });
   }
 
-  const headings = (d) => (d.headings || []).map((h) => `${h.tag}:${nText(h.text)}`);
+  const headings = (d) => (d.headings || []).map((h) => `${h.source || 'surface'}|${h.tag}:${nText(h.text)}`);
   const hd = setDiff(headings(da), headings(db));
   if (hd.onlyBaseline.length || hd.onlyCandidate.length) {
     add({ layer: 'L2', severity: 'major', state: stateId, item: '标题结构',
       detail: `缺失 ${JSON.stringify(hd.onlyBaseline.slice(0, 6))} / 新增 ${JSON.stringify(hd.onlyCandidate.slice(0, 6))}` });
   }
 
-  const actions = (d) => (d.actions || []).map((x) => `${nText(x.text)}${x.disabled ? '(禁用)' : ''}`);
+  const actions = (d) => (d.actions || []).map((x) => `${x.source || 'surface'}|${nText(x.text)}${x.disabled ? '(禁用)' : ''}`);
   const ad = setDiff(actions(da), actions(db));
   if (ad.onlyBaseline.length) {
     add({ layer: 'L2', severity: blindSev('block'), state: stateId, item: '缺失的可操作按钮',
@@ -275,7 +323,7 @@ function compareDom(stateId, a, b) {
   }
 
   const fields = (d) => (d.fields || []).map((f) =>
-    `${f.tag}${f.type ? '[' + f.type + ']' : ''} name=${f.name} label=${nText(f.label)} ph=${nText(f.placeholder)}${f.required ? ' *' : ''}${f.disabled ? ' disabled' : ''}`);
+    `${f.source || 'surface'}|${f.tag}${f.type ? '[' + f.type + ']' : ''} name=${f.name} label=${nText(f.label)} ph=${nText(f.placeholder)}${f.required ? ' *' : ''}${f.disabled ? ' disabled' : ''}`);
   const fd = setDiff(fields(da), fields(db));
   if (fd.onlyBaseline.length) {
     add({ layer: 'L2', severity: blindSev('block'), state: stateId, item: '缺失的表单字段',
@@ -304,17 +352,32 @@ function compareDom(stateId, a, b) {
     }
   }
 
-  const links = (d, side) => (d.links || []).map((l) => `${nText(l.text)} → ${nUrl(l.href, side)}`);
-  const ld = setDiff(links(da, 'baseline'), links(db, 'candidate'));
-  if (ld.onlyBaseline.length) {
-    add({ layer: 'L2', severity: blindSev(dataSev('major')), state: stateId, item: '缺失的链接',
-      detail: ld.onlyBaseline.slice(0, 8).join(' ¶ ') + blindNote });
+  const links = (d, side, dependent) => (d.links || [])
+    .filter((l) => !!l.dataDependent === dependent)
+    .map((l) => `${l.source || 'surface'}|${nText(l.text)} → ${nUrl(l.href, side)}`);
+  for (const dependent of [false, true]) {
+    const ld = setDiff(links(da, 'baseline', dependent), links(db, 'candidate', dependent));
+    if (ld.onlyBaseline.length) {
+      add({
+        layer: 'L2', severity: blindSev(dependent ? dataSev('major') : 'major'), state: stateId,
+        item: dependent ? '缺失的数据区链接' : '缺失的固定链接',
+        detail: ld.onlyBaseline.slice(0, 8).join(' ¶ ') + blindNote,
+      });
+    }
   }
 
-  const td = setDiff((da.textOutline || []).map(nText), (db.textOutline || []).map(nText));
-  if (td.onlyBaseline.length || td.onlyCandidate.length) {
-    add({ layer: 'L2', severity: blindSev(dataSev('minor')), state: stateId, item: '可见文案差异',
-      detail: `仅旧版 ${td.onlyBaseline.length} 条 / 仅新版 ${td.onlyCandidate.length} 条；示例 旧「${td.onlyBaseline.slice(0, 3).join('｜')}」新「${td.onlyCandidate.slice(0, 3).join('｜')}」${blindNote}` });
+  const textItems = (d, dependent) => d.textItems
+    ? d.textItems.filter((x) => !!x.dataDependent === dependent).map((x) => `${x.source || 'surface'}|${nText(x.text)}`)
+    : (dependent ? (d.textOutline || []).map(nText) : []);
+  for (const dependent of [false, true]) {
+    const td = setDiff(textItems(da, dependent), textItems(db, dependent));
+    if (td.onlyBaseline.length || td.onlyCandidate.length) {
+      add({
+        layer: 'L2', severity: blindSev(dependent ? dataSev('minor') : 'minor'), state: stateId,
+        item: dependent ? '数据区可见文案差异' : '固定可见文案差异',
+        detail: `仅旧版 ${td.onlyBaseline.length} 条 / 仅新版 ${td.onlyCandidate.length} 条；示例 旧「${td.onlyBaseline.slice(0, 3).join('｜')}」新「${td.onlyCandidate.slice(0, 3).join('｜')}」${blindNote}`,
+      });
+    }
   }
 
   const brokenImgs = (db.images || []).filter((i) => i.natural?.[0] === 0);
@@ -426,19 +489,28 @@ function compareJourneys() {
           detail: `baseline=${x.status} / candidate=${y.status}${y.error ? ' — ' + y.error : ''}` });
         continue;
       }
+      if (x.status === 'fail' && y.status === 'fail') {
+        add({
+          layer: 'L1', severity: 'block', state: `journey:${id}`, item: `步骤 #${i} 两侧均失败`, invalidates: true,
+          detail: `baseline=${x.error || 'fail'} / candidate=${y.error || 'fail'} — 流程没有被验证，优先检查 selector/scope 配置`,
+        });
+        break;
+      }
       if (x.observed !== undefined || y.observed !== undefined) {
         const va = typeof x.observed === 'string' ? nText(x.observed) : x.observed;
         const vb = typeof y.observed === 'string' ? nText(y.observed) : y.observed;
         const mode = steps[i]?.ignorePath ? 'query' : 'full';
-        const cmpA = x.type === 'expectUrl' ? nUrl(String(va), 'baseline', mode) : va;
-        const cmpB = y.type === 'expectUrl' ? nUrl(String(vb), 'candidate', mode) : vb;
+        const urlObservation = ['expectUrl', 'clickAndExpectPopup', 'expectPopup'].includes(x.type);
+        const cmpA = urlObservation ? nUrl(String(va), 'baseline', mode) : va;
+        const cmpB = urlObservation ? nUrl(String(vb), 'candidate', mode) : vb;
         if (JSON.stringify(cmpA) !== JSON.stringify(cmpB)) {
-          const detail = x.type === 'expectUrl'
+          const detail = urlObservation
             ? `baseline=${JSON.stringify(cmpA)} / candidate=${JSON.stringify(cmpB)}（已按 pathOverrides/urlNormalizeRules 归一化；仍不同说明是未声明的跳转差异，若是有意迁移请在配置里声明）`
             : `baseline=${JSON.stringify(cmpA)} / candidate=${JSON.stringify(cmpB)}`
               + (x.type === 'expectCount' && x.visibleOnly !== false
                 ? `（只计可见节点；含隐藏节点 baseline=${x.observedTotal} / candidate=${y.observedTotal}）` : '');
-          add({ layer: 'L1', severity: x.type === 'expectUrl' ? 'block' : dataSev('major'),
+          const dataDependent = steps[i]?.dataDependent ?? (x.type === 'expectCount');
+          add({ layer: 'L1', severity: urlObservation ? 'block' : (dataDependent ? dataSev('major') : 'major'),
             state: `journey:${id}`, item: `步骤 #${i} ${x.type} ${x.id || ''} 观测值`, detail });
         }
       }
@@ -466,6 +538,9 @@ function compareJourneys() {
 
 // ---------- run ----------
 for (const [side, log] of [['baseline', baseLog], ['candidate', candLog]]) {
+  for (const warning of log.configWarnings || []) {
+    add({ layer: 'L0', severity: 'info', state: `side:${side}`, item: '配置告警', detail: warning });
+  }
   if (log.fatal) {
     add({ layer: 'L0', severity: 'block', state: `side:${side}`, item: `${side} 整侧采集作废`,
       invalidates: true, detail: `${log.fatal} — 本次不产生任何一致性结论` });
@@ -474,7 +549,9 @@ for (const [side, log] of [['baseline', baseLog], ['candidate', candLog]]) {
 
 const baseStates = Object.fromEntries(baseLog.states.map((s) => [`${s.viewport}|${s.id}`, s]));
 const candStates = Object.fromEntries(candLog.states.map((s) => [`${s.viewport}|${s.id}`, s]));
-const stateKeys = [...new Set([...Object.keys(baseStates), ...Object.keys(candStates)])].sort();
+const stateKeys = contractComparable
+  ? [...new Set([...Object.keys(baseStates), ...Object.keys(candStates)])].sort()
+  : [];
 const stateResults = [];
 
 for (const key of stateKeys) {
@@ -482,7 +559,7 @@ for (const key of stateKeys) {
   const b = candStates[key];
   if (!a || !b) {
     add({ layer: 'L0', severity: 'block', state: key, item: '单侧缺失该状态',
-      detail: a ? '候选侧未采集' : '基线侧未采集' });
+      invalidates: true, detail: a ? '候选侧未采集' : '基线侧未采集' });
     continue;
   }
   if (!compareRuntime(key, a, b)) {
@@ -490,7 +567,7 @@ for (const key of stateKeys) {
     // half-loaded page only manufactures noise.
     stateResults.push({
       key, routeId: a.routeId, viewport: a.viewport, pixel: { skipped: '证据作废，未比对' },
-      baselineShot: null, candidateShot: null,
+      baselineShot: null, candidateShot: null, valid: false,
     });
     continue;
   }
@@ -515,20 +592,31 @@ for (const key of stateKeys) {
   }
   stateResults.push({
     key, routeId: a.routeId, viewport: a.viewport, pixel,
+    valid: true,
     baselineShot: path.relative(outRoot, shotA).replace(/\\/g, '/'),
     candidateShot: path.relative(outRoot, shotB).replace(/\\/g, '/'),
   });
 }
 
-compareJourneys();
+if (contractComparable) compareJourneys();
 
 findings.sort((x, y) => SEV_ORDER[x.severity] - SEV_ORDER[y.severity] || x.layer.localeCompare(y.layer));
 const count = (sev) => findings.filter((f) => f.severity === sev).length;
 const invalidated = findings.filter((f) => f.invalidates);
-const verdict = count('block') ? 'fail' : count('major') ? 'warn' : 'pass';
+const parityFindings = findings.filter((f) => !f.invalidates);
+const parityCount = (sev) => parityFindings.filter((f) => f.severity === sev).length;
+const parityVerdict = parityCount('block') ? 'fail' : parityCount('major') ? 'warn' : 'pass';
+const validJourneyEvidence = contractComparable && (baseLog.journeys || []).some((a) => {
+  const b = (candLog.journeys || []).find((j) => j.id === a.id);
+  return b && !a.invalid && !b.invalid;
+});
+const evidenceStatus = invalidated.length
+  ? (stateResults.some((s) => s.valid) || validJourneyEvidence ? 'partial' : 'invalid')
+  : 'valid';
+const verdict = evidenceStatus === 'valid' ? parityVerdict : 'inconclusive';
 
 const summary = {
-  schema: 'parity-summary/v1',
+  schema: 'parity-summary/v2',
   generatedAt: new Date().toISOString(),
   outputDir: outRoot,
   baseline: { baseUrl: baseLog.baseUrl, capturedAt: baseLog.capturedAt, browser: baseLog.browser },
@@ -536,12 +624,17 @@ const summary = {
   context: baseLog.context,
   dataParity: DATA_PARITY,
   styleIntent: STYLE_INTENT,
+  evidenceStatus,
+  parityVerdict,
+  contract: { configFingerprint: CURRENT_FINGERPRINT, comparable: contractComparable, issues: contractIssues },
   thresholds: { pixelDiffRatio: PIXEL_RATIO, pixelChannelTolerance: CHANNEL_TOL, layoutTolerancePx: LAYOUT_TOL },
   verdict,
   counts: { block: count('block'), major: count('major'), minor: count('minor'), info: count('info') },
+  parityCounts: { block: parityCount('block'), major: parityCount('major'), minor: parityCount('minor'), info: parityCount('info') },
   invalidEvidence: invalidated.length,
   states: stateResults.map((s) => ({
     key: s.key,
+    evidenceValid: !!s.valid,
     pixelRatio: s.pixel?.ratio ?? null,
     diffImage: s.pixel?.diffImage ?? null,
     baselineShot: s.baselineShot ?? null,
@@ -564,21 +657,29 @@ const SEV_LABEL = { block: '🔴 阻断', major: '🟠 重要', minor: '🟡 次
 const cell = (s) => String(s).replace(/\|/g, '\\|');
 const md = [];
 md.push('# 前端一致性比对报告', '');
-md.push(`- 结论：**${{ pass: '✅ 通过', warn: '⚠️ 有重要差异', fail: '❌ 不一致（存在阻断项）' }[verdict]}**`);
+const verdictLabel = {
+  pass: '✅ 通过', warn: '⚠️ 有重要差异', fail: '❌ 不一致（存在阻断项）',
+  inconclusive: `⛔ 证据${evidenceStatus === 'partial' ? '不完整' : '无效'}；有效证据范围内${{ pass: '通过', warn: '有重要差异', fail: '不一致' }[parityVerdict]}`,
+};
+md.push(`- 结论：**${verdictLabel[verdict]}**`);
+md.push(`- 证据状态：\`evidenceStatus=${evidenceStatus}\`；有效证据对等结论：\`parityVerdict=${parityVerdict}\``);
 md.push(`- 基线（升级前）：${baseLog.baseUrl}`);
 md.push(`- 候选（升级后）：${candLog.baseUrl}`);
 md.push(`- 采集环境：${baseLog.browser}｜视口 ${(baseLog.context.viewports || []).map((v) => `${v.name} ${v.width}x${v.height}`).join('、')}｜locale ${baseLog.context.locale || 'zh-CN'}｜timezone ${baseLog.context.timezoneId || 'Asia/Shanghai'}`);
 md.push(`- 数据前提：\`dataParity=${DATA_PARITY}\`${DATA_PARITY === 'different-data' ? '（两侧数据源可能不同，数据类差异已降级为参考项，不能据此断言「数据一致」）' : ''}`);
 md.push(`- 样式口径：\`styleIntent=${STYLE_INTENT}\`${STYLE_INTENT === 'redesign-allowed' ? '（允许改版，计算样式差异仅作参考，不构成失败）' : '（要求视觉对齐，字体/颜色/字号等高影响属性变化按重要项处理）'}`);
+md.push(`- 配置指纹：\`${CURRENT_FINGERPRINT.slice(0, 12)}\`｜比较面：\`${JSON.stringify(cfg.compareSurface || { mode: 'full-page' })}\``);
+md.push(`- 覆盖：routes=${(cfg.routes || []).map((r) => r.id).join('、') || '无'}｜journeys=${(cfg.journeys || []).map((j) => j.id).join('、') || '无'}`);
 md.push(`- 生成时间：${summary.generatedAt}`, '');
 if (invalidated.length) {
-  md.push(`> ⛔ **有 ${invalidated.length} 处证据作废**（登录页 / 落地页错误 / 采集失败）：`,
+  md.push(`> ⛔ **有 ${invalidated.length} 处证据作废**（契约不一致 / 登录页 / 落地页错误 / 采集失败）：`,
     ...invalidated.slice(0, 6).map((f) => `> - \`${f.state}\` ${f.item}`),
     '>',
     '> 作废的状态不参与比对，其余层的"通过"不能推广到这些页面 —— 先修登录态或路径映射再重跑。', '');
 }
-md.push(`| 阻断 | 重要 | 次要 | 参考 |`, `|---|---|---|---|`,
-  `| ${count('block')} | ${count('major')} | ${count('minor')} | ${count('info')} |`, '');
+md.push(`| 口径 | 阻断 | 重要 | 次要 | 参考 |`, `|---|---|---|---|---|`,
+  `| 全部发现（含作废证据） | ${count('block')} | ${count('major')} | ${count('minor')} | ${count('info')} |`,
+  `| 有效证据对等项 | ${parityCount('block')} | ${parityCount('major')} | ${parityCount('minor')} | ${parityCount('info')} |`, '');
 
 md.push('## 分层结论', '');
 md.push('| 层 | 阻断 | 重要 | 次要 |', '|---|---|---|---|');
@@ -607,7 +708,7 @@ for (const s of stateResults) {
 }
 md.push('');
 md.push('## 证据目录', '',
-  '```text', `${outRoot}`, '  baseline/<viewport>/<state>/{shot.png,dom.json,styles.json,runtime.json,meta.json}',
+  '```text', `${outRoot}`, '  run-manifest.json', '  baseline/<viewport>/<state>/{shot.png,dom.json,styles.json,runtime.json,meta.json}',
   '  candidate/<viewport>/<state>/...', '  diff/<viewport>__<state>.png', '  parity-summary.json', '  parity-report.md', '```', '');
 md.push('> 判定口径：`block` 必须修复；`major` 需要逐条给出「修复」或「已确认为有意变更」的结论；',
   '> `minor`/`info` 由负责人签署接受。像素层不是唯一依据——L0–L2 通过而 L5 超阈值，通常是样式漂移；',
@@ -618,8 +719,8 @@ fs.writeFileSync(path.join(outRoot, 'parity-report.md'), md.join('\n'), 'utf8');
 if (browser) await browser.close();
 
 console.log(JSON.stringify({
-  verdict, counts: summary.counts,
+  verdict, evidenceStatus, parityVerdict, counts: summary.counts,
   report: path.join(outRoot, 'parity-report.md'),
   summary: path.join(outRoot, 'parity-summary.json'),
 }, null, 2));
-process.exit(verdict === 'fail' ? 1 : 0);
+process.exit(verdict === 'pass' || verdict === 'warn' ? 0 : 1);

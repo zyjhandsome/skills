@@ -16,12 +16,13 @@ import { loadPlaywright, ensureDir, parseArgs } from './lib/pw.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 if (args.help) {
-  console.log('usage: node export-storage-state.mjs [--cdp http://127.0.0.1:9222] --out auth/side.json [--url URL] [--url URL2] [--keep-page]');
+  console.log('usage: node export-storage-state.mjs [--cdp http://127.0.0.1:9222] [--timeout 15000] --out auth/side.json [--url URL] [--url URL2] [--keep-page]');
   process.exit(0);
 }
 const cdp = args.cdp || `http://127.0.0.1:${args.port || 9222}`;
 const out = path.resolve(args.out || 'auth/storage-state.json');
 const urls = [].concat(args.url || []).filter(Boolean);
+const connectTimeout = Number(args.timeout || 15000);
 
 const pw = await loadPlaywright(process.cwd());
 if (!pw) {
@@ -30,12 +31,23 @@ if (!pw) {
 }
 
 let browser;
+let cdpVersion;
 try {
-  browser = await pw.chromium.connectOverCDP(cdp);
+  const versionUrl = new URL('/json/version', cdp).href;
+  const response = await fetch(versionUrl, { signal: AbortSignal.timeout(Math.min(connectTimeout, 10000)) });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  cdpVersion = await response.json();
+  if (!cdpVersion.webSocketDebuggerUrl) throw new Error('响应缺少 webSocketDebuggerUrl');
 } catch (e) {
-  console.error(`无法连接 ${cdp}：${String(e.message || e).split('\n')[0]}`);
-  console.error('请用 --remote-debugging-port=9222 重新启动浏览器并登录后重试。');
-  console.error('注意：已在运行的 Chrome 不会凭空开启调试端口，必须先完全退出再带参数启动。');
+  console.error(`CDP HTTP 探测失败（${cdp}/json/version）：${String(e.message || e).split('\n')[0]}`);
+  console.error('请确认浏览器确实以 --remote-debugging-port 启动；端口未通时不要继续等待 Playwright。');
+  process.exit(4);
+}
+try {
+  browser = await pw.chromium.connectOverCDP(cdp, { timeout: connectTimeout });
+} catch (e) {
+  console.error(`CDP HTTP 已连通，但 Playwright 枚举浏览器 target 失败：${String(e.message || e).split('\n')[0]}`);
+  console.error('这通常不是“端口没开”。请减少标签页/扩展后重试，或手工导出 Cookie；Cookie-only 方案可能缺少 localStorage，不能冒充完整 storageState。');
   process.exit(4);
 }
 
@@ -67,6 +79,7 @@ const origins = (state.origins || []).map((o) => o.origin);
 
 console.log(JSON.stringify({
   cdp,
+  browser: cdpVersion.Browser || null,
   out,
   cookies: state.cookies?.length ?? 0,
   cookieDomains: [...new Set((state.cookies || []).map((c) => c.domain))].slice(0, 20),

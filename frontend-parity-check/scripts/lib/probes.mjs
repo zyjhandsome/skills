@@ -38,8 +38,16 @@ export function visibleCountFn(els) {
 }
 
 /** Compact semantic snapshot of what a user can see and interact with. */
-export function domDigestFn() {
+export function domDigestFn(options = {}) {
   const clip = (s, n) => (s || '').replace(/\s+/g, ' ').trim().slice(0, n);
+  const root = options.root ? document.querySelector(options.root) : document;
+  if (!root) throw new Error(`compareSurface.root 未命中：${options.root}`);
+  const excluded = (el) => (options.exclude || []).some((sel) => {
+    try { return el.matches(sel) || !!el.closest(sel); } catch { return false; }
+  });
+  const dataDependent = (el) => (options.dataSelectors || []).some((sel) => {
+    try { return el.matches(sel) || !!el.closest(sel); } catch { return false; }
+  });
   const visible = (el) => {
     const r = el.getBoundingClientRect();
     if (r.width <= 0 || r.height <= 0) return false;
@@ -47,7 +55,7 @@ export function domDigestFn() {
     return s.visibility !== 'hidden' && s.display !== 'none' && s.opacity !== '0';
   };
   const text = (el) => clip(el.innerText || el.textContent, 200);
-  const all = (sel, root = document) => Array.from(root.querySelectorAll(sel)).filter(visible);
+  const all = (sel, within = root) => Array.from(within.querySelectorAll(sel)).filter((el) => visible(el) && !excluded(el));
   const box = (el) => {
     const r = el.getBoundingClientRect();
     return [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)];
@@ -68,6 +76,7 @@ export function domDigestFn() {
   };
 
   const gridSelectors = 'table, .el-table, .vxe-table, .ant-table, [role=grid], [role=table]';
+  const leafSelector = root === document ? 'body *' : '*';
   const grids = all(gridSelectors)
     .filter((g) => !g.parentElement?.closest(gridSelectors))
     .map((g) => {
@@ -107,26 +116,40 @@ export function domDigestFn() {
       readOnly: !!e.readOnly,
       options: e.tagName === 'SELECT' ? Array.from(e.options).map((o) => clip(o.textContent, 40)) : undefined,
     })),
-    links: all('a[href]').map((e) => ({ text: text(e).slice(0, 60), href: e.getAttribute('href') })),
+    links: all('a[href]').map((e) => ({
+      text: text(e).slice(0, 60), href: e.getAttribute('href'), dataDependent: dataDependent(e),
+    })),
     images: all('img').map((e) => ({ alt: e.getAttribute('alt') || '', src: (e.currentSrc || e.src || '').slice(-120), natural: [e.naturalWidth, e.naturalHeight] })),
     grids,
     landmarks: all('header,nav,main,aside,footer,[role=navigation],[role=main]')
       .map((e) => ({ tag: e.tagName.toLowerCase(), box: box(e) })),
-    textOutline: all('body *')
+    textOutline: all(leafSelector)
       .filter((e) => e.children.length === 0 && (e.innerText || e.textContent || '').trim())
       .map((e) => clip(e.innerText || e.textContent, 120))
       .filter(Boolean)
       .slice(0, 600),
-    documentHeight: Math.round(document.documentElement.scrollHeight),
+    textItems: all(leafSelector)
+      .filter((e) => e.children.length === 0 && (e.innerText || e.textContent || '').trim())
+      .map((e) => ({ text: clip(e.innerText || e.textContent, 120), dataDependent: dataDependent(e) }))
+      .filter((e) => e.text)
+      .slice(0, 600),
+    documentHeight: (options.exclude || []).length
+      ? null
+      : Math.round(root === document ? document.documentElement.scrollHeight : root.scrollHeight),
     counts: {
-      elements: document.querySelectorAll('*').length,
-      visibleElements: all('body *').length,
+      elements: root.querySelectorAll('*').length,
+      visibleElements: all(leafSelector).length,
     },
   };
 }
 
 /** Computed style + geometry for each probe's first visible match. */
-export function styleProbeFn({ probes, props }) {
+export function styleProbeFn({ probes, props, root: rootSelector, exclude = [] }) {
+  const root = rootSelector ? document.querySelector(rootSelector) : document;
+  if (!root) throw new Error(`compareSurface.root 未命中：${rootSelector}`);
+  const excluded = (el) => exclude.some((sel) => {
+    try { return el.matches(sel) || !!el.closest(sel); } catch { return false; }
+  });
   const visible = (el) => {
     const r = el.getBoundingClientRect();
     if (r.width <= 0 || r.height <= 0) return false;
@@ -138,7 +161,8 @@ export function styleProbeFn({ probes, props }) {
     let el = null;
     let count = 0;
     try {
-      const nodes = Array.from(document.querySelectorAll(probe.selector));
+      const self = root !== document && root.matches?.(probe.selector) ? [root] : [];
+      const nodes = [...self, ...Array.from(root.querySelectorAll(probe.selector))].filter((node) => !excluded(node));
       count = nodes.length;
       el = nodes.find(visible) || null;
     } catch {

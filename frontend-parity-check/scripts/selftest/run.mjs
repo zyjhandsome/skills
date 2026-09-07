@@ -64,7 +64,7 @@ const expected = [
   ['像素差异超阈值', /像素差异/],
   ['落地在登录页即作废', /采集失败[\s\S]{0,240}禁止模式/],
   ['waitFor 未命中即作废', /采集失败[\s\S]{0,240}waitFor 未命中/],
-  ['iframe 顶栏里缺失的链接被发现', /缺失的链接[\s\S]{0,160}帮助/],
+  ['iframe 顶栏里缺失的链接被发现', /缺失的固定链接[\s\S]{0,160}帮助/],
 ];
 
 // Regressions this skill must NOT report — the three false positives from the field run.
@@ -72,6 +72,7 @@ const forbidden = [
   ['隐藏 ng-hide 节点不再制造计数误报', /notices 观测值/],
   ['已声明的路径迁移不再误判 expectUrl', /shell-url 观测值/],
   ['已声明的路径迁移不再误判流程结束 URL', /journey:dashboard-notices","item":"流程结束 URL/],
+  ['iframe + popup 主链路不应失败', /journey:frame-popup-report[\s\S]{0,160}(步骤|流程).*(fail|失败|中断)/],
 ];
 
 let failed = 0;
@@ -90,8 +91,8 @@ for (const [label, re] of forbidden) {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}（不应出现）`);
 }
 console.log(`\nverdict=${summary.verdict} counts=${JSON.stringify(summary.counts)}`);
-if (summary.verdict !== 'fail') {
-  console.log('FAIL  verdict should be "fail" for this fixture');
+if (summary.verdict !== 'inconclusive' || summary.parityVerdict !== 'fail' || summary.evidenceStatus !== 'partial') {
+  console.log('FAIL  invalid states should yield inconclusive + partial evidence, while valid evidence still fails parity');
   failed++;
 }
 console.log(failed ? `\n${failed} check(s) failed` : '\nself-test OK');

@@ -75,6 +75,8 @@ preflight 报出可用 channel 后，写进配置（两侧共用，保证可比�
 
 `auth.actions` 里**任何一步失败，或登录后仍停在登录页，整侧立即作废**。
 以前这类失败是静默的，结果是采回二十张登录页截图还判 `ok`。
+冻结时间与随机种子的 init script 会在登录完成后才注入，避免伪造时间干扰 SSO token
+签发与过期判断。
 
 两侧登录到的**用户与权限必须相同**，否则菜单、按钮、数据范围都会不同，
 这类差异会污染 L2 判定。若两侧只能用不同账号，必须在报告里写明。
@@ -89,22 +91,27 @@ preflight 报出可用 channel 后，写进配置（两侧共用，保证可比�
 #    Windows: "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222
 #    macOS:   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --remote-debugging-port=9222
 # 2) 导出（--url 会开一个标签页，让 localStorage 里的 token 也能被采到）
-node scripts/export-storage-state.mjs --out auth/candidate.json --url https://new.example.com/home
+node scripts/export-storage-state.mjs --timeout 15000 --out auth/candidate.json --url https://new.example.com/home
 ```
 
 把生成的文件填进 `<side>.auth.storageState`。两侧同源共用一份；跨域各导一份。
 
 注意事项：
 
+- 脚本先请求 `http://127.0.0.1:9222/json/version`。该请求失败才说明端口不可用；HTTP
+  成功但 `connectOverCDP` 超时通常是浏览器 target/扩展过多，不能再归因成“用户没开端口”。
+- `--timeout` 限制 Playwright 的浏览器级连接等待。枚举超时时先减少标签页和扩展再重试。
 - **已在运行的浏览器不会凭空开出调试端口**，必须先完全退出再带参数启动。
 - 脚本连接的是用户自己的浏览器，因此**绝不调用 `browser.close()`**
   （那会连带关掉用户的所有窗口）；只关它自己新开的标签页，然后直接退出进程。
 - 导出的文件等价于登录凭据：放进 `auth/`（已在 `.gitignore`），不要提交、不要贴进对话。
 - 会话过期后重新导出即可；若报告出现"落地 URL 命中禁止模式"，通常就是它过期了。
-- 无法加调试端口时的退路：让用户在浏览器里手工导出 Cookie，或复制一份用户数据目录后
+- 无法完成浏览器级 CDP 连接时的退路：让用户在浏览器里手工导出 Cookie，或复制一份用户数据目录后
   用 `launchPersistentContext` 拉起（Chrome 运行中会锁定该目录，必须复制而不是直连）。
+  Cookie-only 文件可能缺少 localStorage/sessionStorage，必须验证目标 URL 落地并在结论中注明，
+  不能把它宣称为完整 `storageState`。
 
-密码不要硬编码进提交到仓库的配置文件；用环境变量或让用户在本地填写，
+密码不要硬编码进提交到仓库的配置文件；动作使用 `valueEnv` 读取环境变量，
 并把 `auth/` 目录加入 `.gitignore`。
 
 ## HTTPS 与网关

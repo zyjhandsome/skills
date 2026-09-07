@@ -1,7 +1,7 @@
 {
-  "$schema": "parity-config/v1",
+  "$schema": "parity-config/v2",
   "name": "order-module-migration",
-  "outputDir": "./parity-run",
+  "outputDir": "./parity-runs/order-module-migration",
   "browser": "chromium",
   "dataParity": "different-data",
 
@@ -13,7 +13,7 @@
       "actions": [
         { "type": "goto", "path": "/login" },
         { "type": "fill", "selector": "input[name=username]", "value": "qa_user" },
-        { "type": "fill", "selector": "input[name=password]", "value": "REPLACE_ME" },
+        { "type": "fill", "selector": "input[name=password]", "valueEnv": "PARITY_QA_PASSWORD" },
         { "type": "click", "selector": "button[type=submit]" },
         { "type": "waitForUrl", "pattern": "/home" }
       ]
@@ -48,6 +48,14 @@
     "allowUrl": [],
     "requireUrl": ""
   },
+
+  "runtimePolicy": {
+    "ignoreConsolePatterns": [],
+    "ignoreRequestPatterns": [],
+    "blockRequestPatterns": []
+  },
+
+  "dataSelectors": [".el-table__body", "tbody"],
 
   "masks": [".timestamp", "#nprogress", ".el-loading-mask"],
   "maskTextPatterns": ["订单号\\s*\\S+", "\\b\\d{11}\\b"],
@@ -100,11 +108,11 @@
       "startPath": "/order/list.html",
       "waitFor": { "selector": ".el-table__row" },
       "steps": [
-        { "type": "expectCount", "id": "rows-initial", "selector": ".el-table__row" },
+        { "type": "expectCount", "id": "rows-initial", "selector": ".el-table__row", "dataDependent": true },
         { "type": "fill", "selector": "input[name=keyword]", "value": "A001" },
         { "type": "click", "selector": ".search-form .el-button--primary" },
         { "type": "waitFor", "selector": ".el-table__row" },
-        { "type": "expectCount", "id": "rows-after-search", "selector": ".el-table__row" },
+        { "type": "expectCount", "id": "rows-after-search", "selector": ".el-table__row", "dataDependent": true },
         { "type": "capture", "id": "after-search" },
         { "type": "click", "selector": ".el-table__row .detail-link" },
         { "type": "waitFor", "selector": ".detail-panel" },

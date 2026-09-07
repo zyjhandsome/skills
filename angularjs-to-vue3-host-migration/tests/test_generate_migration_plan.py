@@ -171,7 +171,10 @@ const router = createRouter({
 router.beforeEach(authGuard);
 """,
         )
-        write(host / "vite.config.ts", "export default { server: { proxy: { '/api': 'http://localhost' } } }")
+        write(
+            host / "vite.config.ts",
+            "import checker from 'vite-plugin-checker'; export default { plugins: [checker({ eslint: {} })], server: { hmr: { overlay: false }, proxy: { '/api': 'http://localhost' } } }",
+        )
         init_git_repo(source)
         init_git_repo(host)
         write(host / "node_modules/vue/noise.js", "module.exports = {};")
@@ -241,6 +244,9 @@ router.beforeEach(authGuard);
             host_stack = self.read_csv(output_dir / "csv" / "03-host-stack.csv")
             self.assertIn(["build tool", "Vite", "package.json/config files"], host_stack)
             self.assertTrue(any(row[0] == "state" and "pinia" in row[1] for row in host_stack))
+            diagnostics = next(row for row in host_stack if row[0] == "compile/diagnostic overlay")
+            self.assertIn("vite-plugin-checker", diagnostics[1])
+            self.assertIn("overlay=false", diagnostics[1])
             self.assertTrue(any(row[0] == "ui library" and "element-plus" in row[1] for row in host_stack))
             self.assertTrue(any(row[0] == "ui library" and "@opentiny/vue" in row[1] for row in host_stack))
             self.assertTrue(any(row[0] == "node" and "16.20.2" in row[1] for row in host_stack))
@@ -449,6 +455,71 @@ router.beforeEach(authGuard);
             verify_units = self.read_csv(output_dir / "csv" / "16b-verify-units.csv")
             self.assertIn(["phone-detail", "fail", "selected unit is unmigrated"], verify_units)
 
+    def test_verify_partial_overlap_without_persisted_matrix_is_not_evaluated(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source, host = self.create_fixture(root)
+            output_dir = root / "reports"
+            self.run_generator(output_dir, source, host, "verify", "--unit", "taskManage")
+
+            verify_result = self.read_csv(output_dir / "csv" / "16-verify-result.csv")
+            self.assertEqual("not-evaluated", verify_result[1][0])
+            self.assertIn("persisted matrix required", verify_result[1][1])
+
+    def test_verify_uses_persisted_matrix(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source, host = self.create_fixture(root)
+            output_dir = root / "reports"
+            matrix = root / "display-contract.csv"
+            write(
+                matrix,
+                "DISP-ID,迁移单元,源区域,B 现状,row_lifecycle\n"
+                "DISP-taskmanage-search-1,taskManage,search,verified,active\n"
+                "DISP-taskmanage-retired-1,taskManage,old-region,mismatched,retired\n",
+            )
+            self.run_generator(
+                output_dir,
+                source,
+                host,
+                "verify",
+                "--unit",
+                "taskManage",
+                "--matrix",
+                str(matrix),
+            )
+
+            verify_result = self.read_csv(output_dir / "csv" / "16-verify-result.csv")
+            self.assertEqual("pass", verify_result[1][0])
+            verify_units = self.read_csv(output_dir / "csv" / "16b-verify-units.csv")
+            self.assertEqual("pass", verify_units[1][1])
+
+    def test_verify_reads_markdown_matrix_with_escaped_pipe(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source, host = self.create_fixture(root)
+            output_dir = root / "reports"
+            matrix = root / "display-contract.md"
+            write(
+                matrix,
+                "| DISP-ID | 迁移单元 | 源区域 | API + 字段/公式 | B 现状 | row_lifecycle |\n"
+                "|---|---|---|---|---|---|\n"
+                "| DISP-taskmanage-list-1 | taskManage | list | a \\| b | verified | active |\n",
+            )
+            self.run_generator(
+                output_dir,
+                source,
+                host,
+                "verify",
+                "--unit",
+                "taskManage",
+                "--matrix",
+                str(matrix),
+            )
+
+            verify_result = self.read_csv(output_dir / "csv" / "16-verify-result.csv")
+            self.assertEqual("pass", verify_result[1][0])
+
     def test_batch_verify_fails_when_any_unit_fails(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -503,6 +574,12 @@ router.beforeEach(authGuard);
             self.assertIn("router registration", shared_text)
             self.assertIn("src/router/index.ts", shared_text)
             self.assertIn("[未分配：Plan 必须指定唯一任务组]", shared_text)
+            self.assertTrue((output_dir / "csv" / "19-unit-decisions.csv").exists())
+            self.assertTrue((output_dir / "csv" / "20-comparison-surface.csv").exists())
+            self.assertTrue((output_dir / "csv" / "21-host-integration.csv").exists())
+            self.assertIn("UNIT 四维决策", markdown)
+            self.assertIn("Comparison Surface", markdown)
+            self.assertIn("Host Integration Checklist", markdown)
 
     def test_batch_rejects_mixed_design_scope(self):
         with tempfile.TemporaryDirectory() as tmp:

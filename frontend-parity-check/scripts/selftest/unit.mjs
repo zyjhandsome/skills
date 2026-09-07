@@ -4,6 +4,7 @@
 import {
   landingVerdict, buildPathTokens, normalizeRouteUrl, resolveProbes,
   aggregateStyleDrift, unreadableFrames, mergeDomDigests, DEFAULT_FORBID_URL,
+  resolveSurface, configValidationErrors,
 } from '../lib/parity-core.mjs';
 import { DEFAULT_PROBES } from '../lib/probes.mjs';
 
@@ -23,6 +24,8 @@ check('业务页不误判', landingVerdict('https://app.corp.com/hiapm/project/d
 check('含 login 字样的业务路径不误判', landingVerdict('https://app.corp.com/hiapm/login-history.do').ok);
 check('allowUrl 可放行（被测页本身就是登录页）',
   landingVerdict('https://app.corp.com/login', { allowUrl: ['/login'] }).ok);
+check('allowUrl 不能绕过 requireUrl',
+  !landingVerdict('https://app.corp.com/login', { allowUrl: ['/login'], requireUrl: '/target-login' }).ok);
 check('forbidUrl 置空即关闭该校验', landingVerdict('https://login-beta.huawei.com/', { forbidUrl: [] }).ok);
 check('requireUrl 不匹配也算无效',
   !landingVerdict('https://app.corp.com/other', { requireUrl: '/dashboard' }).ok);
@@ -67,6 +70,20 @@ eq('defaultProbes 可挑子集',
 eq('同 id 自定义探针覆盖内置选择器',
   resolveProbes({ defaultProbes: ['body'], styleProbes: [{ id: 'body', selector: '.app-shell' }] }, {}, DEFAULT_PROBES),
   [{ id: 'body', selector: '.app-shell' }]);
+eq('探针支持两侧独立 CSS 选择器',
+  resolveProbes({ defaultProbes: false, styleProbes: [{ id: 'card', baselineSelector: '.old', candidateSelector: '.new' }] }, {}, DEFAULT_PROBES, 'candidate'),
+  [{ id: 'card', baselineSelector: '.old', candidateSelector: '.new', selector: '.new' }]);
+check('styleProbes 拒绝 Playwright :has-text 语法',
+  configValidationErrors({ styleProbes: [{ id: 'send', selector: 'button:has-text("发送")' }] }).length === 1);
+check('未知 journey 动作在采集前即报配置错误',
+  configValidationErrors({ journeys: [{ id: 'x', steps: [{ type: 'magicClick', selector: 'button' }] }] }).length === 1);
+
+eq('比较面合并共享与分侧配置',
+  resolveSurface({ compareSurface: { exclude: ['.header'], baseline: { frame: '#old-frame' }, candidate: { root: '#new' } } }, {}, 'baseline'),
+  { exclude: ['.header'], frame: '#old-frame' });
+eq('route 可重置全局比较面（popup）',
+  resolveSurface({ compareSurface: { baseline: { frame: '#old-frame' } } }, { compareSurface: { reset: true, root: '#popup' } }, 'baseline'),
+  { root: '#popup', exclude: [] });
 
 // ---- L4 降噪 -------------------------------------------------------------
 const drift = aggregateStyleDrift([

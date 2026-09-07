@@ -89,6 +89,20 @@ const shellPage = ({ primaryBg, radius, fontSize, hiddenMore }) => `<!doctype ht
  <button class="refresh">刷新</button>
 </div></body></html>`;
 
+const frameShellPage = () => `<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>任务报表宿主</title>
+<style>body{margin:0}iframe{width:100%;height:500px;border:0}</style></head>
+<body><header>宿主导航</header><iframe id="report-frame" src="/frame-report" title="任务报表"></iframe></body></html>`;
+
+const frameReportPage = () => `<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>任务报表</title>
+<style>#report-main{padding:20px}.send{padding:8px 16px}</style></head>
+<body><main id="report-main"><h1>任务报表</h1>
+<button class="send" onclick="window.open('/preview','_blank')">发送报表</button></main></body></html>`;
+
+const previewPage = () => `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>报表预览</title></head>
+<body><h1>报表预览</h1><p>预览已生成</p></body></html>`;
+
 const VARIANTS = {
   9401: { title: '订单列表 - 旧版', primaryBg: '#409eff', radius: '4px', extraBtn: true, missingField: false, colName: '客户名称', fontSize: '14px', brokenJs: false, topbarHelp: true, hiddenMore: true },
   9402: { title: '订单列表 - 新版', primaryBg: '#1668dc', radius: '10px', extraBtn: false, missingField: true, colName: '客户', fontSize: '13px', brokenJs: true, topbarHelp: false, hiddenMore: false },
@@ -108,6 +122,9 @@ export function startFixture() {
       }
       if (pathname === '/login') return send(loginPage());
       if (pathname === '/topbar') return send(topbarPage(v));
+      if (pathname === '/frame-shell') return send(frameShellPage());
+      if (pathname === '/frame-report') return send(frameReportPage());
+      if (pathname === '/preview') return send(previewPage());
       if (pathname === '/shell' || pathname === '/shell-v2') return send(shellPage(v));
       return send(page(v));
     }).listen(Number(port)));

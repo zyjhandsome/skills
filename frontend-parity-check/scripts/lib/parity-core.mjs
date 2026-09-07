@@ -35,14 +35,15 @@ export const matchesAny = (text, patterns = []) => firstMatch(String(text ?? '')
  */
 export function landingVerdict(url, assertLanded = {}) {
   const u = String(url ?? '');
-  if (assertLanded.allowUrl?.length && matchesAny(u, assertLanded.allowUrl)) return { ok: true, allowed: true };
+  const allowed = !!(assertLanded.allowUrl?.length && matchesAny(u, assertLanded.allowUrl));
   const hit = firstMatch(u, assertLanded.forbidUrl ?? DEFAULT_FORBID_URL);
-  if (hit) return { ok: false, pattern: hit, url: u, reason: `落地 URL 命中禁止模式 /${hit}/ — ${u}` };
+  // allowUrl is only an exception to forbidUrl. It must never bypass requireUrl.
+  if (hit && !allowed) return { ok: false, pattern: hit, url: u, reason: `落地 URL 命中禁止模式 /${hit}/ — ${u}` };
   if (assertLanded.requireUrl && !matchesAny(u, [assertLanded.requireUrl])) {
     return { ok: false, pattern: assertLanded.requireUrl, url: u,
       reason: `落地 URL 不满足 requireUrl /${assertLanded.requireUrl}/ — ${u}` };
   }
-  return { ok: true };
+  return { ok: true, ...(allowed ? { allowed: true } : {}) };
 }
 
 const pathnameOf = (p) => {
@@ -98,7 +99,7 @@ export function normalizeRouteUrl(url, { origins = [], tokens = [], rules = [], 
  * Which style probes actually run: `defaultProbes` can drop or narrow the built-in set,
  * and a custom probe reusing a built-in id replaces it.
  */
-export function resolveProbes(cfg = {}, route = {}, defaults = []) {
+export function resolveProbes(cfg = {}, route = {}, defaults = [], side = null) {
   const pick = cfg.defaultProbes;
   let base;
   if (pick === false) base = [];
@@ -106,9 +107,71 @@ export function resolveProbes(cfg = {}, route = {}, defaults = []) {
   else base = defaults;
   const byId = new Map();
   for (const p of [...base, ...(cfg.styleProbes || []), ...(route.styleProbes || [])]) {
-    if (p?.id && p?.selector) byId.set(p.id, p);
+    const selector = side && p?.[`${side}Selector`] ? p[`${side}Selector`] : p?.selector;
+    if (p?.id && selector) byId.set(p.id, { ...p, selector });
   }
   return [...byId.values()];
+}
+
+/** Resolve a shared + side-specific comparison surface, with route values winning. */
+export function resolveSurface(cfg = {}, route = {}, side) {
+  const layer = (value = {}) => {
+    const { baseline, candidate, ...shared } = value || {};
+    return { ...shared, ...((side && value?.[side]) || {}) };
+  };
+  const global = layer(cfg.compareSurface);
+  const local = layer(route.compareSurface);
+  if (local.reset) {
+    const { reset, ...rest } = local;
+    return { ...rest, exclude: rest.exclude || [] };
+  }
+  const exclude = [...(global.exclude || []), ...(local.exclude || [])];
+  return { ...global, ...local, exclude };
+}
+
+/** styleProbes execute in document.querySelectorAll, not Playwright's selector engine. */
+export function configValidationErrors(cfg = {}) {
+  const errors = [];
+  const playwrightOnly = /:has-text\s*\(|(^|[\s,])text=|>>|(^|[\s,])role=/i;
+  const inspect = (p, where) => {
+    if (!p?.id) errors.push(`${where}.id 必填`);
+    if (!p?.selector && (!p?.baselineSelector || !p?.candidateSelector)) {
+      errors.push(`${where} 必须提供 selector，或同时提供 baselineSelector/candidateSelector`);
+    }
+    for (const key of ['selector', 'baselineSelector', 'candidateSelector']) {
+      const selector = p?.[key];
+      if (selector && playwrightOnly.test(selector)) {
+        errors.push(`${where}.${key} 必须是原生 CSS，不能使用 Playwright 语法：${selector}`);
+      }
+    }
+  };
+  (cfg.styleProbes || []).forEach((p, i) => inspect(p, `styleProbes[${i}]`));
+  (cfg.routes || []).forEach((r, ri) => (r.styleProbes || []).forEach((p, i) => inspect(p, `routes[${ri}].styleProbes[${i}]`)));
+
+  const actionTypes = new Set([
+    'goto', 'click', 'clickAndExpectPopup', 'expectPopup', 'dblclick', 'hover', 'fill', 'type',
+    'press', 'select', 'check', 'uncheck', 'scrollTo', 'waitFor', 'waitForUrl', 'waitTimeout',
+    'expectVisible', 'expectText', 'expectCount', 'expectValue', 'expectUrl', 'capture',
+  ]);
+  const selectorRequired = new Set([
+    'click', 'clickAndExpectPopup', 'dblclick', 'hover', 'fill', 'type', 'select', 'check', 'uncheck',
+    'waitFor', 'expectVisible', 'expectText', 'expectCount', 'expectValue',
+  ]);
+  const inspectAction = (action, where) => {
+    if (!actionTypes.has(action?.type)) errors.push(`${where}.type 不支持：${action?.type}`);
+    if (selectorRequired.has(action?.type)
+      && !action.selector && (!action.baselineSelector || !action.candidateSelector)) {
+      errors.push(`${where} 必须提供 selector，或同时提供 baselineSelector/candidateSelector`);
+    }
+  };
+  for (const side of ['baseline', 'candidate']) {
+    (cfg[side]?.auth?.actions || []).forEach((a, i) => inspectAction(a, `${side}.auth.actions[${i}]`));
+  }
+  (cfg.beforeEachState || []).forEach((a, i) => inspectAction(a, `beforeEachState[${i}]`));
+  (cfg.routes || []).forEach((r, ri) => (r.states || []).forEach((s, si) =>
+    (s.actions || []).forEach((a, i) => inspectAction(a, `routes[${ri}].states[${si}].actions[${i}]`))));
+  (cfg.journeys || []).forEach((j, ji) => (j.steps || []).forEach((a, i) => inspectAction(a, `journeys[${ji}].steps[${i}]`)));
+  return errors;
 }
 
 /**
@@ -141,14 +204,27 @@ export const unreadableFrames = (dom) => (dom?.frames || []).filter((f) => f.sta
 /** Fold same-origin and readable cross-origin frame digests into the page digest. */
 export function mergeDomDigests(main = {}, frames = []) {
   const out = { ...main };
-  const lists = ['headings', 'actions', 'fields', 'links', 'images', 'grids', 'textOutline'];
-  for (const f of frames) {
+  const lists = ['headings', 'actions', 'fields', 'links', 'images', 'grids', 'textOutline', 'textItems'];
+  const annotate = (value, source) => value && typeof value === 'object' && !Array.isArray(value)
+    ? { ...value, source: value.source || source }
+    : value;
+  for (const key of lists) {
+    if (Array.isArray(out[key])) out[key] = out[key].map((value) => annotate(value, 'main'));
+  }
+  for (let index = 0; index < frames.length; index++) {
+    const f = frames[index];
     if (!f.digest) continue;
     for (const key of lists) {
-      if (Array.isArray(f.digest[key])) out[key] = [...(out[key] || []), ...f.digest[key]];
+      if (Array.isArray(f.digest[key])) {
+        out[key] = [...(out[key] || []), ...f.digest[key].map((value) => annotate(value, `frame:${index}`))];
+      }
     }
   }
   if (Array.isArray(out.textOutline)) out.textOutline = out.textOutline.slice(0, 900);
-  out.frames = frames.map((f) => ({ url: f.url, status: f.status, error: f.error }));
+  out.frames = frames.map((f) => ({
+    url: f.url, status: f.status, error: f.error,
+    ...(f.selected !== undefined ? { selected: f.selected } : {}),
+    ...(f.selector !== undefined ? { selector: f.selector } : {}),
+  }));
   return out;
 }

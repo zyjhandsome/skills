@@ -135,13 +135,53 @@ Plan go、Execute，最后 migrate `verify`。
 - [`docs/vue2-pages-to-vue3-host-migration-playbook.md`](./docs/vue2-pages-to-vue3-host-migration-playbook.md)（A→B 用户粘贴剧本；每步独立会话）
 - [`docs/vue2-pages-to-vue3-host-migration-usage.md`](./docs/vue2-pages-to-vue3-host-migration-usage.md)（解耦原则与交接字段；顺序以剧本为准）
 
+## AngularJS 混合页迁入 Vue3 Host
+
+独立领域 skill：把 AngularJS 1.x / jQuery / JSP / Thymeleaf 混合页（或可切换用户行为）迁入已有 Vue3 宿主仓 B。默认 A 只读、B 壳 host-native、对照矩阵必做；只有 `assess` / `design` / `verify`（确认无 host 时才用 `greenfield`），不改应用代码。不依赖、不调用 `delivery-*`；需要生命周期时按粘贴剧本组合 delivery。
+
+| 技能 | 说明 |
+|------|------|
+| [angularjs-to-vue3-host-migration](./angularjs-to-vue3-host-migration/SKILL.md) | 跨仓混合页迁移：页面闭包、控件矩阵、落地策略/切换处置、iframe 边界、视觉与 runtime 证据 |
+
+**不要**用它做「没有旧页对等目标的常规 Vue3 功能」，也不要用 hosted 路径把已有 host B 推倒重建成绿场壳。Vue2 页面迁入走 `/vue2-pages-to-vue3-host-migration`；单仓 Vue2 原地升走 `/vue2-to-vue3-upgrade-impact-analysis`。
+
+A→B 不要混用职责：本 skill 只出领域证据与页级设计；改 B 应用代码只在 `delivery-execute-verify`。双 URL 黑盒验收走 `/frontend-parity-check`（一侧是宿主 iframe 时必须声明 `compareSurface`）；仓内 CSS 根因走 `/frontend-ui-stack-visual-parity`。
+
+```text
+/angularjs-to-vue3-host-migration
+依次执行 assess 和 design（本阶段不改应用代码）。
+源仓 A：<AngularJS/jQuery/JSP 仓库>
+宿主仓 B：<已有 Vue3 仓库>
+migration_unit：
+- source_entry：<A 的页面/入口/用户行为>
+- host entry：<B 的 route 或 HTML 入口>
+# 缺具体入口就停，不要编占位
+A 只读；B 壳 host-native；内容区 strict parity
+```
+
+### 与 delivery-* 联用
+
+不要在同一会话里把 Frame 和 migrate 焊在一起。按
+[`docs/angularjs-to-vue3-host-migration-playbook.md`](./docs/angularjs-to-vue3-host-migration-playbook.md)
+分波粘贴：先建 change（无规格闸门），再 assess / design，然后 Frame 规格批准、
+Plan go、Execute，最后 migrate `verify`。已有壳页对等修复走 repair 快车道
+（Frame + Plan 同会话，规格与实施两道闸门仍分开问）。
+
+集成路线下，代码修改由 `delivery-execute-verify` 唯一拥有；migrate skill 只跑 `verify` 刷新领域证据。
+
+配套说明：
+
+- [`docs/angularjs-to-vue3-host-migration-playbook.md`](./docs/angularjs-to-vue3-host-migration-playbook.md)（A→B 用户粘贴剧本；每步独立会话）
+- [`docs/angularjs-to-vue3-host-migration-usage.md`](./docs/angularjs-to-vue3-host-migration-usage.md)（解耦原则与交接字段；顺序以剧本为准）
+- [`docs/angularjs-host-migration-hiapm-appendix.md`](./docs/angularjs-host-migration-hiapm-appendix.md)（hiapm → apmweb3 项目专有误判钉子）
+
 ## 前端 parity 验收
 
 两个独立 skill，输入不同，不要混用。
 
 | 技能 | 说明 |
 |------|------|
-| [frontend-parity-check](./frontend-parity-check/SKILL.md) | 两个可访问 URL 的黑盒比对（功能 + 样式六层）；只读、不改业务代码 |
+| [frontend-parity-check](./frontend-parity-check/SKILL.md) | 两个可访问 URL 的黑盒比对（功能 + 样式六层；支持宿主 iframe 比较面）；只读、不改业务代码 |
 | [frontend-ui-stack-visual-parity](./frontend-ui-stack-visual-parity/SKILL.md) | 仓内 CSS 根因定界（Tailwind Preflight×Element 等）；go 后最小 CSS/配置修复 |
 
 **有两个能打开的 URL，要验收「新页是否与旧页一致」**
@@ -151,6 +191,8 @@ Plan go、Execute，最后 migrate `verify`。
 baseline：<升级前 URL>
 candidate：<升级后 URL>
 # 登录态 / 是否同一套数据 / 是否允许改版：没给就先问齐
+# 一侧是宿主壳内 iframe 时声明 compareSurface（frame/root + URL pattern）
+# 企业 SSO 已在本机浏览器登录：用 scripts/export-storage-state.mjs 导出会话
 # 只截图不点 journey，不能宣称功能一致
 ```
 
@@ -293,6 +335,14 @@ vue2-pages-to-vue3-host-migration/
 ├── scripts/              # validate_domain_packet / visual / runtime
 └── tests/
 
+angularjs-to-vue3-host-migration/
+├── SKILL.md              # 技能加载器（assess/design/verify、hosted 闸门）
+├── agents/
+│   └── openai.yaml
+├── references/           # hosted method、绿场映射、jQuery/变量链
+├── scripts/              # generate_migration_plan（unit decisions / comparison surface）
+└── tests/
+
 frontend-ui-stack-visual-parity/
 ├── SKILL.md              # 技能加载器（Phase A 定界 / Phase B CSS 闸门）
 ├── agents/
@@ -306,8 +356,8 @@ frontend-ui-stack-visual-parity/
 frontend-parity-check/
 ├── SKILL.md              # 技能加载器（双 URL、六层判定、Playwright 授权）
 ├── references/           # 提问模板、配置字段、判定阶梯、安装与登录
-├── scripts/              # preflight / capture / compare + 内置自检
-└── templates/            # parity-config.json
+├── scripts/              # preflight / capture / compare / export-storage-state + 内置自检
+└── templates/            # parity-config.json、parity-config-hosted-iframe.json
 
 content-structuring/
 ├── SKILL.md              # 加载器（v5.28）

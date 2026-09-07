@@ -1,5 +1,5 @@
 {
-  "$schema": "parity-config/v1",
+  "$schema": "parity-config/v2",
   "name": "selftest",
   "outputDir": "./parity-run",
   "dataParity": "same-data",
@@ -49,6 +49,18 @@
       "id": "bogus-anchor",
       "path": "/",
       "waitFor": { "selector": ".definitely-missing", "timeout": 2000 }
+    },
+    {
+      "id": "frame-report",
+      "path": "/frame-shell",
+      "compareSurface": {
+        "id": "report-body",
+        "frame": "iframe#report-frame",
+        "root": "#report-main",
+        "mainUrlPattern": "/frame-shell$",
+        "frameUrlPattern": "/frame-report$",
+        "readySelector": ".send"
+      }
     }
   ],
   "journeys": [
@@ -76,6 +88,23 @@
         { "type": "expectCount", "id": "notices", "selector": ".ann-item" },
         { "type": "expectUrl", "id": "shell-url" },
         { "type": "capture", "id": "board" }
+      ]
+    },
+    {
+      "id": "frame-popup-report",
+      "startPath": "/frame-shell",
+      "compareSurface": {
+        "frame": "iframe#report-frame",
+        "root": "#report-main",
+        "mainUrlPattern": "/frame-shell$",
+        "frameUrlPattern": "/frame-report$",
+        "readySelector": ".send"
+      },
+      "steps": [
+        { "type": "expectVisible", "id": "send-visible", "selector": ".send" },
+        { "type": "clickAndExpectPopup", "id": "open-preview", "popupId": "preview", "selector": ".send" },
+        { "type": "waitFor", "id": "preview-ready", "scope": { "page": "preview" }, "selector": "h1" },
+        { "type": "expectText", "id": "preview-title", "scope": { "page": "preview" }, "selector": "h1" }
       ]
     }
   ]

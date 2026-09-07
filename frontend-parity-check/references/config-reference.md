@@ -6,7 +6,8 @@
 
 | 字段 | 默认 | 说明 |
 |---|---|---|
-| `outputDir` | `./parity-run` | 证据与报告的落盘目录，相对配置文件解析 |
+| `name` | `unnamed` | 本次验收的稳定名称；也用于未显式指定 `outputDir` 时生成页面级目录 |
+| `outputDir` | `./parity-runs/<name>` | 证据与报告目录，相对配置文件解析；必须按页面/模块隔离 |
 | `browser` | `chromium` | `chromium` / `firefox` / `webkit`，需对应内核已安装 |
 | `channel` | — | 用本机浏览器：`chrome` / `msedge` / `chrome-beta`。企业环境下不来官方内核时的活路，由 preflight 的 `useConfig` 给出 |
 | `executablePath` | — | 浏览器装在非标准路径时直接指过去；与 `channel` 二选一 |
@@ -18,10 +19,46 @@
 | `masks` | `[]` | 全局遮罩选择器，两侧同样遮罩，遮罩色相同故互相抵消 |
 | `maskTextPatterns` | `[]` | 正则；命中的文本在比对前替换为 `{masked}` |
 | `styleProbes` | `[]` | 追加到默认探针集之后的自定义探针 |
+| `compareSurface` | 整个主文档 | 两侧真正参与 L2–L5 的业务表面，可分别声明 frame/root/URL 闸与排除区域 |
+| `runtimePolicy` | 见下 | 新增失败请求的分级/忽略策略 |
+| `dataSelectors` | 常见表格数据区 | 明确标记数据依赖区域；`different-data` 只降级这些区域 |
 | `fullPage` | `false` | 整页截图；长页面开启后像素噪声会显著上升 |
 | `beforeEachState` | `[]` | 每个状态进入后、快照前统一执行的动作（如关闭引导弹窗） |
 
-日期、时间、13 位时间戳、UUID 在比对前会自动归一化，无需手写正则。
+日期、时间、13 位时间戳、UUID 在比对前会自动归一化，无需手写正则。两侧 capture
+会记录同一份配置的 SHA-256 指纹；compare 发现指纹、浏览器版本或 context 不同会拒绝比对。
+
+## `compareSurface`
+
+比较面是验收契约，不是单纯的截图遮罩。例如旧版业务页在宿主 iframe 中、新版为独立页：
+
+```jsonc
+{
+  "compareSurface": {
+    "id": "task-report-body",
+    "baseline": {
+      "mainUrlPattern": "report\\.do",
+      "frame": "iframe#task-report-frame",
+      "frameUrlPattern": "/apmweb3/taskReport\\.html",
+      "root": "#task-report-main"
+    },
+    "candidate": {
+      "mainUrlPattern": "/taskReport\\.html",
+      "root": "#task-report-main"
+    },
+    "exclude": [".global-header", ".aside-wrapper"]
+  }
+}
+```
+
+- `frame` 是 iframe 元素的 CSS/Playwright selector；省略表示主文档。
+- `root` 是该 frame/document 内业务根节点。DOM、探针、截图及默认 journey 定位均以它为根。
+- `mainUrlPattern` 校验浏览器主 frame；`frameUrlPattern` 校验选中的业务 iframe。
+- `readySelector` 可替代 route/journey 的 `waitFor.selector`。
+- `exclude` 同时排除 DOM/探针并遮罩截图，适合已确认不属于验收面的宿主区域。
+- route/journey 可局部覆盖；popup capture 使用 `compareSurface: {"reset":true,...}` 清除全局表面。
+
+不要把 `shell-vs-dest` 当成一种可以直接出结论的模式；必须把两侧解析成同一业务表面。
 
 ## `baseline` / `candidate`
 
@@ -49,11 +86,31 @@
 | 字段 | 默认 | 说明 |
 |---|---|---|
 | `forbidUrl` | 内置登录/SSO 特征集 | 最终 URL 命中即作废：`/login`、`/signin`、`login-*.` 域名、`/cas/login`、`/oauth2/authorize`、`redirect_uri=`、`service=*login` |
-| `allowUrl` | `[]` | 白名单，优先于 `forbidUrl`。**被测页本身就是登录页时必须配**，否则永远作废 |
+| `allowUrl` | `[]` | 仅作为 `forbidUrl` 的精确例外；仍然必须通过 `requireUrl`。不要填写宽泛业务域名 |
 | `requireUrl` | — | 正则；最终 URL 必须匹配（例如强制留在 `/dashboard`） |
 
-`forbidUrl` 给空数组等于关掉该校验 —— 只在确认站点无 SSO 时这么做，且要在结论里写明。
+`allowUrl` 不再是“全部落地规则放行”。即使它命中，`requireUrl` 仍会执行。业务域名写进
+`allowUrl` 会扩大登录例外范围，应改为具体登录页路径；正常业务 URL 用 `requireUrl` 或
+`compareSurface.mainUrlPattern` 表达。`forbidUrl` 给空数组等于关掉该校验 —— 只在确认站点
+无 SSO 时这么做，且要在结论里写明。
 可在 `routes[].assertLanded` 上按页覆盖。
+
+## `runtimePolicy`
+
+```jsonc
+{
+  "runtimePolicy": {
+    "ignoreConsolePatterns": ["known optional widget"],
+    "ignoreRequestPatterns": ["/known-host-widget\\.png"],
+    "majorRequestPatterns": ["/optional-module/"],
+    "blockRequestPatterns": ["/task-report-main\\.js"]
+  }
+}
+```
+
+仅主文档导航失败默认阻断，其余新增失败请求默认重要。规则按 ignore → block → major 的
+顺序匹配。不要把某个产品的 Gantt、图表或宿主路径写死进通用 Skill；只有用户确认与验收面
+无关后才能在本次配置中降级。运行时证据会记录 `resourceType`、`frameUrl` 与是否导航请求。
 
 ## `context`
 
@@ -69,7 +126,7 @@
 {
   "id": "order-list",                 // 状态 id 前缀，必须唯一
   "path": "/order/list",
-  "waitFor": { "selector": ".el-table__row", "state": "visible" },  // 未命中 → 本状态作废
+  "waitFor": { "baselineSelector": ".old-row", "candidateSelector": ".new-row", "state": "visible" },
   "waitUntil": "networkidle",         // goto 的等待策略
   "assertLanded": { "allowUrl": [] }, // 可按页覆盖顶层落地校验
   "fullPage": false,
@@ -99,7 +156,8 @@
 }
 ```
 
-Journey 只在**第一个视口**执行一次。某一步失败即中断（`stopOnFail: false` 可放行），
+Journey 只在**第一个视口**执行一次。默认定位在该 journey 的 `compareSurface.frame/root` 内。
+某一步失败即中断（`stopOnFail: false` 可放行），
 中断位置本身就是重要证据。`startPath` 同样认 `pathOverrides[journey.id]` 与
 `journeys[].<side>StartPath`。
 
@@ -108,8 +166,10 @@ Journey 只在**第一个视口**执行一次。某一步失败即中断（`stop
 | type | 参数 | 作用 |
 |---|---|---|
 | `goto` | `path`, `waitUntil`, `id` | 导航到相对路径；带 `id` 时可被 `pathOverrides[id]` 覆盖 |
-| `click` / `dblclick` / `hover` | `selector`, `nth`, `force` | 指针操作 |
-| `fill` | `selector`, `value` | 直接置值 |
+| `click` / `dblclick` / `hover` | `selector`, `baselineSelector?`, `candidateSelector?`, `nth`, `force`, `scope?` | 指针操作 |
+| `clickAndExpectPopup` | `selector`, `popupId`, `scope?`, `timeout?` | 点击并等待 `window.open`，保存 popup 供后续步骤使用 |
+| `expectPopup` | `popupId`, `timeout?` | 等待已由其他动作触发的 popup |
+| `fill` | `selector`, `value` 或 `valueEnv` | 直接置值；密码优先使用环境变量 |
 | `type` | `selector`, `value`, `delay` | 逐字输入，触发联想/校验 |
 | `press` | `key`, `selector?` | 键盘 |
 | `select` | `selector`, `value` | 原生 `<select>` |
@@ -121,9 +181,13 @@ Journey 只在**第一个视口**执行一次。某一步失败即中断（`stop
 | `expectVisible` | `selector` | 记录可见性 |
 | `expectText` | `selector` | 记录文本（归一化后比对） |
 | `expectValue` | `selector` | 记录输入框当前值 |
-| `expectCount` | `selector`, `visibleOnly` | 记录匹配数量。**默认只数可见节点**；`visibleOnly: false` 才连隐藏节点一起数 |
+| `expectCount` | `selector`, `visibleOnly`, `dataDependent` | 默认只数可见节点；计数默认视为数据依赖，可显式设 `false` |
 | `expectUrl` | `ignorePath` | 记录当前 URL；比对前按 `pathOverrides`/`urlNormalizeRules` 归一化。`ignorePath: true` 时只比 query/hash |
 | `capture` | `id` | 在流程中间打一次完整快照 |
+
+每个带 selector 的动作都可用 `baselineSelector` / `candidateSelector`，避免用逗号把两个
+不同 DOM 的候选节点混在一起。`scope: {"frame":"iframe#x"}` 显式切 frame；
+`scope: {"page":"preview"}` 切到由 popup 动作保存的页面。
 
 `expect*` **不做断言**，只记录观测值；判定由 `compare.mjs` 在两侧之间进行。
 这是有意设计：不需要预先知道正确答案，旧版的行为就是答案。
@@ -132,7 +196,9 @@ Journey 只在**第一个视口**执行一次。某一步失败即中断（`stop
 `v-show`）而新框架直接不渲染（`v-if`），连隐藏一起数会凭空报出"少了一项"。
 两侧的原始总数记在 `observedTotal`，仅在报告里作为附注出现，不参与判定。
 
-所有 `selector` 走 Playwright 定位语法，支持 CSS、`text=`、`role=` 等。
+动作、`waitFor`、`masks` 的 selector 走 Playwright 定位语法，支持 CSS、`text=`、`role=` 等。
+**`styleProbes` 例外：只能使用浏览器原生 CSS**，因为它在页面内通过
+`document.querySelectorAll` 执行。`:has-text()`、`text=`、`>>` 会在采集前直接报配置错误。
 给动作加 `id` 能让报告里的条目可读。
 
 ## iframe 的处理边界
@@ -143,15 +209,17 @@ Journey 只在**第一个视口**执行一次。某一步失败即中断（`stop
 - 真正读不到的 iframe（`sandbox` 禁脚本、已 detach）标记为 `unreadable` 并写进
   `meta.json` / `dom.json` 的 `frames`。此时"缺失的按钮/字段/链接/文案"会**降级**并附
   提示——它是"读不到"，不是"没有"。
-- **L3/L4 探针只看主文档**：`styleProbes` 不穿 iframe。iframe 内的样式差异靠 L2（结构）
-  和 L5（像素）覆盖；确实要量 iframe 内的计算样式，就把那个 iframe 的 URL 当独立
-  route 单独比。
+- 未声明 `compareSurface` 时，L3/L4 仍只看主文档；声明 `compareSurface.frame` 后，
+  DOM、L3/L4 与截图会在选中的业务 iframe/root 内执行。
+- 未选中的 iframe 不会混入显式业务表面；兼容旧配置的整页模式仍会合并可读 iframe，
+  且每个摘要项带 `source=main/frame:n`，避免跨 frame 错配。
 - 小于 20×20 或 `about:blank` 的 iframe 直接跳过（埋点、占位）。
 
 ## 输出结构
 
 ```text
 <outputDir>/
+  run-manifest.json
   baseline/<viewport>/<state>/{shot.png,dom.json,styles.json,runtime.json,meta.json}
   baseline/<viewport>/<state>/{failure.png,failure.json}   # 仅作废状态：为什么没采到
   baseline/capture-log.json
@@ -161,7 +229,8 @@ Journey 只在**第一个视口**执行一次。某一步失败即中断（`stop
   parity-summary.json
 ```
 
-`meta.json` 额外记录本状态实际生效的探针 id、iframe 读取结果（`frames`）与采集告警。
+`run-manifest.json` 记录配置绝对路径、指纹和两侧采集环境，防止目录撞车或中途改配置。
+`meta.json` 额外记录比较面、实际生效的探针 id、iframe 读取结果与采集告警。
 `parity-summary.json` 的 `invalidEvidence` 是作废证据条数，非 0 时结论不能推广到那些页面。
 
 `parity-summary.json` 是给下游消费的紧凑视图（结论、计数、findings、图片路径）。
@@ -173,7 +242,7 @@ Journey 只在**第一个视口**执行一次。某一步失败即中断（`stop
 |---|---|---|
 | `--config <file>` | 全部 | 必填 |
 | `--side <baseline\|candidate>` | capture | 必填 |
-| `--out <dir>` | capture / compare | 覆盖 `outputDir` |
+| `--out <dir>` | capture / compare | 覆盖 `outputDir`；仍会由 manifest 阻止混用不同契约 |
 | `--only <id,id>` | capture | 只跑指定 route/journey，调试用 |
 | `--headed` | capture | 有头模式，观察脚本卡在哪一步 |
 | `--keepGoing` | capture | 有状态采集失败也返回 0 |
@@ -190,12 +259,12 @@ node scripts/selftest/run.mjs      # 单测 + 端到端
 node scripts/selftest/unit.mjs     # 只跑判定规则单测（无浏览器，1 秒内）
 ```
 
-`unit.mjs` 断言判定规则本身：登录页识别（含"业务路径里带 login 字样"不误判）、
-`pathOverrides` 归一化、探针裁剪、L4 聚合、iframe 合并与 `unreadable` 标记。
+`unit.mjs` 断言判定规则本身：登录页识别（含 `allowUrl` 不能绕过 `requireUrl`）、
+`pathOverrides` 归一化、比较面合并、CSS 探针校验、L4 聚合、iframe 来源与 `unreadable` 标记。
 
 端到端在 9401/9402 起两个故意有差异的本地站点（少一个筛选项、少一个导出按钮、
 表格列改名、主题色/圆角/字号漂移、详情按钮抛异常、SSO 跳转页、iframe 顶栏少一个链接、
-旧版残留 `ng-hide` 隐藏项、声明过的路径迁移），跑完整流水线并同时断言两件事：
+旧版残留 `ng-hide` 隐藏项、声明过的路径迁移、iframe 内按钮与 popup 预览），跑完整流水线并同时断言两件事：
 **该报的都报了**，且**不该报的一条都没报**（隐藏节点计数、已声明的路径迁移）。
 全 PASS 说明采集、判定、像素 diff、报告生成都正常；用于排除"是环境问题还是被测页面问题"。
 
@@ -213,4 +282,8 @@ node scripts/selftest/unit.mjs     # 只跑判定规则单测（无浏览器，1
 | 大量 L4 差异集中在 `font-size` | 根字号或 `html{font-size}` 变了，属于全局回归；报告会收敛成一条"全局样式漂移" |
 | L4 全是壳层噪声（`body`/`button`/`link`） | 用 `defaultProbes: false` 或给数组只留业务探针，再用 `styleProbes` 指到真正关心的组件 |
 | 每次跑差异比例都不同 | 存在未遮罩的动态内容；补 `masks` / `freezeTime` / `seedRandom` |
-| 探针 `found: false` 但页面上有该元素 | 元素在 iframe 或 Shadow DOM 内（L4 探针不穿 iframe）；换具体选择器、把该 iframe 当独立 route，或改用 journey 验证 |
+| 探针 `found: false` 但页面上有该元素 | 元素可能在 iframe/Shadow DOM，或选择器指错业务根；为 route 配 `compareSurface.frame/root`，Shadow DOM 则改用 journey 验证 |
+| 报告提示“采集契约不一致” | 两侧配置、浏览器或 context 有变化，或复用了其他页面的目录；更换 outputDir 并重新采集两侧 |
+| iframe 内按钮主文档点不到 | 给 route/journey 配 `compareSurface.frame`，或只给该动作配 `scope.frame`；不要把选择器失败直接解释成功能回归 |
+| 点击后打开新窗口但报告没验预览 | 使用 `clickAndExpectPopup` 保存 `popupId`，后续步骤用 `scope.page` 断言 popup 内容 |
+| CDP 端口通但导出仍超时 | `/json/version` 已通过说明不是端口问题；减少标签页/扩展后重试。Cookie-only 兜底不含完整 localStorage，报告必须注明 |

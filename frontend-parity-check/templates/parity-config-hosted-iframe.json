@@ -1,7 +1,7 @@
 {
-  "$schema": "parity-config/v1",
+  "$schema": "parity-config/v2",
   "name": "portal-dashboard-migration",
-  "outputDir": "./parity-run",
+  "outputDir": "./parity-runs/portal-dashboard-migration",
 
   "browser": "chromium",
   "channel": "chrome",
@@ -15,6 +15,27 @@
     "requireUrl": "(dashboard|project|portal)",
     "allowUrl": []
   },
+
+  "compareSurface": {
+    "id": "dashboard-business-body",
+    "baseline": {
+      "mainUrlPattern": "(dashboard|project|portal)",
+      "root": ".portal-content"
+    },
+    "candidate": {
+      "mainUrlPattern": "(dashboard|project|workspace)",
+      "root": ".workspace-content"
+    },
+    "exclude": [".global-header", ".side-menu", ".aside-wrapper"]
+  },
+
+  "runtimePolicy": {
+    "ignoreConsolePatterns": [],
+    "ignoreRequestPatterns": [],
+    "blockRequestPatterns": []
+  },
+
+  "dataSelectors": [".notice-list", ".ann-list", ".chart-data"],
 
   "urlNormalizeRules": [
     { "pattern": "\\.do(?=$|[?#])", "replace": "" },
@@ -59,11 +80,10 @@
   "maskTextPatterns": ["更新于\\s*\\S+", "\\b\\d+(\\.\\d+)?%"],
 
   "styleProbes": [
-    { "id": "kpi-card", "selector": ".kpi-card, .stat-card" },
-    { "id": "kpi-value", "selector": ".kpi-card .value, .stat-card .num" },
-    { "id": "chart-wrap", "selector": ".chart-wrap, .echarts-container" },
-    { "id": "notice-item", "selector": ".notice-list li, .ann-item" },
-    { "id": "side-menu", "selector": ".side-menu, .el-menu" }
+    { "id": "kpi-card", "baselineSelector": ".kpi-card", "candidateSelector": ".stat-card" },
+    { "id": "kpi-value", "baselineSelector": ".kpi-card .value", "candidateSelector": ".stat-card .num" },
+    { "id": "chart-wrap", "baselineSelector": ".chart-wrap", "candidateSelector": ".echarts-container" },
+    { "id": "notice-item", "baselineSelector": ".notice-list li", "candidateSelector": ".ann-item" }
   ],
 
   "thresholds": {
@@ -79,7 +99,7 @@
     {
       "id": "dashboard",
       "path": "/hiapm/project/dashboard.do",
-      "waitFor": { "selector": ".kpi-card", "state": "visible" },
+      "waitFor": { "baselineSelector": ".kpi-card", "candidateSelector": ".stat-card", "state": "visible" },
       "masks": [".kpi-trend-spark"],
       "states": [
         { "id": "default", "actions": [] },
@@ -88,7 +108,7 @@
           "actions": [
             { "type": "click", "selector": ".period-filter" },
             { "type": "click", "selector": "text=本季度" },
-            { "type": "waitFor", "selector": ".kpi-card" }
+            { "type": "waitFor", "baselineSelector": ".kpi-card", "candidateSelector": ".stat-card" }
           ]
         }
       ]
@@ -96,7 +116,7 @@
     {
       "id": "notice-list",
       "path": "/hiapm/notice.do",
-      "waitFor": { "selector": ".notice-list li" }
+      "waitFor": { "baselineSelector": ".notice-list li", "candidateSelector": ".ann-item" }
     }
   ],
 
@@ -104,12 +124,12 @@
     {
       "id": "open-notice-detail",
       "startPath": "/hiapm/project/dashboard.do",
-      "waitFor": { "selector": ".kpi-card" },
+      "waitFor": { "baselineSelector": ".kpi-card", "candidateSelector": ".stat-card" },
       "steps": [
-        { "type": "expectCount", "id": "notices-visible", "selector": ".notice-list li" },
-        { "type": "expectText", "id": "first-notice", "selector": ".notice-list li >> nth=0" },
+        { "type": "expectCount", "id": "notices-visible", "baselineSelector": ".notice-list li", "candidateSelector": ".ann-item", "dataDependent": true },
+        { "type": "expectText", "id": "first-notice", "baselineSelector": ".notice-list li", "candidateSelector": ".ann-item", "nth": 0, "dataDependent": true },
         { "type": "capture", "id": "board" },
-        { "type": "click", "selector": ".notice-list li >> nth=0" },
+        { "type": "click", "baselineSelector": ".notice-list li", "candidateSelector": ".ann-item", "nth": 0 },
         { "type": "waitFor", "selector": ".notice-detail, .el-dialog__body" },
         { "type": "expectText", "id": "detail-title", "selector": ".notice-detail h2, .el-dialog__title" },
         { "type": "expectUrl", "id": "detail-url", "ignorePath": true },

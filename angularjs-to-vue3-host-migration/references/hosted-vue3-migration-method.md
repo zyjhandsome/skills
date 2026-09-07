@@ -87,10 +87,11 @@ Goal: decide what can be migrated and in what order.
 
 Required outputs:
 
-- host stack summary, including host compile overlay
+- host stack summary, including host compile/diagnostic overlay and lint/type baseline
 - host baseline gap table
 - source page-entry inventory
 - A/B page comparison
+- per-unit identity kind, landing strategy, switch disposition, and first comparison surface
 - coupling counts excluding vendor
 - recommended first migration units
 - gaps and risks
@@ -114,6 +115,7 @@ Required outputs:
 - vertical slices whose completion criterion is entry mounted and user-reachable
 - verification checklist
 - unresolved evidence
+- per-unit identity/landing/switch decisions, comparison surface, and host-integration checklist
 
 ### verify
 
@@ -127,6 +129,7 @@ Required outputs:
 - visual measurement evidence only when screenshots or measurements exist
 - manual-only label when visual measurement is missing, which never exempts a display-contract row
 - a recorded runtime-evidence attempt whenever browser automation is reported unavailable
+- strategy, comparison-surface, and host-integration parity
 - an archive gate row per unit: completion state, verified/total matrix count, unresolved row IDs, carried degradation labels, archive disposition
 
 ## Host-First Discovery
@@ -213,7 +216,7 @@ Normalize page keys from URL, route, menu label, template filename, component fi
 |---|---|
 | `unmigrated` | Source page exists; no host counterpart found. |
 | `partial-overlap` | Source and host overlap by name/route/domain but behavior is not proven equivalent. |
-| `already-migrated` | Host page has closed source parity, outbound traffic points to it when authorized, and it is independently reachable at runtime. |
+| `already-migrated` | The unit has closed source parity, satisfies its approved landing strategy and switch disposition, and is independently reachable at runtime. Native/reused-B strategies land authorized exits on B; an approved `iframe-keep-A` strategy intentionally preserves the A boundary. |
 | `dest-built-unwired` | Host destination page or helper exists, but source/host outbound navigation still lands on A or on an unapproved fallback. |
 | `wired-hidden` | Host entry or tab is wired, but runtime flags, permissions, `v-if`, feature switches, or parent shell state make it unreachable or invisible. |
 | `develop-native` | Host `develop` has a native page, but its route/hash/query contract is not this source unit. Treat as a candidate, not parity. |
@@ -241,6 +244,27 @@ Rules:
 - Exclude `openspec/`, `reports/`, `evidence/`, coverage output, generated report HTML, `e2e-tests/`, and `*.spec.*` / `*.test.*` files from page inventory and coupling counts.
 - Large host-component counts from reusable components are noise; include them only as page-closure dependencies.
 
+### Orthogonal Unit Decisions
+
+Do not encode identity, landing, traffic intent, and archive outcome into ever-more-specific comparison statuses. Record these four axes separately for every selected UNIT:
+
+| Axis | Values | Decision |
+|---|---|---|
+| `unit_identity_kind` | `business-page`, `parent-shell`, `shell-pane`, `drawer-modal`, `redirect` | What the source candidate actually is. |
+| `landing_strategy` | `native`, `iframe-reuse-existing-B`, `iframe-keep-A`, `do-not-migrate` | What the approved final boundary is. |
+| `switch_disposition` | `authorized-switch`, `never-switch`, `environment-locked`, `not-applicable` | Whether outbound navigation should and can move. |
+| `archive_disposition` | `parity-complete`, `repair-done-partial`, `blocked` | How the completed review is closed. |
+
+Rules:
+
+- A server route or template that only performs auth/header setup and mounts an iframe or child application is a `parent-shell`, not automatically the business-page UNIT. Trace the mounted child and its URL/query/hash contract before creating a host entry.
+- A shell pane with no independent URL, identity contract, or switch boundary stays under the shell UNIT as its own MATRIX group and verify conclusion. Do not invent a separate traffic switch for it. If it does have an independent route or switch boundary, it remains a UNIT even when rendered inside a shell.
+- A drawer or modal is not an independently reachable detail page unless route/runtime evidence proves that identity. Required detail identifiers may not be replaced by a nearby project, user, or parent identifier.
+- `never-switch` and `environment-locked` are traffic dispositions, not aliases for `dest-built-unwired`. Record the approving decision for the former and the external system/owner/unblock condition for the latter.
+- `authorized-switch` closes only after every approved exit is verified on its target. `never-switch` may close when the deliberate retained boundary is approved and verified. `environment-locked` remains blocking until the dependency is resolved or a new scope decision changes the disposition; it is not a permanent exception to reachability.
+- `do-not-migrate` requires a scope, deprecation, ownership-transfer, or product decision. It must not be inferred merely because implementation is difficult.
+- `repair-done-partial` remains an archive disposition. It is never an A/B comparison status.
+
 ## URL And Entry Mapping
 
 Build a separate URL/entry map before design:
@@ -265,6 +289,23 @@ Evidence source branches:
 ## Source Contract Gates
 
 Carry these source contracts through `assess`, `design`, repair, execute, and `verify`. They are gates, not optional notes.
+
+### Comparison Surface
+
+Define the surface before browser automation, screenshots, pixel diffs, or click-path comparison. Emit one row per UNIT:
+
+| UNIT | Baseline URL/surface | Candidate URL/surface | Included chrome | Viewport | Auth/session | Environment dependencies | Allowed normalization | Hit-layer expectation | Evidence |
+|---|---|---|---|---|---|---|---|---|---|
+
+Surface values should distinguish `dest+host-chrome`, `sit-standalone`, and `page-body-only`, or name an equally precise project-specific boundary.
+
+Rules:
+
+- Compare like with like. A standalone source popup and a destination page under a host header are different surfaces until chrome is deliberately included, excluded, or normalized.
+- Record host chrome height/stacking only from current runtime or CSS evidence. Modal and full-screen surfaces must render above the included chrome, and `elementFromPoint` or an equivalent hit-target check must prove the intended layer receives clicks.
+- Pin viewport, login state, feature flags, backend ports/services, locale, and title normalization before calculating a visual difference. A run with different viewport or auth state is environment evidence, not page-body parity evidence.
+- Classify tool findings as `page-contract`, `host-chrome`, `environment-auth`, `environment-service`, or `toolchain-warning`. Missing host links, 401s, cross-port failures, title prefixes, and framework warnings do not become page defects without evidence that they affect the selected page contract.
+- The first UNIT pilot must produce a reviewed comparison-surface row. Measured surface evidence bound to the current host revision may substitute for rerunning that calibration.
 
 ### Navigation Landing
 
@@ -414,6 +455,7 @@ Rules:
 - One row per page is a skeleton, not a matrix. A generated whole-page row marked `(skeleton)` must be split by source region — search, filters, list, thumbnails, badges, empty state, deep links — before the unit can be design-ready.
 - The matrix is one ledger even for a batch. Every row carries the owning unit, so rows are filled, verified, and closed per unit rather than per batch.
 - A closed matrix means every row is `verified`, `manual-verified`, or `approved-deviation`. `wired-unverified` is an open row, not a soft pass.
+- Track row lifecycle separately from `B 现状`: `active`, `retired`, or `stale`. When a UNIT leaves a batch or is deprecated, retain its rows for audit as `retired`, bind the removal decision, and exclude them from current verification counts. When a bound contract digest changes, mark affected rows `stale` until refreshed; changing only a progress summary does not refresh the MATRIX.
 
 ## Source i18n Text Table
 
@@ -471,6 +513,9 @@ Do not enter Delivery framing from a header-only design contract. A unit is desi
 
 - page closure: source templates/fragments/scripts/controllers/services/APIs/assets
 - display-contract matrix rows for every source region of the unit, split from any generated whole-page `(skeleton)` row
+- unit identity kind, landing strategy, and switch disposition with evidence
+- a comparison surface bound to current baseline/candidate runtime conditions
+- a host-integration checklist with every category filled or marked `not-applicable`
 - host baseline gap table with the A column filled, and a page-level landing method for every `host-missing` / `host-partial` baseline this page depends on
 - page-init and side-effect list
 - source i18n text table with any deviations recorded and approved
@@ -513,26 +558,45 @@ A second writer on any of these is a blocker even inside one change, because the
 
 Per-unit properties a batch must preserve: page closure, matrix rows, i18n table, CSS closure, rollback switch, verify conclusion, and completion decision. Batch conclusions are never averaged.
 
-Pilot rule: the first unit of an A/B repo pair runs alone, because the host compile overlay, CSS closure landing method, entry-mounting pattern, and runtime-evidence feasibility are only proven by implementing and verifying once. Batching before that multiplies one wrong assumption by N. Remaining units may draft contracts in parallel with the pilot's implementation, but the pilot's change must be archived before the batch enters planning, or cross-change path overlap turns into a readiness blocker. Recorded measured evidence for those host facts, bound to the current host revision, can substitute for the pilot; nothing else can.
+Pilot rule: the first unit of an A/B repo pair runs alone, because the host compile/diagnostic overlay, CSS closure landing method, entry-mounting pattern, comparison surface, and runtime-evidence feasibility are only proven by implementing and verifying once. Batching before that multiplies one wrong assumption by N. Remaining units may draft contracts in parallel with the pilot's implementation, but the pilot's change must be archived before the batch enters planning, or cross-change path overlap turns into a readiness blocker. Recorded measured evidence for those host facts, bound to the current host revision, can substitute for the pilot; nothing else can.
 
-## Host Compile Overlay
+## Host Compile And Diagnostic Overlay
 
 Capture and carry these host facts as parity requirements:
 
 | Item | Why it matters |
 |---|---|
-| `lintOnSave` and dev-server overlay scope | An unrelated dirty file can blank the whole page and look like a migration defect. |
+| Active diagnostic mechanism | Vue CLI `lintOnSave`, Vite/Webpack ESLint or checker plugins, and HMR/dev-server overlay scope can each block or cover the page. Absence of `lintOnSave` is not absence of diagnostics. |
+| Lint/type baseline | Record the existing command, error count, and file scope before attributing failures to the selected UNIT. |
 | TS `noImplicitAny` / `strict` | New helper modules fail the host build even when logic is correct. |
 | Prettier/EditorConfig indentation | Reformatting a legacy file creates a large out-of-scope diff. |
 | Declared Node baseline vs actual `node -v` | A run on the wrong Node is not verification evidence. |
+| Build-time framework flags | Missing Vue/Vite/Webpack compile-time flags can create warnings or behavior differences that parity tooling misclassifies as page defects. |
 
 Rules:
 
 - Do not reformat, retype, or opportunistically fix legacy files outside approved scope. Record them as residuals with an owner and file list.
 - A compile failure on the current unit's entry is blocking.
 - For new or changed TS helpers in the selected UNIT, annotate callback parameters and empty arrays/objects immediately when host `noImplicitAny` or `strict` can infer `any[]`, `never[]`, or implicit `any`. Do not leave this to a later compile pass.
-- A repo-wide overlay caused by unrelated files is a residual. Neither case may be reported as a healthy dev server.
+- Detect the mechanism from the actual host: Vue CLI config, Vite/Webpack plugins, package dependencies/scripts, and runtime overlay behavior. Do not use `lintOnSave` as the generic name for all hosts.
+- A repo-wide diagnostic/overlay failure caused by unrelated files is a residual. Neither it nor a unit compile failure may be reported as a healthy dev server.
 - Record the actual Node version used for each build/test run next to the host-declared baseline.
+- Inventory framework flags from the actual host build configuration. Add only flags required by the host's Vue/build versions; project-specific flag names belong in project evidence or an appendix, not in this generic method.
+
+## Host Integration Checklist
+
+Design fills this table from current host evidence, the approved execute plan carries it, and verify records the result. Use `not-applicable` rather than silently omitting a category.
+
+| Category | Contract to record | Blocking rule |
+|---|---|---|
+| host/session readiness | Store or session initialization signal, first-paint wait, failure/timeout behavior | A page that races host initialization or renders empty before readiness is not verified. |
+| host chrome and hit layer | Header/overlay stacking, modal/full-screen layer, click target proof | Visual presence without correct hit target is open. |
+| events and i18n | Event name and payload shape, listener lifecycle, initial locale, cross-origin limitation | A one-time locale read is not equivalent to live host switching; inaccessible cross-frame wiring is a named residual. |
+| downloads/exports | Trigger mechanism, endpoint, filename formula, extension, blob handling, effective file MIME | A successful HTTP call without the expected usable artifact is not parity. Do not infer file MIME from a request content type. |
+| build-time flags | Required Vue/Vite/Webpack flags and the configuration file that injects them | A warning affecting hydration/runtime behavior remains open; an unrelated warning is classified by the comparison surface. |
+| existing host controls | Existing date/select/modal/upload/editor wrappers considered and equivalence result | Reuse equivalent host behavior; do not force reuse when an interaction axis fails. |
+| file ownership/freeze | Intended writer, concurrent owner, freeze reason, follow-up owner | Do not edit a frozen or concurrently owned file; record the blocked row or residual. |
+| test-data reachability | Required role/entity/data state, search performed, reachable sample or absence evidence | Never fabricate production-like records to close parity. Unreachable rare data can be non-blocking only when the formula is otherwise proven, the affected acceptance row is explicitly disposed, and an owner/condition is recorded. |
 
 ## Concrete Gates
 
@@ -544,10 +608,13 @@ Rules:
 | Entry-wiring parity | Each slice is mounted at the host entry, calls its API, and is reachable by the user in the browser. |
 | Permission parity | Menu visibility, route access, button hide/disable, server-side rejection. |
 | URL parity | Old deep link, query/hash, redirects, browser back/forward, external links. |
+| Strategy parity | Unit identity kind, approved landing strategy, switch disposition, decision/owner evidence. |
+| Comparison-surface parity | Like-for-like baseline/candidate surface, chrome, viewport, auth/environment, normalization, and hit-layer evidence. |
+| Host-integration parity | Session readiness, chrome/hit layer, events/i18n, downloads, build flags, host controls, freeze/ownership, and test-data disposition. |
 | Source contract gates | Navigation landing, comparison and identity mapping, shared modal modes, mounted view closure, runtime-hidden and host-extra regions, formula/empty-state/payload scope, hit layer, selector-to-DOM binding, CSS utility closure, interruption hygiene, contract test harness, and browser automation disposition. |
 | API parity | Endpoint, method, params/body, response codes, failure handling, messages. |
 | Visual measurement parity | Screenshots, measurements, diff threshold, or mark manual-only. Does not cover display-contract rows. |
-| Runtime parity | Host Node actually used vs declared baseline, lockfile, existing lint/build/test commands, host compile overlay disposition. |
+| Runtime parity | Host Node actually used vs declared baseline, lockfile, existing lint/build/test commands, lint/type baseline, and compile/diagnostic overlay disposition. |
 | Git hygiene | No dependency/cache/build directory noise in intended commit; source A unchanged; B changes scoped. |
 | Rollback | Switch, owner, affected URL/page, restore condition, data compatibility. |
 | Archive gate | One filled row per unit: completion state, verified/total row count, unresolved row IDs, carried degradation labels, archive disposition. |
@@ -565,6 +632,7 @@ Do not announce a page migration complete unless all are true:
 - Git hygiene has no blocking dependency/cache/build noise.
 - Every display-contract row is `verified`, `manual-verified`, or `approved-deviation`.
 - Every slice passes entry-wiring parity.
+- Unit identity, landing strategy, switch disposition, comparison surface, and host-integration checks are current and internally consistent.
 - Behavior, page-init, permission, URL, API, runtime/build, rollback, and visual/manual-only disposition have no blocking residuals.
 - No UNIT remains in `dest-built-unwired`, `wired-hidden`, `develop-native`, `orphan-mpa`, or other open comparison states.
 - Known formula, row-order, API-payload, URL, permission, or entry-wiring residuals prevent a green completion/archive status. A packet with zero verified MATRIX rows can be archived only as an explicit partial/residual handoff, not as parity complete.
@@ -573,12 +641,13 @@ Do not announce a page migration complete unless all are true:
 
 Every gate above is already stated somewhere in this method, and every one of them has still been passed by narration. Closing a unit therefore requires a filled table, not a prose summary. Emit one row per unit at the end of `verify`, before any archive decision:
 
-| 迁移单元 | 完成态 | MATRIX verified / 总行 | 未结清行 ID | 降级标签 | archive 处置 |
-|---|---|---|---|---|---|
+| 迁移单元 | 完成态 | 身份/落地策略 | 切换处置 | MATRIX verified / 总行 | 未结清行 ID | 降级标签 | archive 处置 |
+|---|---|---|---|---|---|---|---|
 
 Rules:
 
 - `完成态` uses the A/B comparison enum. Only `already-migrated` supports a parity-complete archive.
+- `身份/落地策略` records `unit_identity_kind` and `landing_strategy`; `切换处置` records the independent `switch_disposition`. `iframe-keep-A`, `never-switch`, and `environment-locked` must therefore be visible rather than hidden inside prose.
 - `MATRIX verified / 总行` is a count, written as a count. `verified=0` with a green page list is the exact failure this table exists to catch.
 - `未结清行 ID` lists every `missing`, `mismatched`, and `wired-unverified` row ID. An empty cell must mean zero such rows, not an unexamined matrix.
 - `降级标签` carries the honest-degradation labels forward verbatim: `visual-manual-only-not-proven`, `node-mismatch-not-verify-evidence`, `compile-not-run`, `lintonsave-out-of-unit-dirty`. Once recorded, a label stays attached to the unit in the archive record and in every later status report. Restating a labeled unit as "parity reached" is a reporting defect.
@@ -623,6 +692,7 @@ Before expanding to the whole repository, run the method on one mixed page such 
 4. build the display-contract matrix and page-init list
 5. trace one or two core actions
 6. define gates and rollback
-7. review with maintainers
+7. calibrate and record the comparison surface
+8. review with maintainers
 
 Only then batch additional pages.

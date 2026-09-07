@@ -60,7 +60,7 @@ node scripts/selftest/run.mjs     # 含 unit.mjs；也可单独跑 node scripts/
 
 ### 第 1 步：锁定输入契约（不要跳过）
 
-必须问清、并写进配置文件的四件事：
+必须问清、并写进配置文件的五件事：
 
 1. **两个 URL**：baseline（升级前）与 candidate（升级后）的可访问地址；若路由不同，
    给出每个页面的路径映射。
@@ -75,6 +75,11 @@ node scripts/selftest/run.mjs     # 含 unit.mjs；也可单独跑 node scripts/
 4. **样式口径** `styleIntent`：
    - `pixel-parity`（默认）：要求视觉对齐，字体/颜色/字号变化按重要项处理。
    - `redesign-allowed`：本次允许改版，计算样式差异仅作参考，只卡功能与结构。
+5. **比较面** `compareSurface`：验收整页（宿主 + 页体），还是只验业务页体。
+   - 两侧都直接打开业务页时可以省略，默认比较整个主文档。
+   - 一侧是宿主壳内 iframe、另一侧是独立页时，必须分别声明 `frame` / `root`，并用
+     `mainUrlPattern`、`frameUrlPattern` 锁定实际落地位置；不要拿壳 DOM 与页体 DOM 硬比。
+   - 宿主 Header、侧栏等已确认不在验收范围内的区域写进 `exclude`，统一作用于 L2–L5。
 
 用户没主动给的，用 `AskQuestion` 一次性问齐，不要边跑边猜。
 提问模板见 `references/ask-template.md`（也可直接发给用户，让其照填）。
@@ -100,6 +105,10 @@ node scripts/selftest/run.mjs     # 含 unit.mjs；也可单独跑 node scripts/
   没声明的路径差异会被判为跳转缺陷——这是有意的。
 - `waitFor` 填一个**只有目标页才有**的选择器：它同时是"页面已就绪"和
   "确实到了这一页"的判据，命中不了整个状态作废。
+- `outputDir` 必须带页面或模块名，例如 `./parity-runs/task-report`。每次采集会写
+  `run-manifest.json` 与配置指纹；目录属于另一份契约时会拒绝覆盖。
+- `styleProbes` 只能使用浏览器原生 CSS；页面动作使用 Playwright selector。
+  新旧 DOM 类名不同可分别写 `baselineSelector` / `candidateSelector`。
 
 字段与动作词表见 `references/config-reference.md`。
 
@@ -117,8 +126,9 @@ node scripts/capture.mjs --config parity-config.json --side candidate
 采集有三道硬闸，任一触发即该状态（或整侧）**作废**并落一张 `failure.png` 供排查：
 
 1. 落地 URL 命中登录/SSO 特征（`/login`、`login-beta.`、`redirect_uri=` 等）；
-2. `waitFor` 选择器在导航后没命中；
-3. `auth.actions` 登录序列有任何一步失败。
+2. 声明的 `compareSurface` frame/root/URL pattern 没命中；
+3. `waitFor` 选择器在导航后没命中；
+4. `auth.actions` 登录序列有任何一步失败。
 
 作废的状态不参与比对，报告顶部会列出来。**看到"证据作废"先修登录态或路径映射再重跑，
 不要拿半截证据出结论。** 被测页本身就是登录页时，用 `assertLanded.allowUrl` 显式放行。
@@ -127,7 +137,8 @@ node scripts/capture.mjs --config parity-config.json --side candidate
 
 ```bash
 # 先让用户带调试端口重启浏览器并完成登录：chrome.exe --remote-debugging-port=9222
-node scripts/export-storage-state.mjs --out auth/candidate.json --url https://new.example.com/home
+# 脚本会先探测 /json/version，再限时连接，避免把 target 枚举超时误报成“端口没开”
+node scripts/export-storage-state.mjs --timeout 15000 --out auth/candidate.json --url https://new.example.com/home
 ```
 
 导出的文件填进 `<side>.auth.storageState`。该脚本连的是用户自己的浏览器，
@@ -147,9 +158,10 @@ node scripts/compare.mjs --config parity-config.json
 按 `references/parity-ladder.md` 的判定口径逐条处理，向用户回报时必须包含：
 
 - 一句话结论（通过 / 有重要差异 / 不一致）；
+- `evidenceStatus`（证据有效/部分/无效）与 `parityVerdict`（仅针对有效证据）必须分开回报；
 - 阻断项逐条列出，并区分"**回归缺陷**"与"**有意变更**"——
   后者需要用户确认，不能由本技能自行认定；
-- 报告与差异图的路径（不要把截图或整份报告塞进对话）；
+- 报告与差异图的**绝对路径**（不要把截图或整份报告塞进对话）；
 - 本次结论的适用边界：覆盖了哪些页面/状态/视口，`dataParity` 与 `styleIntent` 取值。
 
 ## 判定分层（详见 references/parity-ladder.md）
@@ -170,9 +182,11 @@ node scripts/compare.mjs --config parity-config.json
 
 - 未获授权就执行 `npm install` / `npx playwright install`。
 - 两侧采集环境不同（视口、缩放、时区、登录态不一致）却给出 parity 结论。
+- baseline、candidate、compare 使用的配置指纹不同，或混用了其他页面的输出目录，仍继续比对。
 - 拿**作废的证据**（登录页、落地页错误、`waitFor` 未命中）出任何一致性结论，
   或为了让报告变绿而放宽 `assertLanded`。
-- `dataParity=different-data` 时把行数或文案差异当作缺陷上报。
+- `dataParity=different-data` 时把已标记为数据依赖的行数或文案差异当作缺陷上报。
+- 把固定功能入口误标为数据项；只有 `dataDependent: true` 或 `dataSelectors` 内的内容才可按数据降级。
 - 只跑截图、不跑 journey，就宣称"功能一致"。
 - 把 base64 截图或整份报告贴进对话，而不是给路径。
 - 修改被测站点的任何源码——本技能只做取证与判定。

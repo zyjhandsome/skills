@@ -11,6 +11,8 @@ const DOCS = resolve(HERE, "..");
 const PLAYBOOK = resolve(DOCS, "angularjs-to-vue3-host-migration-playbook.md");
 const USAGE = resolve(DOCS, "angularjs-to-vue3-host-migration-usage.md");
 const APPENDIX = resolve(DOCS, "angularjs-host-migration-hiapm-appendix.md");
+const SKILL = resolve(DOCS, "..", "angularjs-to-vue3-host-migration", "SKILL.md");
+const HOSTED_METHOD = resolve(DOCS, "..", "angularjs-to-vue3-host-migration", "references", "hosted-vue3-migration-method.md");
 const SKILL_ID = "angularjs-to-vue3-host-migration";
 
 const read = (path) => readFileSync(path, "utf8");
@@ -18,10 +20,29 @@ const read = (path) => readFileSync(path, "utf8");
 assert.ok(existsSync(PLAYBOOK), "AngularJS host migration playbook is missing");
 assert.ok(existsSync(USAGE), "AngularJS host migration usage doc is missing");
 assert.ok(existsSync(APPENDIX), "hiapm appendix is missing");
+assert.ok(existsSync(SKILL), "AngularJS host migration SKILL.md is missing");
+assert.ok(existsSync(HOSTED_METHOD), "hosted migration method is missing");
 
 const playbook = read(PLAYBOOK);
 const usage = read(USAGE);
 const appendix = read(APPENDIX);
+const skill = read(SKILL);
+const hostedMethod = read(HOSTED_METHOD);
+
+assert.ok(skill.includes("## When Not To Use"), "skill must state its negative trigger boundary");
+assert.ok(skill.includes("## Red Flags"), "skill must centralize rationalization red flags");
+assert.ok(
+  skill.includes("the only normative checklist") && hostedMethod.includes("## Design-Ready Gate"),
+  "skill must delegate the normative design-ready checklist to the hosted method",
+);
+assert.ok(
+  skill.includes("when the selected unit has jQuery") && skill.includes("when material behavior crosses functions"),
+  "skill must load heavy supporting references conditionally",
+);
+assert.ok(
+  skill.includes("Vite/Webpack ESLint or checker plugins") && hostedMethod.includes("Vite/Webpack ESLint or checker plugins"),
+  "skill and hosted method must describe host diagnostics beyond lintOnSave",
+);
 
 assert.ok(playbook.includes("这不是 Skill"), "playbook must not pose as a Skill");
 assert.ok(!/^---\r?\nname:/m.test(playbook), "playbook must not have Skill frontmatter");
@@ -87,9 +108,15 @@ assert.ok(header.includes("<FRESHNESS_MANIFEST>"), "header must name the freshne
 assert.ok(header.includes("_live-eval"), "header must reject live-eval as authority");
 assert.ok(header.includes("唯一状态源"), "header must pin one state source");
 assert.ok(header.includes("不得缩写"), "header must forbid shortened skill ids");
+assert.ok(
+  header.includes('<CONFIG>.canonical_skill_id == "angularjs-to-vue3-host-migration"'),
+  "header must assert the exact canonical skill id in CONFIG",
+);
+assert.ok(header.includes("handoff") && header.includes("next_skill") && header.includes("禁止静默兼容"), "header must reject shortened ids in handoffs");
 
 assert.ok(fence(wave1).includes("<FRESHNESS_MANIFEST>"), "Wave 1 must initialize freshness manifest");
 assert.ok(fence(wave2).includes("artifact_level=baseline-only"), "Wave 2 must mark generator output baseline-only");
+assert.equal((fence(wave2).match(/--unit "<UNITS>"/g) ?? []).length, 1, "Wave 2 must pass UNITS exactly once");
 assert.ok(fence(wave3).includes("人填 design-ready"), "Wave 3 must require human-filled design-ready evidence");
 assert.ok(fence(wave4).includes("人填 design-ready"), "Wave 4 must bind the filled packet, not a skeleton");
 assert.ok(fence(wave5).includes("denied") && fence(wave5).includes("重新进入 Wave 5"), "Wave 5 must define go reopen");
@@ -102,8 +129,10 @@ assert.ok(fence(wave7).includes("Delivery verified_with_residuals"), "Wave 7 mus
 
 assert.ok(playbook.includes("附录"), "playbook must point project-specific traps to an appendix");
 assert.ok(!playbook.includes("top_bar.do"), "hiapm-specific URLs must not stay in the generic paste block");
-assert.ok(appendix.includes("top_bar.do"), "appendix must carry hiapm-specific traps");
+assert.ok(appendix.includes("iframe-keep-A") && appendix.includes("keepOrigin: true"), "appendix must carry the stable hiapm top-bar boundary trap");
 assert.ok(appendix.includes("taskReport"), "appendix must carry report traps");
+assert.ok(appendix.includes("create.do"), "appendix must carry parent-shell traps");
+assert.ok(appendix.includes("<PROJECT_STATUS_SOURCE>"), "appendix must defer mutable status to the project status source");
 assert.ok(usage.includes("angularjs-to-vue3-host-migration-playbook.md"), "usage must point to the playbook");
 assert.ok(usage.includes(SKILL_ID), "usage must pin the complete skill id");
 assert.ok(usage.includes("_live-eval"), "usage must warn that live-eval output is not authoritative");

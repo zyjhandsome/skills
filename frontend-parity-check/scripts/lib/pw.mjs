@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import crypto from 'node:crypto';
 
 const PW_NAMES = ['playwright', 'playwright-core', '@playwright/test'];
 
@@ -121,3 +122,16 @@ export function normalizeText(text, patterns = []) {
 }
 
 export const slug = (s) => String(s).replace(/[^\w.-]+/g, '-').replace(/^-|-$/g, '') || 'x';
+
+/** Stable JSON used to prove both captures and compare used the same contract. */
+export function stableStringify(value) {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map((k) => `${JSON.stringify(k)}:${stableStringify(value[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+export function configFingerprint(config) {
+  return crypto.createHash('sha256').update(stableStringify(config)).digest('hex');
+}

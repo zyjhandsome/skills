@@ -137,6 +137,9 @@ GATE_ROWS = [
     ["behavior", "输入、校验、分支、成功/失败/空态/加载态", "待补证据"],
     ["permission", "菜单、路由、按钮隐藏/禁用、服务端拒绝", "待补证据"],
     ["url", "旧深链、query/hash、重定向、前进后退、外链", "待补证据"],
+    ["strategy", "身份、落地策略、切换处置分别有证据", "待补证据"],
+    ["comparison surface", "baseline/candidate、chrome、viewport、鉴权、环境、命中层已固定", "待补证据"],
+    ["host integration", "readiness、hit layer、事件/i18n、下载、构建 flags、ownership、测试数据", "待补证据"],
     ["source contract gates", "导航落地、比较/身份、共享弹窗、命中层、选择器-DOM、测试加载方式", "待补证据"],
     ["api", "端点、方法、参数/body、响应码、失败处理", "待补证据"],
     ["visual", "截图或测量证据；否则标 manual-only", "未测量前仅人工核对"],
@@ -158,6 +161,9 @@ DESIGN_READY_ROWS = [
     ["page closure", "已识别源仓模板/片段/脚本/controller/service/API/资产", "not-ready: empty-contract"],
     ["display-contract matrix", "每个源区域有稳定 DISP 行，partial-overlap 已填 B 现状", "not-ready: empty-contract"],
     ["matrix region split", "矩阵已按源区域拆行；仅有整页 (skeleton) 行即不合格", "not-ready: skeleton-only-matrix"],
+    ["unit decisions", "comparison status、身份、落地策略、切换处置分别填实", "not-ready: empty-contract"],
+    ["comparison surface", "baseline/candidate、chrome、viewport、鉴权、环境与命中层已固定", "not-ready: empty-contract"],
+    ["host integration", "宿主 readiness、事件/i18n、下载、build flags、ownership、数据可达性有处置", "not-ready: empty-contract"],
     ["host baseline gap", "宿主全局基线缺口表已填 A 侧依赖，host-missing/partial 项在本页有落地方式", "not-ready: empty-contract"],
     ["page-init", "run/controller init/定时器/首屏请求/默认筛选值已列出", "not-ready: empty-contract"],
     ["source i18n text", "源 zh/en 或模板文案原文已逐项记录，偏离有批准", "not-ready: empty-contract"],
@@ -223,6 +229,42 @@ DISPLAY_CONTRACT_HEADERS = [
     "启动副作用",
     "B 现状",
     "证据",
+]
+
+UNIT_DECISION_HEADERS = [
+    "unit",
+    "comparison_status",
+    "unit_identity_kind",
+    "landing_strategy",
+    "switch_disposition",
+    "decision_evidence",
+    "external_owner_or_approval",
+]
+
+COMPARISON_SURFACE_HEADERS = [
+    "unit",
+    "baseline_surface",
+    "candidate_surface",
+    "included_chrome",
+    "viewport",
+    "auth_session",
+    "environment_dependencies",
+    "allowed_normalization",
+    "hit_layer_expectation",
+    "evidence",
+]
+
+HOST_INTEGRATION_HEADERS = ["unit", "category", "contract", "status", "owner_or_evidence"]
+
+HOST_INTEGRATION_CATEGORIES = [
+    "host/session readiness",
+    "host chrome and hit layer",
+    "events and i18n",
+    "downloads/exports",
+    "build-time flags",
+    "existing host controls",
+    "file ownership/freeze",
+    "test-data reachability",
 ]
 
 
@@ -455,7 +497,7 @@ def actual_node_version() -> str:
         return "not measured"
 
 
-def detect_lint_on_save(root: Path) -> str:
+def detect_compile_diagnostics(root: Path) -> str:
     findings = []
     for filename in ("vue.config.js", "vue.config.cjs", "vue.config.mjs", "vue.config.ts"):
         text = read_text(root / filename)
@@ -480,6 +522,17 @@ def detect_lint_on_save(root: Path) -> str:
         overlay = re.search(r"\boverlay\s*:\s*(true|false)", text)
         if overlay:
             findings.append(f"server.hmr overlay={overlay.group(1)} ({filename})")
+
+    for filename in ("webpack.config.ts", "webpack.config.js", "webpack.config.mjs", "webpack.config.cjs"):
+        text = read_text(root / filename)
+        if not text:
+            continue
+        plugins = [name for name in ("ESLintPlugin", "ForkTsCheckerWebpackPlugin") if name in text]
+        if plugins:
+            findings.append(f"webpack diagnostic plugins: {', '.join(plugins)} ({filename})")
+        overlay = re.search(r"\boverlay\s*:\s*(true|false)", text)
+        if overlay:
+            findings.append(f"devServer overlay={overlay.group(1)} ({filename})")
 
     package = load_package_json(root)
     versions = package_versions(package)
@@ -578,7 +631,7 @@ def detect_host_stack(host: Path) -> list[dict[str, str]]:
         {"area": "i18n", "value": versions.get("vue-i18n", signal_value(host, "i18n")), "evidence": "package.json/source scan"},
         {"area": "proxy", "value": signal_value(host, "proxy"), "evidence": "vite/vue/webpack config scan"},
         {"area": "mpa", "value": detect_mpa(host), "evidence": "scripts/getpage.js and src/pages/*/*.ts scan"},
-        {"area": "lintOnSave / dev overlay", "value": detect_lint_on_save(host), "evidence": "vue.config.*/vite.config.*/package.json scan"},
+        {"area": "compile/diagnostic overlay", "value": detect_compile_diagnostics(host), "evidence": "vue.config.*/vite.config.*/webpack config/package.json scan"},
         {"area": "ts strict", "value": detect_ts_strict(host), "evidence": "tsconfig.json compilerOptions"},
         {"area": "formatter", "value": detect_formatter_config(host), "evidence": "Prettier/EditorConfig files"},
         {"area": "permission/auth", "value": signal_value(host, "permission"), "evidence": "source scan"},
@@ -1488,6 +1541,57 @@ def matching_units(units: list[str], row: dict[str, str]) -> list[str]:
     return [unit for unit in units if unit_matches_row(unit, row)]
 
 
+def unit_decision_rows(units: list[str], comparison: list[dict[str, str]]) -> list[dict[str, str]]:
+    rows = []
+    for unit in units:
+        matches = [row for row in comparison if unit_matches_row(unit, row)]
+        statuses = sorted({row.get("status", "unknown") for row in matches}) or ["unknown"]
+        rows.append(
+            {
+                "unit": unit,
+                "comparison_status": "|".join(statuses),
+                "unit_identity_kind": "[unresolved]",
+                "landing_strategy": "[unresolved]",
+                "switch_disposition": "[unresolved]",
+                "decision_evidence": "[human evidence required]",
+                "external_owner_or_approval": "[unresolved]",
+            }
+        )
+    return rows
+
+
+def comparison_surface_rows(units: list[str]) -> list[dict[str, str]]:
+    return [
+        {
+            "unit": unit,
+            "baseline_surface": "[unresolved]",
+            "candidate_surface": "[unresolved]",
+            "included_chrome": "[unresolved]",
+            "viewport": "[unresolved]",
+            "auth_session": "[unresolved]",
+            "environment_dependencies": "[unresolved]",
+            "allowed_normalization": "[unresolved]",
+            "hit_layer_expectation": "[unresolved]",
+            "evidence": "[human/runtime evidence required]",
+        }
+        for unit in units
+    ]
+
+
+def host_integration_rows(units: list[str]) -> list[dict[str, str]]:
+    return [
+        {
+            "unit": unit,
+            "category": category,
+            "contract": "[unresolved]",
+            "status": "not-ready",
+            "owner_or_evidence": "[unresolved]",
+        }
+        for unit in units
+        for category in HOST_INTEGRATION_CATEGORIES
+    ]
+
+
 def display_contract_rows(comparison: list[dict[str, str]], units: list[str] | None = None) -> list[dict[str, str]]:
     selected = units or []
     rows = []
@@ -1516,16 +1620,74 @@ def display_contract_rows(comparison: list[dict[str, str]], units: list[str] | N
     return rows
 
 
-def verify_one_unit(unit: str, comparison: list[dict[str, str]]) -> dict[str, str]:
+def split_markdown_table_row(line: str) -> list[str]:
+    content = line.strip().strip("|")
+    return [cell.strip().replace(r"\|", "|") for cell in re.split(r"(?<!\\)\|", content)]
+
+
+def parse_markdown_matrix(path: Path) -> list[dict[str, str]]:
+    lines = read_text(path).splitlines()
+    for index, line in enumerate(lines):
+        if not line.lstrip().startswith("|") or "DISP-ID" not in line or "B 现状" not in line:
+            continue
+        headers = split_markdown_table_row(line)
+        rows = []
+        for candidate in lines[index + 2 :]:
+            if not candidate.lstrip().startswith("|"):
+                break
+            values = split_markdown_table_row(candidate)
+            if len(values) != len(headers):
+                continue
+            rows.append(dict(zip(headers, values)))
+        return rows
+    return []
+
+
+def load_persisted_matrix(path_value: str) -> list[dict[str, str]]:
+    path = Path(path_value).resolve()
+    if not path.is_file():
+        raise SystemExit(f"persisted matrix not found: {path}")
+    if path.suffix.lower() == ".csv":
+        with path.open("r", encoding="utf-8-sig", newline="") as handle:
+            rows = [dict(row) for row in csv.DictReader(handle)]
+    else:
+        rows = parse_markdown_matrix(path)
+    if not rows or any("DISP-ID" not in row or "B 现状" not in row for row in rows):
+        raise SystemExit(f"persisted matrix has no readable DISP-ID/B 现状 table: {path}")
+    return rows
+
+
+def matrix_row_matches_unit(unit: str, row: dict[str, str]) -> bool:
+    owners = [piece.strip() for piece in re.split(r"[|,，]", row.get("迁移单元", "")) if piece.strip()]
+    if owners:
+        return unit in owners
+    return slugify(unit) in slugify(row.get("DISP-ID", ""))
+
+
+def verify_one_unit(
+    unit: str,
+    comparison: list[dict[str, str]],
+    persisted_matrix: list[dict[str, str]] | None,
+) -> dict[str, str]:
     matches = [row for row in comparison if unit_matches_row(unit, row)]
     if not matches:
         return {"unit": unit, "status": "fail", "reason": "selected unit has no source/host comparison row"}
     if any(row.get("status") == "unmigrated" for row in matches):
         return {"unit": unit, "status": "fail", "reason": "selected unit is unmigrated"}
-    matrix_rows = display_contract_rows(comparison, [unit])
+    if persisted_matrix is None:
+        return {
+            "unit": unit,
+            "status": "not-evaluated",
+            "reason": "verify requires --matrix with the persisted human-filled display-contract ledger",
+        }
+    matrix_rows = [
+        row
+        for row in persisted_matrix
+        if matrix_row_matches_unit(unit, row) and row.get("row_lifecycle", "active") == "active"
+    ]
     if not matrix_rows:
         return {"unit": unit, "status": "fail", "reason": "selected unit has no display-contract matrix rows"}
-    if any("(skeleton)" in row["DISP-ID"] for row in matrix_rows):
+    if any("(skeleton)" in row.get("DISP-ID", "") for row in matrix_rows):
         return {
             "unit": unit,
             "status": "fail",
@@ -1543,7 +1705,7 @@ def verify_one_unit(unit: str, comparison: list[dict[str, str]]) -> dict[str, st
 def verification_unit_results(args, data: dict) -> list[dict[str, str]]:
     if args.mode != "verify":
         return []
-    return [verify_one_unit(unit, data["comparison"]) for unit in args.units]
+    return [verify_one_unit(unit, data["comparison"], data["persisted_matrix"]) for unit in args.units]
 
 
 def verification_result(args, data: dict) -> dict[str, str]:
@@ -1552,10 +1714,16 @@ def verification_result(args, data: dict) -> dict[str, str]:
     if not args.units:
         return {"status": "fail", "reason": "verify requires --unit to bind evidence"}
     per_unit = data["verification_units"]
-    failed = [result["unit"] for result in per_unit if result["status"] != "pass"]
+    failed = [result["unit"] for result in per_unit if result["status"] == "fail"]
     if failed:
         # One failing unit fails the batch. A batch never averages its units.
         return {"status": "fail", "reason": f"units not verified: {', '.join(failed)}"}
+    not_evaluated = [result["unit"] for result in per_unit if result["status"] == "not-evaluated"]
+    if not_evaluated:
+        return {
+            "status": "not-evaluated",
+            "reason": f"persisted matrix required for: {', '.join(not_evaluated)}",
+        }
     return {
         "status": "pass",
         "reason": f"all {len(per_unit)} unit(s) verified, manual-verified, or approved-deviation",
@@ -1831,6 +1999,18 @@ def build_markdown(args, data: dict) -> str:
             "多个 unit 会碰的宿主面必须由唯一任务组独占修改，并作为前置组先落地；其余 unit 只读依赖。",
             labeled_table(data["batch_shared_surface"], [(header, header) for header in BATCH_SHARED_SURFACE_HEADERS]),
             "",
+            "## UNIT 四维决策",
+            "comparison status、身份、落地策略与切换处置分开填写；不要创造组合状态。",
+            labeled_table(data["unit_decisions"], [(header, header) for header in UNIT_DECISION_HEADERS]),
+            "",
+            "## Comparison Surface",
+            "未固定 chrome、viewport、登录态、环境依赖和命中层前，视觉报告只能作为诊断。",
+            labeled_table(data["comparison_surfaces"], [(header, header) for header in COMPARISON_SURFACE_HEADERS]),
+            "",
+            "## Host Integration Checklist",
+            "每类必须填合同与证据，或明确标为 not-applicable。",
+            labeled_table(data["host_integration"], [(header, header) for header in HOST_INTEGRATION_HEADERS]),
+            "",
             "## 页面闭包合同",
             table(["项", "证据"], [
                 ["源仓模板/片段", "从源码填写"],
@@ -1852,6 +2032,22 @@ def build_markdown(args, data: dict) -> str:
             dict_table(data["display_contract"], DISPLAY_CONTRACT_HEADERS),
         ])
 
+    if mode == "assess" and args.units:
+        lines.extend([
+            "",
+            "## UNIT 四维决策基线",
+            "comparison status、身份、落地策略与切换处置分开填写；脚本不替人推断后三者。",
+            labeled_table(data["unit_decisions"], [(header, header) for header in UNIT_DECISION_HEADERS]),
+            "",
+            "## Comparison Surface 基线",
+            "未固定 chrome、viewport、登录态、环境依赖和命中层前，视觉报告只能作为诊断。",
+            labeled_table(data["comparison_surfaces"], [(header, header) for header in COMPARISON_SURFACE_HEADERS]),
+            "",
+            "## Host Integration Checklist 基线",
+            "每类必须填合同与证据，或明确标为 not-applicable。",
+            labeled_table(data["host_integration"], [(header, header) for header in HOST_INTEGRATION_HEADERS]),
+        ])
+
     if mode == "assess" and data["display_contract"]:
         lines.extend([
             "",
@@ -1865,7 +2061,7 @@ def build_markdown(args, data: dict) -> str:
         lines.extend([
             "",
             "## 领域复核结论",
-            "批次结论不取平均：任一 unit 未结清，整批为 fail。",
+            "批次结论不取平均。未提供持久化 MATRIX 时结果为 not-evaluated；任一已评估 unit 未结清时整批为 fail。",
             table(["状态", "原因"], [[result["status"], result["reason"]]]),
             "",
             "### 逐单元结论",
@@ -1956,10 +2152,14 @@ def collect_data(args) -> dict:
         "recommended_units": recommended_units(comparison, url_entry_mapping),
         "host_baseline_gap": host_baseline_gap_rows(host),
         "design_scope_gate": repair_scope_gate(comparison),
+        "persisted_matrix": load_persisted_matrix(args.matrix) if args.matrix else None,
     }
     data["batch_admission"] = batch_admission_rows(args.units, comparison, data["design_scope_gate"])
     data["batch_shared_surface"] = batch_shared_surface_rows(host, data["batch_admission"], comparison)
-    data["display_contract"] = display_contract_rows(comparison, args.units)
+    data["unit_decisions"] = unit_decision_rows(args.units, comparison)
+    data["comparison_surfaces"] = comparison_surface_rows(args.units)
+    data["host_integration"] = host_integration_rows(args.units)
+    data["display_contract"] = data["persisted_matrix"] or display_contract_rows(comparison, args.units)
     data["verification_units"] = verification_unit_results(args, data)
     data["verification_result"] = verification_result(args, data)
     return data
@@ -2000,6 +2200,9 @@ def write_outputs(args, data: dict) -> None:
         if args.units:
             write_dict_csv(csv_dir / "17-batch-admission.csv", data["batch_admission"], BATCH_ADMISSION_HEADERS)
             write_dict_csv(csv_dir / "18-batch-shared-surface.csv", data["batch_shared_surface"], BATCH_SHARED_SURFACE_HEADERS)
+            write_dict_csv(csv_dir / "19-unit-decisions.csv", data["unit_decisions"], UNIT_DECISION_HEADERS)
+            write_dict_csv(csv_dir / "20-comparison-surface.csv", data["comparison_surfaces"], COMPARISON_SURFACE_HEADERS)
+            write_dict_csv(csv_dir / "21-host-integration.csv", data["host_integration"], HOST_INTEGRATION_HEADERS)
         if args.mode == "verify":
             write_dict_csv(csv_dir / "16-verify-result.csv", [data["verification_result"]], ["status", "reason"])
             write_dict_csv(csv_dir / "16b-verify-units.csv", data["verification_units"], ["unit", "status", "reason"])
@@ -2026,6 +2229,10 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument("--profile", choices=["repair"], help="Optional read-only design profile for shell-page repair contracts.")
+    parser.add_argument(
+        "--matrix",
+        help="Persisted human-filled display-contract ledger (.csv or Markdown). Required for an evaluated verify result.",
+    )
     parser.add_argument("--output-dir", default="reports/angularjs-vue3-migration")
     parser.add_argument("--format", choices=["markdown", "html", "csv", "all"], default="all")
     parser.add_argument("--source-acquisition-warning", default="", help="Optional warning from source repo clone/fetch, recorded as evidence.")
