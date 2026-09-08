@@ -9,8 +9,10 @@ node scripts/preflight.mjs --channel msedge   # 只验证某个本机浏览器
 ```
 
 输出 JSON 含：Node 版本、Playwright 是否可解析及来源路径、浏览器缓存目录与已装内核、
-是否能真实启动（会实打实拉起一次浏览器）、`channels`（本机浏览器探测结果）、
+是否能真实启动（会实打实拉起一次无头浏览器）、`channels`（本机浏览器探测结果）、
 `useConfig`（**照抄进配置文件即可用的启动配置**）、`ready` 布尔值。
+无头预检不能证明桌面窗口已出现；交互登录必须以运行时的 `LOGIN_WINDOW_READY visible:true`
+握手为准。
 
 解析顺序：项目 `node_modules` → `NODE_PATH` → 平台全局目录 → `npm root -g`。
 因此**全局安装的 Playwright 也能直接用**，无需在被测项目里装依赖。
@@ -67,12 +69,13 @@ preflight 报出可用 channel 后，写进配置（两侧共用，保证可比�
 
 ## 登录态
 
-### 推荐：自动探测，必要时打开专用浏览器
+### 推荐：我来登录，完成后回复「已登录」
 
 默认选择 `auth.mode=auto-interactive`，既覆盖免登录页面，也覆盖账号密码、扫码、MFA、企业 SSO：
 
 ```bash
 node scripts/prepare-auth.mjs --config parity-config.json --side baseline
+# baseline 完成后再执行 candidate
 node scripts/prepare-auth.mjs --config parity-config.json --side candidate
 ```
 
@@ -80,10 +83,15 @@ node scripts/prepare-auth.mjs --config parity-config.json --side candidate
 
 1. 有旧 `storageState` 就先验证它；没有则用干净无头会话对首个 route/journey 做短探测。
 2. URL、`compareSurface` 与 `waitFor` / `readySelector` 先通过，再保持 `readyHoldMs` 后仍通过，才保存/复用，不打开窗口。
-3. 未就绪（含登录 URL、登录表单、扫码/SSO、waitFor 没命中）立刻打开 Skill 专用浏览器。
-   用户在窗口里自行登录，无需把密码交给 AI，也无需回复“登录好了”。
+3. 未就绪（含登录 URL、登录表单、扫码/SSO、waitFor 没命中）尝试打开 Skill 专用浏览器。
+   只有输出 `LOGIN_WINDOW_READY` 且 `visible:true` 才算开窗成功；只看到“准备创建”不算。
+   用户在窗口里自行登录，不要把密码交给 AI；完成后在对话回复「已登录」。
+   Agent 必须把 `prepare-auth` 放到后台，确认握手后结束本轮，收到回复再跑 `--confirm`。
+   baseline 与 candidate 逐侧完成，禁止同时弹窗后让用户猜“最新窗口”。
 4. `--force-interactive` 只保证第 3 步会开窗，**不跳过**第 1–2 步。采集作废后重跑不要加这个开关。
-5. 关窗前用刚写出的 `storageState` 冷启动再打开目标 URL；仍通过才报 `ready`。假就绪不落盘，窗口保持打开继续等。
+5. 关窗前用候选 `storageState` 冷启动再打开目标 URL；仍通过才替换正式文件并报 `ready`。
+   假就绪不会破坏上一份已验证会话。
+   用户确认后若仍未就绪，立刻退出并打印原因，不再干等。页面自己就绪时仍会自动保存。
 
 默认等待 10 分钟，profile 保存在 `auth/profiles/<name>/<side>`，状态保存在
 `auth/<side>.json`；二者都应被 Git 忽略。不要把 `profileDir` 指向日常 Chrome/Edge 用户目录，

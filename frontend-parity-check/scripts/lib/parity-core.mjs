@@ -135,7 +135,88 @@ export function resolveSurface(cfg = {}, route = {}, side) {
 /** styleProbes execute in document.querySelectorAll, not Playwright's selector engine. */
 export function configValidationErrors(cfg = {}) {
   const errors = [];
+  const regex = (value, where) => {
+    if (value === undefined || value === null || value === '') return;
+    if (typeof value !== 'string') {
+      errors.push(`${where} 必须是正则字符串`);
+      return;
+    }
+    try { new RegExp(value); } catch (error) {
+      errors.push(`${where} 不是有效正则：${String(error?.message || error).split('\n')[0]}`);
+    }
+  };
+  const regexList = (value, where) => {
+    if (value === undefined) return;
+    if (!Array.isArray(value)) {
+      errors.push(`${where} 必须是正则字符串数组`);
+      return;
+    }
+    value.forEach((item, i) => regex(item, `${where}[${i}]`));
+  };
+  const landed = (value, where) => {
+    if (!value || typeof value !== 'object') return;
+    regexList(value.allowUrl, `${where}.allowUrl`);
+    regexList(value.forbidUrl, `${where}.forbidUrl`);
+    regex(value.requireUrl, `${where}.requireUrl`);
+    landed(value.baseline, `${where}.baseline`);
+    landed(value.candidate, `${where}.candidate`);
+  };
+  const surface = (value, where) => {
+    if (!value || typeof value !== 'object') return;
+    regex(value.mainUrlPattern, `${where}.mainUrlPattern`);
+    regex(value.frameUrlPattern, `${where}.frameUrlPattern`);
+    surface(value.baseline, `${where}.baseline`);
+    surface(value.candidate, `${where}.candidate`);
+  };
+
+  if (cfg.dataParity !== undefined && !['same-data', 'different-data'].includes(cfg.dataParity)) {
+    errors.push('dataParity 只能是 same-data 或 different-data');
+  }
+  if (cfg.styleIntent !== undefined && !['pixel-parity', 'redesign-allowed'].includes(cfg.styleIntent)) {
+    errors.push('styleIntent 只能是 pixel-parity 或 redesign-allowed');
+  }
+  if (cfg.browser !== undefined && !['chromium', 'firefox', 'webkit'].includes(cfg.browser)) {
+    errors.push('browser 只能是 chromium、firefox 或 webkit');
+  }
+  for (const key of ['timeoutMs', 'navTimeoutMs', 'networkIdleTimeoutMs']) {
+    const value = cfg.context?.[key];
+    if (value !== undefined && (!Number.isFinite(Number(value)) || Number(value) <= 0)) {
+      errors.push(`context.${key} 必须是正数`);
+    }
+  }
+  (cfg.context?.viewports || []).forEach((viewport, i) => {
+    if (!viewport?.name) errors.push(`context.viewports[${i}].name 必填`);
+    for (const key of ['width', 'height']) {
+      if (!Number.isFinite(Number(viewport?.[key])) || Number(viewport[key]) <= 0) {
+        errors.push(`context.viewports[${i}].${key} 必须是正数`);
+      }
+    }
+  });
+  const thresholdRanges = {
+    pixelDiffRatio: [0, 1], pixelChannelTolerance: [0, 255],
+    layoutTolerancePx: [0, Infinity], layoutToleranceRatio: [0, Infinity],
+    settleMs: [0, Infinity], styleAggregateMinProbes: [1, Infinity],
+  };
+  for (const [key, [min, max]] of Object.entries(thresholdRanges)) {
+    const value = cfg.thresholds?.[key];
+    if (value === undefined) continue;
+    const number = Number(value);
+    if (!Number.isFinite(number) || number < min || number > max) {
+      errors.push(`thresholds.${key} 必须是 ${min}–${max === Infinity ? '∞' : max} 的数值`);
+    }
+  }
   if (cfg.channel && cfg.executablePath) errors.push('channel 与 executablePath 只能配置一个');
+  landed(cfg.assertLanded, 'assertLanded');
+  surface(cfg.compareSurface, 'compareSurface');
+  regexList(cfg.maskTextPatterns, 'maskTextPatterns');
+  for (const key of ['ignoreConsolePatterns', 'ignoreRequestPatterns', 'blockRequestPatterns', 'majorRequestPatterns']) {
+    regexList(cfg.runtimePolicy?.[key], `runtimePolicy.${key}`);
+  }
+  if (cfg.urlNormalizeRules !== undefined && !Array.isArray(cfg.urlNormalizeRules)) {
+    errors.push('urlNormalizeRules 必须是数组');
+  } else {
+    (cfg.urlNormalizeRules || []).forEach((rule, i) => regex(rule?.pattern, `urlNormalizeRules[${i}].pattern`));
+  }
   const playwrightOnly = /:has-text\s*\(|(^|[\s,])text=|>>|(^|[\s,])role=/i;
   const inspect = (p, where) => {
     if (!p?.id) errors.push(`${where}.id 必填`);
@@ -167,8 +248,34 @@ export function configValidationErrors(cfg = {}) {
       && !action.selector && (!action.baselineSelector || !action.candidateSelector)) {
       errors.push(`${where} 必须提供 selector，或同时提供 baselineSelector/candidateSelector`);
     }
+    if (action?.type === 'waitForUrl') {
+      if (!action.pattern) errors.push(`${where}.pattern 必填`);
+      else regex(action.pattern, `${where}.pattern`);
+    }
   };
+  const allItems = [...(cfg.routes || []).map((item) => ({ kind: 'route', item })),
+    ...(cfg.journeys || []).map((item) => ({ kind: 'journey', item }))];
+  const ids = new Set();
+  for (const { kind, item } of allItems) {
+    const where = `${kind}s[${kind === 'route' ? (cfg.routes || []).indexOf(item) : (cfg.journeys || []).indexOf(item)}]`;
+    if (!item?.id) errors.push(`${where}.id 必填`);
+    else if (ids.has(item.id)) errors.push(`${where}.id 重复：${item.id}`);
+    else ids.add(item.id);
+    landed(item?.assertLanded, `${where}.assertLanded`);
+    surface(item?.compareSurface, `${where}.compareSurface`);
+  }
   for (const side of ['baseline', 'candidate']) {
+    if (!cfg[side]) continue;
+    const sideCfg = cfg[side] || {};
+    if (!sideCfg.baseUrl) errors.push(`${side}.baseUrl 必填`);
+    else {
+      try {
+        const url = new URL(sideCfg.baseUrl);
+        if (!['http:', 'https:'].includes(url.protocol)) throw new Error('只支持 http/https');
+      } catch (error) {
+        errors.push(`${side}.baseUrl 不是有效的 HTTP(S) URL：${String(error?.message || error)}`);
+      }
+    }
     const auth = cfg[side]?.auth || {};
     if (auth.mode && auth.mode !== 'auto-interactive') {
       errors.push(`${side}.auth.mode 不支持：${auth.mode}（当前仅需为交互模式显式设置 auto-interactive）`);
@@ -179,11 +286,26 @@ export function configValidationErrors(cfg = {}) {
     if (auth.interactive?.channel && auth.interactive?.executablePath) {
       errors.push(`${side}.auth.interactive.channel 与 executablePath 只能配置一个`);
     }
-    for (const key of ['timeoutMs', 'probeTimeoutMs', 'readinessTimeoutMs']) {
+    for (const key of ['timeoutMs', 'probeTimeoutMs', 'readinessTimeoutMs', 'waitSliceMs', 'heartbeatMs']) {
       const value = auth.interactive?.[key];
       if (value !== undefined && (!Number.isFinite(Number(value)) || Number(value) <= 0)) {
         errors.push(`${side}.auth.interactive.${key} 必须是正数`);
       }
+    }
+    const readyHoldMs = auth.interactive?.readyHoldMs;
+    if (readyHoldMs !== undefined && (!Number.isFinite(Number(readyHoldMs)) || Number(readyHoldMs) < 0)) {
+      errors.push(`${side}.auth.interactive.readyHoldMs 必须是非负数`);
+    }
+    regex(auth.interactive?.successUrlPattern, `${side}.auth.interactive.successUrlPattern`);
+    if (auth.mode === 'auto-interactive') {
+      const first = (cfg.routes || [])[0] || (cfg.journeys || [])[0];
+      const resolvedSurface = resolveSurface(cfg, first || {}, side);
+      const readySelector = auth.interactive?.readySelector
+        || resolvedSurface.readySelector
+        || first?.waitFor?.[`${side}Selector`]
+        || first?.waitFor?.selector;
+      if (!first) errors.push('routes 或 journeys 至少配置一项，才能验证登录后落地页');
+      else if (!readySelector) errors.push(`${side}.auth.mode=auto-interactive 时首个 route/journey 必须配置登录后 readySelector/waitFor`);
     }
     (auth.actions || []).forEach((a, i) => inspectAction(a, `${side}.auth.actions[${i}]`));
   }

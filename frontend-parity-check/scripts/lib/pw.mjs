@@ -96,6 +96,18 @@ export function parseArgs(argv) {
   return args;
 }
 
+/** Collect repeatable CLI options without changing parseArgs' scalar contract. */
+export function repeatedArgValues(argv = [], key) {
+  const flag = `--${key}`;
+  const prefix = `${flag}=`;
+  const values = [];
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === flag && argv[i + 1] && !argv[i + 1].startsWith('--')) values.push(argv[++i]);
+    else if (argv[i].startsWith(prefix)) values.push(argv[i].slice(prefix.length));
+  }
+  return values;
+}
+
 /** Strip origin + volatile query/hash noise so two hosts compare equal. */
 export function normalizeUrl(url, origins = []) {
   if (typeof url !== 'string' || !url) return url;

@@ -64,10 +64,25 @@ node scripts/selftest/run.mjs     # 含 unit.mjs；也可单独跑 node scripts/
 
 1. **两个 URL**：baseline（升级前）与 candidate（升级后）的可访问地址；若路由不同，
    给出每个页面的路径映射。
-2. **登录方式**：首选 **自动探测 + 未就绪才开窗**（`auto-interactive`）；
-   其余选项是免登录、从用户现有浏览器导出会话、测试账号、其他。
+2. **登录方式**：问的时候 `AskQuestion` 的选项 label **必须逐字**如下（第一项放首位并标推荐）：
+
+   1. 我来登录，完成后回复「已登录」（推荐）
+   2. 免登录直接可访问
+   3. 从我的浏览器导出会话
+   4. 提供测试账号
+
+   用户没特别偏好时采用第 1 项（`auto-interactive`）。不要改写成「自动探测加我手动登录」，
+   也不要砍成 3 项。交互组件自带的 `Other/其他` 保留。
    - **每址最多弹一次登录窗。** 固定顺序：已有 `storageState` → 无头验证 → 通过则静默结束 →
      失败才开窗。用户说“我来登录”只保证第三步会开窗，**不跳过复用**。
+   - 只有脚本输出 `LOGIN_WINDOW_READY`（且 `visible:true`）后，才可以说窗口已经创建。
+     “准备创建”不是成功；若进程先退出，直接回报启动错误，禁止让用户寻找不存在的窗口。
+   - 确认开窗后**立刻结束本轮**，告诉用户准确的 side 和目标地址：在该窗口登录，完成后回复
+     「已登录」，不要发密码。若窗口未置顶，提示从任务栏或 Alt+Tab 查找，不要称“最新窗口”。
+     **禁止**说「不用回复」。**禁止**在同一轮对话里死等 `timeoutMs`（默认 10 分钟）。
+   - 用户回复「已登录」后立刻执行
+     `node scripts/prepare-auth.mjs --config <file> --side <side> --confirm`，
+     让后台窗口马上校验并保存；未就绪要把脚本打印的原因原样告诉用户。
    - 不要加 `--skip-probe`（自检/调试专用）。不要因为用户说了“我来登录”就加
      `--force-interactive` 去跳过探测——该开关现在只表示「未就绪必须开窗」。
    - 采集因 SSO 作废后重跑：先 `prepare-auth`（不加 force / skip-probe）。探测失败再开窗。
@@ -88,7 +103,8 @@ node scripts/selftest/run.mjs     # 含 unit.mjs；也可单独跑 node scripts/
    - 宿主 Header、侧栏等已确认不在验收范围内的区域写进 `exclude`，统一作用于 L2–L5。
 
 用户没主动给的，用 `AskQuestion` 一次性问齐，不要边跑边猜。
-提问模板见 `references/ask-template.md`（也可直接发给用户，让其照填）。
+登录题的 4 个 label 以本节第 2 条为准，不要自行改写。
+其余填表见 `references/ask-template.md`（也可直接发给用户，让其照填）。
 
 ### 第 2 步：写配置文件
 
@@ -122,17 +138,36 @@ node scripts/selftest/run.mjs     # 含 unit.mjs；也可单独跑 node scripts/
 
 ### 第 3 步：双侧采集
 
-`auth.mode=auto-interactive` 时，写完配置后**立刻**准备两侧登录态，不要先自己打开目标站探究：
+`auth.mode=auto-interactive` 时，写完配置后按 **baseline → candidate** 逐侧准备登录态，
+不要先自己打开目标站探究，也不要同时弹两个窗口：
 
 ```bash
-node scripts/prepare-auth.mjs --config parity-config.json --side baseline
-node scripts/prepare-auth.mjs --config parity-config.json --side candidate
+node scripts/prepare-auth.mjs --config parity-config.json --side baseline   # 后台运行
+# baseline ready 后再启动 candidate；需要登录时先完成本侧再继续
+node scripts/prepare-auth.mjs --config parity-config.json --side candidate  # 后台运行
 ```
 
-启动前先告诉用户：**如果弹出浏览器，请在该窗口登录；不用回复「登录好了」，也不要把密码发给我。**
-已有会话仍有效、或页面免登录时，命令会在几秒内无头结束，不再开窗。未就绪才打开专用窗口。
-脚本在关窗前会用刚写出的 `storageState` 再冷启动校验一次，通过才报 `ready`。
-超时、窗口被关闭、仍停在 SSO 页、或冷启动失败时不得继续采集。
+已有会话仍有效、或页面免登录时，命令会在几秒内无头结束，不再开窗。
+未就绪才会尝试打开专用窗口。`prepare-auth` 必须保持在后台运行，并等待下面两类真实结果：
+
+- 输出 JSON `status=ready`：本侧完成，继续下一侧；
+- 输出 `LOGIN_WINDOW_READY` 且 `visible:true`：窗口确实创建成功，此时才告诉用户：
+
+**已创建 `<side>` 登录窗口，目标为 `<targetUrl>`。请在该窗口登录；完成后回复「已登录」。
+不要把密码发给我。若窗口未置顶，请从任务栏或 Alt+Tab 打开。**
+
+如果只看到“准备创建”后进程退出，或没有 `LOGIN_WINDOW_READY`，应把脚本错误原样告诉用户，
+不得声称窗口已打开。重复执行同一 side 时，脚本会复用仍在等待的窗口并拒绝再开一个。
+
+页面自己回到目标页并命中 `waitFor` 时仍会自动保存。用户回复后只对当前正在等待的 side 执行：
+
+```bash
+node scripts/prepare-auth.mjs --config parity-config.json --side <side> --confirm
+```
+
+`--confirm` 只接受仍有活跃登录进程的 side；孤立或过期确认会被拒绝，不会污染下一轮。
+脚本收到确认会马上校验并保存；未就绪、仍停在 SSO、或冷启动失败时立刻退出并打印原因，不再干等。
+超时、窗口被关闭、或确认后仍未就绪时不得继续采集。
 
 **禁止**用 WebSearch、浏览器工具或手动点页面来“搞清楚怎么登录”。那是用户的事，不是探测循环。
 
@@ -214,6 +249,9 @@ node scripts/compare.mjs --config parity-config.json
 - 修改被测站点的任何源码——本技能只做取证与判定。
 - 目标页未就绪时自己探究 SSO / 改 waitFor / 反复无头重试，而不是打开登录窗口让用户登录。
 - 已有 `storageState` 时为了「用户说过要登录」再弹一次窗。重跑先探测；只有探测失败再开窗。
+- 开登录窗后说「不用回复」或在同一轮死等 10 分钟。必须等用户回复「已登录」再 `--confirm`。
+- 未看到 `LOGIN_WINDOW_READY visible:true` 就声称窗口已经打开，或同时打开 baseline/candidate 让用户猜窗口。
+- 把登录题改写成「自动探测加我手动登录」或只给 3 项。AskQuestion label 必须逐字用第 1 步那 4 条。
 - 用登录前就存在的壳节点当登录成功，或把未通过冷启动校验的会话当成 `ready`。
 
 ## 参考文件
@@ -225,4 +263,4 @@ node scripts/compare.mjs --config parity-config.json
 - `templates/parity-config.json`：列表/表单页的完整配置样例
 - `templates/parity-config-hosted-iframe.json`：托管页 + iframe 壳 + 看板的配置样例
 - `scripts/export-storage-state.mjs`：从用户已登录的浏览器导出 `storageState`
-- `scripts/prepare-auth.mjs`：先探测已有会话；未就绪才开窗；关窗前冷启动校验，假就绪不落盘
+- `scripts/prepare-auth.mjs`：先探测已有会话；未就绪才开窗并等用户回复「已登录」；`--confirm` 立刻校验，假就绪不落盘

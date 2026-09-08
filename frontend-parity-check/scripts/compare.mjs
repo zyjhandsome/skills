@@ -9,6 +9,7 @@ import {
 } from './lib/pw.mjs';
 import {
   buildPathTokens, normalizeRouteUrl, landingVerdict, aggregateStyleDrift, unreadableFrames,
+  configValidationErrors,
 } from './lib/parity-core.mjs';
 
 const args = parseArgs(process.argv.slice(2));
@@ -18,6 +19,15 @@ if (!args.config) {
 }
 const configPath = path.resolve(args.config);
 const cfg = readJson(configPath) || {};
+if (!cfg.baseline?.baseUrl || !cfg.candidate?.baseUrl) {
+  console.error('配置必须同时提供 baseline.baseUrl 与 candidate.baseUrl');
+  process.exit(2);
+}
+const configErrors = configValidationErrors(cfg);
+if (configErrors.length) {
+  console.error(`配置校验失败：\n- ${configErrors.join('\n- ')}`);
+  process.exit(2);
+}
 const outRoot = args.out
   ? path.resolve(args.out)
   : path.resolve(path.dirname(configPath), cfg.outputDir || path.join('parity-runs', slug(cfg.name || 'unnamed')));
@@ -110,23 +120,33 @@ function networkSeverity(entry) {
 
 // ---------- L5: pixel diff, computed inside Playwright's own Chromium ----------
 let browser = null;
+let browserLaunchError = null;
 async function getBrowser() {
   if (browser) return browser;
+  if (browserLaunchError) return null;
   const pw = await loadPlaywright(process.cwd());
-  if (!pw) return null;
+  if (!pw) {
+    browserLaunchError = 'playwright unavailable';
+    return null;
+  }
   // Same launch options as capture: on a locked-down machine only `channel` works.
   const options = { headless: true };
   const channel = args.channel || cfg.channel;
   const executablePath = args.executablePath || cfg.executablePath;
   if (channel) options.channel = channel;
   if (executablePath) options.executablePath = executablePath;
-  browser = await pw[cfg.browser || 'chromium'].launch(options);
+  try {
+    browser = await pw[cfg.browser || 'chromium'].launch(options);
+  } catch (error) {
+    browserLaunchError = String(error?.message || error).split('\n')[0];
+    return null;
+  }
   return browser;
 }
 
 async function pixelDiff(aPath, bPath, outPath) {
   const b = await getBrowser();
-  if (!b) return { skipped: 'playwright unavailable' };
+  if (!b) return { skipped: browserLaunchError || 'playwright unavailable' };
   const page = await b.newPage();
   try {
     const toData = (p) => 'data:image/png;base64,' + fs.readFileSync(p).toString('base64');
@@ -229,6 +249,12 @@ function compareRuntime(stateId, a, b) {
     if (entry.status === 'error') {
       add({ layer: 'L0', severity: 'block', state: stateId, item: `${side} 采集失败`, invalidates: true,
         detail: `${entry.error}${entry.url ? `（停留在 ${entry.url}）` : ''} — 本状态证据作废` });
+      valid = false;
+      continue;
+    }
+    if (entry.httpStatus !== null && entry.httpStatus !== undefined && Number(entry.httpStatus) >= 400) {
+      add({ layer: 'L0', severity: 'block', state: stateId, item: `${side} HTTP ${entry.httpStatus}`, invalidates: true,
+        detail: `${entry.url || '未知 URL'} — 服务端错误页不能作为一致性证据` });
       valid = false;
       continue;
     }
@@ -579,6 +605,10 @@ for (const key of stateKeys) {
   let pixel = { skipped: 'screenshot missing' };
   if (fs.existsSync(shotA) && fs.existsSync(shotB)) {
     pixel = await pixelDiff(shotA, shotB, path.join(outRoot, 'diff', `${key.replace(/[|/\\]/g, '__')}.png`));
+    if ((pixel.skipped || pixel.error) && STYLE_INTENT === 'pixel-parity') {
+      add({ layer: 'L5', severity: 'block', state: key, item: '像素证据生成失败', invalidates: true,
+        detail: `${pixel.skipped || pixel.error} — 本状态不能宣称视觉一致` });
+    }
     if (pixel.sizeMismatch) {
       add({ layer: 'L5', severity: 'minor', state: key, item: '截图尺寸不一致',
         detail: `baseline=${pixel.baselineSize?.join('x')} / candidate=${pixel.candidateSize?.join('x')}` });
@@ -589,10 +619,13 @@ for (const key of stateKeys) {
         detail: `热点区域：${(pixel.hotspots || []).map((h) => h.region).slice(0, 3).join('；') || '分散'}`,
         image: pixel.diffImage });
     }
+  } else if (STYLE_INTENT === 'pixel-parity') {
+    add({ layer: 'L5', severity: 'block', state: key, item: '截图证据缺失', invalidates: true,
+      detail: `${!fs.existsSync(shotA) ? 'baseline' : 'candidate'} 截图不存在 — 本状态不能宣称视觉一致` });
   }
   stateResults.push({
     key, routeId: a.routeId, viewport: a.viewport, pixel,
-    valid: true,
+    valid: STYLE_INTENT !== 'pixel-parity' || !(pixel.skipped || pixel.error),
     baselineShot: path.relative(outRoot, shotA).replace(/\\/g, '/'),
     candidateShot: path.relative(outRoot, shotB).replace(/\\/g, '/'),
   });
@@ -608,7 +641,7 @@ const parityCount = (sev) => parityFindings.filter((f) => f.severity === sev).le
 const parityVerdict = parityCount('block') ? 'fail' : parityCount('major') ? 'warn' : 'pass';
 const validJourneyEvidence = contractComparable && (baseLog.journeys || []).some((a) => {
   const b = (candLog.journeys || []).find((j) => j.id === a.id);
-  return b && !a.invalid && !b.invalid;
+  return b && a.status === 'ok' && b.status === 'ok' && !a.invalid && !b.invalid;
 });
 const evidenceStatus = invalidated.length
   ? (stateResults.some((s) => s.valid) || validJourneyEvidence ? 'partial' : 'invalid')

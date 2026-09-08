@@ -37,7 +37,7 @@ const run = (script, extra, configFile = config, captureStderr = false) => spawn
 const unit = spawnSync(process.execPath, [path.join(here, 'unit.mjs')], { stdio: 'inherit' });
 
 try {
-  // Auth gate behavior: a login page opens the interactive browser; a broken readiness anchor does not.
+  // Auth gate behavior: only the post-launch handshake proves an interactive context exists.
   const authCase = (name, routePath, selector, extraInteractive = {}) => {
     const file = path.join(outDir, `${name}.json`);
     fs.mkdirSync(outDir, { recursive: true });
@@ -61,19 +61,26 @@ try {
   };
   const loginCase = run('prepare-auth.mjs', ['--side', 'baseline', '--headless-interactive'],
     authCase('auth-login-detection', '/gate', '.wrap'), true);
-  if (loginCase.status !== 4 || !loginCase.stderr.includes('正在打开登录窗口')) {
+  if (loginCase.status !== 4 || !loginCase.stderr.includes('LOGIN_WINDOW_READY')
+    || !loginCase.stderr.includes('"visible":false')) {
     throw new Error('prepare-auth did not open interactive mode for a detected login page');
   }
   const unreadyCase = run('prepare-auth.mjs', ['--side', 'baseline', '--headless-interactive'],
     authCase('auth-unready-opens', '/', '.definitely-missing'), true);
-  if (unreadyCase.status !== 4 || !unreadyCase.stderr.includes('正在打开登录窗口')) {
+  if (unreadyCase.status !== 4 || !unreadyCase.stderr.includes('LOGIN_WINDOW_READY')) {
     throw new Error('prepare-auth did not open a login window when the page was unready');
   }
   const refuseCase = run('prepare-auth.mjs', ['--side', 'baseline', '--headless-interactive'],
     authCase('auth-broken-page', '/', '.definitely-missing', { openOnUnready: false }), true);
   if (refuseCase.status !== 4 || !refuseCase.stderr.includes('未识别出登录页')
-    || refuseCase.stderr.includes('正在打开登录窗口')) {
+    || refuseCase.stderr.includes('LOGIN_WINDOW_READY')) {
     throw new Error('prepare-auth ignored explicit openOnUnready=false');
+  }
+  const launchFailure = run('prepare-auth.mjs', [
+    '--side', 'baseline', '--skip-probe', '--executablePath', path.join(outDir, 'missing-browser'),
+  ], authCase('auth-launch-failure', '/gate', '.wrap'), true);
+  if (launchFailure.status !== 4 || launchFailure.stderr.includes('LOGIN_WINDOW_READY')) {
+    throw new Error('prepare-auth claimed a login window existed after browser launch failed');
   }
   const flashCase = run('prepare-auth.mjs', ['--side', 'baseline', '--headless-interactive'],
     authCase('auth-flash-shell', '/flash-shell', '.cus-item-title', {
@@ -91,11 +98,60 @@ try {
   if (forceStillProbes.status !== 0 || !forceStillProbes.stdout.includes('"mode": "headless-probe"')) {
     throw new Error('--force-interactive skipped the headless probe on a public page');
   }
-  if (forceStillProbes.stderr.includes('正在打开登录窗口')) {
+  if (forceStillProbes.stderr.includes('LOGIN_WINDOW_READY')) {
     throw new Error('--force-interactive opened a window even though the probe succeeded');
   }
+  const confirmCfg = authCase('auth-user-confirm-unready', '/gate', '.missing-after-login', {
+    timeoutMs: 20000, probeTimeoutMs: 400, readinessTimeoutMs: 150,
+    waitSliceMs: 400, heartbeatMs: 200,
+  });
+  const confirmChild = spawn(process.execPath, [
+    path.join(here, '..', 'prepare-auth.mjs'),
+    '--config', confirmCfg, '--side', 'baseline', '--headless-interactive',
+  ], { stdio: ['ignore', 'pipe', 'pipe'] });
+  let confirmErr = '';
+  confirmChild.stderr.on('data', (chunk) => { confirmErr += chunk; });
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`did not open login window: ${confirmErr}`)), 15000);
+    const check = () => {
+      if (confirmErr.includes('LOGIN_WINDOW_READY')) {
+        clearTimeout(timer);
+        resolve();
+      }
+    };
+    confirmChild.stderr.on('data', check);
+    check();
+  });
+  const confirmWrite = run('prepare-auth.mjs', ['--side', 'baseline', '--confirm'], confirmCfg, true);
+  if (confirmWrite.status !== 0 || !confirmWrite.stdout.includes('"status": "confirm-written"')) {
+    throw new Error(`--confirm did not signal the live login process: ${confirmWrite.stderr}`);
+  }
+  const confirmStarted = Date.now();
+  const confirmStatus = await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      confirmChild.kill();
+      reject(new Error(`user confirm did not fail-fast: ${confirmErr}`));
+    }, 8000);
+    confirmChild.on('exit', (code) => {
+      clearTimeout(timer);
+      resolve(code);
+    });
+  });
+  if (confirmStatus === 0 || !confirmErr.includes('已登录') || Date.now() - confirmStarted > 8000) {
+    throw new Error(`user confirm did not fail-fast: status=${confirmStatus} stderr=${confirmErr}`);
+  }
+  const orphanConfirm = run('prepare-auth.mjs', ['--side', 'baseline', '--confirm'],
+    authCase('auth-confirm-write', '/', '.wrap'), true);
+  if (orphanConfirm.status !== 4 || !orphanConfirm.stderr.includes('没有正在等待的登录窗口')) {
+    throw new Error('--confirm accepted a marker without a live login process');
+  }
+  if (fs.existsSync(path.join(outDir, '.confirm-baseline'))) {
+    throw new Error('--confirm left a stale marker without a live login process');
+  }
+  console.log('PASS  启动失败不冒充开窗；LOGIN_WINDOW_READY 才是成功握手');
   console.log('PASS  未就绪默认开登录窗；显式 openOnUnready=false 才拒绝');
   console.log('PASS  登录前壳节点闪现不落盘；--force-interactive 仍先探测');
+  console.log('PASS  用户回复已登录后立刻校验，未就绪不再干等');
 
   for (const side of ['baseline', 'candidate']) {
     // Baseline uses --skip-probe to exercise the persistent-context branch; candidate covers the clean probe.
@@ -118,7 +174,7 @@ try {
     || !reuse.stdout.includes('"reused": true')) {
     throw new Error('--force-interactive did not reuse a valid storageState');
   }
-  if (reuse.stderr.includes('正在打开登录窗口')) {
+  if (reuse.stderr.includes('LOGIN_WINDOW_READY')) {
     throw new Error('--force-interactive reopened a login window despite a valid session');
   }
   console.log('PASS  已有会话时 --force-interactive 复用，不再开窗');
@@ -145,6 +201,8 @@ const expected = [
   ['像素差异超阈值', /像素差异/],
   ['落地在登录页即作废', /采集失败[\s\S]{0,240}禁止模式/],
   ['waitFor 未命中即作废', /采集失败[\s\S]{0,240}waitFor 未命中/],
+  ['状态动作失败即作废', /采集失败[\s\S]{0,260}状态动作失败/],
+  ['HTTP 500 即使两侧相同也作废', /HTTP 500[\s\S]{0,180}证据作废|采集失败[\s\S]{0,220}HTTP 500/],
   ['iframe 顶栏里缺失的链接被发现', /缺失的固定链接[\s\S]{0,160}帮助/],
 ];
 

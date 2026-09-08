@@ -142,6 +142,10 @@ export function startFixture() {
       if (pathname === '/preview') return send(previewPage());
       if (pathname === '/flash-shell') return send(flashShellPage());
       if (pathname === '/shell' || pathname === '/shell-v2') return send(shellPage(v));
+      if (pathname === '/server-error') {
+        res.writeHead(500, { 'content-type': 'text/html; charset=utf-8' });
+        return res.end('<!doctype html><title>server error</title><h1>Server error</h1>');
+      }
       return send(page(v));
     }).listen(Number(port)));
   return () => servers.forEach((s) => s.close());

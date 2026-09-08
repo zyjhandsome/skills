@@ -80,7 +80,13 @@ const executablePath = args.executablePath || cfg.executablePath || null;
 const launchOptions = { headless: !args.headed };
 if (channel) launchOptions.channel = channel;
 if (executablePath) launchOptions.executablePath = executablePath;
-const browser = await pw[browserName].launch(launchOptions);
+let browser;
+try {
+  browser = await pw[browserName].launch(launchOptions);
+} catch (error) {
+  console.error(`浏览器启动失败：${String(error?.message || error).split('\n')[0]}`);
+  process.exit(3);
+}
 const sideDir = path.join(outRoot, side);
 ensureDir(sideDir);
 
@@ -236,14 +242,18 @@ async function runActions(page, actions = [], acc) {
       switch (a.type) {
         case 'goto': {
           const target = (a.id && acc.pathOverrides?.[a.id]) || a.path;
-          await context.goto(new URL(target, acc.baseUrl).href, { waitUntil: a.waitUntil || 'networkidle' });
+          const response = await context.goto(new URL(target, acc.baseUrl).href, {
+            waitUntil: a.waitUntil || 'domcontentloaded', timeout: a.timeout,
+          });
+          const status = response?.status() ?? null;
+          if (status !== null && status >= 400) throw new Error(`HTTP ${status}：${context.url()}`);
           break;
         }
-        case 'click': await loc.click({ force: a.force }); break;
+        case 'click': await loc.click({ force: a.force, timeout: a.timeout }); break;
         case 'clickAndExpectPopup': {
           const popupId = a.popupId || a.id || 'popup';
           const popupPromise = targetPage.waitForEvent('popup', { timeout: a.timeout });
-          const [, popup] = await Promise.all([loc.click({ force: a.force }), popupPromise]);
+          const [, popup] = await Promise.all([loc.click({ force: a.force, timeout: a.timeout }), popupPromise]);
           acc.pages ||= { main: page };
           acc.pages[popupId] = popup;
           if (acc.sink) attachObservers(popup, acc.sink);
@@ -262,14 +272,14 @@ async function runActions(page, actions = [], acc) {
           step.popupId = popupId;
           break;
         }
-        case 'dblclick': await loc.dblclick(); break;
-        case 'hover': await loc.hover(); break;
-        case 'fill': await loc.fill(String(actionValue(a))); break;
-        case 'type': await loc.pressSequentially(String(actionValue(a)), { delay: a.delay ?? 20 }); break;
-        case 'press': await (loc || targetPage.keyboard).press(a.key); break;
-        case 'select': await loc.selectOption(actionValue(a)); break;
-        case 'check': await loc.check(); break;
-        case 'uncheck': await loc.uncheck(); break;
+        case 'dblclick': await loc.dblclick({ timeout: a.timeout }); break;
+        case 'hover': await loc.hover({ timeout: a.timeout }); break;
+        case 'fill': await loc.fill(String(actionValue(a)), { timeout: a.timeout }); break;
+        case 'type': await loc.pressSequentially(String(actionValue(a)), { delay: a.delay ?? 20, timeout: a.timeout }); break;
+        case 'press': await (loc || targetPage.keyboard).press(a.key, { timeout: a.timeout }); break;
+        case 'select': await loc.selectOption(actionValue(a), { timeout: a.timeout }); break;
+        case 'check': await loc.check({ timeout: a.timeout }); break;
+        case 'uncheck': await loc.uncheck({ timeout: a.timeout }); break;
         case 'scrollTo':
           if (selector) await loc.scrollIntoViewIfNeeded();
           else await context.evaluate((y) => window.scrollTo(0, y), a.y ?? 0);
@@ -348,7 +358,11 @@ async function settle(page, route, { strict = false, warnings = null } = {}) {
   }
   await page.addStyleTag({ content: STABILIZE_CSS }).catch(() => {});
   await page.evaluate(() => document.fonts?.ready).catch(() => {});
-  await page.waitForLoadState('networkidle').catch(() => {});
+  // Readiness selectors are the contract. A best-effort, short network-idle wait only
+  // reduces screenshot noise; polling/SSE applications must not block for 20+ seconds.
+  await page.waitForLoadState('networkidle', {
+    timeout: Math.min(Number(ctx.networkIdleTimeoutMs || 2000), Number(ctx.timeoutMs || 20000)),
+  }).catch(() => {});
   await page.waitForTimeout(Number(thresholds.settleMs ?? 400));
 }
 
@@ -494,8 +508,11 @@ for (const viewport of viewports) {
       const warnings = [];
       try {
         const url = new URL(routePath, sideCfg.baseUrl).href;
-        const resp = await page.goto(url, { waitUntil: route.waitUntil || 'networkidle', timeout: ctx.navTimeoutMs || 45000 });
+        const resp = await page.goto(url, { waitUntil: route.waitUntil || 'domcontentloaded', timeout: ctx.navTimeoutMs || 45000 });
         entry.httpStatus = resp?.status() ?? null;
+        if (entry.httpStatus !== null && entry.httpStatus >= 400) {
+          throw new Error(`HTTP ${entry.httpStatus}：${page.url()}`);
+        }
         await assertLandedOn(page, route);
         await settle(page, route, { strict: true });
         const preActions = [...(cfg.beforeEachState || []), ...(state.actions || [])];
@@ -506,6 +523,10 @@ for (const viewport of viewports) {
               defaultFrame: surfaceFrameSelector(resolveSurface(cfg, route, side)),
               defaultRoot: resolveSurface(cfg, route, side).root || null,
             });
+          const failedAction = entry.actions.find((action) => action.status === 'fail');
+          if (failedAction) {
+            throw new Error(`状态动作失败（#${failedAction.index} ${failedAction.type} ${failedAction.id || ''}）：${failedAction.error}`);
+          }
           await settle(page, route, { warnings });
           await assertLandedOn(page, route);
         }
@@ -546,7 +567,11 @@ for (const viewport of viewports) {
         // A journey start path migrates just like a route path, so it honours pathOverrides too.
         const start = sideCfg.pathOverrides?.[journey.id]
           || journey[`${side}StartPath`] || journey.startPath || journey.path || '/';
-        await page.goto(new URL(start, sideCfg.baseUrl).href, { waitUntil: 'networkidle', timeout: ctx.navTimeoutMs || 45000 });
+        const resp = await page.goto(new URL(start, sideCfg.baseUrl).href, {
+          waitUntil: journey.waitUntil || 'domcontentloaded', timeout: ctx.navTimeoutMs || 45000,
+        });
+        const httpStatus = resp?.status() ?? null;
+        if (httpStatus !== null && httpStatus >= 400) throw new Error(`HTTP ${httpStatus}：${page.url()}`);
         await assertLandedOn(page, journey);
         await settle(page, journey, { strict: true });
         for (let i = 0; i < (journey.steps || []).length; i++) {

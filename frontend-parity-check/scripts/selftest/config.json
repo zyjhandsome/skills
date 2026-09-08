@@ -41,6 +41,12 @@
             { "type": "click", "selector": ".el-button--primary" },
             { "type": "waitFor", "selector": ".el-table__row" }
           ]
+        },
+        {
+          "id": "broken-state-action",
+          "actions": [
+            { "type": "click", "selector": ".definitely-missing", "timeout": 200 }
+          ]
         }
       ]
     },
@@ -58,6 +64,10 @@
       "id": "bogus-anchor",
       "path": "/",
       "waitFor": { "selector": ".definitely-missing", "timeout": 2000 }
+    },
+    {
+      "id": "server-error",
+      "path": "/server-error"
     },
     {
       "id": "frame-report",

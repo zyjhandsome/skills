@@ -12,16 +12,19 @@
 // which would take the user's own windows down with it.
 import path from 'node:path';
 import fs from 'node:fs';
-import { loadPlaywright, ensureDir, parseArgs } from './lib/pw.mjs';
+import { loadPlaywright, ensureDir, parseArgs, repeatedArgValues } from './lib/pw.mjs';
 
-const args = parseArgs(process.argv.slice(2));
+const rawArgs = process.argv.slice(2);
+const args = parseArgs(rawArgs);
 if (args.help) {
   console.log('usage: node export-storage-state.mjs [--cdp http://127.0.0.1:9222] [--timeout 15000] --out auth/side.json [--url URL] [--url URL2] [--keep-page]');
   process.exit(0);
 }
 const cdp = args.cdp || `http://127.0.0.1:${args.port || 9222}`;
 const out = path.resolve(args.out || 'auth/storage-state.json');
-const urls = [].concat(args.url || []).filter(Boolean);
+// parseArgs intentionally keeps a simple scalar interface; collect repeatable --url
+// values here so the documented `--url A --url B` form does not discard A.
+const urls = repeatedArgValues(rawArgs, 'url');
 const connectTimeout = Number(args.timeout || 15000);
 
 const pw = await loadPlaywright(process.cwd());

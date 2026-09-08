@@ -7,9 +7,11 @@ import {
   resolveSurface, configValidationErrors,
 } from '../lib/parity-core.mjs';
 import { DEFAULT_PROBES } from '../lib/probes.mjs';
+import { repeatedArgValues } from '../lib/pw.mjs';
 import {
   firstAuthTarget, shouldOpenInteractive, shouldProbeFirst, shouldCommitAuthState,
-  earlyAuthReadyWarning,
+  earlyAuthReadyWarning, authConfirmPath, authWaitStatePath, interactiveWaitDecision,
+  shouldPrintHeartbeat, isProcessAlive,
 } from '../lib/auth.mjs';
 
 let failed = 0;
@@ -78,13 +80,29 @@ eq('探针支持两侧独立 CSS 选择器',
   resolveProbes({ defaultProbes: false, styleProbes: [{ id: 'card', baselineSelector: '.old', candidateSelector: '.new' }] }, {}, DEFAULT_PROBES, 'candidate'),
   [{ id: 'card', baselineSelector: '.old', candidateSelector: '.new', selector: '.new' }]);
 check('styleProbes 拒绝 Playwright :has-text 语法',
-  configValidationErrors({ styleProbes: [{ id: 'send', selector: 'button:has-text("发送")' }] }).length === 1);
+  configValidationErrors({ styleProbes: [{ id: 'send', selector: 'button:has-text("发送")' }] })
+    .some((error) => error.includes('不能使用 Playwright 语法')));
 check('未知 journey 动作在采集前即报配置错误',
-  configValidationErrors({ journeys: [{ id: 'x', steps: [{ type: 'magicClick', selector: 'button' }] }] }).length === 1);
+  configValidationErrors({ journeys: [{ id: 'x', steps: [{ type: 'magicClick', selector: 'button' }] }] })
+    .some((error) => error.includes('不支持')));
 check('交互登录不能与脚本登录混用',
-  configValidationErrors({ baseline: { auth: { mode: 'auto-interactive', actions: [{ type: 'goto', path: '/' }] } } }).length === 1);
+  configValidationErrors({ baseline: { auth: { mode: 'auto-interactive', actions: [{ type: 'goto', path: '/' }] } } })
+    .some((error) => error.includes('不能同时使用')));
 check('交互登录超时必须为正数',
-  configValidationErrors({ candidate: { auth: { mode: 'auto-interactive', interactive: { timeoutMs: 0 } } } }).length === 1);
+  configValidationErrors({ candidate: { auth: { mode: 'auto-interactive', interactive: { timeoutMs: 0 } } } })
+    .some((error) => error.includes('timeoutMs 必须是正数')));
+check('无效 URL 正则在采集前报错',
+  configValidationErrors({ assertLanded: { requireUrl: '[' } })
+    .some((error) => error.includes('不是有效正则')));
+check('dataParity 拼写错误在采集前报错',
+  configValidationErrors({ dataParity: 'same_date' })
+    .some((error) => error.includes('dataParity')));
+check('重复 route/journey id 在采集前报错',
+  configValidationErrors({ routes: [{ id: 'same' }], journeys: [{ id: 'same' }] })
+    .some((error) => error.includes('id 重复')));
+eq('重复 --url 参数全部保留',
+  repeatedArgValues(['--url', 'https://a.example', '--url=https://b.example', '--keep-page'], 'url'),
+  ['https://a.example', 'https://b.example']);
 eq('未就绪默认直接开窗，不先自行排查',
   shouldOpenInteractive({ loginLikely: false }), true);
 eq('用户已要求登录时，未就绪必须开窗（仍先探测）',
@@ -113,6 +131,38 @@ eq('面包屑就绪选择器要警告',
   !!earlyAuthReadyWarning('.el-breadcrumb'), true);
 eq('登录后才有的节点不警告',
   earlyAuthReadyWarning('.tab-list') == null, true);
+eq('窗口自己就绪即使未确认也提交',
+  interactiveWaitDecision({ windowReady: true, userConfirmed: false }), 'commit');
+eq('用户确认且窗口就绪则立即提交',
+  interactiveWaitDecision({ windowReady: true, userConfirmed: true }), 'commit');
+eq('用户确认但窗口未就绪则立刻结束等待',
+  interactiveWaitDecision({ windowReady: false, userConfirmed: true }), 'commit-or-fail');
+eq('未确认且未就绪则继续等',
+  interactiveWaitDecision({ windowReady: false, userConfirmed: false }), 'keep-waiting');
+eq('窗口关闭视为失败',
+  interactiveWaitDecision({ closed: true, userConfirmed: true }), 'closed');
+eq('超时失败',
+  interactiveWaitDecision({ timedOut: true }), 'timeout');
+eq('从未打印过心跳则立刻打印',
+  shouldPrintHeartbeat(0, 1000, 15000), true);
+eq('心跳间隔内不再打印',
+  shouldPrintHeartbeat(1000, 14999, 15000), false);
+eq('心跳到期要打印未就绪原因',
+  shouldPrintHeartbeat(1000, 16000, 15000), true);
+check('确认文件默认在 storageState 同目录',
+  /[\\/]auth[\\/]\.confirm-baseline$/.test(authConfirmPath(
+    'C:/work/parity-config.json',
+    'baseline',
+    { auth: { storageState: './auth/baseline.json' } },
+  )));
+check('等待租约跟随确认文件且使用独立后缀',
+  /\.confirm-baseline\.waiting\.json$/.test(authWaitStatePath(
+    'C:/work/parity-config.json',
+    'baseline',
+    { auth: { storageState: './auth/baseline.json' } },
+  )));
+eq('当前进程可被登录租约检测为存活', isProcessAlive(process.pid), true);
+eq('非法 PID 不会被当成活跃登录进程', isProcessAlive(-1), false);
 
 eq('交互登录探测遵守首个路由的分侧路径映射',
   firstAuthTarget({

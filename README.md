@@ -192,7 +192,7 @@ baseline：<升级前 URL>
 candidate：<升级后 URL>
 # 登录态 / 是否同一套数据 / 是否允许改版：没给就先问齐
 # 一侧是宿主壳内 iframe 时声明 compareSurface（frame/root + URL pattern）
-# 默认 auto-interactive：短探测；未就绪立刻开专用窗口，由用户自行登录
+# 默认 auto-interactive：短探测；未就绪开专用窗口，用户登录后回复「已登录」
 # 只有明确要复用已打开的浏览器时，才用 scripts/export-storage-state.mjs
 # 只截图不点 journey，不能宣称功能一致
 ```

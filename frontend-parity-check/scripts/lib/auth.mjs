@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { landingVerdict, resolveSurface } from './parity-core.mjs';
@@ -56,6 +57,89 @@ export function resolvedAuthReadySelector(cfg, side) {
 export function authStoragePath(configPath, side, sideCfg = {}) {
   const configured = sideCfg.auth?.storageState || `./auth/${side}.json`;
   return path.resolve(path.dirname(configPath), configured);
+}
+
+/** Marker file the agent writes after the user replies「已登录」. */
+export function authConfirmPath(configPath, side, sideCfg = {}) {
+  const configured = sideCfg.auth?.interactive?.confirmPath;
+  if (configured) return path.resolve(path.dirname(configPath), configured);
+  return path.join(path.dirname(authStoragePath(configPath, side, sideCfg)), `.confirm-${side}`);
+}
+
+/** Lease proving that a prepare-auth process really owns a live login context. */
+export function authWaitStatePath(configPath, side, sideCfg = {}) {
+  return `${authConfirmPath(configPath, side, sideCfg)}.waiting.json`;
+}
+
+export function readAuthWaitState(waitStatePath) {
+  try {
+    return JSON.parse(fs.readFileSync(waitStatePath, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+export function writeAuthWaitState(waitStatePath, state) {
+  fs.mkdirSync(path.dirname(waitStatePath), { recursive: true });
+  const temp = `${waitStatePath}.${process.pid}.tmp`;
+  fs.writeFileSync(temp, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
+  fs.copyFileSync(temp, waitStatePath);
+  fs.rmSync(temp, { force: true });
+  return waitStatePath;
+}
+
+export function clearAuthWaitState(waitStatePath, expectedPid = null) {
+  if (!waitStatePath || !fs.existsSync(waitStatePath)) return false;
+  const state = readAuthWaitState(waitStatePath);
+  if (expectedPid !== null && Number(state?.pid) !== Number(expectedPid)) return false;
+  fs.rmSync(waitStatePath, { force: true });
+  return true;
+}
+
+export function isProcessAlive(pid) {
+  const n = Number(pid);
+  if (!Number.isInteger(n) || n <= 0) return false;
+  try {
+    process.kill(n, 0);
+    return true;
+  } catch (error) {
+    // EPERM means the process exists but this account cannot signal it.
+    return error?.code === 'EPERM';
+  }
+}
+
+export function consumeUserConfirm(confirmPath) {
+  if (!confirmPath || !fs.existsSync(confirmPath)) return false;
+  fs.rmSync(confirmPath, { force: true });
+  return true;
+}
+
+export function writeUserConfirm(confirmPath) {
+  fs.mkdirSync(path.dirname(confirmPath), { recursive: true });
+  fs.writeFileSync(confirmPath, `confirmed ${new Date().toISOString()}\n`);
+  return confirmPath;
+}
+
+/**
+ * After the login window is open:
+ * ready pages still auto-commit; a user「已登录」confirm ends the wait immediately.
+ */
+export function interactiveWaitDecision({
+  windowReady = false,
+  userConfirmed = false,
+  timedOut = false,
+  closed = false,
+} = {}) {
+  if (closed) return 'closed';
+  if (windowReady) return 'commit';
+  if (userConfirmed) return 'commit-or-fail';
+  if (timedOut) return 'timeout';
+  return 'keep-waiting';
+}
+
+export function shouldPrintHeartbeat(lastPrintedAt = 0, now = 0, intervalMs = 15000) {
+  if (!lastPrintedAt) return true;
+  return now - lastPrintedAt >= intervalMs;
 }
 
 export function authProfilePath(configPath, side, cfg = {}, sideCfg = {}) {

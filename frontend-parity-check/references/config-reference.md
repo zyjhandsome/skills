@@ -71,7 +71,7 @@
 | `userAgent` / `extraHTTPHeaders` | 需要指定 UA 或注入网关头时使用 |
 | `auth.mode` | 推荐 `auto-interactive`：先无头验证，必要时打开专用可见浏览器供用户登录；省略则沿用 `storageState` / `actions` 旧流程 |
 | `auth.storageState` | Cookie/localStorage 文件路径；`auto-interactive` 默认 `./auth/<side>.json` |
-| `auth.interactive` | `{startPath,successUrlPattern,readySelector,timeoutMs,probeTimeoutMs,readinessTimeoutMs,readyHoldMs,profileDir,channel,executablePath,openOnUnready}`；profile 必须是 Skill 专用目录；`readySelector` 必须是登录后才出现的节点 |
+| `auth.interactive` | `{startPath,successUrlPattern,readySelector,timeoutMs,probeTimeoutMs,readinessTimeoutMs,readyHoldMs,waitSliceMs,heartbeatMs,confirmPath,profileDir,channel,executablePath,openOnUnready}`；profile 必须是 Skill 专用目录；`readySelector` 必须是登录后才出现的节点 |
 | `auth.actions` | 非交互备选：文件不存在时执行登录动作，成功后自动写入。**不能与 `auto-interactive` 混用，任一步失败即整侧作废** |
 
 也可以在 `routes[].baselinePath` / `routes[].candidatePath`、
@@ -103,10 +103,17 @@
 先运行 `node scripts/prepare-auth.mjs --config parity-config.json --side candidate`。脚本会先用
 现有 `storageState`（若有）或干净会话做短探测（默认约 4 秒）。首个 route/journey 的 URL、比较面和
 `waitFor` / `readySelector` 先通过、再保持一小段时间（`readyHoldMs`，默认 1.5 秒）仍通过，才算就绪。
-未就绪则立刻打开隔离的持久化浏览器，让用户自行完成账号、扫码、MFA 或证书登录。
+未就绪则尝试打开隔离的持久化浏览器。`prepare-auth` 必须后台运行；只有输出
+`LOGIN_WINDOW_READY` 且 `visible:true` 才能确认窗口已经创建。只有“准备创建”或进程已经退出时，
+应报告启动错误，不能让用户寻找不存在的窗口。按 baseline → candidate 逐侧处理，不要同时开两侧。
+确认开窗后让用户自行完成账号、扫码、MFA 或证书登录，并在对话回复「已登录」；随后执行
+`node scripts/prepare-auth.mjs --config parity-config.json --side candidate --confirm`。
+`--confirm` 会先检查该 side 的等待租约与后台 PID，只向仍在等待的窗口写确认标记；孤立确认会失败，
+不会遗留到下一次运行。窗口会立刻校验，未就绪则马上打印 URL 和原因退出，不再默默等到
+`timeoutMs`。页面自己就绪时仍会自动保存。
 `--force-interactive` 只表示未就绪必须开窗，**不跳过**已有会话的无头验证。只有自检/调试才用
 `--skip-probe`。关窗前会用刚写出的 `storageState` 冷启动再打开目标 URL，仍通过才报 `ready` 并落盘；
-假就绪（壳子闪一下）会删掉这份文件并继续等。
+假就绪（壳子闪一下）不会替换上一份已验证的 `storageState`。
 `capture.mjs` 发现该模式缺少状态文件时退出码为 `4`，不会悄悄采集登录页。
 
 默认 `openOnUnready` 为开：扫码页、自定义 SSO、登录表单识别不到时也开窗，避免 agent 自行探究。
@@ -156,7 +163,9 @@
 
 `viewports`（`[{name,width,height}]`）、`deviceScaleFactor`、`locale`、`timezoneId`、
 `colorScheme`、`freezeTime`（ISO 字符串，冻结 `Date`）、`seedRandom`（固定
-`Math.random`）、`timeoutMs`、`navTimeoutMs`、`ignoreHTTPSErrors`。
+`Math.random`）、`timeoutMs`、`navTimeoutMs`、`networkIdleTimeoutMs`、`ignoreHTTPSErrors`。
+导航默认等待 `domcontentloaded`；页面就绪以后只额外短等网络空闲（默认 2 秒），避免轮询、SSE、
+WebSocket 页面长期卡在 `networkidle`。
 
 两侧强制共用同一份 `context` —— 这是 parity 结论成立的前提。
 
@@ -167,7 +176,7 @@
   "id": "order-list",                 // 状态 id 前缀，必须唯一
   "path": "/order/list",
   "waitFor": { "baselineSelector": ".old-row", "candidateSelector": ".new-row", "state": "visible" },
-  "waitUntil": "networkidle",         // goto 的等待策略
+  "waitUntil": "domcontentloaded",    // 默认值；再由 waitFor/readySelector 判定业务就绪
   "assertLanded": { "allowUrl": [] }, // 可按页覆盖顶层落地校验
   "fullPage": false,
   "masks": [".update-time"],          // 追加到全局 masks
@@ -289,6 +298,7 @@ Journey 只在**第一个视口**执行一次。默认定位在该 journey 的 `
 | `--keepGoing` | capture | 有状态采集失败也返回 0 |
 | `--force-interactive` | prepare-auth | 未就绪必须开窗；**仍先探测**已有会话，通过则不开窗 |
 | `--skip-probe` | prepare-auth | 跳过无头探测。仅自检/调试；正式跑禁用 |
+| `--confirm` | prepare-auth | 用户回复「已登录」后调用；先验证活跃等待租约，再让开着的窗口立刻校验；无窗口时拒绝 |
 | `--channel <chrome\|msedge>` | capture / compare | 覆盖配置里的 `channel`，用本机浏览器 |
 | `--executablePath <path>` | capture / compare | 覆盖配置里的 `executablePath` |
 
@@ -320,6 +330,9 @@ node scripts/selftest/unit.mjs     # 只跑判定规则单测（无浏览器，1
 | 用户说"我已经登录了"但脚本还是跳登录页 | 先无头跑 `prepare-auth.mjs` 验证已有 `storageState`；探测失败再开 Skill 专用窗口。不要加 `--skip-probe`。只有明确要复用原窗口时才带 `--remote-debugging-port=9222` 导出 |
 | 刚登录成功，采集却跳到 `login-beta` / SSO | 就绪选择器太早（登录前就有的壳）。改成登录后才出现的节点，重跑 `prepare-auth`（不加 `--force-interactive`） |
 | 同一网址登录了两次 | `--force-interactive` 已不再跳过探测。重跑不要加 `--skip-probe`；已有会话应静默复用 |
+| 已经在窗口里登录了，脚本却几分钟没动 | 脚本在等 `waitFor` / 冷启动，不是在等你输入密码。回复「已登录」触发 `--confirm`；心跳会打印当前 URL 和未就绪原因 |
+| 提示登录但没有窗口 | 只有 `LOGIN_WINDOW_READY visible:true` 才算开窗成功；若没有该握手，查看其后的浏览器启动错误。窗口未置顶时从任务栏或 Alt+Tab 查找 |
+| 页面一直轮询，采集导航超时 | 不要把 `networkidle` 当业务就绪条件；保持默认 `domcontentloaded`，用登录后/数据加载后的 `waitFor`，必要时调 `networkIdleTimeoutMs` |
 | 托管页顶栏/菜单链接被报"缺失"，截图里明明有 | 内容在 iframe 里。现已自动合并可读 iframe；若报告标了 `iframe 不可读`，说明该 frame 禁脚本或已 detach，按"读不到"处理，不要当缺陷 |
 | 计数类差异"6 对 5"但页面上看着一样 | 旧版把隐藏项留在 DOM（`ng-hide`/`v-show`），新版 `v-if` 不渲染。`expectCount` 默认已只数可见节点；看 `observedTotal` 确认 |
 | `expectUrl` 被判阻断，但地址本来就该不同 | 路径迁移没声明。写进 `<side>.pathOverrides` / `urlTokens`，或给该步加 `ignorePath: true` |
