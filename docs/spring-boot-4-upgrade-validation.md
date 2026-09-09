@@ -4,6 +4,8 @@
 
 本文记录**首次创建时**的校验；后续压测修订、新增 17 项自动测试及真实 MVC 夹具基线结果见 [压测复核与改进](spring-boot-4-upgrade-pressure-review.md)，不与下方历史“未执行”混淆。
 
+2026-09-10 增量校验：证据契约升级为 v2，26 项 Python 回归通过；Skill 结构、内部链接、JSON/YAML/XML 与 diff 检查通过。新增 managed-parent 夹具在隔离目录用 Maven 3.6.3 实际导出 effective-pom 和 Dependency Plugin 3.8.1 的 JSON tree：仅 import 4.0.7 BOM 时 core/autoconfigure 仍 3.5.14，子 POM 显式管理后为 4.0.7。新解析校验器读取两份原始树分别拒绝/接受，结果符合预期。证据目录：`C:/Users/zyjhandsome/AppData/Local/Temp/boot4-owner-fixture-15f6c610246b4b48bfb2651d444dd9e8`。此项只验证管理规则与解析检查，未执行用户业务仓库的运行时迁移；Gradle 解析分支以合成日志回归，未实跑 Gradle 项目。
+
 ## 结构校验
 
 使用 skill-creator 自带 quick_validate.py。系统默认 Python 缺少 PyYAML、venv、pip，因此改用 uv 隔离的 Python 3.12 + PyYAML，并启用 UTF-8 读取中文。未修改用户全局 Python 包。

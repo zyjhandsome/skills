@@ -70,6 +70,8 @@ description: Upgrade existing Spring Boot 3.x repositories to a verified Spring 
 
 默认完成原生 4.x 适配。必要时可使用目标版本仍支持的 Jackson 2/classic 等兼容桥，但记录原因、影响、负责人/待分配、退出条件与复查日期。存在兼容桥的结果单独标识，不能称为“全部迁移完成”；不要猜未来移除版本。桥接也要证明自动配置和运行行为有效。
 
+桥是目标运行栈支持、刻意保留且已验证的兼容适配；**Boot 3/4 混栈、版本覆盖失败不是桥**。两种 verified 状态均须先通过核心解析检查；单个新 starter/属性/BOM 的版本不代表实际 core 已升级。
+
 ## 5. 验证与交付
 
 执行 [验收与回退](references/verification.md)。至少核查最终解析版本、生产/测试编译、实际执行的测试数量与失败/跳过、完整制品、启动及关键业务契约；对库模块以消费者集成测试替代启动。`BUILD SUCCESS`、`-DskipTests` 或一次 health 200 均不足以证明升级成功。
@@ -87,7 +89,9 @@ description: Upgrade existing Spring Boot 3.x repositories to a verified Spring 
 | assessed | 只完成评估和方案 |
 | blocked | 关键兼容性或前置条件阻塞，列出解除条件 |
 | implemented-unverified | 代码已改，但必需的测试/启动/契约证据缺失 |
-| verified-with-bridges | 适用验证通过，仍有明确登记的临时兼容桥 |
+| verified-with-bridges | 核心解析及适用验证全部通过，仍有明确登记的临时兼容桥；不得包含 Boot 混栈 |
 | verified | 精确目标已解析，适用验证通过，无未退出的临时兼容桥 |
 
 交付代码差异、目标版本与来源、报告、剩余风险及回退方法。`verified` 只表示记录范围内验证完成，不表示已经部署或获得业务发布验收。提交、推送、PR、部署按用户授权与仓库规则执行，不内置额外审批流程。
+
+阶段交付和最终答复固定包含：**状态 · 已验证范围 · 未完成及解除条件 · 下一步（谁／做什么）**。普通进度消息无需重复四项。未通过验证不说“已完成升级”；with-bridges 明说仍有桥及退出动作。下一步已获授权且可执行就继续，只有范围已完成、真实阻塞或需用户决策才收口；不要把“请用户再说继续”当下一步。无剩余迁移工作时写明，发布动作仅按原授权处理。

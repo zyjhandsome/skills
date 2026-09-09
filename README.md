@@ -256,6 +256,13 @@ python md2wechat/scripts/validate_wechat_bundle.py "<stem>_公众号完整版.ht
 
 详见 `md2wechat/SKILL.md`。
 
+## 讲解与沟通
+
+| 技能 | 说明 |
+|------|------|
+| [eli5](./eli5/SKILL.md) | 按听众校准讲解（年龄 / 年级 / 岗位 / 家人）：词汇、类比、语气、深度；来源 [DreambigOu/ELI5](https://github.com/DreambigOu/ELI5) |
+
+触发示例：`ELI5 what a database index is`、`Explain this to my manager`、`Break this down for a 5th grader`。未指定听众时默认 Age 5。
 
 ## 目录结构
 
@@ -403,6 +410,10 @@ md2html-lecture/
 │   └── template.html     # 单文件 HTML 模板（CSS/JS + 占位符）
 └── scripts/
     └── build_html.py     # 确定性的 MD → HTML 转换脚本（仅依赖标准库）
+
+eli5/
+├── SKILL.md              # 听众校准讲解（上游 DreambigOu/ELI5）
+└── LICENSE               # MIT
 ```
 
 安装：将需要的技能目录复制到项目的 `.cursor/skills/` 或 `~/.cursor/skills/` 即可。

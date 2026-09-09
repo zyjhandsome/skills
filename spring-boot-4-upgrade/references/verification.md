@@ -10,7 +10,7 @@
 
 只有以下条件**同时满足**才报告 `verified`：
 
-1. 精确目标 Boot 已在适用生产/测试依赖中解析，记录与最终代码快照一致；无未解释的框架混用。
+1. 精确目标 Boot 通过下述核心解析检查，记录与最终代码快照一致。**Boot 3/4 混栈禁止 verified 和 verified-with-bridges**，不能用“已解释”或桥接登记豁免。
 2. 预先明确的模块、profile、JDK/runtime、数据库和功能验收范围内，完整构建、真实测试、制品启动或库 consumer 及关键契约均通过。有未执行的必需项则为 `implemented-unverified`；不能在失败后把它改成“不适用”。测试跳过须解释且证明必需覆盖仍在。
 3. 原有与新增失败已归因，范围内无未解决的必需验证失败；测试数变少有合理说明；skipTests、空 patch 和单一 health 响应不构成通过证据。
 4. `spring-boot-properties-migrator` 和本次临时 rewrite 配置已清理，并对清理后的快照复测；兼容桥全部退出。桥保留且其他条件满足时用 `verified-with-bridges`。
@@ -21,6 +21,10 @@
 JSON 比较默认忽略对象键顺序，保留数组顺序、缺失/null、类型与数值含义；存在签名、字节级缓存或文本消费者时，对象序列化顺序也须作为契约检查。
 
 结构化辅助见 [evidence-contract.md](evidence-contract.md)。判定依据是实际证据，不能仅填写 `passed`。
+
+**核心解析检查（两种 verified 状态共用）**：对每个应用模块/profile 的完整实际依赖树，确认 `org.springframework.boot:spring-boot` 与 `spring-boot-autoconfigure` 的 **jar** 精确版本等于目标，且 compile/runtime/provided/system 和测试路径上所有实际选中的 `org.springframework.boot:spring-boot*` 都对齐目标；`webmvc:4.0.7`、属性或 imported BOM 不能证明 core 为 4.0.7。忽略被仲裁淘汰的旧候选，不能忽略仍被选中的旧模块。库用真实 consumer 验证，聚合 POM 不冒充应用证据；特殊应用确不使用 autoconfigure 时需说明结构并人工核验，不伪造该坐标。
+
+tree 通过后仍检查打包制品/容器实际加载的依赖，留意 provided 容器库、手工/shaded jar；插件自身依赖与应用 classpath 分开判断。Tomcat、Framework 等第三方依赖按目标 Boot BOM/支持矩阵核对，不能要求其版本号也等于 Boot 4.0.7。运行验证不可因失败而改成不适用；若任务仅授权静态评估则报告 assessed，不把缺少应用启动证据包装成 verified-with-bridges。
 
 ## 最低验收矩阵（按实际范围执行）
 

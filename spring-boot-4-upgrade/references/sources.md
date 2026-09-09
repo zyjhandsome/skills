@@ -28,6 +28,7 @@
 | OpenAPI 生成与 nullable | [Spring generator 选项](https://openapi-generator.tech/docs/generators/spring/)、[nullable v0.2.8 POM](https://github.com/OpenAPITools/jackson-databind-nullable/blob/v0.2.8/pom.xml)，按具体 generator/artifact 版本核对 Jakarta、Jackson 和三态 |
 | Jackson mapper 定制 | [Jackson 3 MapperBuilder](https://javadoc.io/static/tools.jackson.core/jackson-databind/3.0.0/tools.jackson.databind/tools/jackson/databind/cfg/MapperBuilder.html)，核对实际目标版本 |
 | 私有/其他第三方 | 组件自己维护的发布记录、兼容矩阵、源码和可重现 consumer 验证；没有来源就记 unknown |
+| Maven 管理与实际解析 | [Dependency Mechanism](https://maven.apache.org/guides/introduction/introduction-to-dependency-mechanism.html)、[Dependency Tree JSON 格式](https://maven.apache.org/plugins/maven-dependency-plugin/examples/tree-mojo.html)；区分继承、显式管理、BOM import 与最终选中节点 |
 
 ## OpenRewrite
 

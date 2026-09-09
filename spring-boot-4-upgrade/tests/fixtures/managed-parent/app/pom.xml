@@ -1,0 +1,21 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <parent><groupId>example.fixture</groupId><artifactId>enterprise-parent</artifactId><version>1.0</version><relativePath>../parent/pom.xml</relativePath></parent>
+  <artifactId>app</artifactId>
+  <properties><spring-boot.version>4.0.7</spring-boot.version></properties>
+  <dependencyManagement><dependencies>
+    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-dependencies</artifactId><version>${spring-boot.version}</version><type>pom</type><scope>import</scope></dependency>
+  </dependencies></dependencyManagement>
+  <dependencies>
+    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot</artifactId></dependency>
+    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-autoconfigure</artifactId></dependency>
+    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-webmvc</artifactId></dependency>
+  </dependencies>
+  <!-- A counterexample to "a child can never override its parent"; not a general migration recipe. -->
+  <profiles><profile><id>explicit-management</id>
+    <dependencyManagement><dependencies>
+      <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot</artifactId><version>${spring-boot.version}</version></dependency>
+      <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-autoconfigure</artifactId><version>${spring-boot.version}</version></dependency>
+    </dependencies></dependencyManagement>
+  </profile></profiles>
+</project>

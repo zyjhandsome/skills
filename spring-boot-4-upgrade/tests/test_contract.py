@@ -33,13 +33,81 @@ class EvidenceContractTests(unittest.TestCase):
         final = copy.deepcopy(stage)
         final.update(resolved_boot="4.0.8", properties_migrator_present=False,
                      temporary_rewrite_present=False, bridges=[])
-        self.data = {"schema_version": 1, "mode": "migrate", "source_boot": "3.4.0", "target_boot": "4.0.8",
+        for label, entry in (("baseline35", stage), ("final", final)):
+            tree = {"groupId": "example", "artifactId": "app", "version": "1.0", "children": [
+                {"groupId": "org.springframework.boot", "artifactId": artifact, "version": entry["resolved_boot"],
+                 "type": "jar", "scope": "compile"}
+                for artifact in ("spring-boot", "spring-boot-autoconfigure", "spring-boot-starter-webmvc")]}
+            entry["resolution"] = {"units": [{"id": "app@default", "module": "example:app", "format": "maven-json",
+                "core_artifacts": {k: entry["resolved_boot"] for k in MODULE.CORE},
+                "tree": self.save_tree(label, tree)}]}
+        self.data = {"schema_version": 2, "mode": "migrate", "source_boot": "3.4.0", "target_boot": "4.0.8",
                      "scope": {"included": ["synthetic fixture"], "excluded": [],
+                               "resolution_units": ["app@default"],
                                "required_checks": sorted(MODULE.BASE_CHECKS)},
                      "baseline35": stage, "final": final}
 
     def check(self, gate="boot4", snapshot="fixture-snapshot"):
         return MODULE.check_contract(self.data, self.root, gate, snapshot)
+
+    def save_tree(self, label, tree):
+        raw = json.dumps(tree).encode("utf-8")
+        path = self.root / (label + "-tree.json")
+        path.write_bytes(raw)
+        return {"path": path.name, "sha256": hashlib.sha256(raw).hexdigest()}
+
+    def mutate_final_tree(self, change):
+        unit = self.data["final"]["resolution"]["units"][0]
+        tree = json.loads((self.root / unit["tree"]["path"]).read_text())
+        change(tree)
+        unit["tree"] = self.save_tree("final", tree)
+
+    def test_new_starter_does_not_prove_core_and_cannot_be_a_bridge(self):
+        self.mutate_final_tree(lambda t: t["children"][0].update(version="3.5.14"))
+        self.assertTrue(self.check("verified"))
+        self.data["final"]["bridges"] = [{"component": "parent", "reason": "old owner", "exit_condition": "later"}]
+        errors = self.check("verified-with-bridges")
+        self.assertTrue(any("spring-boot:3.5.14" in e for e in errors), errors)
+
+    def test_old_actuator_rejected_even_when_core_matches(self):
+        self.mutate_final_tree(lambda t: t["children"].append({"groupId": "org.springframework.boot",
+            "artifactId": "spring-boot-actuator", "version": "3.5.14", "scope": "runtime", "type": "jar"}))
+        self.assertTrue(self.check("verified"))
+
+    def test_only_bom_or_starter_is_insufficient(self):
+        self.mutate_final_tree(lambda t: t.update(children=t["children"][2:]))
+        self.assertTrue(self.check("verified"))
+
+    def test_core_pom_is_not_core_jar(self):
+        self.mutate_final_tree(lambda t: t["children"][0].update(type="pom"))
+        self.assertTrue(self.check("verified"))
+
+    def test_missing_raw_tree_or_wrong_module(self):
+        unit = self.data["final"]["resolution"]["units"][0]
+        unit["module"] = "example:another-app"
+        self.assertTrue(self.check("verified"))
+        unit.pop("tree")
+        self.assertTrue(self.check("verified"))
+
+    def test_missing_second_application(self):
+        self.data["scope"]["resolution_units"].append("second-app@default")
+        self.assertTrue(self.check("verified"))
+
+    def test_gradle_selected_version_not_requested_or_constraint(self):
+        unit = {"format": "gradle-text", "configuration": "runtimeClasspath"}
+        text = "runtimeClasspath - Runtime\n+--- org.springframework.boot:spring-boot:3.5.14 -> 4.0.8\n+--- org.springframework.boot:spring-boot:3.5.14 (c)\n"
+        self.assertEqual(MODULE.resolved_boot_nodes(text, unit), [("org.springframework.boot:spring-boot", "4.0.8", True)])
+        with self.assertRaises(ValueError):
+            MODULE.resolved_boot_nodes(text + "+--- example:lib:1 FAILED\n", unit)
+
+    def test_gradle_bom_managed_dependency_without_requested_version(self):
+        text = "runtimeClasspath - Runtime\n+--- org.springframework.boot:spring-boot -> 4.0.8\n(n) - Cannot be resolved legend\n"
+        self.assertEqual(MODULE.resolved_boot_nodes(text, {"format": "gradle-text", "configuration": "runtimeClasspath"}),
+                         [("org.springframework.boot:spring-boot", "4.0.8", True)])
+
+    def test_v1_no_longer_passes(self):
+        self.data["schema_version"] = 1
+        self.assertTrue(self.check("verified"))
 
     def test_complete_stage_and_final(self):
         self.assertEqual(self.check(), [])

@@ -7,6 +7,106 @@ import re
 
 
 BASE_CHECKS = {"resolution", "build", "tests", "runtime", "contracts"}
+BOOT_GROUP = "org.springframework.boot"
+CORE = {f"{BOOT_GROUP}:spring-boot", f"{BOOT_GROUP}:spring-boot-autoconfigure"}
+
+
+def read_evidence(base, artifact):
+    if not isinstance(artifact, dict) or not isinstance(artifact.get("path"), str) or not artifact["path"]:
+        raise ValueError("invalid evidence path")
+    raw = (base / artifact["path"]).read_bytes()
+    if not raw or hashlib.sha256(raw).hexdigest() != artifact.get("sha256"):
+        raise ValueError("empty or mismatched evidence")
+    return raw.decode("utf-8-sig")
+
+
+def resolved_boot_nodes(text, unit):
+    """Read selected dependency nodes, never infer Boot from the declared BOM."""
+    found = []
+    if unit.get("format") == "maven-json":
+        root = json.loads(text)
+        if not isinstance(root, dict) or f"{root.get('groupId')}:{root.get('artifactId')}" != unit.get("module"):
+            raise ValueError("tree root differs from application/consumer module")
+        pending = list(root.get("children", []))
+        while pending:
+            node = pending.pop()
+            if not isinstance(node, dict) or not isinstance(node.get("children", []), list):
+                raise ValueError("invalid Maven dependency node")
+            if any(not isinstance(node.get(k), str) or not node[k] for k in ("groupId", "artifactId", "version", "type")):
+                raise ValueError("missing/invalid Maven coordinate")
+            if node.get("scope") not in {"compile", "runtime", "provided", "system", "test"}:
+                raise ValueError("missing/unsupported dependency scope; export full non-verbose tree")
+            if any(k.startswith("omitted") for k in node):
+                raise ValueError("verbose/omitted nodes unsupported; export non-verbose selected tree")
+            if node.get("groupId") == BOOT_GROUP and str(node.get("artifactId", "")).startswith("spring-boot"):
+                found.append((f"{BOOT_GROUP}:{node['artifactId']}", node.get("version"),
+                              node.get("type") == "jar" and not node.get("classifier") and node["scope"] != "test"))
+            pending.extend(node.get("children", []))
+    elif unit.get("format") == "gradle-text":
+        configuration = unit.get("configuration")
+        if configuration not in {"compileClasspath", "runtimeClasspath", "testRuntimeClasspath"}:
+            raise ValueError("unsupported Gradle configuration; requires manual evidence review")
+        if not re.search(r"^" + re.escape(configuration) + r"(?:\s+-.*)?$", text, re.M):
+            raise ValueError("missing Gradle configuration header")
+        if re.search(r"(?:\+---|\\---).*?(?:FAILED|\(n\))", text):
+            raise ValueError("unresolved Gradle dependencies")
+        for line in text.splitlines():
+            if "(c)" in line:
+                continue  # Constraints are not selected artifacts.
+            match = re.search(r"(?:\+---|\\---)\s+(org\.springframework\.boot):(spring-boot[\w-]*)(?::([^\s]+))?(?:\s+->\s+(\S+))?", line)
+            if match:
+                group, artifact, requested, selected = match.groups()
+                if not selected and not requested:
+                    raise ValueError("missing selected Gradle version")
+                coordinate = f"{group}:{artifact}"
+                if selected and ":" in selected:
+                    group, artifact, selected = selected.split(":", 2)
+                    coordinate = f"{group}:{artifact}"
+                found.append((coordinate, selected or requested, True))
+    else:
+        raise ValueError("unsupported tree format; no automatic pass from a summary")
+    return found
+
+
+def check_resolution(stage, scope, base):
+    errors = []
+    required = scope.get("resolution_units")
+    resolution = stage.get("resolution")
+    if not isinstance(required, list) or not required or any(not isinstance(x, str) or not x for x in required):
+        return ["scope.resolution_units must enumerate application/consumer module-profile-classpath units"]
+    units = resolution.get("units") if isinstance(resolution, dict) else None
+    if not isinstance(units, list) or not units:
+        return ["missing actual resolution trees; resolved_boot alone is insufficient"]
+    seen = set()
+    expected = stage.get("resolved_boot")
+    for unit in units:
+        if not isinstance(unit, dict) or not isinstance(unit.get("id"), str) or not unit["id"]:
+            errors.append("invalid resolution unit")
+            continue
+        key = unit["id"]
+        if key in seen:
+            errors.append(f"{key}: duplicate resolution unit")
+        seen.add(key)
+        try:
+            nodes = resolved_boot_nodes(read_evidence(base, unit.get("tree")), unit)
+        except (OSError, ValueError, TypeError, RecursionError) as exc:
+            errors.append(f"{key}: cannot verify dependency tree: {exc}")
+            continue
+        actual = {}
+        for coordinate, selected, core_candidate in nodes:
+            if coordinate.startswith(BOOT_GROUP + ":spring-boot") and selected != expected:
+                errors.append(f"{key}: selected {coordinate}:{selected}, expected {expected}; not a bridge")
+            if coordinate in CORE and core_candidate:
+                actual.setdefault(coordinate, set()).add(selected)
+        recorded = unit.get("core_artifacts")
+        for coordinate in sorted(CORE):
+            if actual.get(coordinate) != {expected}:
+                errors.append(f"{key}: core jar/component {coordinate} not resolved exclusively to {expected}")
+            if not isinstance(recorded, dict) or recorded.get(coordinate) != expected:
+                errors.append(f"{key}: core_artifacts summary missing/inconsistent for {coordinate}")
+    if seen != set(required):
+        errors.append("resolution unit coverage differs from scope.resolution_units")
+    return errors
 
 
 def version(value):
@@ -20,8 +120,8 @@ def check_contract(data, base, gate, snapshot):
     errors = []
     if not isinstance(data, dict):
         return ["contract must be an object"]
-    if data.get("schema_version") != 1:
-        errors.append("unsupported schema_version")
+    if type(data.get("schema_version")) is not int or data["schema_version"] != 2:
+        errors.append("schema_version=2 required; v1 did not verify resolved dependency trees")
     if data.get("mode") != "migrate":
         errors.append("migration gates require mode=migrate; assess cannot authorize writes")
     source, target = version(data.get("source_boot")), version(data.get("target_boot"))
@@ -82,6 +182,7 @@ def check_contract(data, base, gate, snapshot):
                     errors.append("each bridge needs component/reason/exit_condition")
     if stage.get("snapshot") != snapshot:
         errors.append("checkpoint does not match supplied current snapshot")
+    errors.extend(check_resolution(stage, scope, base))
     checks = stage.get("checks")
     if not isinstance(checks, dict):
         return errors + ["stage.checks must be an object"]

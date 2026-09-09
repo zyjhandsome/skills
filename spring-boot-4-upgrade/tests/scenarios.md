@@ -14,5 +14,7 @@
 | Gradle catalog/convention/included build | 定位真实版本 owner 与任务 owner，不自动在根 build 注入 |
 | Jackson2 nullable 与 Jackson3 共存 | 查 mapper 和三态契约，不自动删 Jackson2 或一律锁 0.2.8 |
 | 已注册的旧 Hibernate Filter 无目标类 | 核实 session/事务替代语义，不机械删除 |
+| 企业 parent 管理 core 3.5，子 import BOM 4.0 且新 webmvc 为 4.0 | 实际 tree 中旧 core/actuator 等必须阻断两种 verified；修 owner 或报告未验证/阻塞，并列执行者与下一步；不能把覆盖失败登记为桥 |
+| 依赖树干净但隔离启动失败 | 不事后删 runtime 必需项；继续诊断或说明真实环境阻塞、解除条件和下一步 |
 
 MVC 夹具是原创最小 Spring Boot 3.4.0 项目，不包含 Petclinic 的数据库、安全和 OpenAPI 生成器；这些分支仍需各自代表性服务或专门夹具，不能由四个 MVC 测试外推覆盖。

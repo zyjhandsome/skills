@@ -12,6 +12,10 @@
 
 分开记录：`declared_version`、`resolved_version`、`version_owner`、`profile/configuration`、`evidence`。静态解析不能求出继承属性/动态 Gradle 逻辑时填 unknown；不能把文件中第一个 `3.x` 当成生效 Boot 版本。Boot BOM 的范围不等于某个不受其管理的第三方组件受到支持。
 
+**企业 parent + 子 BOM 陷阱**：继承的 dependencyManagement 已有某坐标时，子 POM 再 import 新 BOM 不保证替换它；可能出现旧 core/starter 与新模块并存。不要笼统称“父级永远优先”：子 POM **显式**管理同一坐标可覆盖父级；属性覆盖只有在实际 owner 使用并在继承模型中解析该属性时才有效，同层多个 imported BOM 的重复项还受顺序影响。用各应用模块 effective-pom 和实际 tree 判定，不能靠声明推演成功。[Maven 官方规则](https://maven.apache.org/guides/introduction/introduction-to-dependency-mechanism.html)
+
+优先升级真正的企业 parent/BOM，或修正其可用的版本控制入口；无法修改仓外 owner 时，评估保留 parent 的显式管理覆盖与切换 parent 的代价，不默认逐 starter 钉版本或脱离企业 parent。切换到 Boot parent 必须盘点并保留必要的企业插件、仓库、编译/打包、发布和检查约定；企业 parent 源码若不在授权仓库内，记录该责任方的动作。无论选哪条，重新检查 core 与所有 Boot 模块的实际版本，失败覆盖不是兼容桥，暂行覆盖需退出条件。
+
 ## 最小盘点清单
 
 - 仓库路径、HEAD、用户现有变更、应用/库模块、依赖边和当前构建入口。

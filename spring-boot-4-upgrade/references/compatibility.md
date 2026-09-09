@@ -10,6 +10,8 @@ Boot 4.0 改为按技术拆分模块。主代码、自动配置和测试 API 可
 
 自动配置类迁移必须核对目标类存在及必要依赖，同时检查 `@Import`、exclude 字符串、`AutoConfiguration.imports`、条件注解和私有 starter。不要对整个 `org.springframework.boot.autoconfigure` 前缀一刀切。
 
+目标中已迁移/删除的 Boot 3 API（如旧 `org.springframework.boot.web.embedded.tomcat` 下的类）仍能编译时，先反查提供该类的实际 jar 和 classpath，而不是据此认定迁移正确；是否移包以该具体类的目标版本为准，不把所有旧前缀一律判错。
+
 Servlet 基线为 6.1，Boot 4.0 不支持 Undertow。发现 Undertow 或老外置容器时，评估已有授权是否允许切换到支持的 Tomcat/Jetty/运行平台，并验证定制 handler、线程、连接、HTTP 配置；必须保留旧容器则阻塞，不偷换成能编译的组合。JVM 可执行 jar 保留 `java -jar`；检查依赖旧内嵌 Unix 启动脚本的服务启动配置。
 
 ## Jackson：先保护数据契约
