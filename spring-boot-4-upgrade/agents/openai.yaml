@@ -1,0 +1,4 @@
+interface:
+  display_name: "Spring Boot 4 存量仓库升级"
+  short_description: "分阶段完成 Spring Boot 3.x 到 4.x 升级，支持批量仓库与行为验收"
+  default_prompt: "使用 $spring-boot-4-upgrade 按我的请求评估或实施 Spring Boot 4.x 升级；仅评估时不修改业务、构建或部署文件，已要求实施时先列方案再执行和验证。"

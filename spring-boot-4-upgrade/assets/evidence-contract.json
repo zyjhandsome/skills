@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "mode": "assess",
+  "source_boot": null,
+  "target_boot": null,
+  "scope": {
+    "included": [],
+    "excluded": [],
+    "required_checks": ["resolution", "build", "tests", "runtime", "contracts"]
+  },
+  "baseline35": null,
+  "final": null
+}

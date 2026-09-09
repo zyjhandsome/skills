@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "batch_id": null,
+  "mode": "assess",
+  "verified_at": null,
+  "target_boot": null,
+  "target_reason": null,
+  "version_sources": [],
+  "rewrite": {
+    "maven_plugin": null,
+    "gradle_plugin": null,
+    "recipe_artifacts": [],
+    "active_recipes": []
+  },
+  "repositories": [],
+  "repository_entry_template": {
+    "id": null,
+    "absolute_path": null,
+    "baseline_head": null,
+    "baseline_changes_evidence": null,
+    "modules": [],
+    "build_tool": null,
+    "declared_boot": null,
+    "resolved_boot": null,
+    "version_owner": null,
+    "bridge_boot": null,
+    "target_boot": null,
+    "target_exception_reason": null,
+    "depends_on": [],
+    "wave": null,
+    "current_stage": "inventory",
+    "status": "pending",
+    "compatibility_bridges": [],
+    "checkpoints": [],
+    "blocked_by": [],
+    "report": null,
+    "next_action": null
+  }
+}

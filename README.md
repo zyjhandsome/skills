@@ -96,6 +96,14 @@ forbid_source_mutation: yes
 - [`docs/vue2-to-vue3-upgrade-impact-analysis-usage.md`](./docs/vue2-to-vue3-upgrade-impact-analysis-usage.md)（Vue2 分析-only）
 - [`docs/vue2-to-vue3-upgrade-impact-analysis-playbook.md`](./docs/vue2-to-vue3-upgrade-impact-analysis-playbook.md)（单仓原地升到仓内 verified；每步独立会话）
 
+## Spring Boot 4 存量升级
+
+| 技能 | 说明 |
+|------|------|
+| [spring-boot-4-upgrade](./spring-boot-4-upgrade/SKILL.md) | Spring Boot 3.x → 4.x 分阶段升级：3.5 准备、Maven/Gradle、OpenRewrite、依赖兼容、行为验收和批量仓库续跑；支持只评估或直接实施 |
+
+详见[方案与使用示例](./docs/spring-boot-4-upgrade-plan.md)。独立可用，不强制串联依赖分析 Skill 或 delivery-*。
+
 ## Vue2 页面迁入 Vue3 Host
 
 独立领域 skill：把 Vue2 源仓 A 的可切换用户行为（通常是一页）迁入已有 Vue3 宿主仓 B。默认 A 只读、B 壳保持 host-native、迁入内容 strict parity、视觉证据必做；只有 `assess` / `design` / `verify`，不改应用代码。不依赖、不调用 `delivery-*`；需要生命周期时按粘贴剧本组合 delivery。
