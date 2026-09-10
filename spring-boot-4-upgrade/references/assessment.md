@@ -16,6 +16,8 @@
 
 优先升级真正的企业 parent/BOM，或修正其可用的版本控制入口；无法修改仓外 owner 时，评估保留 parent 的显式管理覆盖与切换 parent 的代价，不默认逐 starter 钉版本或脱离企业 parent。切换到 Boot parent 必须盘点并保留必要的企业插件、仓库、编译/打包、发布和检查约定；企业 parent 源码若不在授权仓库内，记录该责任方的动作。无论选哪条，重新检查 core 与所有 Boot 模块的实际版本，失败覆盖不是兼容桥，暂行覆盖需退出条件。
 
+组织已有 Boot 4 parent/BOM 可作优先候选，但其名称/版本号不是兼容证据，仍检查实际管理值、企业约定和 consumer 行为。企业 parent 的 SNAPSHOT 不等于 Boot SNAPSHOT；需记录其实际解析内容及可复现限制，不能替代目标 Boot 的精确 GA 要求，也不自动采用可变 SNAPSHOT 基线。
+
 ## 最小盘点清单
 
 - 仓库路径、HEAD、用户现有变更、应用/库模块、依赖边和当前构建入口。
@@ -44,10 +46,14 @@
 
 处置：升级引入方、使用兼容版本、迁移 API、替换（需符合用户范围）、限时桥接、阻塞。状态：confirmed / tested-only / unknown / incompatible。无公开矩阵的私有 starter，可检查可用源/字节码依赖和自动配置声明，并在目标 consumer 运行上下文及关键功能测试；仍缺资料则报告 unknown，不声明官方支持。
 
+预编译组件的具体检查见 [二进制检查与处置](binary-compatibility.md)。写“版本不变”不等于兼容性已确认；记录目标 API 检查及关键路径触达证据，未知仍保留 unknown。
+
 “没有 Boot 4 兼容版本”是组件层阻塞，不是增加多个 `force`、排除全部传递依赖或删除业务功能的理由。
 
 ## 前后基线
 
 记录 wrapper 命令、工作目录、JDK、profile、外部设施和测试结果。原始基线失败可继续诊断或做独立的方案工作；区分原有失败、本次失败、环境不可用。不得把未验证阶段称为成功，也不要为了掩盖失败删测试、降低断言、改成永久跳过。
+
+私服/代理 TLS 失败先核对实际构建 JDK、证书链和组织 CA；优先使用来源已核实的 CA 与限定本次构建的 truststore，不自动关闭证书/主机名校验或修改全局信任。已有明确授权的临时例外仍需记录作用域、风险及清理，不能固化到 POM、wrapper 或 Skill 默认命令；连接失败不等于 artifact 不存在。
 
 来源：[Boot 4.0 迁移指南](https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-4.0-Migration-Guide)、[Boot 4.0 安装要求](https://docs.spring.io/spring-boot/4.0/installing.html)、[Spring Cloud 兼容矩阵](https://spring.io/projects/spring-cloud/)。

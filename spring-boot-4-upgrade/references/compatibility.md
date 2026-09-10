@@ -10,6 +10,8 @@ Boot 4.0 改为按技术拆分模块。主代码、自动配置和测试 API 可
 
 自动配置类迁移必须核对目标类存在及必要依赖，同时检查 `@Import`、exclude 字符串、`AutoConfiguration.imports`、条件注解和私有 starter。不要对整个 `org.springframework.boot.autoconfigure` 前缀一刀切。
 
+防止 starter **静默失效**：核对实际 jar 的注册入口、条件评估结果、预期 bean 及核心调用，不能用“无异常”证明已生效。`spring.factories` 的 `EnableAutoConfiguration` 注册支持在 Boot 3.0 已移除，其他键不因此失效；不要删除整个文件或把它当作 Boot 4 新变化。[Boot 3.0 官方说明](https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-3.0-Migration-Guide#auto-configuration-files)。是否换用厂商的 Boot 4 starter 取决于具体版本证据；合法条件不满足或用户 bean 导致自动配置退让并非一律错误。
+
 目标中已迁移/删除的 Boot 3 API（如旧 `org.springframework.boot.web.embedded.tomcat` 下的类）仍能编译时，先反查提供该类的实际 jar 和 classpath，而不是据此认定迁移正确；是否移包以该具体类的目标版本为准，不把所有旧前缀一律判错。
 
 Servlet 基线为 6.1，Boot 4.0 不支持 Undertow。发现 Undertow 或老外置容器时，评估已有授权是否允许切换到支持的 Tomcat/Jetty/运行平台，并验证定制 handler、线程、连接、HTTP 配置；必须保留旧容器则阻塞，不偷换成能编译的组合。JVM 可执行 jar 保留 `java -jar`；检查依赖旧内嵌 Unix 启动脚本的服务启动配置。
@@ -20,9 +22,19 @@ Boot 4 首选 Jackson 3。它更换多数 artifact/package 命名，但 **`com.f
 
 逐项检查自定义 ObjectMapper/JsonMapper、builder/customizer、module、serializer/deserializer、mixin、异常捕获、HTTP converter、Redis/session/Kafka 等。Mapper 构建/不可变性及格式专用 mapper 会影响旧的覆盖方式；不能仅修 imports。以目标 Boot 自动配置验证实际注入和真正处理请求的 mapper。
 
+源码直接使用的 Jackson API 应在所属模块显式声明对应 artifact 和正确 scope，版本优先由相容 BOM 管理，不依赖无关 SDK/服务发现组件偶然传递引入，也不统一硬钉某个 Jackson 2 补丁。[Maven 直接依赖建议](https://maven.apache.org/guides/introduction/introduction-to-dependency-mechanism.html)。`spring-boot-jackson2` 是自动配置兼容模块，其存在不能单独证明实际使用的 Jackson API/serializer 已适配。
+
 迁移前保留脱敏的输入与输出样本，覆盖字段名/大小写、日期时区、null/空值、枚举、数值精度、未知字段、多态、错误响应；新旧版本双向读取缓存、session、事件历史数据。Jackson 2 兼容默认选项不等于启用 Jackson 2 引擎，也不保证全部行为相同。
 
+保留 Jackson 2 serializer 桥时，至少用实际 serializer 和配置做离线契约检查，读取升级前脱敏字节样本，并覆盖适用的反向读取、类型信息与边界值。同版本 serialize→deserialize 往返不能证明旧数据兼容；离线通过不替代约定的 Redis/消息连接、TTL、集成行为或 HTTP Jackson 3 与 SDK Jackson 2 边界验证。
+
 **已观察到的配方漏项**：旧 mapper visibility 配置可能被转换为目标 Jackson 3 不接受的 `.visibility(...)`。核对实际目标 Javadoc，用 `changeDefaultVisibility(v -> ...)` 等目标 API 表达原配置，并检查字段暴露范围不变；不可简单扩大为所有字段 ANY。参见 [MapperBuilder API](https://javadoc.io/static/tools.jackson.core/jackson-databind/3.0.0/tools.jackson.databind/tools/jackson/databind/cfg/MapperBuilder.html)。配方版本不同，覆盖也可能不同，此项是检查线索而非每次必改。
+
+**配置绑定漏项**：Jackson 3 的日期/时长开关如 `WRITE_DATES_AS_TIMESTAMPS`、`WRITE_DURATIONS_AS_TIMESTAMPS` 属于 `DateTimeFeature`。Boot 4 对应 `spring.jackson.datatype.datetime.<feature>`，另有 `datatype.enum` / `datatype.json-node`；不能继续放在 serialization map 下。旧 `spring.jackson.serialization.write-dates-as-timestamps` 在绑定目标 JacksonProperties 时会因枚举转换失败报错；新增正确键不会抵消仍有效的旧键，需检查所有生效来源。[JsonMapper 配置说明](https://docs.spring.io/spring-boot/how-to/spring-mvc.html#howto.spring-mvc.customize-jackson-objectmapper)
+
+不能仅删旧键：Jackson 3 默认日期/时长输出倾向字符串，但 Boot 3 的默认或自定义 mapper 可能本来就输出字符串；按原始样本决定是否迁移原 true/false 值，并分别检查 Date、java.time、时区及数值精度。`spring.jackson.date-format`、module/customizer 和 Jackson 2 默认兼容选项可能改变最终特性；Boot 4.0.8 的配置顺序中 date-format 在 datatype 特性之后应用，绑定为 true 不保证最终仍输出时间戳。确需 customizer 时核实执行顺序与输出，不默认增加。[4.0.8 自动配置源码](https://github.com/spring-projects/spring-boot/blob/v4.0.8/module/spring-boot-jackson/src/main/java/org/springframework/boot/jackson/autoconfigure/JacksonAutoConfiguration.java)
+
+`spring.jackson.*` 对应 Jackson 3，`spring.jackson2.*` 对应兼容桥的 Jackson 2 配置；不能机械互换或用手建 mapper 证明 HTTP 实际引擎已生效。按 [离线配置绑定预检](verification.md#离线配置绑定预检) 验证。properties-migrator 的报告或无告警不能替代 Map 枚举键检查，不假定目标版本能自动识别并迁移每个动态子键。
 
 ## OpenAPI 与生成代码（命中时）
 
@@ -45,6 +57,12 @@ Boot 4 首选 Jackson 3。它更换多数 artifact/package 命名，但 **`com.f
 JUnit、Testcontainers、Mockito、Surefire/Failsafe、Gradle test suites 以目标 BOM 与官方迁移说明为准。JUnit major 不意味着所有 `org.junit.jupiter` 包都要改名；Testcontainers 模块或 Java package 变化要核对实际目标，Docker 不可用则不能把容器测试记为通过。
 
 Framework 7/Kotlin 中检查 JSpecify nullability、HTTP 路径匹配、validation、反射参数名、缓存/事务代理与自定义 Spring 内部扩展。保留 `-parameters` 等已有编译契约，不把所有 `javax.*` 都替成 Jakarta（例如 JDK 的 `javax.sql`）。新增 Framework 功能不在默认升级范围内。
+
+HTTP 契约也记录 `Content-Type`、字符编码和内容协商。Framework 7 移除了旧 `APPLICATION_JSON_UTF8[_VALUE]` 常量；改为 `APPLICATION_JSON[_VALUE]` 后，实测响应头及非 ASCII 内容，检查下游是否精确比较 charset 参数，不默认认为必然等价或必然破坏兼容。参考 [6.2 MediaType](https://docs.spring.io/spring-framework/docs/6.2.x/javadoc-api/org/springframework/http/MediaType.html) 与 [7.0 MediaType](https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/http/MediaType.html)。确需保留既有头部契约时用目标支持的 API 显式表达。
+
+## 预编译 SDK 的二进制兼容（命中时）
+
+本仓编译通过、Boot 依赖树对齐，不证明预编译第三方 jar 的内部调用能在目标运行栈链接成功。对缺乏目标兼容证据、直接引用 Spring/相关升级库、被启动中断遮挡或出现链接异常的 SDK，按 [二进制检查与处置](binary-compatibility.md) 核对实际字节码、目标 API、类加载来源及关键调用。自动配置未生效与加载后调用失效分别诊断，不由组件版本号或“无异常”推断兼容。
 
 ## 数据库、持久化与批处理
 

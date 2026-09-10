@@ -4,6 +4,8 @@
 
 OpenRewrite 负责可解析范围内的结构化转换，不保证私有框架或业务兼容。没有可用 recipe 时可手工迁移。不要因此安装无关工具或把企业源码上传第三方服务。
 
+无论 recipe 已运行还是改用手工路径，覆盖记录都应包含：Java 移除/搬家 API、starter/BOM、应用与部署属性键（含外部配置）、预编译 SDK。只 grep 旧 Java 包名不能结项；配置按 [离线绑定预检](verification.md#离线配置绑定预检) 补证据，不能因“没跑 Rewrite”或“recipe 无差异”省略。
+
 核实并固定三个不同对象：构建插件版本、recipe artifact 版本、活动 recipe ID。Maven 与 Gradle 插件有不同版本线，不能共用一个版本号。查官方 recipe 当前定义和本地 discover 输出，确认组合配方是否已经包含 Framework/Security/Jackson/Data 等子配方，避免盲目叠加或引用不存在的 ID。
 
 候选 ID（执行前必须在所选 artifact 中确认）：

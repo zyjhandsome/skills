@@ -127,6 +127,17 @@ class EvidenceContractTests(unittest.TestCase):
         self.data["baseline35"]["checks"]["runtime"]["status"] = "unavailable"
         self.assertTrue(self.check())
 
+    def test_partial_startup_cannot_pass_either_verified_gate(self):
+        runtime = self.data["final"]["checks"]["runtime"]
+        runtime["environment"] = "synthetic: context initialized; baseline and target DB unreachable"
+        for gate in ("verified", "verified-with-bridges"):
+            self.data["final"]["bridges"] = [] if gate == "verified" else [
+                {"component": "jackson2", "reason": "legacy serializer", "exit_condition": "migrate serializer"}]
+            for status, exit_code in (("failed", 1), ("unavailable", 0), ("passed", 1)):
+                with self.subTest(gate=gate, status=status, exit_code=exit_code):
+                    runtime.update(status=status, exit_code=exit_code)
+                    self.assertIn("runtime: required check did not pass", self.check(gate))
+
     def test_old_code_snapshot(self):
         self.assertTrue(self.check(snapshot="edited-after-tests"))
 

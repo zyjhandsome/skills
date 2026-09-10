@@ -16,5 +16,19 @@
 | 已注册的旧 Hibernate Filter 无目标类 | 核实 session/事务替代语义，不机械删除 |
 | 企业 parent 管理 core 3.5，子 import BOM 4.0 且新 webmvc 为 4.0 | 实际 tree 中旧 core/actuator 等必须阻断两种 verified；修 owner 或报告未验证/阻塞，并列执行者与下一步；不能把覆盖失败登记为桥 |
 | 依赖树干净但隔离启动失败 | 不事后删 runtime 必需项；继续诊断或说明真实环境阻塞、解除条件和下一步 |
+| core 已对齐、Tomcat 监听且部分上下文初始化，随后数据库连接超时；基线同样超时 | 记录局部里程碑与环境归因，runtime 未通过；不新增 context-verified 状态或给予 verified-with-bridges |
+| 日志仅在临时目录，报告存于仓外既有目录 | 先查证据索引，不推断未执行；交付前归档必要证据并核对可读取性，不强制提交日志 |
+| Jackson 2 API 靠无关 SDK 传递引入，只有新 serializer 自身往返测试 | 显式声明所用 API 依赖并核实 BOM；补旧字节样本与实际 serializer 契约，不把离线通过当 Redis 集成通过 |
+| 旧 starter 无异常但预期 bean 不存在，jar 仅用旧 EnableAutoConfiguration 注册 | 查注册入口及条件结果；不删除 spring.factories 其他键，不统一强加厂商 Boot 4 坐标 |
+| JSON 值相同，但移除旧常量后 Content-Type 不再带 charset | 检查实际编码与消费者契约；不能只凭 JSON 语义比较判定行为完全不变 |
+| 企业私服证书失败且测试启动需解密口令 | 核实 CA/构建 JDK，采用限定 truststore 与受保护注入；不默认跳过 TLS 校验，不将真实口令写进命令记录或日志 |
+| SDK 字节码调用已删除的方法，应用编译和 jdeps 检查均通过 | 用 javap 核对 owner/name/descriptor 和目标继承层次；触发实际调用，不把类级分析当成员链接通过 |
+| 数据源先失败，SDK 在 lazy Bean 或首次请求才初始化 | 标明未触达/未知关键路径，补真实 SDK 的静态或隔离测试，环境恢复后仍验收完整制品 |
+| NoClassDefFoundError 之前已有静态初始化异常 | 追首次原因及加载来源，不一律认定为删除 API 或只补 jar |
+| 同包名覆盖只在 IDE 生效，部署入口加载原 SDK 类 | 桥验收失败；核对最终制品及支持入口的类加载来源，不能只凭无失效调用的覆盖类字节码通过 |
+| Spring 6 编译的 SDK 将 HttpHeaders 传入旧 MultiValueMap 构造器，Spring 7 读取时 ICCE | 核对实际入参/类型关系并扫描同 jar 全部有效类；旧 API 编译、目标 API 运行复现，不用反射失败替代现场；不自动覆盖 HttpEntity，合法 MultiValueMap 命中不判错 |
+| SDK 局部补丁未奏效，拟覆盖 HttpEntity；此前启动在 environmentPrepared 中断却标 verified-with-bridges | 单独评估框架覆盖及子类/消费者影响；更正旧状态，当前制品重验实际路径，不继承旧 verified 标签 |
+| 配置仍有旧 serialization.write-dates-as-timestamps，启动先死在外部配置/数据源 | 离线加载实际输入并绑定目标 JacksonProperties，按原契约迁到 datatype.datetime；旧键残留不因加新键豁免，runtime 保持未通过 |
+| ApplicationContextRunner 未导入实际 YAML；或时间戳键绑定 true 但 date-format 改变输出 | 断言输入加载和值，核对实际自动配置 mapper 的输出；不能以空输入/绑定通过宣称配置生效，不盲加 customizer |
 
 MVC 夹具是原创最小 Spring Boot 3.4.0 项目，不包含 Petclinic 的数据库、安全和 OpenAPI 生成器；这些分支仍需各自代表性服务或专门夹具，不能由四个 MVC 测试外推覆盖。

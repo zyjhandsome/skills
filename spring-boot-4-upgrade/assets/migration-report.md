@@ -5,7 +5,7 @@
 ## 范围与结论
 
 - 模式：assess / migrate
-- 状态：assessed / blocked / implemented-unverified / verified-with-bridges / verified
+- 状态（只选一个，不新增枚举）：assessed / blocked / implemented-unverified / verified-with-bridges / verified
 - 仓库绝对路径、基线 HEAD、当前差异/验证快照：
 - 应用/库模块、版本控制位置、profile/configuration：
 - 原始声明版本 / 原始解析版本：
@@ -25,6 +25,7 @@
 
 ## 实施与证据
 
+- 持久证据索引/报告位置、可读取性检查、保留期限（适用时）；命令与日志脱敏，密钥仅写注入方式：
 - OpenRewrite：插件精确版本、recipe artifact 精确版本、recipe ID 列表；或手工路径及原因。
 - discover、dry-run patch 与解析错误/覆盖缺口：
 - 实际文件变化与理由（含版本 owner、锁文件、外部配置需求）：
@@ -36,6 +37,13 @@
 |---|---|---|---|---|---|---|
 
 适用验收：解析版本、编译、单元/集成测试、制品、启动或库 consumer、JSON、鉴权负例、数据/消息、监控、native（按需）。不适用项写理由；无环境项保留复跑命令。
+
+- 运行里程碑与最终结果分开写：已初始化部分、实际可用性/请求结果、后续失败及证据；环境归因含对照条件，不将失败记为通过：
+- 命中时：HTTP Content-Type/编码变化、预期自动配置与 bean、桥接 serializer 旧数据兼容及集成验证缺口：
+- 启动中断后未触达/无法确认的关键 Bean、SDK 或首次调用路径；静态/隔离补测结果及恢复环境后的复跑入口：
+- 预编译组件命中时：调用方 jar 坐标/哈希、失效成员与 descriptor、目标 classpath、最终部署制品标识/实际类来源；最终采用的修复及遗留桥，不混用不同轮次结果：
+- 单 jar 扩展扫描命中时：有效类总数/成功分析数/缺口，命中类与方法、实际参数类型、路径触达状态及处置；框架类覆盖须另列继承链与消费者验收：
+- 配置命中时：生效来源/profile/优先级及未知外部输入、绑定对象/转换器、键和值断言、实际 mapper/bean 行为；离线覆盖和部署未验证范围分开记录：
 
 ## 桥接与阻塞
 

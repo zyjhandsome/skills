@@ -82,7 +82,7 @@ description: Upgrade existing Spring Boot 3.x repositories to a verified Spring 
 
 每阶段更新升级报告：实际变更、命令与工作目录、环境/profile、退出码、测试摘要、证据路径和差异范围。续跑时先比对 HEAD/差异/版本，已有记录不是当前代码验证通过的证明。
 
-最终状态选一个并说明：
+最终状态只能从下表选一个；细分进展写入已验证范围，不新增 `implemented-context-verified` 等状态：
 
 | 状态 | 含义 |
 |---|---|

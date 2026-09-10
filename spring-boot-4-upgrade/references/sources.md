@@ -27,6 +27,7 @@
 | springdoc | [官方兼容问答](https://springdoc.org/#what-is-the-compatibility-matrix-of-springdoc-openapi-with-spring-boot) |
 | OpenAPI 生成与 nullable | [Spring generator 选项](https://openapi-generator.tech/docs/generators/spring/)、[nullable v0.2.8 POM](https://github.com/OpenAPITools/jackson-databind-nullable/blob/v0.2.8/pom.xml)，按具体 generator/artifact 版本核对 Jakarta、Jackson 和三态 |
 | Jackson mapper 定制 | [Jackson 3 MapperBuilder](https://javadoc.io/static/tools.jackson.core/jackson-databind/3.0.0/tools.jackson.databind/tools/jackson/databind/cfg/MapperBuilder.html)，核对实际目标版本 |
+| Jackson 配置绑定与变化 | [Customize the Jackson JsonMapper](https://docs.spring.io/spring-boot/how-to/spring-mvc.html#howto.spring-mvc.customize-jackson-objectmapper)、[Boot 4.0 Configuration Changelog](https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-4.0-Configuration-Changelog)、[4.0 配置附录](https://docs.spring.io/spring-boot/4.0/appendix/application-properties/index.html)；默认文档可能展示新 minor，须与目标 jar 的配置元数据/枚举及自动配置实现交叉核对 |
 | 私有/其他第三方 | 组件自己维护的发布记录、兼容矩阵、源码和可重现 consumer 验证；没有来源就记 unknown |
 | Maven 管理与实际解析 | [Dependency Mechanism](https://maven.apache.org/guides/introduction/introduction-to-dependency-mechanism.html)、[Dependency Tree JSON 格式](https://maven.apache.org/plugins/maven-dependency-plugin/examples/tree-mojo.html)；区分继承、显式管理、BOM import 与最终选中节点 |
 
