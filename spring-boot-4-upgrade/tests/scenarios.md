@@ -30,5 +30,10 @@
 | SDK 局部补丁未奏效，拟覆盖 HttpEntity；此前启动在 environmentPrepared 中断却标 verified-with-bridges | 单独评估框架覆盖及子类/消费者影响；更正旧状态，当前制品重验实际路径，不继承旧 verified 标签 |
 | 配置仍有旧 serialization.write-dates-as-timestamps，启动先死在外部配置/数据源 | 离线加载实际输入并绑定目标 JacksonProperties，按原契约迁到 datatype.datetime；旧键残留不因加新键豁免，runtime 保持未通过 |
 | ApplicationContextRunner 未导入实际 YAML；或时间戳键绑定 true 但 date-format 改变输出 | 断言输入加载和值，核对实际自动配置 mapper 的输出；不能以空输入/绑定通过宣称配置生效，不盲加 customizer |
+| 升级后漏洞总数下降，但新增一条适用 Critical；扫描退出 0 | 逐组件/公告对比并执行策略判定；未处置前拒绝两种 verified，不把退出码或总数当安全结论 |
+| 组件版本未变，数据库刷新后多报一个 CVE | 尽可能用相同数据库复扫源/目标，区分新披露与升级引入；仍按当前准入规则处置 |
+| 扫描超时或数据库不可用，报告为空；或制品包含未识别私有 jar | 保留失败/识别缺口并补证据，不计零漏洞；缺少 dependency_security 或从 scope 删除它也不能通过契约 |
+| 切换企业 parent 后丢失旧安全覆盖；拟逐个 force 最新叶子版本 | 核对原修复与目标 BOM，优先相容 parent/SDK 或最小覆盖；复扫且做二进制/行为验证，不制造混栈 |
+| Jackson 2/同包名 SDK 桥仍带漏洞，拟全包 suppression；源检查通过但最终镜像未扫 | 桥无安全豁免，核对具体路径及有效例外；补实际交付制品/镜像扫描，未完成时不 verified-with-bridges |
 
 MVC 夹具是原创最小 Spring Boot 3.4.0 项目，不包含 Petclinic 的数据库、安全和 OpenAPI 生成器；这些分支仍需各自代表性服务或专门夹具，不能由四个 MVC 测试外推覆盖。

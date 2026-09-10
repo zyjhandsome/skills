@@ -12,6 +12,7 @@
 | 支持周期 | [Boot 项目支持信息](https://spring.io/projects/spring-boot#support)、[Supported Versions](https://github.com/spring-projects/spring-boot/wiki/Supported-Versions) |
 | 目标工具链与运行环境 | [Boot 4.0 系统要求](https://docs.spring.io/spring-boot/4.0/system-requirements.html)、[4.0 安装要求](https://docs.spring.io/spring-boot/4.0/installing.html)；其他 minor 改用对应页面 |
 | BOM 管理版本 | [3.5 dependency versions](https://docs.spring.io/spring-boot/3.5/appendix/dependency-versions/coordinates.html)、[4.0 dependency versions](https://docs.spring.io/spring-boot/4.0/appendix/dependency-versions/coordinates.html)，并以精确 artifact 的 POM 和实际解析树复核 |
+| 依赖安全 | [Spring Security Advisories](https://spring.io/security) 及各组件维护方公告；[扫描工具资料与比较规则](dependency-security.md)，记录数据库/规则日期，不能把扫描总数或 BOM 版本当安全保证 |
 | Cloud 兼容矩阵 | [Spring Cloud 项目页](https://spring.io/projects/spring-cloud/)、[Supported Versions](https://github.com/spring-cloud/spring-cloud-release/wiki/Supported-Versions) |
 
 ## 命中相关技术时读取

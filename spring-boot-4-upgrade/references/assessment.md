@@ -26,6 +26,7 @@
 - Jackson mapper/customizer、HTTP 与 Kafka/Redis/session 等序列化、Security filter chains、JPA/Hibernate、Flyway/Liquibase、Web MVC/WebFlux、Actuator、日志/tracing、AOT/native。
 - 配置作用域：主配置、profiles、测试内联属性、环境变量、Helm/K8s/Compose、CI、配置中心；只收集键名、位置和相关脱敏值。
 - 测试引擎、Surefire/Failsafe 或 Gradle test suites、自定义 integrationTest、Testcontainers/Docker；已有测试数量、跳过数量和 profile。
+- 既有 SCA 工具/数据库与准入规则、源版本漏洞清单、企业 parent 中的安全修复覆盖及例外有效期；按 [依赖漏洞检查](dependency-security.md) 预查候选版本及 BOM 差异，不以版本更高或 Boot 官方管理代替安全结论。
 
 在缺少真实仓库时只提供可行性、待盘点项和 Skill；不要虚构某家企业组件可用、测试已通过或工期。
 

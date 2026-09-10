@@ -26,7 +26,7 @@ description: Upgrade existing Spring Boot 3.x repositories to a verified Spring 
 1. 每个应用/库模块的 Boot **声明版本、实际解析版本、版本控制位置**；父 POM、导入 BOM、Gradle platform/catalog/convention plugin 的关系。
 2. JDK 的运行版本与编译目标、wrapper、Kotlin（若有）、打包和运行环境；CI 与本地是否一致。
 3. Spring Cloud、第三方和私有 starter 的兼容证据；JSON、安全、数据访问、消息、Web、测试、native 等实际使用面。
-4. 可重现的原始构建/测试结果和业务契约样本。缺网络、私服、数据库或容器时记录 `unavailable`，不伪装成版本冲突或已通过。
+4. 可重现的原始构建/测试结果、业务契约样本和 [依赖漏洞基线](references/dependency-security.md)。缺网络、私服、数据库或容器时记录 `unavailable`，不伪装成版本冲突或已通过。
 
 工具执行会运行仓库构建逻辑；先检查 CI/插件是否绑定了发布、远程环境或数据库变更。使用隔离的测试配置，避免为了“启动验证”连接生产数据库、消息消费组或注册中心。
 
@@ -74,7 +74,7 @@ description: Upgrade existing Spring Boot 3.x repositories to a verified Spring 
 
 ## 5. 验证与交付
 
-执行 [验收与回退](references/verification.md)。至少核查最终解析版本、生产/测试编译、实际执行的测试数量与失败/跳过、完整制品、启动及关键业务契约；对库模块以消费者集成测试替代启动。`BUILD SUCCESS`、`-DskipTests` 或一次 health 200 均不足以证明升级成功。
+执行 [验收与回退](references/verification.md)。至少核查最终解析版本、生产/测试编译、实际执行的测试数量与失败/跳过、完整制品、启动及关键业务契约；对库模块以消费者集成测试替代启动。按 [依赖漏洞检查](references/dependency-security.md) 比较升级前后风险并检查最终制品，兼容桥不豁免安全准入。`BUILD SUCCESS`、`-DskipTests` 或一次 health 200 均不足以证明升级成功。
 
 `verified` 必须满足 verification 中的完整判定条件并带明确验证范围。可运行 [证据契约校验](references/evidence-contract.md) 检查阶段/范围/证据文件一致性；它不执行升级，不替代实际测试或证明代理遵守权限。Skill 维护时用其中的离线回归和 Maven MVC 夹具检查行为，避免仅匹配文案的测试。
 
@@ -88,7 +88,7 @@ description: Upgrade existing Spring Boot 3.x repositories to a verified Spring 
 |---|---|
 | assessed | 只完成评估和方案 |
 | blocked | 关键兼容性或前置条件阻塞，列出解除条件 |
-| implemented-unverified | 代码已改，但必需的测试/启动/契约证据缺失 |
+| implemented-unverified | 代码已改，但必需的功能或依赖安全验收未通过/证据缺失 |
 | verified-with-bridges | 核心解析及适用验证全部通过，仍有明确登记的临时兼容桥；不得包含 Boot 混栈 |
 | verified | 精确目标已解析，适用验证通过，无未退出的临时兼容桥 |
 

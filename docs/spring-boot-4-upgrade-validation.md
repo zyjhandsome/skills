@@ -20,6 +20,10 @@
 
 本轮使用 Boot 4.0.8、Framework 7.0.9、Jackson 3.1.5、JDK 21，在仅注册 JacksonAutoConfiguration 的隔离上下文和直接 Binder 中做六组对照：旧 serialization 日期键失败、新 datatype.datetime 键成功、新旧键共存失败、无显式特性时 Date/Instant 为 ISO 字符串、日期键 true 加 date-format 时绑定仍为 true 但输出为字符串、非法布尔值失败。仅日期开关为 true 时 Date 为 0、Instant 为 0.0，Duration 仍为 PT2S，说明时长开关应独立核对。验证文档中的 Binder 片段已原样编译，正确输入通过、空输入被断言拒绝。未连接数据库/配置中心或加载企业 SDK；这不是用户仓库实际 YAML/profile/远端配置或业务启动的验收。Skill 结构和 diff 检查通过，新增 Agent 情景未实跑。
 
+2026-09-10 依赖安全增量：新增 dependency-security 参考，将原始/中间/目标漏洞比较、最终制品覆盖、版本 owner 安全覆盖保留、兼容修复与例外边界纳入主流程和报告。两种 verified 状态共用最终安全门；3.5 阶段记录风险及继续迁移的处置依据，不要求先清零原有漏洞。v2 结构保持不变，但校验器基本项新增 dependency_security，旧证据须补充该项。
+
+30 项 Python 回归及 Skill 结构校验通过。新增三项回归覆盖移除必需项、各阶段缺失/失败/不可用或非零退出码的拒绝、证据文件被改动/删除；全部使用合成证据，不解析真实漏洞报告。新增五条 Agent 情景尚未实跑；本轮未扫描用户业务仓库、最终 jar 或镜像，不能据此断言真实漏洞已修复。工具和 BOM 依据已对照官方资料；实际执行仍须核实工具版本、漏洞数据及准入规则。
+
 ## 结构校验
 
 使用 skill-creator 自带 quick_validate.py。系统默认 Python 缺少 PyYAML、venv、pip，因此改用 uv 隔离的 Python 3.12 + PyYAML，并启用 UTF-8 读取中文。未修改用户全局 Python 包。

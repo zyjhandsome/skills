@@ -6,7 +6,7 @@ from pathlib import Path
 import re
 
 
-BASE_CHECKS = {"resolution", "build", "tests", "runtime", "contracts"}
+BASE_CHECKS = {"resolution", "build", "tests", "runtime", "contracts", "dependency_security"}
 BOOT_GROUP = "org.springframework.boot"
 CORE = {f"{BOOT_GROUP}:spring-boot", f"{BOOT_GROUP}:spring-boot-autoconfigure"}
 
@@ -143,7 +143,7 @@ def check_contract(data, base, gate, snapshot):
     if not isinstance(required, list) or any(not isinstance(x, str) or not x for x in required):
         return errors + ["scope.required_checks must be a list of check names"]
     if not BASE_CHECKS.issubset(required):
-        errors.append("required_checks must include resolution/build/tests/runtime/contracts")
+        errors.append("required_checks must include " + "/".join(sorted(BASE_CHECKS)))
     exclusions = scope.get("excluded", [])
     if not isinstance(exclusions, list):
         errors.append("scope.excluded must be a list")

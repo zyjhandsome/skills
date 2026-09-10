@@ -165,6 +165,42 @@ class EvidenceContractTests(unittest.TestCase):
         self.data["scope"]["required_checks"].append("security")
         self.assertTrue(self.check("verified"))
 
+    def test_dependency_security_cannot_be_removed_from_scope(self):
+        self.data["scope"]["required_checks"].remove("dependency_security")
+        for gate in ("boot4", "verified", "verified-with-bridges"):
+            with self.subTest(gate=gate):
+                errors = self.check(gate)
+                self.assertTrue(any("required_checks must include" in e and "dependency_security" in e
+                                    for e in errors), errors)
+
+    def test_dependency_security_missing_or_failed_rejected_at_each_stage(self):
+        for gate in ("boot4", "verified", "verified-with-bridges"):
+            self.data["final"]["bridges"] = [] if gate != "verified-with-bridges" else [
+                {"component": "legacy-sdk", "reason": "temporary adapter", "exit_condition": "compatible SDK"}]
+            checks = self.data["baseline35" if gate == "boot4" else "final"]["checks"]
+            original = checks.pop("dependency_security")
+            with self.subTest(gate=gate, status="missing"):
+                self.assertIn("missing required check: dependency_security", self.check(gate))
+            checks["dependency_security"] = copy.deepcopy(original)
+            for status, exit_code in (("failed", 0), ("failed", 1), ("unavailable", 0), ("passed", 1)):
+                with self.subTest(gate=gate, status=status, exit_code=exit_code):
+                    checks["dependency_security"].update(status=status, exit_code=exit_code)
+                    self.assertIn("dependency_security: required check did not pass", self.check(gate))
+            checks["dependency_security"] = original
+            self.assertEqual(self.check(gate), [])
+
+    def test_dependency_security_evidence_must_exist_and_match(self):
+        evidence = self.root / "synthetic-security-review.json"
+        raw = b'{"fixture": true, "note": "synthetic evidence; no vulnerability scan executed"}'
+        evidence.write_bytes(raw)
+        record = self.data["final"]["checks"]["dependency_security"]
+        record["artifacts"] = [{"path": evidence.name, "sha256": hashlib.sha256(raw).hexdigest()}]
+        self.assertEqual(self.check("verified"), [])
+        evidence.write_bytes(b"changed security evidence")
+        self.assertTrue(self.check("verified"))
+        evidence.unlink()
+        self.assertTrue(self.check("verified"))
+
     def test_health_alone_is_not_verification(self):
         runtime = self.data["final"]["checks"]["runtime"]
         self.data["final"]["checks"] = {"runtime": runtime}

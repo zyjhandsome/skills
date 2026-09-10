@@ -6,7 +6,7 @@
   "scope": {
     "included": [],
     "excluded": [],
-    "required_checks": ["resolution", "build", "tests", "runtime", "contracts"],
+    "required_checks": ["resolution", "build", "tests", "runtime", "contracts", "dependency_security"],
     "resolution_units": []
   },
   "baseline35": null,
