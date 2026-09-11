@@ -22,7 +22,7 @@
 
 - 仓库路径、HEAD、用户现有变更、应用/库模块、依赖边和当前构建入口。
 - Boot parent/BOM/plugin；Java runtime、toolchain、release/source/target；Maven/Gradle wrapper；Kotlin compiler/plugins（若有）。CI、Docker/buildpack/Jib、运行容器和外部 WAR 部署要求。
-- 已使用的 Cloud/Alibaba、springdoc、MyBatis/MyBatis-Plus、Dubbo、Resilience4j、Querydsl、MapStruct、Lombok、数据库驱动及私有 SDK/starter。这里是检查候选，不是固定依赖升级清单。
+- 已使用的 Cloud/Alibaba、springdoc、MyBatis/MyBatis-Plus、Dubbo、Resilience4j、Querydsl、MapStruct、Lombok、数据库驱动及私有 SDK/starter。这里是检查候选，不是固定依赖升级清单。仅靠旧 `spring.factories` 注册或坐标带 Boot 版本标识的厂商组件，盘点期就检索其官方 Boot 4 坐标与版本线（可能形如 `*-spring-boot-4-starter`），不等到“编译通过但 bean 不在”才发现。
 - Jackson mapper/customizer、HTTP 与 Kafka/Redis/session 等序列化、Security filter chains、JPA/Hibernate、Flyway/Liquibase、Web MVC/WebFlux、Actuator、日志/tracing、AOT/native。
 - 配置作用域：主配置、profiles、测试内联属性、环境变量、Helm/K8s/Compose、CI、配置中心；只收集键名、位置和相关脱敏值。
 - 测试引擎、Surefire/Failsafe 或 Gradle test suites、自定义 integrationTest、Testcontainers/Docker；已有测试数量、跳过数量和 profile。
@@ -37,6 +37,18 @@
 3. 从**目标版本页面**取得 Java/Framework/构建工具要求。Boot 4.0 的基线是 Java 17、Maven 3.6.3+、Gradle 8.14+ 的 8.x 或 9.x；工具插件可能要求更高版本。Kotlin/native 项目另核实 Kotlin 2.2+、GraalVM 25+ 等要求。这不是要求把 JVM 应用统一改成 Java 25。
 4. 按中间与最终阶段分别确认生态支持；不要用支持 Boot 3.5 的 Cloud train 在 Boot 4 上关闭兼容性检查来“修复”。截至核验日，官方表列 2025.0.x 对应 Boot 3.5，2025.1.x 对应 4.0，2025.1.2 起还支持 4.1；执行时重新查表，不能推导不存在的 2026.0 train。
 5. 比较源/目标 BOM 和实际依赖树，找出显式覆盖、仲裁冲突、同一框架的跨 major 混用。优先改 parent/BOM/property/引入方；只有确有证据需要偏离 BOM 时才加局部覆盖，并记录原因和验证。
+
+## 新增与变更依赖的发布状态
+
+对原始→3.5、3.5→目标及原始→最终的实际组件清单做差异，逐项记录新增、移除、版本变化；坐标替换记录旧/新坐标关联，不能漏掉传递依赖。应用 runtime/provided、test、构建插件/工具分开列；打包时新增或替换的组件也需纳入。未实际选中的 BOM 条目不当作已引入依赖。
+
+每个新增或版本变化的组件记录：模块/profile、完整坐标或 purl、直接/传递及引入路径、原版本→实际目标版本、版本 owner、发布状态（GA / prerelease / snapshot / unknown）、官方发布证据及核验日期。发布状态与兼容性、支持周期、漏洞结论分别判断，不能互相替代。
+
+优先使用维护方对该精确版本的发布公告、release notes 或正式版本目录，并与实际 artifact 对应；私有组件可用维护方正式发布记录及不可变制品标识。SNAPSHOT、Alpha、Beta、Milestone、RC 等命名是核验线索，不能仅凭正则、纯数字版本、存在 tag、可从仓库下载或被 Boot BOM 管理就认定 GA；不同组件的命名约定需按维护方证据解释。
+
+默认仅引入已核实的 GA，不新增预发布/快照依赖。无证据填 unknown，先补证据或选择相容 GA；缺口未解除不得通过对应阶段的发布状态验收。只有用户已明确指定或组织已有授权例外时才保留非 GA/未知项，并登记范围、原因、责任人、复查/退出条件及可复现限制；例外不把状态改写为 GA，也不自动成为兼容桥。原有未变的非 GA 项保留风险记录，按组织规则处理，不借此擅自扩大升级范围。
+
+候选版本确定时先核验，最终再用解析树和制品清单复核，避免配方、仲裁或锁文件把候选 GA 换成其他实际版本。阶段发布状态证据与 [依赖安全验收](dependency-security.md) 一并归档；校验器不自动查询发布状态。
 
 ## 兼容决策表
 

@@ -12,6 +12,7 @@
 - runtime 记录完整验收命令/测试驱动的结果，应用正常受控停止与启动失败分别说明。部分初始化或到达可归因失败点不能填 passed；程序检查状态/退出码一致性，不读取日志判定 readiness。命令中的凭证使用占位符；原始证据先脱敏再计算其归档文件哈希，交付前核查持久路径，不能用一致性通过承诺未来文件不丢失。
 - dependency_security 记录 [阶段安全门](dependency-security.md) 的整体检查结果，不是仅抄扫描退出码：3.5 为基线覆盖、风险及继续迁移处置，final 为源/目标差异、最终制品覆盖及准入判定。artifacts 包含原始扫描报告、组件清单、工具/数据库/规则与制品哈希、差异及处置依据；各子命令/退出码记录其中，整体 command 写实际检查入口（人工审查则如实标明，不能伪造扫描命令）。扫描失败/不可用、覆盖缺失或策略未通过均不得 passed，即使扫描进程退出 0。程序仅校验记录/文件一致性，不解析 CVE、验证例外授权或自动判断报告中的策略是否通过。
 - tests 另含非负整数 `executed`（实际执行数量，不含 skipped）、`failures`、`errors`、`skipped`；有跳过写 `skip_coverage_reason`。真实测试报告应作为 artifact，不要仅提供自己写的总结。
+- dependency_security 的 artifacts 还须归档该阶段新增/变更组件的发布状态清单及来源、High/Critical 逐项评审表；整体 passed 同时要求发布状态验收及阶段安全规则满足。沿用现有检查项和 JSON 结构；程序不查询第三方 GA、不校验这些表的逐行内容或扫描覆盖，不能把 consistent=true 当作“所有依赖均 GA 且无漏洞”。
 - final 另含布尔值 `properties_migrator_present`、`temporary_rewrite_present`（必须 false），`bridges` 数组。空桥允许 verified；保留桥的记录需 component/reason/exit_condition，用 verified-with-bridges。合法的第三方 Jackson 2 依赖不自动计为 Boot 兼容桥。
 - `scope.resolution_units` 列出必须验证的应用/consumer 模块、profile/classpath 单元 ID，例如 `app@local:all`；不能用聚合 POM 替代应用。`baseline35` 和 `final` 的 `resolution.units` 须逐单元提供 `id`、`module`、`format`、`tree: {path, sha256}`、`core_artifacts`。后者以完整 GA 为键，记录 spring-boot 和 spring-boot-autoconfigure 版本；校验器从 tree 独立读取并交叉核对，不能只填两个字符串。所有 Boot 模块必须对齐该阶段精确版本。
 

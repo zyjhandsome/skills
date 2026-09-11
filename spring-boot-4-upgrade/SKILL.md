@@ -50,6 +50,8 @@ description: Upgrade existing Spring Boot 3.x repositories to a verified Spring 
 
 将中间和最终版本、工具/recipe 版本、来源日期固定进升级记录；执行前把 `latest`、`RELEASE`、`4.x` 等范围解析成精确 GA。报告计划包含变更模块/文件、依赖处置、阶段、验收命令、阻塞和回退点，可用 [报告模板](assets/migration-report.md)。关键依赖无兼容版本时继续可行的独立工作，暂停依赖它的跨 major 阶段。
 
+按 assessment 的发布状态规则，逐项核验新增或版本变化的直接/传递依赖及构建工具，记录原版本→实际目标版本、GA 状态与来源；默认不引入预发布/快照，未知不能当 GA。最终解析和制品变化后复核，Boot 本身为 GA 不能代替关联依赖核验。
+
 ## 3. 完成 3.5 准备阶段
 
 先对齐 3.5 的 Boot 与 Cloud/BOM，升级确有必要的工具链，解决目标 4.x 会删除的废弃 API，迁移 Security 6.5 的预备配置。依照原项目执行完整构建、适用的集成测试和启动/库消费者验证。
@@ -81,6 +83,8 @@ description: Upgrade existing Spring Boot 3.x repositories to a verified Spring 
 新增/修改测试须覆盖真实迁移风险（鉴权负例、JSON 契约、数据/消息兼容等）；不为迁移引入无关测试框架。失败时定位根因再重试；同一失败无新证据连续两次则停止盲重试，记录阻塞并转向可独立推进的项目。
 
 每阶段更新升级报告：实际变更、命令与工作目录、环境/profile、退出码、测试摘要、证据路径和差异范围。续跑时先比对 HEAD/差异/版本，已有记录不是当前代码验证通过的证明。
+
+启动或 runtime 检查未执行、被截断或退出码非 0 时，交付文字不得写“上下文初始化全链路通过”“启动验证通过”一类结论；未做离线绑定核对、也未证明对应 bean 按该配置创建的 `@ConfigurationProperties`（Jackson、缓存、session 等）一律列为未证实。
 
 最终状态只能从下表选一个；细分进展写入已验证范围，不新增 `implemented-context-verified` 等状态：
 
