@@ -13,7 +13,7 @@ Build a decision-ready brief, not a raw changelog dump. Organize updates by user
 
 When the user asks for an AI agent update brief, AI coding tools report, agentic IDE report, CLI agent update, or similar research task and does not specify a tool list, treat "all tools" as the default. Do not ask for clarification just to choose tools.
 
-Default output is a standalone HTML report saved in the current workspace. Also provide a concise Chinese chat summary with the local file link after generation.
+Default output is a standalone HTML report saved under a `reports/` folder in the current workspace (create it if missing), unless the user specifies another location. Do not save reports next to the skill's own files. Also provide a concise Chinese chat summary with the local file link after generation.
 
 Only produce a chat-only brief when the user explicitly asks for no file, no HTML, quick summary, or chat-only output.
 
@@ -34,8 +34,7 @@ For Chinese reports (the default):
 - Link text should be reader-friendly in Chinese when possible, while the underlying URL remains unchanged. For example, prefer "Codex 官方 changelog" over a bare URL unless the URL itself is the clearest label.
 - Keep terminology consistent throughout the report. For example, choose "Agent" and "子 Agent" consistently instead of mixing "agent", "subagent", and "Subagent" in natural-language sentences.
 - Use these default Chinese section titles: 核心结论、建议动作、工程自动化、多 Agent / 子 Agent、权限安全与破坏性变更、模型配额与成本、按任务选工具、联合更新池、官方来源、术语表.
-- After the HTML is written, run a localization pass over visible text. Source notes, update-pool remarks, glossary rows, and footer caveats are easy to leave half-English.
-- Before finalizing, scan visible text for stray English fragments. Leave only deliberate English product/feature names, commands, URLs, and technical identifiers.
+- After the HTML is written, run one localization pass over visible text and remove stray English fragments. Source notes, update-pool remarks, glossary rows, and footer caveats are easy to leave half-English. Leave only deliberate English product/feature names, commands, URLs, and technical identifiers.
 
 For English reports (explicit request only):
 
@@ -44,6 +43,8 @@ For English reports (explicit request only):
 - Set `<html lang="en">`.
 
 ## Default Tool Set
+
+Treat this list as a baseline, not a frozen contract: if official sources show a tool has been renamed, merged, or succeeded by another product, report it under the successor with a note, and add newly prominent official agent tools discovered during research. Known successor relationships are recorded in [references/sources.md](references/sources.md).
 
 Cover this full set by default unless the user narrows or expands the list:
 
@@ -67,6 +68,13 @@ Cover this full set by default unless the user narrows or expands the list:
 - GitHub Copilot Workspace or related GitHub agentic coding updates
 
 If an item has no official updates available under the inclusion rule, keep it in the report with an explicit note and cite the official page checked when possible. Default wording: "未找到合格官方更新". Use "No qualifying official update found" only in an English report.
+
+## Execution Strategy
+
+1. Start from the official source index in [references/sources.md](references/sources.md) and open those URLs directly. Fall back to web search only when an index entry is missing, dead, or clearly outdated, and note the correction in the report's source notes so the index can be updated.
+2. Group tools by vendor (Anthropic, OpenAI, Google, GitHub/Microsoft, Cognition, JetBrains, independents) and research groups in parallel when parallel tool calls or subagents are available.
+3. Budget roughly 2-4 fetches or searches per tool. If a tool still has no qualifying update after that, record "未找到合格官方更新" with the page checked and move on instead of continuing to search.
+4. Capture exact dates and version numbers while reading each source page; never reconstruct them from memory afterwards.
 
 ## Research Rules
 
@@ -154,22 +162,22 @@ Because standalone HTML is the default output:
 6. Include "Glossary" / "术语表" only when useful.
 7. Keep examples inside each tool's impact cell or card text.
 8. Make the page readable without a local server.
-9. Use a descriptive filename such as `ai-agent-update-brief-YYYY-MM-DD.html`.
+9. Use a descriptive filename such as `reports/ai-agent-update-brief-YYYY-MM-DD.html`.
 10. After writing the HTML, open or inspect the file enough to verify it contains the required sections and links.
-11. Chinese is the default, so always run a localization pass over visible text after content is complete. Translate source notes, update-pool remarks, glossary rows, and footer caveats; these areas are easy to leave half-English. Skip this pass only for an explicit English report.
-12. Every standalone HTML brief must include **亮色** and **暗黑** modes in the same file. Read [references/html-theme.md](references/html-theme.md) and copy that token, toggle, and script contract. Do not invent a new palette unless the user asks.
+11. Run the localization pass described in "Language and Localization" (skip only for an explicit English report).
+12. Include both 亮色 and 暗黑 modes per the "Appearance (Light / Dark)" section below.
 
 ## Appearance (Light / Dark)
 
-Required for every standalone HTML brief:
+Every standalone HTML brief ships both 亮色 (`light`) and 暗黑 (`dark`) modes in one file. Follow the token, toggle, and script contract in [references/html-theme.md](references/html-theme.md) exactly; do not invent a new palette unless the user asks.
 
-- Ship both modes: 亮色 (`light`) and 暗黑 (`dark`).
-- Default to the reader's `prefers-color-scheme` until they pick a mode.
-- Persist an explicit pick in `localStorage` key `ai-agent-brief-theme`.
-- Place a segmented toggle in the sticky nav so it stays visible while scrolling. Default labels: `亮色` / `暗黑`. English reports: `Light` / `Dark`.
-- Put a tiny theme-restore script in `<head>` before CSS so the first paint does not flash the wrong mode.
-- Express every color through CSS variables from the theme contract. Header, rule callout, sticky nav, cards, tables, chips, code, links, and footer must all flip with the mode.
-- After writing, verify **both** modes on: the first screen (header + 核心结论 cards), one table with chips, the sticky nav, and the footer. Fix contrast problems before finishing.
+After writing, verify **both** modes on: the first screen (header + 核心结论 cards), one table with chips, the sticky nav, and the footer. Fix contrast problems before finishing. Preferred verification: run [scripts/verify-theme.mjs](scripts/verify-theme.mjs) (path is relative to this skill's directory) and inspect the screenshots it writes:
+
+```bash
+node <skill-dir>/scripts/verify-theme.mjs reports/ai-agent-update-brief-YYYY-MM-DD.html
+```
+
+The script needs `playwright-core` and a locally installed Edge or Chrome (or set `BRIEF_BROWSER_PATH`). If it cannot run, open the file in a browser and check both modes manually.
 
 ## Tool-Specific Handling
 
