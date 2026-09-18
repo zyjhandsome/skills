@@ -248,6 +248,7 @@ COMPARISON_SURFACE_HEADERS = [
     "included_chrome",
     "viewport",
     "auth_session",
+    "identity_context",
     "environment_dependencies",
     "allowed_normalization",
     "hit_layer_expectation",
@@ -1569,6 +1570,7 @@ def comparison_surface_rows(units: list[str]) -> list[dict[str, str]]:
             "included_chrome": "[unresolved]",
             "viewport": "[unresolved]",
             "auth_session": "[unresolved]",
+            "identity_context": "[unresolved: tenant/space/department/role scope; gated units need hidden-state + visible-state surfaces]",
             "environment_dependencies": "[unresolved]",
             "allowed_normalization": "[unresolved]",
             "hit_layer_expectation": "[unresolved]",
@@ -1625,12 +1627,24 @@ def split_markdown_table_row(line: str) -> list[str]:
     return [cell.strip().replace(r"\|", "|") for cell in re.split(r"(?<!\\)\|", content)]
 
 
+# The canonical ledger ID header is literally "DISP-ID". These documented aliases are
+# accepted on read and normalized, so a human ledger renamed to "行 ID" fails as a
+# distinct matrix-header-mismatch only when no known alias is present.
+MATRIX_ID_HEADER_ALIASES = {"行 ID", "行ID", "DISP ID"}
+
+
+def normalize_matrix_header(header: str) -> str:
+    return "DISP-ID" if header in MATRIX_ID_HEADER_ALIASES else header
+
+
 def parse_markdown_matrix(path: Path) -> list[dict[str, str]]:
     lines = read_text(path).splitlines()
     for index, line in enumerate(lines):
-        if not line.lstrip().startswith("|") or "DISP-ID" not in line or "B 现状" not in line:
+        if not line.lstrip().startswith("|") or "B 现状" not in line:
             continue
-        headers = split_markdown_table_row(line)
+        if "DISP-ID" not in line and not any(alias in line for alias in MATRIX_ID_HEADER_ALIASES):
+            continue
+        headers = [normalize_matrix_header(header) for header in split_markdown_table_row(line)]
         rows = []
         for candidate in lines[index + 2 :]:
             if not candidate.lstrip().startswith("|"):
@@ -1649,11 +1663,18 @@ def load_persisted_matrix(path_value: str) -> list[dict[str, str]]:
         raise SystemExit(f"persisted matrix not found: {path}")
     if path.suffix.lower() == ".csv":
         with path.open("r", encoding="utf-8-sig", newline="") as handle:
-            rows = [dict(row) for row in csv.DictReader(handle)]
+            rows = [
+                {normalize_matrix_header(key): value for key, value in row.items()}
+                for row in csv.DictReader(handle)
+            ]
     else:
         rows = parse_markdown_matrix(path)
     if not rows or any("DISP-ID" not in row or "B 现状" not in row for row in rows):
-        raise SystemExit(f"persisted matrix has no readable DISP-ID/B 现状 table: {path}")
+        raise SystemExit(
+            "matrix-header-mismatch: persisted matrix has no readable DISP-ID/B 现状 table "
+            f"(accepted ID aliases: {', '.join(sorted(MATRIX_ID_HEADER_ALIASES))}); "
+            f"fix the ledger header or the parser alias list, do not regenerate a new ledger: {path}"
+        )
     return rows
 
 
@@ -1692,6 +1713,12 @@ def verify_one_unit(
             "unit": unit,
             "status": "fail",
             "reason": "display-contract matrix is still a whole-page skeleton row; split it by source region first",
+        }
+    if all(row["B 现状"] == "missing" for row in matrix_rows):
+        return {
+            "unit": unit,
+            "status": "fail",
+            "reason": "matrix-not-written-back: every row is still design-time missing; reflow to the implementing stage before gate review",
         }
     if any(row["B 现状"] not in MATRIX_CLOSED_STATUSES for row in matrix_rows):
         return {"unit": unit, "status": "fail", "reason": "display-contract matrix is not verified"}

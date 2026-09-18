@@ -12,7 +12,8 @@
 > `delivery-execute-verify` 是唯一应用代码 mutation owner；其余 Wave 对 A/B 应用代码只读。
 > Wave 3 无论 `new-landing` 还是 `repair` scope，都只产出合同和切片计划，不直接写 B。
 >
-> 项目专有误判钉子放在 `docs/angularjs-host-migration-hiapm-appendix.md`。通用粘贴块只保留可泛化规则。
+> 项目专有误判钉子放在使用方项目仓库自带的项目附录文档（路径在 `<CONFIG>` 中登记）。
+> 本剧本与 Skill 仓库不携带项目内容，通用粘贴块只保留可泛化规则。
 
 ## 0. 编排结论
 
@@ -98,7 +99,10 @@ archive 之后该 UNIT 即关闭：新发现只能开新 change，不得回填�
 ### 项目反例附录
 
 通用规则只记录模式：壳存在不等于迁完、详情抽屉不等于独立页、隐藏入口不等于可达、
-iframe/mail/external URL 与应用内跳转语义不同。hiapm -> apmweb3 的专有页面名、URL 和 T16 反例见附录。
+iframe/mail/external URL 与应用内跳转语义不同、宿主 store 权限清单不等于源页权限清单、
+只读空间/部门对照面掩盖可编辑态。
+具体项目的页面名、URL、权限清单来源、部门/空间映射、禁改文件清单和 T16 反例写进使用方项目仓库的
+项目附录文档，并在 `<CONFIG>` 登记路径；附录只放钉子（常量、选择器、入口），不放通用规则。
 
 ### UNIT 批次
 
@@ -137,8 +141,10 @@ iframe/mail/external URL 与应用内跳转语义不同。hiapm -> apmweb3 的�
 - **进入 Wave 5 或 4R Plan 段之前，试点的 change 必须已经 archive**；否则批次的就绪审查会在 G8 上
   把试点标成路径重叠阻塞项，只能靠显式接受并行风险绕过，等于手工关掉这道闸
 
-这些宿主级事实已有实测证据（host baseline gap 表、compile overlay 与 comparison surface 已填实并绑定当前宿主修订）时，
-可以在批次准入里记录证据位置并豁免试点；无证据不得跳过。
+这些宿主级事实已有实测证据（host baseline gap 表、compile overlay 与 comparison surface 已填实并
+绑定当前宿主修订，**且** CSS 闭包落地方式与浏览器取证可行性已在本对 A/B 上真实实施并验证过至少一次）时，
+可以在批次准入里记录证据位置并豁免试点；无证据不得跳过。填过表不等于实测证据——
+表填实 + 从未起过 dev server / 从未取过一次运行时证据，仍然必须单跑试点。
 
 `repair` scope 下，同一 mounted wrapper 内后发现的源站区域可继续补合同；一旦发现缺接口、
 要动权限模型、要加源站没有的行为、不同页面/wrapper，或选定 wrapper 当初完全漏扫，立即停止、
@@ -358,7 +364,15 @@ assess 是全仓一次扫完的，不按 UNIT 收费：一次运行同时覆盖 
 - 逐成员四维决策：`unit_identity_kind`、`landing_strategy`、`switch_disposition`、现有 comparison status；
   父壳必须继续追 mounted child，Pane 无独立 URL/切换边界时归壳 MATRIX 分组，抽屉不得冒充独立详情页
 - <COMPARISON_SURFACE>：逐成员固定 baseline/candidate、是否含 host chrome、viewport、登录态、locale、
-  feature flags、依赖端口/服务、允许归一化项、hit-layer 预期；未钉表前 parity 报告只能当诊断
+  身份上下文（租户/空间/部门/组织/角色范围）、feature flags、依赖端口/服务、允许归一化项、hit-layer 预期。
+  身份上下文是硬轴：同一 URL 同一账号换空间/部门时，权限、工具栏、列和身份 payload 都可能不同。
+  成员存在权限/上下文显隐（`ng-show`/`ng-if`/编辑态开关）时必须钉两行对照面——
+  一行隐藏态（只读）、一行可见态（可编辑）；只有隐藏态对照的结论不得关闭被门控的 MATRIX 行。
+  未钉表前 parity 报告只能当诊断
+- 落在宿主壳下的成员（含 `iframe-keep-A` / `iframe-reuse-existing-B`）：按 hosted-method 的
+  Host Chrome Ledger 输出 chrome 加减法表（顶栏/左栏/面包屑/页脚/标题/基础字号/滚动容器逐项
+  keep/hide/replace），默认不是「套宿主壳」；权限门控的成员另记权限清单来源
+  （源页实际读的 DOM/服务端注入/父窗口/API 清单 vs 宿主 store 清单）
 - <FRESHNESS_MANIFEST>：逐成员绑定 A route/hash/i18n/API 行为文件与 B MPA/menu/permission/runtime 文件 digest；
   A i18n、ui-router/hash、Java `@RequestMapping` 或 B MPA entry 与旧 evidence 不一致时，直接标旧 MATRIX/packet stale
 - 若某成员判为 `partial-overlap`：把首轮控件矩阵写入 <MATRIX>，每行填「迁移单元」和 `B 现状`
@@ -463,6 +477,13 @@ Step 1 补齐合同：
 - 控件矩阵写入 <MATRIX>；design-scope=repair 时为原地刷新，不重开分析
 - 每个成员确认 `unit_identity_kind` / `landing_strategy` / `switch_disposition`，并把
   <COMPARISON_SURFACE> 与 <HOST_INTEGRATION> 写回 <DOMAIN_ROOT>
+- host/session readiness 按运行面分行：嵌在已登录宿主壳内、独立 dest 入口（无服务端注入 DOM）各一行；
+  禁止用单一 readiness 标志（如 `v-if` 挡住整个壳挂载）门死另一个运行面
+- 权限身份行必须写清单来源：源页实际读的 DOM/服务端注入/父窗口/API 清单，以及与宿主 store 清单的
+  映射证明；两份清单规模差一个数量级即为错源，不得以「权限点名字像」放行
+- 有权限/上下文显隐的成员：<COMPARISON_SURFACE> 必须已有隐藏态 + 可见态两行，缺任一行即 `not-ready`；
+  被门控的 UI 在 native 落地里必须实现并接同一道门，不得因当前对照面看不见而不画
+- chrome 加减法表逐项落地：每个 hide/replace 决策有页级落地方式和可执行钉（合同测或具名验证步骤）
 - 直接按 hosted-method 的完整 Design-Ready Gate 填实，不在本剧本维护第二份字段清单；
   `(skeleton)`、空表头、`[unresolved]` 或未处置的 `host-missing` / `host-partial` 均为 not-ready
 - Source Contract Gates、URL/T16 语义、显示/隐藏偏差、公式/空态、modal 模式、CSS/asset 闭包
@@ -593,6 +614,8 @@ design-scope=repair 且无升级条件 → 下一步 Wave 4R 同会话连跑；
 - 行为、权限、URL、API、错误、runtime、rollback 验证矩阵
 - 视觉要求：有测量链则写 G9 证据计划；无测量链则标 manual-only，不得假装通过
 - fallback/rollback 任务和演练命令
+- 独立的「<MATRIX> 写回 + freshness digest 刷新」任务，与 T15 类视觉记录任务分开；
+  没有这条任务的 tasks.md 不得进入实施闸门
 
 批次模式的任务组织：
 - 共享宿主面（路由注册、菜单、共享 i18n、common CSS、全局 store，以及出站落地 helper、
@@ -664,6 +687,7 @@ Plan 段：
 - 运行时证据获取方式；宿主工具链取不到时的 residual 处置与人工确认项
 - 视觉要求：有测量链则写 G9 证据计划；无测量链则标 manual-only
 - fallback/rollback 任务和演练命令
+- 独立的「<MATRIX> 写回 + freshness digest 刷新」任务，与视觉记录任务分开；缺失则不得询问实施 go
 - 批次模式：共享宿主面作为唯一 owner 的前置任务组先落地，其余成员按组并行或串行，
   每个任务标注归属成员与 ownership/conflict note
 就绪审查跑 G1–G3、G8、G5。存在阻塞项时不得询问实施授权。
@@ -765,6 +789,21 @@ Fresh Verification Gate：
 visual 的 manual-only 只能覆盖像素/截图/测量类结论。
 禁止用“无测量链 → manual-only”跳过任何 display-contract 行；这些行是静态可对照的，必须逐行给结论。
 
+Wave 6 出口清单——以下任一不满足，不得写 overall_status=verified
+（最多 verified_with_residuals 并逐条列明原因，而它不能满足 Wave 7 完成候选）：
+1. <MATRIX> 已写回：0 行仍停留在 design 初期的整表 `missing`；已接线行至少 `wired-unverified`，
+   仅纯代码可证行可写 `verified`；写回同时刷新 <FRESHNESS_MANIFEST> 对应 digest
+2. 已按宿主工具链实际尝试本批每个 UNIT 的浏览器取证并记录结果。无 `node_modules`、
+   起不来本 UNIT 的 dev server、已声明 Playwright/Cypress 却未安装未尝试、
+   或用与宿主基线不符的 Node 跑出的结果当运行时证据，都算未尝试
+3. 本页依赖的 host-missing / host-partial 基线均有页级落地或 approved-deviation，落地方式可验证
+4. 落在宿主壳下的 UNIT：chrome 加减法表已落地且逐项有可执行钉
+5. 合同测覆盖 CSS/chrome/权限清单来源钉，不只是 API 字面量、i18n 键和入口挂载
+6. 存在权限/上下文显隐时：隐藏态与可见态两个对照面都已取证；或可见态明确标注未跑，
+   且对应 MATRIX 行保持 open
+报告用语禁令：不得把合同测行数写成 MATRIX 行数（如「MATRIX N 行全 pass」）；
+MATRIX 行状态只能来自逐行写回。「代码合同一致」只能记入补充台账，不得写成 `verified`。
+
 全部通过后写 verification.md 和 verified handoff：
 overall_status=verified，archive.status=deferred_to_openspec。
 不要 archive/commit/push/PR/部署/切流。
@@ -795,6 +834,11 @@ Delivery 未 verified 则回 Wave 6，不得声称迁移完成。Delivery verifi
 - <FRESHNESS_MANIFEST> 中 A route/hash/i18n/API 与 B MPA/menu/permission/runtime digest 是否仍匹配；变化则回对应 Wave
 - Codebase Memory 图谱是否绑定当前 revision；stale 则重新 index_repository
 - domain evidence path/digest 是否完整
+- <MATRIX> 是否已由 Wave 6 写回：整表仍是 design 初期 `missing` 时**不做十门评审**，
+  直接以 `matrix-not-written-back` 回流 Wave 6
+- <MATRIX> 表头是否可解析：ID 列必须是 `DISP-ID`（工具接受别名 `行 ID`）；
+  解析失败以 `matrix-header-mismatch` 单独回流（改台账表头或脚本别名清单），
+  不与「行未结清」混成一个失败，也不得重开新台账
 
 按当前 revision、逐 UNIT 执行 hosted-method 的完整 Concrete Gates；本剧本不维护第二份领域检查清单。
 额外确认编排边界：
@@ -802,6 +846,9 @@ Delivery 未 verified 则回 Wave 6，不得声称迁移完成。Delivery verifi
 - identity/landing/switch、<COMPARISON_SURFACE>、<HOST_INTEGRATION> 与批准记录一致
 - 无 agent 运行时证据的行保持 `wired-unverified`；只有用户逐行记录确认人、条件、时间后才能 `manual-verified`
 - visual `manual-only` 只处置截图/测量，不覆盖 display contract；runtime 与 rollback 仍须独立结论
+- 「代码合同一致」类补充台账（code-consistent ledger）可以作为证据附件新增，
+  但不能替代 <MATRIX> 逐行写回，也不能把有运行时可见性要求的行升为 `verified`
+- 对照面复核含身份上下文：结论若来自隐藏态（只读）对照面，被门控的行不得据此结清
 
 可运行脚本生成 verify 合同基线：
 python angularjs-to-vue3-host-migration/scripts/generate_migration_plan.py verify \
@@ -865,6 +912,9 @@ fail：不要直接改代码；按回流表返回对应 Wave，然后停止。
 | 已批准范围内的 B 实现缺陷 | Wave 6 Execute |
 | 控件矩阵已有行不达标（文案、控件形态、默认值、几何、字段公式、CSS） | 当前实施波内增量补片，不回流 |
 | 运行时可见性无法自验 | Wave 6 记录取证尝试与 residual；Wave 7 由用户逐行 `manual-verified` |
+| <MATRIX> 整表仍是 design 初期 missing（matrix-not-written-back） | Wave 6 Execute 补写回 + 刷新 freshness，再重跑 Wave 7 |
+| <MATRIX> 表头无法解析（matrix-header-mismatch） | 改台账表头为 `DISP-ID` 或让脚本认别名；不重开新台账，不与行未结清混判 |
+| 对照面缺身份上下文（空间/部门）或权限门控成员缺可见态行 | Wave 2/3 补对照面与权限清单来源，再回当前 Wave |
 | Delivery 未 verified | Wave 6 Execute |
 | A revision 变化 | Wave 2 Assess |
 | B revision 变化且已实施 | Wave 6 Execute / fresh verify |

@@ -520,6 +520,95 @@ router.beforeEach(authGuard);
             verify_result = self.read_csv(output_dir / "csv" / "16-verify-result.csv")
             self.assertEqual("pass", verify_result[1][0])
 
+    def test_verify_accepts_documented_id_header_alias(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source, host = self.create_fixture(root)
+            output_dir = root / "reports"
+            matrix = root / "display-contract.md"
+            write(
+                matrix,
+                "| 行 ID | 迁移单元 | 源区域 | B 现状 | row_lifecycle |\n"
+                "|---|---|---|---|---|\n"
+                "| DISP-taskmanage-list-1 | taskManage | list | verified | active |\n",
+            )
+            self.run_generator(
+                output_dir,
+                source,
+                host,
+                "verify",
+                "--unit",
+                "taskManage",
+                "--matrix",
+                str(matrix),
+            )
+
+            verify_result = self.read_csv(output_dir / "csv" / "16-verify-result.csv")
+            self.assertEqual("pass", verify_result[1][0])
+
+    def test_verify_unparsable_matrix_header_is_a_distinct_mismatch_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source, host = self.create_fixture(root)
+            output_dir = root / "reports"
+            matrix = root / "display-contract.csv"
+            write(
+                matrix,
+                "编号,迁移单元,源区域,B 现状\n"
+                "DISP-taskmanage-list-1,taskManage,list,verified\n",
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(GENERATOR),
+                    "verify",
+                    "--project-name",
+                    "header-mismatch",
+                    "--source-repo",
+                    str(source),
+                    "--host-repo",
+                    str(host),
+                    "--unit",
+                    "taskManage",
+                    "--matrix",
+                    str(matrix),
+                    "--output-dir",
+                    str(output_dir),
+                ],
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("matrix-header-mismatch", result.stderr)
+
+    def test_verify_all_missing_rows_fail_as_matrix_not_written_back(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source, host = self.create_fixture(root)
+            output_dir = root / "reports"
+            matrix = root / "display-contract.csv"
+            write(
+                matrix,
+                "DISP-ID,迁移单元,源区域,B 现状,row_lifecycle\n"
+                "DISP-taskmanage-search-1,taskManage,search,missing,active\n"
+                "DISP-taskmanage-list-1,taskManage,list,missing,active\n",
+            )
+            self.run_generator(
+                output_dir,
+                source,
+                host,
+                "verify",
+                "--unit",
+                "taskManage",
+                "--matrix",
+                str(matrix),
+            )
+
+            verify_units = self.read_csv(output_dir / "csv" / "16b-verify-units.csv")
+            self.assertEqual("fail", verify_units[1][1])
+            self.assertIn("matrix-not-written-back", verify_units[1][2])
+
     def test_batch_verify_fails_when_any_unit_fails(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

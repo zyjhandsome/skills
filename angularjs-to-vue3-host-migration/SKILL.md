@@ -30,8 +30,8 @@ Default mode is `assess` unless the user names a page or asks for implementation
 
 For hosted migration, require:
 
-- source repo A path, such as `hiapm`
-- host repo B path, such as `apmweb3`
+- source repo A path (the legacy AngularJS/jQuery/JSP/Thymeleaf repository)
+- host repo B path (the existing Vue 3 host repository)
 - migration unit when doing `design` or `verify`: page, URL, route, menu item, or user behavior
 
 If only one repo is available, perform source-only assessment and state that host landing design cannot be completed.
@@ -78,9 +78,9 @@ If only one repo is available, perform source-only assessment and state that hos
 
 ```bash
 python scripts/generate_migration_plan.py assess \
-  --project-name "hiapm-to-apmweb3" \
-  --source-repo "D:/path/hiapm" \
-  --host-repo "D:/path/apmweb3" \
+  --project-name "<source>-to-<host>" \
+  --source-repo "D:/path/<source-repo>" \
+  --host-repo "D:/path/<host-repo>" \
   --output-dir reports/angularjs-vue3-migration
 ```
 
@@ -109,6 +109,11 @@ These commands discover candidates only. Read definitions, callers, templates, c
 - Resolve unit identity and route shape before landing design. Filename similarity, a root `index.html`, a drawer, a parent shell, or a nearby tab never proves the selected source page; keep comparison status, identity, landing strategy, switch disposition, and archive disposition separate.
 - Treat T16/outbound switching as separately authorized. Keep one landing function per UNIT, preserve query/hash identity and destination-specific absolute/relative URL semantics, and leave active exits on their approved fallback until parity and authorization are proven.
 - Apply every Source Contract Gate, Comparison Surface row, and Host Integration Checklist item from the hosted method. A B skeleton, DOM presence without visibility, or a screenshot from a mismatched surface cannot pass.
+- Pin identity context (tenant/workspace/department/role scope) on every comparison surface alongside viewport, auth, and locale. A unit with permission- or context-gated visibility needs both a hidden-state and a visible-state surface; hidden-surface evidence never closes gated rows, and a native landing must implement gate-hidden UI behind the same gate rather than omit it.
+- Permission-list provenance is identity: the host gate must read the same list the source page reads (DOM, server-injected, parent frame, or API), not a nearby host store list. A cardinality gap between the two lists means a wrong source, not a naming match.
+- Record a host chrome keep/hide/replace ledger before landing any unit under the host shell. An approved host chrome difference never legalizes an empty pane, a duplicated breadcrumb/footer, a base-font or title change, or a changed scroll model.
+- Record host/session readiness per runtime surface (embedded in the logged-in shell vs a standalone entry); never gate the entire shell mount behind a signal one surface cannot produce.
+- Contract-test counts are never MATRIX counts, and MATRIX write-back belongs to the implementing stage: wired rows end at least `wired-unverified`, untouched rows stay `missing`. A verify run on a ledger still wholly at design-time `missing` stops as `matrix-not-written-back`.
 - `repair` requires a proven mounted host entry and matching route shape. Same-wrapper regions may extend its MATRIX; different wrappers or API, permission, traffic, or rollback changes return to full framing.
 - Runtime evidence must be attempted through the host toolchain. Without agent evidence, affected runtime rows remain `wired-unverified`; only explicit per-row human evidence may produce `manual-verified`.
 - A slice is complete only when its entry mounts, calls the intended API, and is user-reachable. Helpers, components, tabs, or files alone are not completion.
@@ -126,6 +131,10 @@ These commands discover candidates only. Read definitions, callers, templates, c
 | `manual-only` visual evidence is used to waive MATRIX rows | Reject it; measurement fallback never closes display-contract rows. |
 | `verified_with_residuals`, `wired-unverified`, or a shortened skill id is used as completion/recovery evidence | Reject completion or recovery and return to the producing wave. |
 | A Vite/Webpack host has no `lintOnSave` key | Inspect its ESLint/checker/HMR plugins and lint/type baseline before claiming there is no diagnostic overlay. |
+| A host store/login permission list is wired as the page gate | Prove its provenance equals the list the source page reads; treat a cardinality gap as a wrong source. |
+| Hidden-state (read-only) surface evidence is used to close permission-gated rows | Pin a visible-state surface and re-verify; gated rows stay open until the gated UI exists behind the same gate. |
+| "N contract tests pass" is reported as MATRIX row status | Reject; each row's `B 现状` is written from row-level evidence, not test counts. |
+| Verify starts on a ledger still wholly `missing` | Stop with `matrix-not-written-back` and return to the implementing stage. |
 
 ## Display Contract
 
@@ -137,6 +146,7 @@ Rules:
 - A generated whole-page `(skeleton)` row is a placeholder, not a contract. Split it by source region before the unit can be design-ready.
 - Display-contract parity is code-comparable and mandatory. It is separate from pixel/screenshot measurement, and `manual-only` never excuses copy, widget shape, defaults, geometry, or field formulas.
 - DOM presence is not visibility. For rows marked as visible copy or visible numbers, confirm the element is actually visible at runtime, since host or shared CSS such as `font-size: 0` can hide correct markup.
+- The ledger's ID column header stays literally `DISP-ID`. A renamed header is a `matrix-header-mismatch` ledger/tooling repair, distinct from unclosed rows; do not regenerate a new ledger to work around it.
 
 ## Host Compile And Diagnostic Overlay
 
@@ -185,6 +195,7 @@ For each selected page or user behavior (1 to 5 per run):
 
 ### Verify
 
+- matrix write-back precheck: a ledger still wholly at design-time `missing` stops as a `matrix-not-written-back` reflow to the implementing stage instead of a gate review; an unparsable ledger header stops as `matrix-header-mismatch`
 - behavior, page-init, permission, URL, API, runtime, rollback checks
 - display-contract parity: matrix row by row, code-comparable, mandatory, with runtime visibility confirmed for visible copy and numbers
 - entry-wiring parity: each slice is mounted, called, and reachable

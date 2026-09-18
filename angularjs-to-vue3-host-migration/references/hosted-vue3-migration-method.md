@@ -129,6 +129,7 @@ Required outputs:
 - visual measurement evidence only when screenshots or measurements exist
 - manual-only label when visual measurement is missing, which never exempts a display-contract row
 - a recorded runtime-evidence attempt whenever browser automation is reported unavailable
+- a `matrix-not-written-back` stop, instead of the full gate review, when the persisted matrix is still wholly design-time `missing`
 - strategy, comparison-surface, and host-integration parity
 - an archive gate row per unit: completion state, verified/total matrix count, unresolved row IDs, carried degradation labels, archive disposition
 
@@ -294,8 +295,8 @@ Carry these source contracts through `assess`, `design`, repair, execute, and `v
 
 Define the surface before browser automation, screenshots, pixel diffs, or click-path comparison. Emit one row per UNIT:
 
-| UNIT | Baseline URL/surface | Candidate URL/surface | Included chrome | Viewport | Auth/session | Environment dependencies | Allowed normalization | Hit-layer expectation | Evidence |
-|---|---|---|---|---|---|---|---|---|---|
+| UNIT | Baseline URL/surface | Candidate URL/surface | Included chrome | Viewport | Auth/session | Identity context | Environment dependencies | Allowed normalization | Hit-layer expectation | Evidence |
+|---|---|---|---|---|---|---|---|---|---|---|
 
 Surface values should distinguish `dest+host-chrome`, `sit-standalone`, and `page-body-only`, or name an equally precise project-specific boundary.
 
@@ -304,6 +305,8 @@ Rules:
 - Compare like with like. A standalone source popup and a destination page under a host header are different surfaces until chrome is deliberately included, excluded, or normalized.
 - Record host chrome height/stacking only from current runtime or CSS evidence. Modal and full-screen surfaces must render above the included chrome, and `elementFromPoint` or an equivalent hit-target check must prove the intended layer receives clicks.
 - Pin viewport, login state, feature flags, backend ports/services, locale, and title normalization before calculating a visual difference. A run with different viewport or auth state is environment evidence, not page-body parity evidence.
+- Identity context is a pinned axis like viewport and auth: tenant, workspace/space, department/organization, project scope, and effective role. The same URL under the same account can render different permissions, toolbars, columns, and identity payloads in different contexts; a surface row without its identity context cannot close permission-dependent rows.
+- When the unit gates visibility on permissions or context (`ng-show`/`ng-if`/edit-mode flags), pin at least two surfaces: one where the gated UI is hidden and one where it is visible. Evidence from the hidden-state surface never closes rows for the gated UI, and "this surface does not require the editable state" may be recorded only as a surface note, never as a completion criterion.
 - Classify tool findings as `page-contract`, `host-chrome`, `environment-auth`, `environment-service`, or `toolchain-warning`. Missing host links, 401s, cross-port failures, title prefixes, and framework warnings do not become page defects without evidence that they affect the selected page contract.
 - The first UNIT pilot must produce a reviewed comparison-surface row. Measured surface evidence bound to the current host revision may substitute for rerunning that calibration.
 
@@ -325,6 +328,8 @@ Rules:
 - Treat comparison operators and runtime types as source contracts. Template `==`, JavaScript `===`, numeric strings from APIs, booleans encoded as strings, and empty-string/null branches must be preserved or recorded as approved deviations.
 - Map identity fields from source evidence: server-rendered hidden inputs, globals, session/request fields, DOM IDs, API response fields, and template variables. Do not replace an identity with a nearby host store getter unless the source-to-host field mapping is proven. A composite identity such as `enName + ' ' + employeeNumber` is one contract: reproduce the whole expression, not one of its parts.
 - Permission codes are identity fields. A host permission point with a similar name is not the source permission point until the mapping is proven, and a page gate, a button gate, and a menu gate may each use a different code in the same flow.
+- Permission-list provenance is itself identity. Record which list the source page actually reads — a DOM node, a server-injected variable, a parent-frame document, or an API response — and prove the host-side gate reads an equivalent list. A host login/store permission list is a different source until the mapping is proven, and a large cardinality difference between the two lists is evidence of a wrong source, not a naming coincidence.
+- When reading server-rendered hidden inputs or globals by element id, guard against browser named access: `window[<id>]` returns the DOM element itself, and string-coercing that node into a URL or payload is a defect. Read the element's `value` and type-guard against `Node` before use.
 - Route, permission, and gateway allow-lists are additive during migration: append the B path and keep the A path until the rollback switch is formally retired. Replacing the A entry inside an allow-list removes the fallback the rollback plan depends on.
 - Put comparison and identity assumptions into FLOW/VAR/CHAIN conditions, payload mappings, and display-contract rows when they affect visible state, permissions, routing, or API payloads.
 
@@ -349,6 +354,7 @@ Rules:
 Two opposite directions, both resolved by the source contract:
 
 - Source present, runtime hidden. Treat source code that is present but hidden by runtime CSS or classes as its own display-contract row. Visibility toggles such as `display:none !important`, `*-hide`, collapsed tabs, role-hidden blocks, and feature flags must record source code presence and runtime visibility separately. Default to SIT/runtime visibility for release parity. Showing a source-hidden function, or hiding a runtime-visible source function, requires an `approved-deviation` with reason and approver.
+- A gate-hidden branch must still be implemented on a native landing. When the landing strategy rewrites the page, UI that the source hides behind a permission/context gate is built and wired behind the same gate, not omitted; its matrix rows stay open until both the gate and the gated UI exist. Hidden on the pinned comparison surface is never a license to leave the row `missing`.
 - Host present, source absent. Regions, controls, colors, series, columns, and buttons the host added beyond the source closure are not parity. Default to removing or hiding them inside the unit; keeping one visible requires an `approved-deviation` with reason and approver. An extra chart series color, an extra toolbar button, or an extra tab is a deviation row, not a free improvement.
 
 Neither direction is a bug fix. Do not "correct" a source quirk while migrating it: a `colspan` that does not match the column count, an off-by-one label, or an odd sort order is the contract until a deviation is approved.
@@ -372,6 +378,8 @@ Neither direction is a bug fix. Do not "correct" a source quirk while migrating 
 - Prefer executable display-contract tests for repair work when the contract can be checked without a browser: copy text, CSS class presence, API payload shape, derived formulas, and entry wiring. These tests are evidence for matrix rows, not a replacement for the matrix.
 - Do not strip TypeScript or Vue code with regex and then import the result as verification evidence. If the test cannot load through the host toolchain, isolate a pure-JS function or mark the contract test harness as unresolved.
 - A contract test must import the real shipped module. When the unit's logic already lives in a plain `.mjs`/`.js` helper, import that file directly through the host runner; a rewritten, inlined, or transformed copy of the logic tests the copy, not the unit.
+- A contract-test count is never a matrix count. "N/N contract tests pass" must not be reported as "N matrix rows pass"; each row's `B 现状` is written from row-level evidence. A supplementary code-consistency ledger may record which rows have contract-test coverage, but it never replaces per-row write-back and never lifts a runtime-dependent row past `wired-unverified`.
+- Every `host-missing` / `host-partial` baseline the unit depends on and every chrome-ledger `hide`/`replace` decision needs an executable pin: a contract test or a named verification step asserting the scoped CSS/DOM effect. A filled CSS closure or chrome ledger without pins is a plan, not a landing, and "approximate with the component library" is a deviation candidate, not a landing method.
 
 ### Browser Automation Disposition
 
@@ -413,9 +421,24 @@ Do not copy source A JSP/Thymeleaf global layout into host B. You **must** still
 
 Land source i18n text verbatim. If no source i18n files exist, visible template literals and server-rendered literals are the copy baseline. Keep migration units independently switchable and rollbackable.
 
+### Host Chrome Ledger
+
+Any unit that lands under the host shell — including `iframe-keep-A` and `iframe-reuse-existing-B` — records one decision per chrome element before implementation:
+
+| Chrome element | A side has it | B shell provides | Decision | Landing method | Evidence |
+|---|---|---|---|---|---|
+
+Cover at minimum: top bar/header, side navigation, breadcrumb, footer, page title text, base font size and family, and the scroll container (window-level scrolling versus a fixed header with inner overflow). Decision enum: `keep`, `hide`, `replace`.
+
+Rules:
+
+- Wrapping in the host shell is not the default. A source page that carries its own chrome renders double chrome when wrapped, and an empty host menu leaves a dead pane; both are deviations, not acceptable host differences.
+- An approved "host chrome difference" covers only chrome layers both sides render or a recorded deviation approves. It never legalizes an empty pane, a duplicated breadcrumb or footer, a base-font change, a rewritten title, or a changed scroll model.
+- Each `hide`/`replace` decision needs a page-scoped landing method plus an executable pin (contract test or named verification step). Shared shell components stay unmodified unless the batch's shared-surface owner approves the change.
+
 ### Interaction Equivalence Test
 
-A host component may replace a source widget only when all five hold:
+A host component may replace a source widget only when all six hold:
 
 | Axis | Requirement |
 |---|---|
@@ -424,6 +447,7 @@ A host component may replace a source widget only when all five hold:
 | Default value | Same initial value, initial selection, and initial empty/loading state. |
 | Validation and limits | Same required rules, min length, max count, at-least-one rules, and messages. |
 | Submit/format shape | Same payload shape, separator, ordering, and display formatting. |
+| Open/dismiss behavior | Same open trigger, click-outside and ESC dismissal, mutual exclusion between sibling popovers/sub-dropdowns, empty-selection feedback, and panel geometry not inherited from generic overlay rules. |
 
 When the source specifies geometry, dialog width/height, centering, and column widths are part of the contract, not a styling preference.
 
@@ -456,6 +480,8 @@ Rules:
 - The matrix is one ledger even for a batch. Every row carries the owning unit, so rows are filled, verified, and closed per unit rather than per batch.
 - A closed matrix means every row is `verified`, `manual-verified`, or `approved-deviation`. `wired-unverified` is an open row, not a soft pass.
 - Track row lifecycle separately from `B 现状`: `active`, `retired`, or `stale`. When a UNIT leaves a batch or is deprecated, retain its rows for audit as `retired`, bind the removal decision, and exclude them from current verification counts. When a bound contract digest changes, mark affected rows `stale` until refreshed; changing only a progress summary does not refresh the MATRIX.
+- The persisted ledger's ID column header is literally `DISP-ID`. Tooling may accept documented aliases, but a renamed header is a `matrix-header-mismatch` finding — a ledger/tooling repair, kept distinct from unclosed rows, and never a reason to regenerate a new ledger.
+- Write-back is an implementing-stage duty. When implementation ends, wired rows read at least `wired-unverified`, rows proven by code-only evidence may read `verified`, and untouched rows stay `missing`; ending with the whole ledger still at design-time `missing` is an incomplete implementation stage, not a verification question. A verify run that finds such a ledger stops with a `matrix-not-written-back` reflow to the implementing stage instead of running the full gate review.
 
 ## Source i18n Text Table
 
@@ -488,7 +514,8 @@ Rules:
 - Empty states are one display contract: visible copy, image/icon, spacing, and trigger condition. Correct text with a missing image or broken sprite is not `verified`.
 - Runtime-hidden source functions must be represented. If source markup exists but SIT hides it, default to hidden; making it visible requires `approved-deviation`.
 - A component-library overlay can host a migrated dialog, but it is not automatically equivalent to a Bootstrap/source modal. Width, title bar, footer buttons, iconography, destructive theme, close behavior, and success/error affordances must match or be recorded as deviations.
-- Rich text editor swaps are deviations unless the five-axis interaction equivalence test passes. Toolbar affordance, paste/upload behavior, validation, output format, and read-only rendering are part of the contract.
+- Rich text editor swaps are deviations unless the six-axis interaction equivalence test passes. Toolbar affordance, paste/upload behavior, validation, output format, and read-only rendering are part of the contract.
+- Host generic overlay rules are part of the closure. Shared dropdown/panel/menu classes carrying `max-height`, `overflow`, or width constraints silently reshape a migrated panel that reuses them; when a migrated region mounts inside or reuses a host overlay class, its geometry (width, height limit, wrapping) is a contract row, not a styling detail.
 
 ## Report From Code
 
@@ -581,6 +608,8 @@ Rules:
 - Detect the mechanism from the actual host: Vue CLI config, Vite/Webpack plugins, package dependencies/scripts, and runtime overlay behavior. Do not use `lintOnSave` as the generic name for all hosts.
 - A repo-wide diagnostic/overlay failure caused by unrelated files is a residual. Neither it nor a unit compile failure may be reported as a healthy dev server.
 - Record the actual Node version used for each build/test run next to the host-declared baseline.
+- Verify template-referenced bindings are actually exposed by the host's exact SFC compiler version before relying on them; a binding the pinned compiler drops does not fail the build but unmounts the whole component subtree at runtime. Treat such compiler-version quirks as host facts to capture, not per-page surprises.
+- A `.ts` module that re-exports a same-basename `.js` sibling can resolve the export specifier to itself (TS2303). Use distinct basenames or an explicit re-export target.
 - Inventory framework flags from the actual host build configuration. Add only flags required by the host's Vue/build versions; project-specific flag names belong in project evidence or an appendix, not in this generic method.
 
 ## Host Integration Checklist
@@ -589,7 +618,7 @@ Design fills this table from current host evidence, the approved execute plan ca
 
 | Category | Contract to record | Blocking rule |
 |---|---|---|
-| host/session readiness | Store or session initialization signal, first-paint wait, failure/timeout behavior | A page that races host initialization or renders empty before readiness is not verified. |
+| host/session readiness | Store or session initialization signal, first-paint wait, failure/timeout behavior — one row per runtime surface: embedded in the logged-in host shell vs a standalone entry without server-injected DOM | A page that races host initialization or renders empty before readiness is not verified. Gating the entire shell mount behind a signal that one surface can never produce deadlocks that surface and is a blocker. |
 | host chrome and hit layer | Header/overlay stacking, modal/full-screen layer, click target proof | Visual presence without correct hit target is open. |
 | events and i18n | Event name and payload shape, listener lifecycle, initial locale, cross-origin limitation | A one-time locale read is not equivalent to live host switching; inaccessible cross-frame wiring is a named residual. |
 | downloads/exports | Trigger mechanism, endpoint, filename formula, extension, blob handling, effective file MIME | A successful HTTP call without the expected usable artifact is not parity. Do not infer file MIME from a request content type. |
