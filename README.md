@@ -100,7 +100,7 @@ forbid_source_mutation: yes
 
 | 技能 | 说明 |
 |------|------|
-| [spring-boot-4-upgrade](./spring-boot-4-upgrade/SKILL.md) | Spring Boot 3.x → 4.x 分阶段升级：3.5 准备、Maven/Gradle、OpenRewrite、依赖兼容、行为验收和批量仓库续跑；支持只评估或直接实施 |
+| [spring-boot-4-upgrade](./spring-boot-4-upgrade/SKILL.md) | 现有 Spring Boot 3.x 仓库升到已核实的 4.x GA：只评估或实施；批量存量仓按同一流程逐仓处理 |
 
 详见[方案与使用示例](./docs/spring-boot-4-upgrade-plan.md)。独立可用，不强制串联依赖分析 Skill 或 delivery-*。
 

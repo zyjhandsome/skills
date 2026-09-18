@@ -1,6 +1,6 @@
 # 可执行证据契约
 
-本辅助程序只读 JSON 与指定证据文件，不执行命令或改业务仓库。v2 增加实际依赖树解析，v1 不再直接通过。输出 `consistent=true` 表示记录和所读解析结果一致；不能证明日志真实、制品与外置容器加载一致、测试覆盖充分、源码未变或阻止 Agent 越权执行命令。实际阶段条件仍以 SKILL.md 和 verification 为准。
+本辅助程序只读 JSON 与指定证据文件，不执行命令或改业务仓库。v2 增加实际依赖树解析，v1 不再直接通过。输出 `consistent=true` 表示记录和所读解析结果一致；不能证明日志真实、制品与外置容器加载一致、测试覆盖充分、源码未变或阻止 Agent 越权执行命令。实际阶段条件以 [verification.md](verification.md) 为准；入口 SKILL.md 只引用，不复述完整谓词。
 
 用 [evidence-contract.json](../assets/evidence-contract.json) 开始记录，null/空值故意不能通过校验。不要为了通过校验填入伪造的 passed。已有等价证据系统可继续使用，无需重复造文件。
 
@@ -48,6 +48,14 @@ python <skill>/scripts/check_contract.py <report.json> --gate verified-with-brid
 python -m unittest discover -s <skill>/tests -p test_*.py -v
 ```
 
-回归使用临时合成证据验证拒绝/通过分支，不代表真实 Java 迁移。另有 [Maven MVC 3.4 夹具](../tests/fixtures/maven-mvc-3.4/pom.xml)，复制整个夹具到独立目录后用于 Agent 实跑；不要在 Skill 原目录升级夹具。它覆盖 GET/404、JSON null/日期与 POST validation。已有 Maven 或单独生成的 wrapper 可用 `mvn verify`；仓库实际无 wrapper 时不能假定存在。完整人工前向情景见 [scenarios.md](../tests/scenarios.md)。
+回归使用临时合成证据验证拒绝/通过分支，不代表真实 Java 迁移。`tests/test_fixtures.py` 只锁定夹具教学不变量（起点版本、鉴权正负例、OSIV/懒加载、Gradle owner 位置），不编译 Java。复制整个夹具目录到独立工作树后再实跑；不要在 Skill 原目录升级夹具。已有 Maven/Gradle 或单独生成的 wrapper 可用 `mvn verify` / `gradle :service:test`；仓库实际无 wrapper 时不能假定存在。完整人工前向情景见 [scenarios.md](../tests/scenarios.md)。
 
-[企业 parent 夹具](../tests/fixtures/managed-parent/app/pom.xml) 用于复现版本管理规则：复制 managed-parent 整目录后，从 app 执行 help:effective-pom/tree。默认应看到 core/autoconfigure 3.5.14 与 webmvc starter 4.0.7；`-Pexplicit-management` 应把两个 core 管理项改到 4.0.7。这仅证明覆盖规则和解析检查，不是可运行服务或建议所有项目逐坐标覆盖。夹具未含任何私有厂商组件。
+| 夹具 | 用途 | 不能外推 |
+|---|---|---|
+| [Maven MVC 3.4](../tests/fixtures/maven-mvc-3.4/pom.xml) | GET/404、JSON null/日期、POST validation | 鉴权、JPA、Gradle owner |
+| [Maven Security 3.4](../tests/fixtures/maven-security-3.4/pom.xml) | 匿名 401、用户 200/403、管理员 200；默认 CSRF | `security=false` 或全局 `permitAll` 不能当 verified |
+| [Maven JPA 3.4](../tests/fixtures/maven-jpa-3.4/pom.xml) | 已注册 Hibernate 5 OSIV、懒加载读集合、旧 `write-dates-as-timestamps` | H2 通过 ≠ 生产库；OSIV 不是无用 import |
+| [Gradle catalog 3.4](../tests/fixtures/gradle-catalog-3.4/settings.gradle.kts) | 版本在 `gradle/libs.versions.toml`，Boot 插件在 `:service`，toolchain 在 buildSrc convention | 不要往根 `build.gradle.kts` 注入 rewrite/Boot 版本 |
+| [企业 parent](../tests/fixtures/managed-parent/app/pom.xml) | 父级管理 core 3.5.14，子 import BOM 4.0.7；`-Pexplicit-management` 才覆盖 core | 不是可运行服务，也不是建议逐坐标覆盖 |
+
+夹具未含私有厂商组件、OpenAPI 生成器、消息或预编译 SDK；那些情景仍要各自代表性服务。

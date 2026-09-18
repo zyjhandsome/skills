@@ -1,6 +1,6 @@
 # 最小前向测试情景
 
-以独立副本执行，检查实际命令、差异和证据，不能用搜到指令中的关键词代替行为测试。Python 单元测试验证记录契约，以下情景用于验证 Agent 是否遵循 Skill。
+以独立副本执行，检查实际命令、差异和证据，不能用搜到指令中的关键词代替行为测试。Python 单元测试验证记录契约，以下情景用于验证 Agent 是否遵循 Skill。入口 `SKILL.md` 只保留阶段指针；下列情景仍必须按 verification / assessment / openrewrite 的完整条件执行，不能只根据 description 或阶段标题交差。
 
 | 输入 | 观察结果 |
 |---|---|
@@ -40,4 +40,14 @@
 | 漏洞修复候选是 GA，但最终锁文件/制品选中另一版本 | 重核实际版本的发布状态和漏洞；候选证据不得复用为最终通过 |
 | 用户要求最终零高危/致命，升级后无新增但保留原有 High | 按全量规则处理并逐项列明修复版本/适用性/处置，不降为增量标准；无修复版也不自动放行 |
 
-MVC 夹具是原创最小 Spring Boot 3.4.0 项目，不包含 Petclinic 的数据库、安全和 OpenAPI 生成器；这些分支仍需各自代表性服务或专门夹具，不能由四个 MVC 测试外推覆盖。
+夹具对照（复制整目录到独立副本，不要在 Skill 原目录升级）：
+
+| 情景 | 用这个夹具 |
+|---|---|
+| 只评估 / 3.5 失败停步 / 3.5 合格后分阶段 / skipTests+health | [maven-mvc-3.4](fixtures/maven-mvc-3.4/pom.xml) |
+| 必需范围含鉴权却只测 security=false | [maven-security-3.4](fixtures/maven-security-3.4/pom.xml) |
+| 已注册旧 Hibernate Filter；旧 jackson timestamp 键；H2 ≠ 生产库 | [maven-jpa-3.4](fixtures/maven-jpa-3.4/pom.xml) |
+| Gradle catalog/convention，不在根 build 注入 | [gradle-catalog-3.4](fixtures/gradle-catalog-3.4/settings.gradle.kts) |
+| 企业 parent 管理旧 core，子 import 新 BOM | [managed-parent](fixtures/managed-parent/app/pom.xml) |
+
+OpenAPI、消息、预编译 SDK、私有 starter 仍无夹具，不能由上表外推覆盖。

@@ -1,40 +1,35 @@
 ---
 name: spring-boot-4-upgrade
-description: Upgrade existing Spring Boot 3.x repositories to a verified Spring Boot 4.x GA release, including pre-3.5 preparation, Maven/Gradle multi-module builds, dependency compatibility, OpenRewrite-assisted edits, behavior verification, and repository batches. Use for Spring Boot 4 升级、迁移、批量存量仓库改造 or an assessment of that migration; not for new applications or unrelated Java dependency updates.
+description: Use when assessing or migrating an existing Spring Boot 3.x repository to a Spring Boot 4.x GA, or when asked for Spring Boot 4 升级、迁移、批量存量仓库改造或该迁移的评估. Not for new applications, Boot 2.x, pure Spring Framework projects, or unrelated Java dependency updates.
 ---
 
 # Spring Boot 4 存量仓库升级
 
-把现有 3.x 应用升级到明确的 4.x 正式版本，保留可观察业务行为，交付代码、验证证据和剩余阻塞。用用户的语言输出。版本知识核验基准为 2026-09-09；执行时重新查询目标版本官方资料，不把本文日期或示例当作最新版本保证。
+把现有 3.x 应用升级到执行时核实的 4.x 正式版本，保留可观察业务行为，交付代码、验证证据和剩余阻塞。用用户的语言输出。版本知识核验基准为 2026-09-09；执行时按 [官方资料索引](references/sources.md) 重查，不把本文日期或示例当作最新版本保证。
 
 ## 入口与边界
 
-- 用户只要可行性或方案：做 `assess`，写证据与方案，不改业务源码、构建声明或部署配置。
-- UI 默认提示只是入口示例，不扩大用户授权。assess 下不得为加载 recipe 而写 POM/Gradle 配置，不执行 rewrite run、wrapper/lockfile 更新；构建探测先检查副作用，记录业务/构建/部署文件前后差异。
-- 用户要求完成升级：做 `migrate`，先展示具体方案，然后在已有授权内继续编辑与验证，不逐阶段重复索要同意。用户明确要求“方案确认后再改”时才等待该确认。
-- 多个仓库：使用同一流程逐仓执行，另读 [批量推进](references/batch.md)。只评估或迁移用户指定的仓库，不自动扩展到相邻仓库。
-- 默认支持 Java/Kotlin、Maven、Gradle Groovy/Kotlin DSL。2.x 或纯 Spring Framework 项目先报告超出本 Skill 的迁移起点，给出前置工作，不套用 3→4 配方。已经是 4.x 的仓库只补做目标 minor 的迁移，避免降级或重跑 3.x 步骤。
-- 保存当前分支、HEAD、工作区差异和模块范围；保留用户未提交工作。需要隔离时用本地分支/独立 checkout；不要自动清空、stash、提交全部文件或发布。
+- 只要可行性或方案：做 `assess`，写证据与方案。不改业务源码、构建声明或部署配置；不为加载 recipe 写 POM/Gradle；不执行 rewrite run、wrapper/lockfile 更新。构建探测先检查副作用，记录业务/构建/部署文件前后差异。
+- UI 默认提示只是入口示例，不扩大授权。
+- 要求完成升级：做 `migrate`，先展示具体方案，再在已有授权内编辑与验证，不逐阶段重复索要同意。用户明确要求“方案确认后再改”时才等待。
+- 多仓：同一流程逐仓，另读 [批量推进](references/batch.md)。只处理用户指定的仓库。
+- 默认支持 Java/Kotlin、Maven、Gradle Groovy/Kotlin DSL。2.x 或纯 Spring Framework 先报告超出本 Skill 的起点并给出前置工作，不套用 3→4 配方。已是 4.x 只补目标 minor，避免降级或重跑 3.x。
+- 保存分支、HEAD、工作区差异和模块范围；保留未提交工作。隔离用本地分支/独立 checkout；不自动清空、stash、提交全部文件或发布。
 - 不自动采用 Java 25、WebFlux、虚拟线程、API versioning、新数据库或全套可观测性替换；只改升级必需部分。已有项目约束优先。
 
-## 1. 发现实际升级单元
+## 按阶段加载
 
-先读目标仓库 AGENTS.md 和已有构建/验收约定。有 codebase-memory-mcp 时优先 `search_graph`、`trace_path`、`get_code_snippet`、`query_graph`，未索引先 `index_repository`；工具不可用或结果不足再用 `rg`。构建配置、属性字面量、CI 文件可直接搜索。图索引不能替代构建工具的依赖解析。
+| 何时 | 读 |
+|---|---|
+| 盘点、路线、发布状态 | [assessment.md](references/assessment.md)、[sources.md](references/sources.md)、[dependency-security.md](references/dependency-security.md) |
+| 3.5 门、验收、回退、状态判定 | [verification.md](references/verification.md)、[evidence-contract.md](references/evidence-contract.md) |
+| 机械迁移 | [openrewrite.md](references/openrewrite.md) |
+| 命中的技术项 | [compatibility.md](references/compatibility.md)、[binary-compatibility.md](references/binary-compatibility.md) |
+| 多仓 | [batch.md](references/batch.md) |
+| 每仓记录 | [migration-report.md](assets/migration-report.md) |
+| 夹具实跑 / 维护回归 | [evidence-contract.md](references/evidence-contract.md) 维护回归、[scenarios.md](tests/scenarios.md) |
 
-按 [盘点与版本决策](references/assessment.md) 建立记录，至少得到：
-
-1. 每个应用/库模块的 Boot **声明版本、实际解析版本、版本控制位置**；父 POM、导入 BOM、Gradle platform/catalog/convention plugin 的关系。
-2. JDK 的运行版本与编译目标、wrapper、Kotlin（若有）、打包和运行环境；CI 与本地是否一致。
-3. Spring Cloud、第三方和私有 starter 的兼容证据；JSON、安全、数据访问、消息、Web、测试、native 等实际使用面。
-4. 可重现的原始构建/测试结果、业务契约样本和 [依赖漏洞基线](references/dependency-security.md)。缺网络、私服、数据库或容器时记录 `unavailable`，不伪装成版本冲突或已通过。
-
-工具执行会运行仓库构建逻辑；先检查 CI/插件是否绑定了发布、远程环境或数据库变更。使用隔离的测试配置，避免为了“启动验证”连接生产数据库、消息消费组或注册中心。
-
-## 2. 锁定路线并展示方案
-
-按 [官方资料索引](references/sources.md) 核实目标 GA、支持状态、工具链、BOM 和第三方兼容性。明确区分官方支持、实际测试通过、尚未证实。
-
-默认路线：
+## 默认路线
 
 ```text
 现有 3.0–3.4 → 执行时核实的最新 3.5.x → 执行时核实的 4.0.x
@@ -42,51 +37,19 @@ description: Upgrade existing Spring Boot 3.x repositories to a verified Spring 
 用户目标为更高 4.x minor               → 再按各 minor 官方说明继续
 ```
 
-3.x 内不要求每个 minor 都落地构建，但必须审阅跨过的 release notes；失败难以定位或生态组件需过渡时拆成更小步骤。3.5 与 4.0 是独立验证点，不用一个大配方吞掉 3.5 验证。发现未覆盖的新版本线时查官方路线，不强制降到 3.5。
+同 minor 补丁、未指定 minor 时的 4.0 落点、精确 GA 锁定见 assessment。3.5 与 4.0 是独立验证点。
 
-**同一 4.x minor 内补丁升级**：例如 4.0.7 → 4.0.8，只检查差异 release notes、BOM/兼容覆盖，修改真实版本 owner 并做受影响及完整验收；不回到 3.5，不默认重跑跨 major 配方。不同 4.x minor 按各 minor 路线继续；相同版本只核验剩余迁移事项，不制造版本变更。
+## 阶段
 
-用户未指定 minor 时，优先评估 4.0 作为跨 major 的首个落点；结合执行时支持周期、组织标准和生态支持，确定最终 4.x minor 并说明理由。不得把仍受支持假定为永久事实。用户指定精确版本时尊重它；不可获得或不兼容则报告，不静默替换。
+1. **发现升级单元** — 按 assessment 得到声明/解析/owner、工具链、兼容面、基线与漏洞基线。图索引不能替代构建解析。
+2. **锁定路线并展示方案** — 按 sources 核实目标后写方案。`assess` 在此结束。
+3. **3.5 准备** — 按 assessment 对齐 3.5 并做预备迁移。源为 3.x 时，未满足 verification 中「进入 4.0 的实施条件」不得对主工作树做 Boot 4 `run` 或手工升到 4。
+4. **4.x 实施** — OpenRewrite 可选：先读生成补丁再应用，零 `git diff` 不能证明完成。命中项读 compatibility。混栈或覆盖失败不是桥。
+5. **验证与交付** — 只按 verification 判定状态。契约校验只证明记录一致，不替代测试，也不证明守权。
 
-将中间和最终版本、工具/recipe 版本、来源日期固定进升级记录；执行前把 `latest`、`RELEASE`、`4.x` 等范围解析成精确 GA。报告计划包含变更模块/文件、依赖处置、阶段、验收命令、阻塞和回退点，可用 [报告模板](assets/migration-report.md)。关键依赖无兼容版本时继续可行的独立工作，暂停依赖它的跨 major 阶段。
+## 状态与交付
 
-按 assessment 的发布状态规则，逐项核验新增或版本变化的直接/传递依赖及构建工具，记录原版本→实际目标版本、GA 状态与来源；默认不引入预发布/快照，未知不能当 GA。最终解析和制品变化后复核，Boot 本身为 GA 不能代替关联依赖核验。
-
-## 3. 完成 3.5 准备阶段
-
-先对齐 3.5 的 Boot 与 Cloud/BOM，升级确有必要的工具链，解决目标 4.x 会删除的废弃 API，迁移 Security 6.5 的预备配置。依照原项目执行完整构建、适用的集成测试和启动/库消费者验证。
-
-同一阶段的依赖、源码、配置、测试变更可以联动完成；不要要求在 API 修复之前“只改版本就必须编译通过”。阶段结束才设完整验证点。原有失败单独保留，修复本次引入的失败；环境缺口不能用跳测试掩盖，也不能把该阶段宣称为已验证。
-
-**进入 4.0 的实施条件**：源为 3.x 时，必须已有对应仓库/模块、3.5 精确解析版本、代码快照、验证范围、命令与通过证据的 3.5 检查点。缺记录、必需检查失败/不可用、记录不对应当前待迁移快照时，不执行 Boot 4 的 `run`，也不手工把主工作树改到 4；先补证据/解决前置条件。原有失败不会自动豁免。可以继续只读诊断和在隔离副本做明确标注的预览，但不能称已跨过验证点。续跑可复用可追溯的合格检查点，不要求重造表格行。显式要求跳过此条件时说明实际缺口，相关结果保持未验证。
-
-## 4. 实施 4.x 迁移
-
-优先用已验证、能在当前环境解析的 OpenRewrite recipe 处理机械变化；详见 [OpenRewrite 与构建命令](references/openrewrite.md)。它是可选执行引擎：不可获得、许可/仓库不可用、语言或结构不支持时，按官方映射做局部人工修改并记下覆盖缺口。
-
-1. 锁定工具版本，发现 recipe，dry-run，读取**生成的补丁及解析错误**。dry-run 没有修改源码，不能只看 `git diff`；零差异也不能证明迁移完成。
-2. 审查是否包含越界的 JDK/依赖升级、版本漂移、错误模块或语义变化；调整配方/配置后再应用。自动化覆盖不到的地方按证据补齐。
-3. 在实际版本控制位置修改 Boot parent/BOM/plugin 及相容生态 BOM；保留合理的安全覆盖并复核，不逐个强制 Spring/Hibernate/Jackson 叶子依赖的最新版本。
-4. 按 [兼容迁移与行为检查](references/compatibility.md) 处理模块拆分、测试包、Jackson、安全、持久化、消息、配置和部署。只读实际命中的技术项。
-5. 属性迁移器只用于临时诊断。修复应用、profile、环境变量、部署模板和已有可访问外部配置中的对应项；移除迁移器后重新验证。外部配置不可访问时列出责任方和准确键名，不假装本仓改完即全链路完成。
-
-默认完成原生 4.x 适配。必要时可使用目标版本仍支持的 Jackson 2/classic 等兼容桥，但记录原因、影响、负责人/待分配、退出条件与复查日期。存在兼容桥的结果单独标识，不能称为“全部迁移完成”；不要猜未来移除版本。桥接也要证明自动配置和运行行为有效。
-
-桥是目标运行栈支持、刻意保留且已验证的兼容适配；**Boot 3/4 混栈、版本覆盖失败不是桥**。两种 verified 状态均须先通过核心解析检查；单个新 starter/属性/BOM 的版本不代表实际 core 已升级。
-
-## 5. 验证与交付
-
-执行 [验收与回退](references/verification.md)。至少核查最终解析版本、生产/测试编译、实际执行的测试数量与失败/跳过、完整制品、启动及关键业务契约；对库模块以消费者集成测试替代启动。按 [依赖漏洞检查](references/dependency-security.md) 比较升级前后风险并检查最终制品，兼容桥不豁免安全准入。`BUILD SUCCESS`、`-DskipTests` 或一次 health 200 均不足以证明升级成功。
-
-`verified` 必须满足 verification 中的完整判定条件并带明确验证范围。可运行 [证据契约校验](references/evidence-contract.md) 检查阶段/范围/证据文件一致性；它不执行升级，不替代实际测试或证明代理遵守权限。Skill 维护时用其中的离线回归和 Maven MVC 夹具检查行为，避免仅匹配文案的测试。
-
-新增/修改测试须覆盖真实迁移风险（鉴权负例、JSON 契约、数据/消息兼容等）；不为迁移引入无关测试框架。失败时定位根因再重试；同一失败无新证据连续两次则停止盲重试，记录阻塞并转向可独立推进的项目。
-
-每阶段更新升级报告：实际变更、命令与工作目录、环境/profile、退出码、测试摘要、证据路径和差异范围。续跑时先比对 HEAD/差异/版本，已有记录不是当前代码验证通过的证明。
-
-启动或 runtime 检查未执行、被截断或退出码非 0 时，交付文字不得写“上下文初始化全链路通过”“启动验证通过”一类结论；未做离线绑定核对、也未证明对应 bean 按该配置创建的 `@ConfigurationProperties`（Jackson、缓存、session 等）一律列为未证实。
-
-最终状态只能从下表选一个；细分进展写入已验证范围，不新增 `implemented-context-verified` 等状态：
+最终状态只能从下表选一个；完整谓词以 [verification.md](references/verification.md) 为准，不新增枚举：
 
 | 状态 | 含义 |
 |---|---|
@@ -96,6 +59,11 @@ description: Upgrade existing Spring Boot 3.x repositories to a verified Spring 
 | verified-with-bridges | 核心解析及适用验证全部通过，仍有明确登记的临时兼容桥；不得包含 Boot 混栈 |
 | verified | 精确目标已解析，适用验证通过，无未退出的临时兼容桥 |
 
-交付代码差异、目标版本与来源、报告、剩余风险及回退方法。`verified` 只表示记录范围内验证完成，不表示已经部署或获得业务发布验收。提交、推送、PR、部署按用户授权与仓库规则执行，不内置额外审批流程。
+| 观察 | 不能据此给出的结论 |
+|---|---|
+| `BUILD SUCCESS`、`-DskipTests`、一次 health 200 | `verified` 或启动通过 |
+| 新 starter / BOM / 属性版本 | core 已升级 |
+| 端口监听或上下文初始化 | runtime 通过 |
+| Boot 3/4 混栈或覆盖失败 | 兼容桥；任一种 verified |
 
-阶段交付和最终答复固定包含：**状态 · 已验证范围 · 未完成及解除条件 · 下一步（谁／做什么）**。普通进度消息无需重复四项。未通过验证不说“已完成升级”；with-bridges 明说仍有桥及退出动作。下一步已获授权且可执行就继续，只有范围已完成、真实阻塞或需用户决策才收口；不要把“请用户再说继续”当下一步。无剩余迁移工作时写明，发布动作仅按原授权处理。
+阶段交付和最终答复固定包含：**状态 · 已验证范围 · 未完成及解除条件 · 下一步（谁／做什么）**。普通进度消息无需重复四项。未通过验证不说“已完成升级”；with-bridges 明说仍有桥及退出动作。下一步已获授权且可执行就继续，只有范围已完成、真实阻塞或需用户决策才收口；不要把“请用户再说继续”当下一步。无剩余迁移工作时写明，发布动作仅按原授权处理。`verified` 只表示记录范围内验证完成，不表示已经部署。提交、推送、PR、部署按用户授权与仓库规则执行。
