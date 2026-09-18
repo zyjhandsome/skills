@@ -13,24 +13,19 @@ if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 from paths import pair_stem, source_stem
+from sections import ALLOWED_EXTRA_H2, SOURCE_OMIT_H2, forbidden_article_h2_patterns
 from wechat_policy import (
-    scan_source_risks,
+    parse_policy_ack,
     title_policy_errors,
+    validate_article_residuals,
     validate_policy_audit,
     validate_source_against_audit,
 )
 
 RATIO = 2.35
 RATIO_TOL = 0.02
-SOURCE_OMIT_H2 = {
-    "文章元数据",
-    "核心导读",
-    "目录",
-    "延伸术语表",
-    "自检报告",
-    "关键语录与交锋时刻",
-}
-ALLOWED_EXTRA_H2 = {"核心导读"}
+COVER_TITLE_KEY = "WeChatCoverTitle"
+COVER_PEOPLE_KEY = "WeChatCoverPeople"
 AUDIT_DECISIONS = {"保留", "合并", "删减", "删除"}
 
 FORBIDDEN_IN_ARTICLE = [
@@ -38,10 +33,7 @@ FORBIDDEN_IN_ARTICLE = [
     (r"<link\b", "link tag inside article"),
     (r"fonts\.googleapis", "Google Fonts in article"),
     (r"class=\"mermaid\"", "raw Mermaid block"),
-    (r">目录<", "TOC heading should be omitted"),
-    (r">延伸术语表<", "glossary heading should be omitted"),
-    (r">自检报告<", "self-check section should be omitted"),
-    (r">关键语录", "quotes anthology should be omitted"),
+    *forbidden_article_h2_patterns(),
     (r"完整整理版｜微信排版", "redundant subtitle"),
     (r"用户提供完整字幕", "pipeline note leaked (字幕来源)"),
     (r"次要核对", "pipeline note leaked (次要核对)"),
@@ -318,7 +310,9 @@ def article_metrics(path: Path, profile: str = "auto") -> tuple[str, int, float]
     return resolved_profile, han_chars, han_chars / 260 if han_chars else 0.0
 
 
-def validate_cover(path: Path) -> list[str]:
+def validate_cover(
+    path: Path, expected_title: str | None = None, expected_people: str | None = None
+) -> list[str]:
     errors: list[str] = []
     try:
         from PIL import Image
@@ -333,6 +327,20 @@ def validate_cover(path: Path) -> list[str]:
     r = w / h
     if abs(r - RATIO) > RATIO_TOL:
         errors.append(f"cover ratio {r:.3f} != 2.35 (±{RATIO_TOL})")
+    stored_title = (im.info.get(COVER_TITLE_KEY) or "").strip()
+    if expected_title:
+        if not stored_title:
+            errors.append(
+                "cover missing WeChatCoverTitle tEXt; re-run overlay_cover_text.py"
+            )
+        elif stored_title != expected_title:
+            errors.append(f"cover title {stored_title!r} != H1 {expected_title!r}")
+    if expected_people is not None:
+        stored_people = (im.info.get(COVER_PEOPLE_KEY) or "").strip()
+        if stored_people != expected_people.strip():
+            errors.append(
+                f"cover people {stored_people!r} != expected {expected_people!r}"
+            )
     return errors
 
 
@@ -352,9 +360,35 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Permit H1/H2 rewrite when the user explicitly asked to 改写标题",
     )
+    ap.add_argument(
+        "--html-only",
+        action="store_true",
+        help="Lint HTML structure only; skip source, audit, heading, and policy gates",
+    )
+    ap.add_argument(
+        "--policy-ack",
+        action="append",
+        default=[],
+        metavar="CODE:REASON",
+        help="Allow a remaining stop signal in the article (code:reason, ≥8 chars)",
+    )
+    ap.add_argument(
+        "--people",
+        default=None,
+        help="Expected cover people line; compared to PNG tEXt when --cover is set",
+    )
     args = ap.parse_args(argv)
 
     errors: list[str] = []
+    acks: dict[str, str] = {}
+    for raw in args.policy_ack:
+        try:
+            code, reason = parse_policy_ack(raw)
+        except ValueError as exc:
+            errors.append(f"POLICY ACK: {exc}")
+            continue
+        acks[code] = reason
+
     if not args.html.is_file():
         print(f"ERROR: HTML not found: {args.html}")
         return 2
@@ -364,37 +398,49 @@ def main(argv: list[str] | None = None) -> int:
     article = extract_article(args.html.read_text(encoding="utf-8"))
     errors.extend(title_policy_errors(extract_h1(article)))
     errors.extend(validate_deliverable_names(args.html, args.cover, args.source))
-    if args.audit is not None:
+    errors.extend(validate_article_residuals(article, acks))
+
+    if not args.html_only:
         if args.source is None:
-            errors.append("coverage validation requires --source with --audit")
-        else:
-            errors.extend(validate_coverage(args.source, args.audit, resolved_profile))
-    if args.source is not None and args.source.is_file():
-        source_text = args.source.read_text(encoding="utf-8")
-        audit_text = (
-            args.audit.read_text(encoding="utf-8")
-            if args.audit is not None and args.audit.is_file()
-            else None
-        )
-        errors.extend(
-            validate_source_against_audit(source_text, audit_text, html_delivered=True)
-        )
-        if scan_source_risks(source_text) and re.search(r"落马", article):
-            errors.append("POLICY BODY: 落马/政治公共事件 remains in the article")
-        errors.extend(
-            validate_heading_fidelity(
-                args.source,
-                article,
-                resolved_profile,
-                allow_rewrite=args.allow_heading_rewrite,
+            errors.append("MISSING: --source is required (or pass --html-only)")
+        if args.audit is None:
+            errors.append(
+                "MISSING: --audit is required (write a temp coverage audit, then delete it)"
             )
-        )
+        if args.source is not None and args.audit is not None:
+            errors.extend(validate_coverage(args.source, args.audit, resolved_profile))
+        if args.source is not None and args.source.is_file():
+            source_text = args.source.read_text(encoding="utf-8")
+            audit_text = (
+                args.audit.read_text(encoding="utf-8")
+                if args.audit is not None and args.audit.is_file()
+                else None
+            )
+            errors.extend(
+                validate_source_against_audit(
+                    source_text, audit_text, html_delivered=True
+                )
+            )
+            errors.extend(
+                validate_heading_fidelity(
+                    args.source,
+                    article,
+                    resolved_profile,
+                    allow_rewrite=args.allow_heading_rewrite,
+                )
+            )
 
     if args.cover:
         if not args.cover.is_file():
             errors.append(f"cover not found: {args.cover}")
         else:
-            errors.extend(validate_cover(args.cover))
+            errors.extend(
+                validate_cover(
+                    args.cover,
+                    expected_title=extract_h1(article),
+                    expected_people=args.people,
+                )
+            )
 
     if errors:
         print("FAIL")
@@ -409,7 +455,7 @@ def main(argv: list[str] | None = None) -> int:
     print(
         "COVERAGE checked against source+audit"
         if args.source is not None and args.audit is not None
-        else "COVERAGE not checked (pass --source and --audit)"
+        else "COVERAGE skipped (--html-only)"
     )
     return 0
 

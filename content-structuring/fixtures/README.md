@@ -1,4 +1,4 @@
-# content-structuring fixtures（v5.33）
+# content-structuring fixtures（v5.34）
 
 迷你金样，用于结构/闸门回归。**不是**生产级深度文。
 
@@ -8,16 +8,14 @@
 | `adversarial-interview.md` | 争辩型访谈 + 核心冲突 + 原声先于解释 |
 | `longform-generic.md` | 通用模板（含篇末关键语录节及其前置结构 `---`） |
 | `multisource-conflict.md` | 多源口径冲突 + 编者注 |
-| `stock-english-mix.md` | 存量夹写（应被 4c 扫出裸词） |
+| `stock-english-mix.md` | 存量夹写（应被 4c-1 扫出裸词） |
 
 ```bash
+python scripts/selfcheck.py fixtures/dialogue-three-layer.md
+python scripts/check_4c.py fixtures/dialogue-three-layer.md   # expect 4c-1 OK
+python scripts/check_4c.py fixtures/stock-english-mix.md      # expect 4c-1 hits
 python scripts/normalize_spacing.py fixtures/dialogue-three-layer.md --check
-python scripts/normalize_spacing.py fixtures/adversarial-interview.md --check
-python scripts/normalize_spacing.py fixtures/longform-generic.md --check
-python scripts/normalize_spacing.py fixtures/multisource-conflict.md --check
-python scripts/check_4c.py fixtures/dialogue-three-layer.md   # expect OK
-python scripts/check_4c.py fixtures/stock-english-mix.md      # expect hits
-python scripts/tests/test_gates.py                            # 五个金样全部入测
+python scripts/tests/test_gates.py
 ```
 
-4c 词库单源：`references/lexicon.txt`（`check_4c.py` 自动加载）。
+4c 词库单源：`references/lexicon.txt`。4c-2 开集连扫内置于 `check_4c.py`。

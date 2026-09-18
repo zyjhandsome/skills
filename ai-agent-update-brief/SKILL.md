@@ -1,202 +1,157 @@
 ---
 name: ai-agent-update-brief
-description: Create standalone HTML update briefs for AI coding agents, agentic IDEs, CLI agents, developer tools, and related AI productivity tools. Use when the user asks to research changelogs, release notes, official blogs, GitHub releases, or docs updates for tools such as Cursor, OpenAI Codex, Claude Code, Claude Cowork, Antigravity CLI, Google Antigravity, Antigravity IDE, VS Code, or similar tools. If the user does not name specific tools, default to the full default tool set defined in this skill. Default report language is Chinese for both the HTML file and the chat summary, including when the user only types /ai-agent-update-brief or writes in English. Use English only if the user explicitly requests it. The output should be a clear, practical HTML report with recent updates, latest versions, official sources, real user impact, and concrete examples.
+description: >
+  Creates a standalone HTML update brief for AI coding agents, agentic IDEs,
+  and CLI tools. Use when the user invokes /ai-agent-update-brief or explicitly
+  asks for an AI-agent / coding-tool changelog brief, release-notes digest, or
+  weekly update report.
+disable-model-invocation: true
 ---
 
 # AI Agent Update Brief
 
-## Core Output Principle
+Build a decision-ready brief, not a changelog dump. Copy the HTML skeleton, fill
+research, then run the content verifier. Do not invent class names or `data-*`
+attributes.
 
-Build a decision-ready brief, not a raw changelog dump. Organize updates by user scenario, explain practical impact, include concrete examples inside each tool's impact text, and cite official sources.
+## Files
 
-## Default Behavior
+- [references/report-skeleton.html](references/report-skeleton.html) — copy this; fill content
+- [references/sources.md](references/sources.md) — official URL index; edit it in the same turn if stale
+- [references/html-theme.md](references/html-theme.md) — token/script contract (already inlined in the skeleton)
+- [scripts/verify-brief.mjs](scripts/verify-brief.mjs) — required content gate
+- [scripts/verify-theme.mjs](scripts/verify-theme.mjs) — optional light/dark screenshots
 
-When the user asks for an AI agent update brief, AI coding tools report, agentic IDE report, CLI agent update, or similar research task and does not specify a tool list, treat "all tools" as the default. Do not ask for clarification just to choose tools.
+`<skill-dir>` is the folder that holds this `SKILL.md`. Use the absolute path you
+loaded, not a guess.
 
-Default output is a standalone HTML report saved under a `reports/` folder in the current workspace (create it if missing), unless the user specifies another location. Do not save reports next to the skill's own files. Also provide a concise Chinese chat summary with the local file link after generation.
+## Workflow
 
-Only produce a chat-only brief when the user explicitly asks for no file, no HTML, quick summary, or chat-only output.
+```
+- [ ] 1. Read sources.md and open those URLs first
+- [ ] 2. Research by vendor in parallel; honor tool tiers and the fetch budget
+- [ ] 3. Backfill sources.md in this turn if any URL is dead, renamed, or superseded
+- [ ] 4. Copy report-skeleton.html → reports/ai-agent-update-brief-YYYY-MM-DD.html
+- [ ] 5. Fill content; keep data-section / data-tool / data-window-* attributes
+- [ ] 6. Localization pass (Chinese default); delete data-placeholder="1"
+- [ ] 7. node <skill-dir>/scripts/verify-brief.mjs <report.html>
+- [ ] 8. Optional: verify-theme.mjs; Chinese chat summary + local file link
+```
 
-## Language and Localization
+Default output: standalone HTML under the workspace `reports/` folder (create it
+if missing). Never write reports next to this skill. Chat-only only when the user
+asks for no file / no HTML / a quick summary.
 
-**Chinese is the default language.** Write both the HTML report and the chat summary in Chinese unless the user explicitly asks for English.
+## Language
 
-This default applies even when the user only invokes `/ai-agent-update-brief`, writes the request in English, or uses English product names. Do not infer English from the slash command, the tool list, or an English workspace path.
+Chinese is the default for the HTML and the chat summary, including when the user
+only types `/ai-agent-update-brief` or writes the request in English. Switch only
+on an explicit English request (`in English`, `English report`, `英文`, `用英语`).
 
-Switch to English only when the user explicitly requests it, for example: "in English", "English report", "英文", "用英语", or "English please". If the request is mixed and does not clearly ask for English, keep Chinese.
+- Chinese report: `lang="zh-CN"`. Translate visible prose, labels, notes, and the
+  footer. Keep product names, commands, APIs, versions, URLs, and official feature
+  names in English. Ban leftover work-notes such as `checked`, `latest`,
+  `No qualifying update found`, `official releases`.
+- English report: `lang="en"` and pass `--en` to the verifier. Same structure and
+  `data-*` attributes.
 
-For Chinese reports (the default):
+Chinese section titles: 核心结论、建议动作、工程自动化、多 Agent / 子 Agent、
+权限安全与破坏性变更、模型配额与成本、按任务选工具、联合更新池、官方来源、术语表.
 
-- Set `<html lang="zh-CN">`.
-- Translate all natural-language analysis, labels, table headers, navigation, status notes, source-use notes, update-pool remarks, footer caveats, and glossary explanations into Chinese.
-- Keep product names, model names, commands, API names, protocol names, version numbers, URLs, and official feature names in English when translation would reduce clarity, for example `Cursor`, `Claude Tag`, `MCP`, `BYOK`, `GitHub Changelog`, `/usage`, and `AGENTS.md`.
-- Do not leave English work-note phrases in the report body, such as "checked", "latest", "official releases", "No qualifying update found", "billed to organization", "spend limits", "audit logs", or "release page checked". Translate them into polished Chinese, for example "已检查", "最新版本", "官方版本页", "未找到合格更新", "计入组织账单", "支出上限", "审计日志", and "已检查版本页".
-- Link text should be reader-friendly in Chinese when possible, while the underlying URL remains unchanged. For example, prefer "Codex 官方 changelog" over a bare URL unless the URL itself is the clearest label.
-- Keep terminology consistent throughout the report. For example, choose "Agent" and "子 Agent" consistently instead of mixing "agent", "subagent", and "Subagent" in natural-language sentences.
-- Use these default Chinese section titles: 核心结论、建议动作、工程自动化、多 Agent / 子 Agent、权限安全与破坏性变更、模型配额与成本、按任务选工具、联合更新池、官方来源、术语表.
-- After the HTML is written, run one localization pass over visible text and remove stray English fragments. Source notes, update-pool remarks, glossary rows, and footer caveats are easy to leave half-English. Leave only deliberate English product/feature names, commands, URLs, and technical identifiers.
+## Tool tiers
 
-For English reports (explicit request only):
+Baseline, not a frozen contract. Follow successors in `sources.md`. The user may
+narrow or expand the list.
 
-- Use English for all natural-language analysis, labels, notes, and the chat summary.
-- Keep the same structure, inclusion rule, and official-source standard.
-- Set `<html lang="en">`.
+| Tier | `data-tool` | Report as | If research fails |
+| --- | --- | --- | --- |
+| Core (required) | `cursor`, `codex`, `claude-code`, `antigravity`, `vscode-copilot` | Cursor; Codex; Claude Code; Antigravity / Gemini CLI; VS Code / Copilot | Still emit a pool row; cite the page checked |
+| Secondary (best effort) | `cowork`, `claude-tag`, `jetbrains`, `devin`, `amp`, `factory` | Cowork; Claude Tag; JetBrains / Junie; Devin / Windsurf; Amp; Factory Droid | May use `data-status="skipped"` + 「本轮未深挖」 |
+| Tail (if found) | `aider`, `continue`, `replit`, `copilot-workspace` | Aider; Continue; Replit Agent; Copilot Workspace | Same as secondary; keep empty tail off the first screen |
 
-## Default Tool Set
+**Degrade rule:** A brief is deliverable once every **core** row is filled
+(`update` or `none`). If any secondary/tail row is `skipped`, set
+`data-degrade="1"` on `.rule.degrade` and list what was skipped. Do not present a
+partial run as a full default scan.
 
-Treat this list as a baseline, not a frozen contract: if official sources show a tool has been renamed, merged, or succeeded by another product, report it under the successor with a note, and add newly prominent official agent tools discovered during research. Known successor relationships are recorded in [references/sources.md](references/sources.md).
+Budget: 2–4 fetches per researched tool. After that, write 「未找到合格官方更新」
+(`data-status="none"`) and stop. Group by vendor (Anthropic, OpenAI, Google,
+GitHub/Microsoft, Cognition, JetBrains, independents) and research groups in
+parallel when possible.
 
-Cover this full set by default unless the user narrows or expands the list:
+## Research
 
-- Cursor
-- OpenAI Codex
-- Claude Code
-- Claude Cowork
-- Claude Tag / Claude in Slack
-- Gemini CLI
-- Antigravity CLI
-- Google Antigravity / Antigravity IDE
-- VS Code and GitHub Copilot coding agent capabilities
-- Windsurf
-- JetBrains AI Assistant and Junie
-- Aider
-- Continue
-- Sourcegraph Amp
-- Factory Droid
-- Devin
-- Replit Agent
-- GitHub Copilot Workspace or related GitHub agentic coding updates
+1. Open the URLs in `sources.md` first. Search only if an entry is missing, dead,
+   or clearly stale.
+2. **Same turn:** patch `sources.md` (URL, successor note, 核实日期) when you
+   correct the index. A note in the report is not enough.
+3. Treat dated claims in `sources.md` as clues to re-verify, not as facts to paste.
+4. Source order: official changelog → docs → official GitHub Releases → official
+   blog/support → labeled secondary.
+5. Capture URL + date + version while reading; never reconstruct them later.
+6. Capability-surface sweep for suite products (Claude, Copilot, Replit, Devin):
+   help/docs, connectors, enterprise pages, launch posts.
+7. OpenAI product facts: official OpenAI sources only unless the user says otherwise.
 
-If an item has no official updates available under the inclusion rule, keep it in the report with an explicit note and cite the official page checked when possible. Default wording: "未找到合格官方更新". Use "No qualifying official update found" only in an English report.
+Inclusion rule (a union, not two lists):
 
-## Execution Strategy
+`included updates = last 7 days ∪ each tool's latest 3 official versions or updates`
 
-1. Start from the official source index in [references/sources.md](references/sources.md) and open those URLs directly. Fall back to web search only when an index entry is missing, dead, or clearly outdated, and note the correction in the report's source notes so the index can be updated.
-2. Group tools by vendor (Anthropic, OpenAI, Google, GitHub/Microsoft, Cognition, JetBrains, independents) and research groups in parallel when parallel tool calls or subagents are available.
-3. Budget roughly 2-4 fetches or searches per tool. If a tool still has no qualifying update after that, record "未找到合格官方更新" with the page checked and move on instead of continuing to search.
-4. Capture exact dates and version numbers while reading each source page; never reconstruct them from memory afterwards.
+No semver → latest official notes/docs; label 「官方文档更新」 or 「发布说明条目」.
 
-## Research Rules
+## Report
 
-1. Browse the web because release notes, model support, pricing, quotas, and tool availability change frequently.
-2. Prefer official sources in this order:
- - Official changelog or release notes
- - Official docs
- - GitHub Releases from the official repository
- - Official blog or support article
- - Secondary sources only when official sources are unavailable, and label them clearly
-3. Capture source URL and publication date for each included update.
-4. Treat client-rendered official pages as usable official sources if their page resources contain version data. Note this in the final source notes.
-5. For OpenAI product information, use official OpenAI sources only unless the user requests otherwise.
-6. Do a capability-surface sweep for products whose agent updates may ship outside classic changelogs. Search official help centers, docs collections, connector/integration pages, team/enterprise capability pages, and official social/blog launch pages for new agent surfaces such as Slack agents, group/channel agents, mobile dispatch, browser/desktop agents, connectors, and admin controls. This is required for Claude, GitHub Copilot, Replit, Devin, and similar suite products.
-7. Search by product-family aliases and user-facing feature names, not only by tool names. For example, for Anthropic search Claude Code, Claude Cowork, Claude Tag, Claude in Slack, Team and Enterprise capabilities, connectors, and release notes.
+Copy the skeleton. Keep `data-section` values, `nav.toc` / `.rule` / `.chip.*` /
+`.theme-switch`, and pool-row attributes:
 
-## Inclusion Rule
+- `data-window-start` / `data-window-end` on `.rule.scope` (`YYYY-MM-DD`)
+- each pool `tr`: `data-tool`, `data-status` = `update|none|skipped`
+- if `update`: `data-date`; if that date is outside the 7-day window, also
+  `data-latest="1|2|3"`
 
-Use a union, not two separate lists:
+Table headers: 工具、日期、官方更新、实际影响 / 示例.
 
-`included updates = updates from the last 7 days ∪ each tool's latest 3 official versions or updates`
+Impact cell answers: 谁该关心、工作流怎么变、风险或机会、一个具体用法. The
+example lives in the tool row, not as a scenario-level blurb.
 
-If a tool has no semantic version releases, use its latest official release-note entries or docs updates and label the source type. Default Chinese labels: "官方文档更新" or "发布说明条目". English labels ("official docs update", "release notes entry") only in an English report.
+Filename: `reports/ai-agent-update-brief-YYYY-MM-DD.html`.
 
-## Recommended Report Structure
+Do not add beginner-audience or "who should read where" sections unless asked.
+Do not name the glossary 「小白术语表」 or 「Beginner glossary」.
 
-For the HTML report, use this structure:
+## Theme
 
-1. Title and date scope
- - State current date.
- - State the 7-day window using exact dates.
- - State the union inclusion rule.
- - Default Chinese heading style: `AI Agent 更新简报` plus the date.
-2. Topline conclusions（核心结论）
- - Highlight the biggest migration, breaking change, security change, pricing/quota change, and agent workflow trend.
-3. Recommended actions（建议动作）
- - Provide concrete next steps such as upgrade, migrate, check policy, verify quota, or pilot a workflow.
-4. Scenario sections
- - Default Chinese scenario titles:
- - 工程自动化
- - 多 Agent / 子 Agent
- - 权限安全与破坏性变更
- - 模型配额与成本
- - 按任务选工具
- - In each scenario, include tool-specific rows or cards.
- - Put examples in each tool's "影响 / 示例" text, not as a single scenario-level example.
-5. Union update pool（联合更新池）
- - List each tool's included versions or updates under the union rule.
-6. Official sources（官方来源）
- - Link each official source used.
-7. Glossary（术语表）
- - Name the section "术语表" by default, or "Glossary" only in an English report. Never "Beginner glossary" or "小白术语表".
+The skeleton already inlines [html-theme.md](references/html-theme.md). Do not
+invent a palette. The header stays a dark masthead; paper, cards, tables, chips,
+and the sticky nav flip.
 
-## Scenario Row Pattern
+## Tool-specific
 
-For table rows, prefer these Chinese headers by default:
+- Gemini CLI → Antigravity CLI (`agy`) when official sources say so; treat as breaking.
+- VS Code is an IDE / Copilot workbench, not a standalone agent.
+- Cowork: desktop / knowledge-work; use official notes if unversioned.
+- Claude Tag: first-class Slack agent surface, not a minor connector.
+- Split IDE vs CLI vs cloud vs desktop when the split changes the action.
 
-- 工具
-- 日期
-- 官方更新
-- 实际影响 / 示例
+## Verify
 
-The impact cell should answer:
+Required:
 
-- 谁该关心？
-- 工作流会怎么变？
-- 出现了什么风险或机会？
-- 一个具体用法示例是什么？
+```bash
+node <skill-dir>/scripts/verify-brief.mjs reports/ai-agent-update-brief-YYYY-MM-DD.html
+```
 
-Default Chinese impact style:
+English report: add `--en`. Optional link HEAD: `--check-links`. Delivered reports
+must not keep `data-placeholder="1"` (`--strict` fails on it).
 
-`适合把 CI 失败转成后台修复任务。示例：GitHub Actions 在 PR 上失败时，触发 Agent 查看日志、修好失败测试并开出修复 PR。`
-
-Use English headers and impact style only in an English report.
-
-## HTML Artifact Guidelines
-
-Because standalone HTML is the default output:
-
-1. Create a standalone HTML file with embedded CSS. Default `<html lang="zh-CN">`.
-2. Use scenario navigation, summary cards, readable tables, and source links.
-3. Avoid landing-page or marketing copy; make the first screen useful.
-4. Do not include a "what this report is about for beginners" section unless explicitly requested.
-5. Do not include a "which reader should read where" section unless explicitly requested.
-6. Include "Glossary" / "术语表" only when useful.
-7. Keep examples inside each tool's impact cell or card text.
-8. Make the page readable without a local server.
-9. Use a descriptive filename such as `reports/ai-agent-update-brief-YYYY-MM-DD.html`.
-10. After writing the HTML, open or inspect the file enough to verify it contains the required sections and links.
-11. Run the localization pass described in "Language and Localization" (skip only for an explicit English report).
-12. Include both 亮色 and 暗黑 modes per the "Appearance (Light / Dark)" section below.
-
-## Appearance (Light / Dark)
-
-Every standalone HTML brief ships both 亮色 (`light`) and 暗黑 (`dark`) modes in one file. Follow the token, toggle, and script contract in [references/html-theme.md](references/html-theme.md) exactly; do not invent a new palette unless the user asks.
-
-After writing, verify **both** modes on: the first screen (header + 核心结论 cards), one table with chips, the sticky nav, and the footer. Fix contrast problems before finishing. Preferred verification: run [scripts/verify-theme.mjs](scripts/verify-theme.mjs) (path is relative to this skill's directory) and inspect the screenshots it writes:
+Fix every ERROR before delivering. Then optional theme screenshots:
 
 ```bash
 node <skill-dir>/scripts/verify-theme.mjs reports/ai-agent-update-brief-YYYY-MM-DD.html
 ```
 
-The script needs `playwright-core` and a locally installed Edge or Chrome (or set `BRIEF_BROWSER_PATH`). If it cannot run, open the file in a browser and check both modes manually.
+`verify-theme.mjs` needs `playwright-core` plus Edge/Chrome, or `BRIEF_BROWSER_PATH`.
+If it cannot run, spot-check both modes on the first screen, one table with chips,
+the sticky nav, and the footer.
 
-## Tool-Specific Handling
-
-- **Gemini CLI / Antigravity CLI**: If official sources indicate Gemini CLI migration or deprecation, present Antigravity CLI as the successor and treat migration as a breaking or high-priority change.
-- **VS Code**: Position it as an IDE, Copilot, and agent-workbench base rather than a standalone coding agent.
-- **Claude Cowork**: Position it as desktop and knowledge-work agent tooling. If no versioned changelog exists, use official release notes and support/docs updates.
-- **Claude Tag / Claude in Slack**: Treat Slack-native channel/group collaboration as an agent workflow surface, not as a minor connector. Include it when official docs or launch pages show new channel tagging, shared context, agent identity, proactive follow-up, channel/workspace memory, routing to Claude Code, spend limits, audit logs, or admin permissions. Place it in engineering automation, team collaboration, permissions/security, and quota/cost sections as appropriate.
-- **Agentic IDEs and CLIs**: Separate IDE, CLI, cloud automation, and desktop-agent use cases when the distinction affects user action.
-
-## Quality Checklist
-
-Before finalizing:
-
-- Verify every included update satisfies the union rule.
-- Ensure every tool has a recent update pool entry or an explicit note explaining why not.
-- Ensure breaking changes, migrations, security changes, quota/pricing changes, and model support changes are easy to find.
-- Ensure cross-surface launches are not missed: check official help/docs capability pages in addition to changelogs for Claude Tag/Slack, Copilot app/CLI/agent, Replit connectors, Devin automations, and similar agent surfaces.
-- Ensure examples are attached to tool-level impact, not isolated as generic scenario examples.
-- Ensure source links are official and dates are explicit.
-- Ensure the report language is consistent. Default Chinese reports must use Chinese for visible prose, navigation, source notes, update-pool remarks, and footer caveats, except for deliberate product names, commands, URLs, API/protocol names, and version identifiers. The chat summary must match the report language.
-- Ensure both 亮色 and 暗黑 modes are present, the sticky toggle works, the saved theme restores without a flash, and contrast holds in both modes on cards, tables, chips, and the header.
-- If producing files, provide a clickable local file link in the final response.
+The chat summary matches the report language and includes a clickable local file link.

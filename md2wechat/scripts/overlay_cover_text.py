@@ -151,10 +151,30 @@ def _wrap_if_needed(lines: list[str], max_w: float) -> list[str]:
     return [p for p in out if p]
 
 
-def overlay(path: Path, title: str, people: str) -> None:
+COVER_TITLE_KEY = "WeChatCoverTitle"
+COVER_PEOPLE_KEY = "WeChatCoverPeople"
+
+
+def _pnginfo(title: str, people: str):
+    from PIL.PngImagePlugin import PngInfo
+
+    info = PngInfo()
+    info.add_text(COVER_TITLE_KEY, title or "")
+    info.add_text(COVER_PEOPLE_KEY, people or "")
+    return info
+
+
+def overlay(path: Path, title: str, people: str, out: Path | None = None) -> None:
     from PIL import Image, ImageDraw
 
-    im = Image.open(path).convert("RGB")
+    dest = out or path
+    im = Image.open(path)
+    if im.info.get(COVER_TITLE_KEY) or im.info.get(COVER_PEOPLE_KEY):
+        raise SystemExit(
+            f"Refusing to overlay twice: {path} already has cover tEXt. "
+            "Re-run make_cover_235.py on the generated scene, then overlay once."
+        )
+    im = im.convert("RGB")
     w, h = im.size
     draw = ImageDraw.Draw(im)
     max_w = w * MAX_WIDTH_RATIO
@@ -204,8 +224,9 @@ def overlay(path: Path, title: str, people: str) -> None:
         tw = _tracked_width(people, people_font, PEOPLE_TRACK)
         _draw_tracked(draw, people, (w - tw) / 2, y, people_font, PEOPLE_FILL, PEOPLE_TRACK)
 
-    im.save(path, format="PNG", optimize=True)
-    print(f"Overlaid text on {path} size={im.size} title_px={title_size}")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    im.save(dest, format="PNG", optimize=True, pnginfo=_pnginfo(title, people))
+    print(f"Overlaid text on {dest} size={im.size} title_px={title_size}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -213,11 +234,17 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("image", type=Path)
     ap.add_argument("--title", default="", help="Article H1")
     ap.add_argument("--people", default="", help="Speakers, shown under the title")
+    ap.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="Output PNG (default: overwrite input; refused if already overlaid)",
+    )
     args = ap.parse_args(argv)
     if not args.image.is_file():
         print(f"ERROR: not found: {args.image}", file=sys.stderr)
         return 2
-    overlay(args.image, args.title, args.people)
+    overlay(args.image, args.title, args.people, out=args.out)
     return 0
 
 

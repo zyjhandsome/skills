@@ -11,6 +11,10 @@ import re
 from dataclasses import dataclass
 
 POLICY_CONCLUSIONS = frozenset({"可发布", "改写后可发布", "不可发布"})
+POLICY_CODES = frozenset(
+    {"leak_closed_door", "unverified_finance", "political_public_event"}
+)
+ACK_MIN_REASON = 8
 POLICY_OFFICIAL_URL = (
     "https://mp.weixin.qq.com/cgi-bin/readtemplate"
     "?t=business/faq_operation_tmpl&type=info&lang=zh_CN&token="
@@ -26,9 +30,13 @@ _LEAK_PATTERNS = (
     r"内部录音",
     r"讲话外泄",
 )
+# Standalone 知情人士 / 尚未核实 are how careful drafts mark uncertainty.
+# Only stop when they sit next to financing / valuation claims.
 _FINANCE_PATTERNS = (
-    r"知情人士",
-    r"尚未核实",
+    r"知情人士.{0,40}(融资|估值|暴雷|交易)",
+    r"(融资|估值|暴雷|交易).{0,40}知情人士",
+    r"尚未核实.{0,24}(融资|估值|帖文)",
+    r"(融资|估值).{0,24}尚未核实",
     r"突然.{0,12}融资",
     r"据报.{0,12}融资",
     r"暂停.{0,16}融资",
@@ -145,6 +153,45 @@ def validate_source_against_audit(
         errors.append("POLICY: 发布结论是不可发布, but HTML was delivered")
     elif conclusion is None:
         errors.append("AUDIT MISSING: 发布结论")
+    return errors
+
+
+def parse_policy_ack(raw: str) -> tuple[str, str]:
+    """Parse ``code:reason`` from --policy-ack. Raises ValueError on bad input."""
+    text = (raw or "").strip()
+    if ":" not in text:
+        raise ValueError("policy ack must be code:reason")
+    code, reason = text.split(":", 1)
+    code = code.strip()
+    reason = reason.strip()
+    if code not in POLICY_CODES:
+        raise ValueError(f"unknown policy ack code: {code}")
+    if len(reason) < ACK_MIN_REASON:
+        raise ValueError(f"policy ack reason for {code} must be ≥{ACK_MIN_REASON} chars")
+    return code, reason
+
+
+def strip_html_text(html: str) -> str:
+    text = re.sub(r"<script\b[^>]*>.*?</script>", " ", html, flags=re.S | re.I)
+    text = re.sub(r"<style\b[^>]*>.*?</style>", " ", text, flags=re.S | re.I)
+    text = re.sub(r"<[^>]+>", " ", text)
+    return re.sub(r"\s+", " ", text)
+
+
+def validate_article_residuals(
+    article_html: str,
+    acks: dict[str, str] | None = None,
+) -> list[str]:
+    """Stop signals still in the pasted article must be cut or explicitly acked."""
+    acks = acks or {}
+    errors: list[str] = []
+    for finding in scan_source_risks(strip_html_text(article_html)):
+        if finding.code in acks:
+            continue
+        errors.append(
+            f"POLICY BODY: {finding.code} remains in the article; "
+            f"cut it or pass --policy-ack {finding.code}:<reason>"
+        )
     return errors
 
 

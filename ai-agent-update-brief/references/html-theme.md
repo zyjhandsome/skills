@@ -1,6 +1,8 @@
 # HTML 主题契约（亮色 / 暗黑）
 
-Every standalone brief must ship **both** modes in one file. Copy the tokens, toggle markup, and scripts below. Do not invent a new palette unless the user asks.
+Copy markup and class names from [report-skeleton.html](report-skeleton.html). This file is the token, toggle, and script contract only — do not invent a new palette, DOM skeleton, or class names unless the user asks.
+
+Every standalone brief must ship **both** modes in one file.
 
 ## Required behavior
 

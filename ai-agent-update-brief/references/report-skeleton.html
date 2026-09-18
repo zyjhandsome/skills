@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-placeholder="1">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Agent 更新简报 YYYY-MM-DD</title>
+<script>
+(function () {
+  try {
+    var saved = localStorage.getItem('ai-agent-brief-theme');
+    if (saved === 'light' || saved === 'dark') {
+      document.documentElement.setAttribute('data-theme', saved);
+    }
+  } catch (e) {}
+})();
+</script>
+<style>
+:root {
+  color-scheme: light;
+  --ink: #1b1d21;
+  --muted: #5b616b;
+  --line: #d9dde3;
+  --paper: #f7f5f1;
+  --card: #ffffff;
+  --accent: #1f4b99;
+  --warn: #8a3b12;
+  --risk: #9b1c2e;
+  --ok: #1b6b45;
+  --chip: #eef1f6;
+  --header-bg: #1b1d21;
+  --header-fg: #f4f1ea;
+  --header-muted: #c9c4b8;
+  --rule-bg: #2a2d33;
+  --rule-fg: #efe8d8;
+  --rule-accent: #c9a227;
+  --toc-bg: rgba(247, 245, 241, 0.94);
+  --toc-link-bg: #ffffff;
+  --th-bg: #eef1f6;
+  --code-bg: #eef1f6;
+  --switch-bg: #e8e4dc;
+  --switch-active-bg: #ffffff;
+  --chip-break-bg: #f8d7dc;
+  --chip-mig-bg: #fde8d2;
+  --chip-sec-bg: #f3e2c8;
+  --chip-sec-fg: #6d3b08;
+  --chip-price-bg: #e3efe7;
+  --chip-new-bg: #dce7f8;
+  --chip-none-bg: #ececec;
+  --chip-none-fg: #555555;
+  --focus: #1f4b99;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ink: #ece8e1;
+    --muted: #9aa1ab;
+    --line: #323842;
+    --paper: #121418;
+    --card: #1b1f26;
+    --accent: #8fb4f0;
+    --warn: #f0b27a;
+    --risk: #f08a96;
+    --ok: #7dcea0;
+    --chip: #252a33;
+    --header-bg: #0d0f12;
+    --header-fg: #f4f1ea;
+    --header-muted: #a8a396;
+    --rule-bg: #252830;
+    --rule-fg: #efe8d8;
+    --rule-accent: #d4b44a;
+    --toc-bg: rgba(18, 20, 24, 0.92);
+    --toc-link-bg: #1b1f26;
+    --th-bg: #222730;
+    --code-bg: #252a33;
+    --switch-bg: #252a33;
+    --switch-active-bg: #323842;
+    --chip-break-bg: #3a1f24;
+    --chip-mig-bg: #3a2a18;
+    --chip-sec-bg: #3a2e18;
+    --chip-sec-fg: #f0c48a;
+    --chip-price-bg: #1c3328;
+    --chip-new-bg: #1d2c44;
+    --chip-none-bg: #2a2d33;
+    --chip-none-fg: #b0b4ba;
+    --focus: #8fb4f0;
+  }
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+  --ink: #ece8e1;
+  --muted: #9aa1ab;
+  --line: #323842;
+  --paper: #121418;
+  --card: #1b1f26;
+  --accent: #8fb4f0;
+  --warn: #f0b27a;
+  --risk: #f08a96;
+  --ok: #7dcea0;
+  --chip: #252a33;
+  --header-bg: #0d0f12;
+  --header-fg: #f4f1ea;
+  --header-muted: #a8a396;
+  --rule-bg: #252830;
+  --rule-fg: #efe8d8;
+  --rule-accent: #d4b44a;
+  --toc-bg: rgba(18, 20, 24, 0.92);
+  --toc-link-bg: #1b1f26;
+  --th-bg: #222730;
+  --code-bg: #252a33;
+  --switch-bg: #252a33;
+  --switch-active-bg: #323842;
+  --chip-break-bg: #3a1f24;
+  --chip-mig-bg: #3a2a18;
+  --chip-sec-bg: #3a2e18;
+  --chip-sec-fg: #f0c48a;
+  --chip-price-bg: #1c3328;
+  --chip-new-bg: #1d2c44;
+  --chip-none-bg: #2a2d33;
+  --chip-none-fg: #b0b4ba;
+  --focus: #8fb4f0;
+}
+[data-theme="light"] { color-scheme: light; }
+
+html { background: var(--paper); }
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  color: var(--ink);
+  font: 16px/1.55 "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif;
+  background: var(--paper);
+}
+header { background: var(--header-bg); color: var(--header-fg); padding: 2rem 1.25rem 1.5rem; }
+.wrap { max-width: 1080px; margin: 0 auto; }
+.meta { color: var(--header-muted); margin: 0.4rem 0 0; font-size: 0.95rem; }
+h1 { margin: 0; font-size: 1.8rem; letter-spacing: 0.02em; }
+.rule {
+  background: var(--rule-bg);
+  border-left: 4px solid var(--rule-accent);
+  color: var(--rule-fg);
+  padding: 0.75rem 1rem;
+  margin: 1rem 0 0;
+}
+.rule.degrade[data-degrade="1"] { display: block; }
+.rule.degrade:not([data-degrade="1"]) { display: none; }
+nav.toc {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.65rem 1.25rem;
+  background: var(--toc-bg);
+  border-bottom: 1px solid var(--line);
+}
+nav.toc a {
+  color: var(--accent);
+  border: 1px solid var(--line);
+  background: var(--toc-link-bg);
+  text-decoration: none;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+}
+.theme-switch {
+  margin-left: auto;
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.15rem;
+  border-radius: 999px;
+  background: var(--switch-bg);
+}
+.theme-switch button {
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.theme-switch button[aria-pressed="true"] { background: var(--switch-active-bg); }
+main.wrap { padding: 1.25rem; }
+section { margin: 2rem 0; }
+h2 { font-size: 1.25rem; margin: 0 0 0.8rem; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.8rem; }
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+}
+.card h3 { margin: 0 0 0.4rem; font-size: 1rem; }
+.card p { margin: 0; color: var(--muted); }
+ol.actions { padding-left: 1.2rem; }
+table { width: 100%; border-collapse: collapse; background: var(--card); }
+th, td { border-bottom: 1px solid var(--line); padding: 0.7rem 0.65rem; text-align: left; vertical-align: top; }
+th { background: var(--th-bg); color: var(--muted); font-size: 0.8rem; letter-spacing: 0.04em; }
+code { background: var(--code-bg); color: var(--ink); padding: 0.05rem 0.3rem; border-radius: 4px; font-size: 0.9em; }
+.chip {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.75rem;
+  margin-right: 0.3rem;
+  background: var(--chip);
+}
+.chip.break { background: var(--chip-break-bg); color: var(--risk); }
+.chip.mig { background: var(--chip-mig-bg); color: var(--warn); }
+.chip.sec { background: var(--chip-sec-bg); color: var(--chip-sec-fg); }
+.chip.price { background: var(--chip-price-bg); color: var(--ok); }
+.chip.new { background: var(--chip-new-bg); color: var(--accent); }
+.chip.none { background: var(--chip-none-bg); color: var(--chip-none-fg); }
+footer {
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: 1.5rem 1.25rem 2.5rem;
+  border-top: 1px solid var(--line);
+}
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>AI Agent 更新简报 YYYY-MM-DD</h1>
+    <p class="meta">纳入规则：过去 7 天 ∪ 各工具最近 3 条官方更新。下列日期与条目均为骨架占位，生成时必须替换。</p>
+    <p class="rule scope" data-window-start="2026-09-11" data-window-end="2026-09-18">
+      覆盖窗口：2026-09-11 至 2026-09-18。生成时改这两个 <code>data-window-*</code> 属性，并同步可见日期。
+    </p>
+    <aside class="rule degrade">若有次级/长尾 <code>data-status="skipped"</code>，在此元素加上 <code>data-degrade="1"</code> 并列出未深挖项。不要把半成品写成全量扫描。</aside>
+  </div>
+</header>
+
+<nav class="toc" aria-label="本页导航">
+  <a href="#conclusions">核心结论</a>
+  <a href="#actions">建议动作</a>
+  <a href="#automation">工程自动化</a>
+  <a href="#multi-agent">多 Agent</a>
+  <a href="#security">权限安全</a>
+  <a href="#quota">配额成本</a>
+  <a href="#choose-tool">按任务选工具</a>
+  <a href="#pool">联合更新池</a>
+  <a href="#sources">官方来源</a>
+  <a href="#glossary">术语表</a>
+  <div class="theme-switch" role="group" aria-label="外观">
+    <button type="button" data-theme-set="light" aria-pressed="false">亮色</button>
+    <button type="button" data-theme-set="dark" aria-pressed="false">暗黑</button>
+  </div>
+</nav>
+
+<main class="wrap">
+  <section id="conclusions" data-section="conclusions">
+    <h2>核心结论</h2>
+    <div class="cards">
+      <article class="card">
+        <h3>迁移 / 破坏性变更</h3>
+        <p>用一句话写本周最大的迁移或破坏性变更。示例占位，勿留在成稿里。</p>
+      </article>
+      <article class="card">
+        <h3>权限与安全</h3>
+        <p>审计日志、企业权限、默认策略变化写在这里。</p>
+      </article>
+      <article class="card">
+        <h3>配额与成本</h3>
+        <p>定价、额度、组织账单变化写在这里。</p>
+      </article>
+      <article class="card">
+        <h3>工作流趋势</h3>
+        <p>子 Agent、后台修复、跨表面调度等趋势写在这里。</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="actions" data-section="actions">
+    <h2>建议动作</h2>
+    <ol class="actions">
+      <li>升级 / 迁移：写清工具、版本、谁该做。</li>
+      <li>核对策略：权限、审计、组织账单。</li>
+      <li>试点一条工作流：用具体命令或场景，不要写「关注后续」。</li>
+    </ol>
+  </section>
+
+  <section id="automation" data-section="automation">
+    <h2>工程自动化</h2>
+    <table>
+      <thead>
+        <tr><th>工具</th><th>日期</th><th>官方更新</th><th>实际影响 / 示例</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Cursor</td>
+          <td>2026-09-16</td>
+          <td><span class="chip new">新能力</span>占位更新</td>
+          <td>适合把 CI 失败转成后台修复任务。示例：GitHub Actions 在 PR 上失败时，触发 Agent 查看日志、修好失败测试并开出修复 PR。</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="multi-agent" data-section="multi-agent">
+    <h2>多 Agent / 子 Agent</h2>
+    <table>
+      <thead>
+        <tr><th>工具</th><th>日期</th><th>官方更新</th><th>实际影响 / 示例</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Claude Code</td>
+          <td>2026-09-15</td>
+          <td><span class="chip new">新能力</span>占位子 Agent 更新</td>
+          <td>适合把调研与改码拆给并行子 Agent。示例：主 Agent 拆出「读 changelog」和「改调用方」两路，汇合后再开 PR。</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="security" data-section="security">
+    <h2>权限安全与破坏性变更</h2>
+    <table>
+      <thead>
+        <tr><th>工具</th><th>日期</th><th>官方更新</th><th>实际影响 / 示例</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Antigravity CLI</td>
+          <td>2026-09-12</td>
+          <td><span class="chip mig">迁移</span><span class="chip break">破坏性</span> Gemini CLI → <code>agy</code></td>
+          <td>个人 / Pro 账户应改用 Antigravity CLI。示例：把脚本里的 <code>gemini</code> 调用换成 <code>agy</code>，并按官方迁移指南核对标志位。</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="quota" data-section="quota">
+    <h2>模型配额与成本</h2>
+    <table>
+      <thead>
+        <tr><th>工具</th><th>日期</th><th>官方更新</th><th>实际影响 / 示例</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>GitHub Copilot</td>
+          <td>2026-09-14</td>
+          <td><span class="chip price">配额</span>占位定价更新</td>
+          <td>适合团队管理员先核对本月额度。示例：在组织设置里核对 premium request 上限，再决定是否把 coding agent 开到全部私有仓。</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="choose-tool" data-section="choose-tool">
+    <h2>按任务选工具</h2>
+    <table>
+      <thead>
+        <tr><th>工具</th><th>日期</th><th>官方更新</th><th>实际影响 / 示例</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>OpenAI Codex</td>
+          <td>2026-09-17</td>
+          <td><span class="chip new">新能力</span>占位 CLI / IDE 更新</td>
+          <td>适合本地仓库的长任务循环。示例：在仓库根目录跑 Codex CLI，把「补测试并修红」当成一条可过夜的任务。</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="pool" data-section="pool">
+    <h2>联合更新池</h2>
+    <p class="meta" style="color:var(--muted)">每个默认工具一行。状态：<code>update</code> / <code>none</code> / <code>skipped</code>。窗口外的最新 3 条请加 <code>data-latest="1|2|3"</code>。</p>
+    <table>
+      <thead>
+        <tr><th>工具</th><th>日期</th><th>官方更新</th><th>状态</th></tr>
+      </thead>
+      <tbody>
+        <tr data-tool="cursor" data-status="update" data-date="2026-09-16"><td>Cursor</td><td>2026-09-16</td><td>占位：替换为官方版本或条目</td><td><span class="chip new">更新</span></td></tr>
+        <tr data-tool="codex" data-status="update" data-date="2026-09-17"><td>OpenAI Codex</td><td>2026-09-17</td><td>占位：替换为官方版本或条目</td><td><span class="chip new">更新</span></td></tr>
+        <tr data-tool="claude-code" data-status="update" data-date="2026-09-15"><td>Claude Code</td><td>2026-09-15</td><td>占位：替换为官方版本或条目</td><td><span class="chip new">更新</span></td></tr>
+        <tr data-tool="antigravity" data-status="update" data-date="2026-09-12"><td>Antigravity / Gemini CLI</td><td>2026-09-12</td><td>占位：后继关系以官方页为准</td><td><span class="chip mig">迁移</span></td></tr>
+        <tr data-tool="vscode-copilot" data-status="update" data-date="2026-09-14"><td>VS Code / GitHub Copilot</td><td>2026-09-14</td><td>占位：替换为官方版本或条目</td><td><span class="chip new">更新</span></td></tr>
+        <tr data-tool="cowork" data-status="update" data-date="2026-09-16"><td>Claude Cowork</td><td>2026-09-16</td><td>占位：无版本号时用官方说明条目</td><td><span class="chip new">更新</span></td></tr>
+        <tr data-tool="claude-tag" data-status="none"><td>Claude Tag</td><td>—</td><td>未找到合格官方更新（已检查官方文档页）</td><td><span class="chip none">无合格更新</span></td></tr>
+        <tr data-tool="jetbrains" data-status="none"><td>JetBrains AI Assistant / Junie</td><td>—</td><td>未找到合格官方更新（已检查官方 What's new）</td><td><span class="chip none">无合格更新</span></td></tr>
+        <tr data-tool="devin" data-status="update" data-date="2026-09-13"><td>Devin / Windsurf</td><td>2026-09-13</td><td>占位：按官方后继名报告</td><td><span class="chip new">更新</span></td></tr>
+        <tr data-tool="amp" data-status="none"><td>Sourcegraph Amp</td><td>—</td><td>未找到合格官方更新（已检查 Chronicle）</td><td><span class="chip none">无合格更新</span></td></tr>
+        <tr data-tool="factory" data-status="none"><td>Factory Droid</td><td>—</td><td>未找到合格官方更新（已检查官方 changelog）</td><td><span class="chip none">无合格更新</span></td></tr>
+        <tr data-tool="aider" data-status="none"><td>Aider</td><td>—</td><td>未找到合格官方更新（已检查 GitHub Releases）</td><td><span class="chip none">无合格更新</span></td></tr>
+        <tr data-tool="continue" data-status="none"><td>Continue</td><td>—</td><td>未找到合格官方更新（已检查 GitHub Releases）</td><td><span class="chip none">无合格更新</span></td></tr>
+        <tr data-tool="replit" data-status="none"><td>Replit Agent</td><td>—</td><td>未找到合格官方更新（已检查官方 Updates）</td><td><span class="chip none">无合格更新</span></td></tr>
+        <tr data-tool="copilot-workspace" data-status="none"><td>Copilot Workspace</td><td>—</td><td>未找到合格官方更新（已检查 GitHub Next / Changelog）</td><td><span class="chip none">无合格更新</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="sources" data-section="sources">
+    <h2>官方来源</h2>
+    <ul>
+      <li><a href="https://cursor.com/changelog">Cursor changelog</a></li>
+      <li><a href="https://developers.openai.com/codex/changelog">Codex 官方 changelog</a></li>
+      <li><a href="https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md">Claude Code CHANGELOG.md</a></li>
+      <li><a href="https://antigravity.google/changelog/">Antigravity changelog</a></li>
+      <li><a href="https://github.blog/changelog/label/copilot/">GitHub Changelog（Copilot）</a></li>
+    </ul>
+    <p>来源说明：先打开 <code>references/sources.md</code> 中的 URL。若索引失效，同轮改索引并更新核实日期。</p>
+  </section>
+
+  <section id="glossary" data-section="glossary">
+    <h2>术语表</h2>
+    <table>
+      <thead>
+        <tr><th>术语</th><th>说明</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>联合更新池</td><td>过去 7 天更新与每工具最近 3 条官方更新的并集。</td></tr>
+        <tr><td>子 Agent</td><td>由主 Agent 派发的并行执行单元。</td></tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    本页为技能骨架，占位内容不可当作真实更新。成稿请删除 <code>data-placeholder="1"</code>，并跑 <code>scripts/verify-brief.mjs</code>。日期与版本以当时打开的官方页面为准。
+  </div>
+</footer>
+
+<script>
+(function () {
+  var KEY = 'ai-agent-brief-theme';
+  var root = document.documentElement;
+  var buttons = document.querySelectorAll('[data-theme-set]');
+
+  function current() {
+    return root.getAttribute('data-theme') ||
+      (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  }
+
+  function apply(theme, persist) {
+    root.setAttribute('data-theme', theme);
+    if (persist) {
+      try { localStorage.setItem(KEY, theme); } catch (e) {}
+    }
+    buttons.forEach(function (btn) {
+      var on = btn.getAttribute('data-theme-set') === theme;
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
+
+  buttons.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      apply(btn.getAttribute('data-theme-set'), true);
+    });
+  });
+
+  apply(current(), false);
+})();
+</script>
+</body>
+</html>

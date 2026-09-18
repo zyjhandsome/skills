@@ -2,8 +2,9 @@
 """Regression tests for md2html-lecture converters.
 
 Focus: no silent content drops (preamble / unknown subsections / multi-line
-quotes), block-level markdown support, generic speaker tagging, and
-batch-upgrade diagram preservation.
+quotes), block-level markdown support, generic speaker tagging,
+batch-upgrade diagram preservation, and 争辩型 layers (核心冲突 / 原声交锋 /
+未决问题 / optional 实录 / extra metadata tables).
 
 Run:  python -m pytest scripts/tests/ -q   (from the skill root)
 """
@@ -96,12 +97,85 @@ print("hello")
 """
 
 
-def _build(tmp_path):
-    md = tmp_path / "sample_整理文档.md"
-    out = tmp_path / "sample_整理文档.html"
-    md.write_text(SAMPLE_MD, encoding="utf-8")
+def _build(tmp_path, source=SAMPLE_MD, name="sample_整理文档"):
+    md = tmp_path / ("%s.md" % name)
+    out = tmp_path / ("%s.html" % name)
+    md.write_text(source, encoding="utf-8")
     build_html.build(str(md), str(out))
     return out.read_text(encoding="utf-8")
+
+
+DEBATE_MD = """# 争辩标题
+
+## 文章元数据
+
+| 项目 | 内容 |
+|------|------|
+| 原标题 | Debate Show |
+| 发布时间 | 2026-09-02 |
+| 内容链接 | https://youtu.be/debate1 |
+| 文稿结构 | 争辩型访谈 |
+
+### 官方章节索引
+
+| 时间 | 章节 |
+|------|------|
+| 00:12 | 开场 |
+
+> **讲者背景**：李四是对谈嘉宾。
+
+## 核心导读
+
+> **核心冲突**：双方对监管是否该提前介入无法达成共识。
+
+导读说明分歧本身就是论点。
+
+## 交锋小节
+
+### 核心洞察
+
+> 冲突没有收束。
+
+### 深度解析
+
+解析双方框架。
+
+### 原声交锋
+
+**甲**：「应该先立法。」
+
+**乙**：「那会扼杀实验。」
+
+### 语境与释义
+
+甲要的是事前规则，乙要的是事后追责。
+
+### 未决问题
+
+现场没有给出可执行的折中。
+
+## 无实录小节
+
+### 核心洞察
+
+> 这节没有值得摘的对话。
+
+### 深度解析
+
+只有分析，没有对谈实录层。
+
+## 延伸术语表
+
+| 术语 | 解释 |
+|------|------|
+| 监管 | 事前或事后规则 |
+
+## 自检报告
+
+| 项 | 结果 |
+|----|------|
+| 完整性 | OK |
+"""
 
 
 # ---- no silent drops --------------------------------------------------------
@@ -196,3 +270,47 @@ def test_inject_skips_when_diagram_already_present():
     added, out = batch.inject_diagrams(html_with_fig, diagrams)
     assert added == 0
     assert out.count('<figure class="diagram">') == 1
+
+
+# ---- debate variant / optional layers / extra meta tables -------------------
+
+def test_core_conflict_uses_conflict_highlight(tmp_path):
+    html = _build(tmp_path, DEBATE_MD, "debate_整理文档")
+    assert "highlight-conflict" in html
+    assert "双方对监管是否该提前介入无法达成共识" in html
+    assert "highlight highlight-conflict" in html
+
+
+def test_debate_layers_render(tmp_path):
+    html = _build(tmp_path, DEBATE_MD, "debate_整理文档")
+    assert "layer-clash" in html
+    assert "应该先立法" in html
+    assert "那会扼杀实验" in html
+    assert "layer-context" in html
+    assert "甲要的是事前规则" in html
+    assert "section-open" in html
+    assert "callout-warn" in html
+    assert "现场没有给出可执行的折中" in html
+
+
+def test_missing_dialogue_does_not_invent_timeline(tmp_path):
+    html = _build(tmp_path, DEBATE_MD, "debate_整理文档")
+    # 交锋小节 has 原声交锋 → one timeline; 无实录小节 must not add an empty one
+    assert html.count('class="timeline"') == 1
+    assert "只有分析，没有对谈实录层" in html
+    assert "这节没有值得摘的对话" in html
+
+
+def test_extra_metadata_table_keeps_heading(tmp_path):
+    html = _build(tmp_path, DEBATE_MD, "debate_整理文档")
+    assert "官方章节索引" in html
+    assert "00:12" in html
+    assert "开场" in html
+
+
+def test_speaker_bio_opens_before_thesis(tmp_path):
+    html = _build(tmp_path, DEBATE_MD, "debate_整理文档")
+    bio_at = html.index('class="callout callout-info speaker-bio"')
+    thesis_at = html.index('<h2 id="核心导读">')
+    assert bio_at < thesis_at
+    assert "李四是对谈嘉宾" in html

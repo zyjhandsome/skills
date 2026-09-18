@@ -7,7 +7,7 @@ description: >-
   GitHub repo tutorials, AI-tool update HTML briefs, or generic MD→HTML (md2html /
   md2html-lecture).
 metadata:
-  version: "5.33"
+  version: "5.35"
 ---
 
 # 内容结构化整理（Content Structuring）
@@ -28,17 +28,17 @@ metadata:
 | 公司/产品/API/**Agent Skill** 等专名，以及 AI/DevTools 的社区原生概念标签 | **保留英文或中英并写**（禁止过译，见下） |
 | 元数据「原标题」、术语表专名列 | 可保留英文 |
 
-**过译红线（v5.31）**：整理 Cursor / Claude / Agent 工具向素材时，不只产品专名要保留英文，讲者用来命名**角色、范式、工作流原语或对照组**的社区原生标签也要保真。**Skill / Agent Skill / Skill Creator / Hooks / Computer Use / Composer / Canvas / Subagent** 保留英文；**Builder、Agent、Agent Loop、Loop、Graph、Workflow、Harness、Evals** 等在承担概念标签时也保留英文，首次可补一句中文释义。❌ 不要把 `Agent → Loop → Graph` 抹平成「代理→循环→图」，也不要因 4c 词库命中就机械翻译。普通动作、状态和形容词仍写中文；同一个词按指称判断。细则见 `references/over-translation-guard.md`。
+**过译红线**：整理 Cursor / Claude / Agent 工具向素材时，不只产品专名要保留英文，讲者用来命名**角色、范式、工作流原语或对照组**的社区原生标签也要保真。**Skill / Agent Skill / Skill Creator / Hooks / Computer Use / Composer / Canvas / Subagent** 保留英文；**Builder、Agent、Agent Loop、Loop、Graph、Workflow、Harness、Evals** 等在承担概念标签时也保留英文，首次可补一句中文释义。❌ 不要把 `Agent → Loop → Graph` 抹平成「代理→循环→图」，也不要因 4c 词库命中就机械翻译。普通动作、状态和形容词仍写中文；同一个词按指称判断。细则见 `references/over-translation-guard.md`。
 
-**成稿后必做**：对叙述层与**对谈实录/关键语录**跑 spec **4c 检索** + **4c 验收闸门**（4c-1 词库 grep → 4c-2 连续英文通读 + 反向过译检查 → 4c-3 对谈实录或关键语录独立扫）；**裸词**自检写 **grep 命中 X→修正后 Y**（首现 `中文（English）` 括注与专名白名单**不计入**失败），多义术语与疑似过译命中写明「已对照来源逐项核实」。**未核实不得标 ✅**。可辅以 `scripts/check_4c.py`：其 `CONTEXTUAL_ENGLISH_REVIEW` / `OVER_TRANSLATION_REVIEW` 是人工复核提示，不是机械替换清单。成稿后还须跑 **4d 节间空白验收闸门**（或 `scripts/normalize_spacing.py --check`），**未过不得标纯净排版 ✅**。优化存量 output 稿时：**最小 diff** 增量中文化，见 `references/language-and-gates.md`「默认中文化工作流」。
+**成稿后必做**：跑 `scripts/selfcheck.py {稿}`（一次给出 4c-1 / 4c-2 / 4d）。4c-1 裸词须清零；4c-2 连续英文须逐条核实（译中文或确认为专名）；4c-3 独立扫实录/语录；过译护栏反向检查。`CONTEXTUAL` / `OVER_TRANSLATION` 是人工复核，不是机械替换。把机检行贴进自检，**未核实不得标 ✅**。再抽 3 个原文片段做「信息覆盖抽样」。存量稿：**最小 diff**，见 `language-and-gates.md`。
 
-## 技术素材与多源合并（v5.27+）
+## 技术素材与多源合并
 
 - **AI/DevTools 行话**：整理 AI 编码、开发者工具类素材时，4c 须额外 grep「AI/DevTools 行话簇」。**判定原则**：产品/命令/协议/模型名，以及承担角色、范式、工作流原语或对照组的社区原生标签（如 `Builder`、`Agent Loop`、`Loop`、`Graph`）保留英文或首现中英并写；**普通行为、状态、口语形容词**中文化。若原文把若干词并列成一套 taxonomy，整组保留，不拆散翻译。
 - **首现缩写注释**：行业缩写（IC/ASL/MTS/RAG/GTM 等）首次出现须注中文全称「中文全称（英文缩写）」；MCP/API/LLM/SaaS 等已普及缩写可免。自检新增「首现缩写注释」行。
 - **多源合并稿（≥2 来源）**：走「通用模板 + **源口径标注** + **多源一致性核对**」；冲突须 `[编者注]` 并存或点明「**互补/不同维度**」，禁自称「互证」。详见 `references/interview-structures.md`「多源合并稿」。
 
-## 对谈三层节结构（播客/访谈默认，v5.23）
+## 对谈三层节结构（播客/访谈默认）
 
 | 层级 | 作用 |
 |------|------|
@@ -55,7 +55,7 @@ metadata:
 - **空壳实录**：无值得摘录的对话时**省略**整块 `### 对谈实录`，禁止留空标题（下游 `md2html-lecture` 亦支持缺省实录）。
 - **用户可覆盖**：「不要对谈实录」「恢复关键语录节」「纯粹对话模式」等。
 
-## 争辩型访谈 / 原声增强模式（v5.29）
+## 争辩型访谈 / 原声增强模式
 
 - **触发条件**：分歧贯穿多个主题，出现连续追问、直接纠错、打断、拒答、要求保留/删去某段，或双方对事实与价值判断都不接受对方框架。单个尖锐问题、嘉宾批评第三方、多人各抒己见，**不自动触发**。
 - **结构优先级**：保留冲突发生的时间顺序与升级过程；导读写 `> **核心冲突**：…`，不替素材制造单一「全文共识」。
@@ -64,7 +64,7 @@ metadata:
 - **禁止假共识**：双方未达成共识时，不写「共识点」；争议信息用「A 主张…，B 质疑…，现场未解决…」。
 - **适用边界**：只有局部交锋的普通访谈仍走三层结构，在对应小节加长实录、压缩解析即可；不要为一处反驳重排全文。
 
-## 核心导读（全文论点，v5.26）
+## 核心导读（全文论点）
 
 | 层级 | 作用 |
 |------|------|
@@ -75,9 +75,9 @@ metadata:
 ## 加载策略
 
 1. 先读本 `SKILL.md`，确认触发条件、交付物和红线。
-2. 再读 `references/spec.md`（**参考集入口**：角色、偏好覆盖、决策流程图、快速参考、执行步骤清单 + 分册路由表）。
-3. 按素材与任务加载分册（v5.33 拆分，路由表见 spec.md 顶部）：
-   - **成稿与验收必读**：`references/language-and-gates.md`（三层语言分区、4c/4d 闸门、默认中文化工作流、存量优化清单、可读性内化）+ `references/editorial-standards.md`（称谓全名、说话人对齐、防幻觉、原数据快照、术语校准）。
+2. 再读 `references/spec.md`（**参考集入口**：角色、偏好覆盖、决策流程图、执行步骤清单 + 分册路由表）。
+3. 按素材与任务加载分册（路由表见 spec.md 顶部）：
+   - **成稿与验收必读**：`references/language-and-gates.md`（三层分区、失败模式、4c/4d、易错译法、可读性内化）+ `references/editorial-standards.md`（称谓、说话人对齐、防幻觉、元数据、术语校准）。
    - **播客/访谈/圆桌/多源素材**：加读 `references/interview-structures.md`（对谈三层、争辩型、多源合并、核心导读写法）。
    - **组装输出时**：加读 `references/templates.md`（文件命名 + 三个文档模板与自检表）。
    - **技术/Agent 工具向素材**：加读 `references/over-translation-guard.md`。
@@ -96,20 +96,20 @@ metadata:
 
 成稿应达到：
 
-- **≥95% 关键信息覆盖**
+- **信息覆盖抽样通过**（3 个互不重叠原文片段已落地或注明省略）
 - **纯净深度文章感**（段内呼吸感 ≠ 节间多空行）
 - **正文默认中文叙事** + **专名/技术概念标签不过译**
 - **正文默认全名**指称人物
 
 ## 执行顺序
 
-识别内容类型 → **判定对谈三层 vs 争辩型访谈 vs 通用模板 vs 多源合并** → 若有主 URL：浏览器优先（可降级）→ 元数据快照 → 术语校准与说话人对齐 → 主题/冲突弧重构 → 按模板成稿 → **语义保真闸门（叙事轴 / 标题承诺 / 事实状态 / 声纹 / 去重）** → **4c（含过译护栏）** → **4d** → 自检报告。
+识别内容类型 → **判定对谈三层 vs 争辩型访谈 vs 通用模板 vs 多源合并** → 超长则先分段预告 → 若有主 URL：浏览器优先（可降级）→ 元数据快照 → 术语校准与说话人对齐 → 主题/冲突弧重构 → 按模板成稿 → **语义保真闸门** → **`selfcheck.py`（4c+4d）** → 信息覆盖抽样 → 自检报告。
 
 ## 交付物
 
 - 默认目录：`output/`，除非用户指定其他位置。
 - 文件名：`{发布日YYYYMMDD} {内容标题}_整理文档.md`；日期前缀必须来自内容发布时间。
-- 存量优化：最小 diff，见 `references/language-and-gates.md`「存量 output 优化检查清单」。
+- 存量优化：最小 diff，见 `references/language-and-gates.md`「存量复审」。
 
 ## 硬性红线
 
@@ -127,12 +127,14 @@ metadata:
 - [ ] 已区分已发生案例、嘉宾预测、机构目标、主持人口播与编者推断。
 - [ ] 已核人物声纹；深度解析与实录按「一项事实一个主要归宿」去重。
 - [ ] 技术/Agent 素材已核 `over-translation-guard.md`：专名、角色/范式/工作流标签未被过译；原文 taxonomy（如 `Agent → Loop → Graph`）保持完整。
-- [ ] 已执行 **4c-1/4c-2/4c-3**（裸词 X→Y；括注/白名单已排除）；技术素材已加跑行话簇。
+- [ ] 已跑 `scripts/selfcheck.py`：4c-1 清零；4c-2 连续英文已核实；4c-3 已扫实录/语录；技术素材已核过译护栏。
 - [ ] 行业缩写首现已注中文全称（已普及可免）。
 - [ ] 多源合并稿已做源口径 + 多源一致性。
-- [ ] 已执行 **4d**（或 `normalize_spacing.py --check`）。
+- [ ] 4d 已通过（`selfcheck.py` 或 `normalize_spacing.py --check`）。
+- [ ] 信息覆盖抽样已写 3 个锚点与结果。
+- [ ] 超长素材已先发分段预告（未触发则自检填不适用）。
 - [ ] 核心导读含 `> **全文论点**：…`；争辩型则改为 `> **核心冲突**：…`，且未伪造共识。
-- [ ] 文末含 `自检报告`（含节结构 / 导读论点 / 4d / 正文中文叙事等行）。
+- [ ] 文末含 `自检报告`（机检行来自 `selfcheck.py`，判断行人工填）。
 
 ## 维护说明
 
@@ -144,10 +146,9 @@ metadata:
 2. 同步本 `SKILL.md` 的 version / 摘要 / 清单
 3. 若使用 Codex 镜像目录，将本技能目录复制到 `~/.codex/skills/content-structuring/`（保持同 version）
 
-**不再要求**维护已缺失的 `.cursor/rules/content-structuring.mdc` / `.codex/rules/...mdc` 四副本链；若将来恢复规则文件，须从 spec 生成且 version 一致。
-
 **脚本与数据**（均相对本技能根目录）：
 
+- `scripts/selfcheck.py` — 一次生成 4c/4d 自检行（优先）
+- `scripts/check_4c.py` — 4c-1 词库 + 4c-2 连续英文
 - `scripts/normalize_spacing.py` — 4d
-- `scripts/check_4c.py` — 4c 裸词辅助（不替代通读）
-- `references/lexicon.txt` — **4c 统一词库单源**（blocking / contextual / allow 分节）；新词只加这里，spec 不再维护词表副本，`check_4c.py` 自动加载
+- `references/lexicon.txt` — 4c 词库单源；新词只加这里

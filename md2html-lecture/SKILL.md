@@ -1,26 +1,37 @@
 ---
 name: md2html-lecture
 description: >-
-  Convert a content-structuring "_整理文档.md" (对谈三层结构: 文章元数据 / 核心导读 / 多个
-  ## 小节 each with 核心洞察·深度解析·对谈实录, or the debate variant
-  原声交锋·语境与释义·未决问题 / 延伸术语表 / 自检报告) into the
-  styled, single-file Claude-orange HTML used in this repo's output/ folder.
-  Use when asked to turn one of these整理文档 Markdown files into HTML, or to
-  batch-convert files under output/ to the lecture HTML format.
+  Use when asked to convert a content-structuring "_整理文档.md" into the
+  single-file lecture HTML, or to batch-upgrade already-published lecture HTML
+  after the template or converter changed. Not for generic Markdown, WeChat
+  Official Account HTML (md2wechat), last-30-days trend briefs, or AI-tool
+  update briefs.
 ---
 
 # md2html-lecture
 
-Converts this repo's content-structuring Markdown notes into a single,
-self-contained HTML page (Claude-orange light/dark theme, sticky TOC, layer
-pills, timeline, callouts, Mermaid support, collapsible glossary + metadata).
+Converts a finished content-structuring 整理文档 into a single-file HTML page
+(Claude-orange light/dark theme, sticky TOC, layer pills, timeline, callouts,
+Mermaid support, collapsible glossary + metadata). CSS and JS are inline; only
+Mermaid loads from a CDN, so diagrams need network to render.
 
 The transform is deterministic and handled by a script. Mermaid diagrams are
-**not** in the source Markdown — add them by hand after conversion (see below).
+**not** in the source Markdown — add them by hand after conversion.
+
+**REQUIRED UPSTREAM:** Input must be a finished **content-structuring** note
+(对谈三层, 争辩型访谈, or generic-template). Do not restate that writing spec
+here. How this converter maps it to HTML: [source-shape.md](references/source-shape.md).
 
 **人物/讲者背景** from `文章元数据` is lifted to the article opening (after the
-doc header, before `核心导读`) as an info callout — not buried in the end
-metadata panel.
+doc header, before `核心导读`) as an info callout.
+
+## When not to use
+
+- Generic or arbitrary Markdown → HTML
+- WeChat Official Account paste HTML → **md2wechat**
+- Trend / last-30-days briefs → **last30days**
+- AI-agent update HTML briefs → **ai-agent-update-brief**
+- Notes that are not a content-structuring `_整理文档.md`
 
 ## Files
 
@@ -29,6 +40,17 @@ metadata panel.
   notes against the current template, preserving hand-added Mermaid diagrams.
 - `assets/template.html` — the full HTML scaffold (CSS/JS + placeholders). Edit
   this only to change the global design; the script injects content into it.
+- `scripts/tests/test_build_html.py` — regression tests guarding "no silent
+  content drops" plus 争辩型 layers. Run after touching either script:
+  `python -m pytest scripts/tests/ -q` (needs pytest; the converter itself
+  needs only stdlib).
+- `scripts/patch_key_emphasis.py` — one-shot CSS migration for HTML published
+  before the key-info emphasis pass. The template already includes it; only run
+  it against old output files.
+- [references/source-shape.md](references/source-shape.md) — heading map, optional
+  实录, 争辩型 layers, extra metadata tables, bio placement.
+- [references/design-decisions.md](references/design-decisions.md) — load only
+  when editing the template.
 
 ## Workflow
 
@@ -42,14 +64,25 @@ metadata panel.
 ### 1. Run the converter
 
 ```bash
-python ".cursor/skills/md2html-lecture/scripts/build_html.py" "output/<name>.md"
+python "<skill-dir>/scripts/build_html.py" "<notes-dir>/<name>.md"
 ```
+
+`<skill-dir>` is the folder holding this SKILL.md — usually
+`~/.cursor/skills/md2html-lecture` for a personal install, or
+`.cursor/skills/md2html-lecture` when the skill is vendored into a repo. Use the
+absolute path you loaded this file from rather than guessing. `<notes-dir>` is
+wherever the 整理文档 lives in the current workspace (often `output/`, not
+always).
 
 Output defaults to the same path with `.html`. Pass a second arg for a custom
 output path. The script prints `sections`, `cjk` count, and reading time, and
 warns if no source URL was found in 文章元数据.
 
 It requires only the Python standard library (no pip installs).
+
+**Re-running the converter on a file overwrites hand-added Mermaid diagrams.**
+To rebuild an already-published note, use `batch_upgrade_dir.py` (see below),
+which saves and restores them.
 
 ### 2. Add Mermaid diagrams (judgment step)
 
@@ -94,7 +127,8 @@ needs a better fit:
 ### 4. Verify
 
 ```
-- [ ] 10/N sections present; TOC lists only lvl-2 (no 洞察/解析/实录 sub-links)
+- [ ] every `## ` content section present (compare the script's `sections=` count
+      with the source); TOC lists only lvl-2 (no 洞察/解析/实录 sub-links)
 - [ ] No stray "<p>---</p>"; 目录 section dropped
 - [ ] 人物/讲者背景 (if present) opens the article as an info callout before 核心导读
 - [ ] 延伸术语表 and 文章元数据 render as collapsed <details> at the end; extra
@@ -108,114 +142,15 @@ needs a better fit:
 - [ ] Header source line / subtitle read well
 ```
 
-## Expected source Markdown shape
+## Common mistakes
 
-The converter assumes the content-structuring 对谈三层 format:
-
-```markdown
-# 标题
-## 文章元数据
-| 项目 | 内容 |            ← first table = source table (内容链接 cell holds the URL)
-| ...
-### 官方章节索引           ← optional extra tables keep their own heading
-| 时间 | 章节 |
-> **人物背景**：...        ← or **讲者背景**；lifted to article opening
-## 核心导读
-> **全文论点**：...        ← becomes the highlight box (label stripped)
-段落…                      ←导读 summary paragraphs
-## 目录                    ← dropped (TOC is auto-generated)
-## <小节标题>              ← repeated content sections
-### 核心洞察
-> 一句话洞察               ← becomes a tip callout
-### 深度解析
-段落…
-### 对谈实录
-**讲者**：「台词」          ← each line becomes a timeline step
-### 原声交锋               ← 争辩型 only: timeline of the clashing quotes
-**讲者**：「台词」
-### 语境与释义             ← 争辩型 only: prose unpacking the clash
-段落…
-### 未决问题               ← 争辩型 only: warning callout
-段落…
-## 延伸术语表              ← table → collapsed <details>
-## 自检报告                ← table → hidden heading + collapsed <details>
-```
-
-Section titles `文章元数据 / 核心导读 / 目录 / 延伸术语表 / 自检报告` are matched
-by exact name. Any other `## ` section is treated as a content section.
-
-Expected subsections for 对谈三层 notes: `核心洞察` / `深度解析` / `对谈实录`.
-**`对谈实录` is optional** — content-structuring omits the whole block when there is
-no dialogue worth quoting; the converter simply skips a missing layer (do not invent
-an empty timeline). Generic-template notes may use `## 关键语录与交锋时刻` instead
-of per-section 实录; that section renders as a normal content block if present.
-
-### 争辩型访谈的第二组分层
-
-When the interview is an argument rather than an explanation, a section may use
-`原声交锋` / `语境与释义` / `未决问题` instead of (or alongside) the three
-standard layers — the converter renders whichever layers are present, in the
-order 核心洞察 → 深度解析 → 对谈实录 → 原声交锋 → 语境与释义 → 未决问题:
-
-| Subsection | Renders as | Badge |
-|---|---|---|
-| `原声交锋` | timeline, same shape as 对谈实录 | 交锋 |
-| `语境与释义` | plain prose blocks | 释义 |
-| `未决问题` | warning callout | 未决 |
-
-`核心导读` can open with `> **核心冲突**：…` instead of `> **全文论点**：…`;
-the highlight box then carries a 核心冲突 pill. Use it when the thesis is the
-disagreement itself.
-
-### 文章元数据 with more than one table
-
-The first table is the source table: it feeds the header fields and the
-collapsible panel. Any further table under its own `### ` heading (a chapter
-index, a timeline of releases) is kept and rendered below the source table with
-that heading intact, instead of being merged into one flat table.
-
-### Placement of 人物背景 / 讲者背景
-
-Source keeps the bio blockquote under `## 文章元数据` (content-structuring
-convention). The converter **moves** it to the reading path:
-
-```
-doc-header (title / subtitle / meta)
-  ↓
-人物背景 callout   ← who is speaking (info callout, label preserved)
-  ↓
-核心导读           ← thesis + summary
-  ↓
-content sections…
-  ↓
-延伸术语表 / 文章元数据（table only）/ 自检报告
-```
-
-Rationale: readers need speaker context before the thesis, not after the whole
-article. The end metadata panel keeps the source table only (no duplicate bio).
-
-## Design refinements baked into the template
-
-The template already encodes earlier review decisions — keep them when editing:
-- One unified reading measure (`--measure: 75ch`) for all blocks (text,
-  callouts, diagrams, timeline, tables) so widths stay consistent.
-- TOC shows section titles only (no repeated 洞察/解析/实录 links); bio label
-  appears as the first TOC entry when present.
-- No per-section jump-pill row (`injectSectionJumps` is intentionally not called).
-- Tight 对谈实录 spacing.
-- Key-info hierarchy: body `strong` uses soft accent chip; thesis `.highlight`
-  is stronger (border/shadow + CSS `全文论点` pill); `.section-insight` tip
-  callouts get a left accent bar + slightly larger type. Speaker bio / timeline /
-  info-callout `strong` stay calm (no chip) so names and quotes do not flood.
-- 延伸术语表 + 文章元数据 collapsed by default.
-- Speaker bio uses `callout-info` (blue), distinct from tip insights (orange)
-  and the thesis highlight.
-- Dark theme: head script sets `data-theme` before paint (no FOUC); `color-scheme`
-  follows theme; raised `--border` / `--code-bg`; `--accent-on` for text on accent
-  fills; Mermaid uses `theme: "base"` + warm Claude palette variables.
-- Light theme: body links / TOC use `--link` / `--link-hover` (AA terracotta, not the
-  softer brand peach); solid badges use `--accent-fill` + `--accent-on`; topbar has a
-  solid `--bg` fallback before `color-mix` glass.
+| Mistake | Do this instead |
+|---|---|
+| Hand-write the whole HTML page from the template | Run `build_html.py` |
+| Rewrite or patch the converter for one file | Fix the source Markdown, or edit the generated HTML for header/diagram only |
+| Auto-add Mermaid while batch-converting | Diagrams need per-file judgment; batch never invents them |
+| Ignore `WARN: no source URL` | Restore 内容链接 in 文章元数据, then re-run |
+| Use this as a generic md2html | Stop; see When not to use |
 
 ## Batch conversion
 
@@ -227,7 +162,7 @@ To re-publish notes that were already converted, after the template or the
 converter changed:
 
 ```bash
-python ".cursor/skills/md2html-lecture/scripts/batch_upgrade_dir.py" "<notes-dir>"
+python "<skill-dir>/scripts/batch_upgrade_dir.py" "<notes-dir>"
 ```
 
 It walks `<notes-dir>` for `*_整理文档.html` files that still have a sibling

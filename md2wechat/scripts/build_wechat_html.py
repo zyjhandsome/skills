@@ -14,6 +14,7 @@ if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 from paths import article_html_name
+from sections import BUILDER_OMIT_H2, TRUNCATE_H2
 
 C = {
     "bg": "#FAFAF7",
@@ -34,7 +35,7 @@ FONT = (
     "'Microsoft YaHei','Noto Sans CJK SC',sans-serif"
 )
 
-OMIT_H2 = {"延伸术语表", "目录", "自检报告", "关键语录与交锋时刻"}
+OMIT_H2 = BUILDER_OMIT_H2
 
 # 整理文档「内容来源」常把抓取流水账写进同一格；公众号只留读者能看懂的场次/平台。
 _PROCESS_MARKERS = (
@@ -447,7 +448,7 @@ def parse_md(md: str, mode: str = "auto") -> tuple[str, list[str], str]:
             i += 1
             skip_blank()
 
-            if heading == "自检报告":
+            if heading == TRUNCATE_H2:
                 while i < n:
                     i += 1
                 break
@@ -677,6 +678,13 @@ def _self_test() -> None:
     marked = _inline_no_link("差异化来自==该让什么存在==。")
     assert C["accent_soft"] in marked and "该让什么存在" in marked
     assert "==" not in marked
+    noisy = (
+        "# T\n\n## 开场\n\n正文。\n\n## 编辑说明\n\n不要出现。\n\n"
+        "## 免责声明\n\n也不要。\n"
+    )
+    _, noisy_parts, _ = parse_md(noisy, mode="editorial")
+    noisy_html = "".join(noisy_parts)
+    assert "编辑说明" not in noisy_html and "免责声明" not in noisy_html
     print("self-test OK")
 
 
@@ -704,6 +712,12 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     title, parts, mode = parse_md(src.read_text(encoding="utf-8"), mode=args.mode)
+    if mode == "editorial" and any("<table" in part for part in parts):
+        print(
+            "WARNING: editorial mode emitted native <table>; "
+            "rewrite comparisons as sentences and rebuild.",
+            file=sys.stderr,
+        )
     html_out = wrap(title, parts, mode=mode)
     out = args.out or default_out_path(src)
     out.write_text(html_out, encoding="utf-8")

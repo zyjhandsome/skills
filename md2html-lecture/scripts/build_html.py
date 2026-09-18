@@ -20,10 +20,11 @@ TEMPLATE = os.path.join(HERE, "..", "assets", "template.html")
 # Inline + helpers
 # --------------------------------------------------------------------------
 def inline(s):
-    """Render markdown inline syntax to HTML (bold / code / links)."""
+    """Render markdown inline syntax to HTML (bold / italic / code / links)."""
     out = html.escape(s, quote=False)
     out = re.sub(r"`([^`]+?)`", lambda m: "<code>%s</code>" % m.group(1), out)
     out = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", out)
+    out = re.sub(r"(?<!\*)\*(?=\S)([^*\n]+?)(?<=\S)\*(?!\*)", r"<em>\1</em>", out)
     out = re.sub(r"\[([^\]]+?)\]\(([^)]+?)\)", r'<a href="\2">\1</a>', out)
     return out.strip()
 
@@ -73,40 +74,39 @@ def render_table(lines):
     return "".join(out)
 
 
-def paragraphs(lines):
-    """Group consecutive non-blank lines into <p> blocks."""
-    blocks, cur = [], []
-    for l in lines:
-        if l.strip() == "" or re.fullmatch(r"-{3,}|\*{3,}|_{3,}", l.strip()):
-            if cur:
-                blocks.append(" ".join(cur))
-                cur = []
-        else:
-            cur.append(l.strip())
-    if cur:
-        blocks.append(" ".join(cur))
-    return ["<p>%s</p>" % inline(b) for b in blocks]
-
-
 def _is_table_separator(line):
     s = line.strip()
     return bool(re.fullmatch(r"\|?[\s:|-]+\|?", s)) and "-" in s and "|" in s
 
 
 def render_blocks(lines):
-    """Render a body into <p>, markdown tables, and bullet lists.
+    """Render a body into <p>, tables, lists, blockquotes and code blocks.
 
-    Blocks are separated by blank lines / horizontal rules. Each block is
-    classified: a pipe row followed by a separator row → table; lines all
-    starting with '- '/'* ' → unordered list; otherwise a paragraph.
+    Blocks are separated by blank lines / horizontal rules. Fenced code is kept
+    verbatim; every other block is classified: a pipe row followed by a
+    separator row → table; all lines '> ' → blockquote; all lines '1. ' → <ol>;
+    all lines '- '/'* ' → <ul>; otherwise a paragraph.
     """
-    out, block = [], []
+    out, block, code = [], [], []
+    fence = None
+
+    def emit_code():
+        out.append("<pre><code>%s</code></pre>" % html.escape("\n".join(code)))
+        del code[:]
 
     def flush():
         if not block:
             return
         if len(block) >= 2 and block[0].strip().startswith("|") and _is_table_separator(block[1]):
             out.append('<div class="table-wrap">%s</div>' % render_table(block))
+        elif all(l.strip().startswith(">") for l in block):
+            out.append("<blockquote><p>%s</p></blockquote>" % inline(blockquote_text(block)))
+        elif all(re.match(r"^\s*\d+[.)]\s+\S", l) for l in block):
+            items = "".join(
+                "<li>%s</li>" % inline(re.sub(r"^\s*\d+[.)]\s+", "", l).strip())
+                for l in block
+            )
+            out.append("<ol>%s</ol>" % items)
         elif all(re.match(r"^\s*[-*]\s+\S", l) for l in block):
             items = "".join(
                 "<li>%s</li>" % inline(re.sub(r"^\s*[-*]\s+", "", l).strip())
@@ -115,13 +115,27 @@ def render_blocks(lines):
             out.append("<ul>%s</ul>" % items)
         else:
             out.append("<p>%s</p>" % inline(" ".join(l.strip() for l in block)))
+        del block[:]
 
     for l in lines:
-        if l.strip() == "" or re.fullmatch(r"-{3,}|\*{3,}|_{3,}", l.strip()):
+        s = l.strip()
+        if fence is not None:
+            if s.startswith(fence):
+                emit_code()
+                fence = None
+            else:
+                code.append(l)
+            continue
+        m = re.match(r"^\s*(`{3,}|~{3,})", l)
+        if m:
             flush()
-            block = []
+            fence = m.group(1)
+        elif s == "" or re.fullmatch(r"-{3,}|\*{3,}|_{3,}", s):
+            flush()
         else:
             block.append(l)
+    if code:                 # unterminated fence: keep the content anyway
+        emit_code()
     flush()
     return out
 
@@ -164,37 +178,56 @@ def split_sections(md):
 
 
 def split_subsections(body):
-    """Split a content section body by '### ' headings -> {name: [lines]}."""
-    subs, cur = {}, None
+    """Split a content section body by '### ' headings.
+
+    Returns (preamble_lines, [(name, lines), ...]). Keeping the preamble and the
+    source order — instead of a name->lines dict — is what lets the renderer
+    emit unexpected headings and heading-less prose instead of dropping them.
+    """
+    pre, subs, cur = [], [], None
     for l in body:
         if l.startswith("### "):
-            cur = l[4:].strip()
-            subs[cur] = []
+            cur = (l[4:].strip(), [])
+            subs.append(cur)
         elif cur is not None:
-            subs[cur].append(l)
-    return subs
+            cur[1].append(l)
+        else:
+            pre.append(l)
+    return pre, subs
 
 
 def render_steps(lines):
-    steps, n = [], 0
+    """Return (step_html, leftover_lines) for a '**讲者**：「台词」' block.
+
+    A line that does not open a new step continues the previous quote (quotes
+    wrap across lines in the source); anything else is handed back so the caller
+    can render it as prose rather than discard it.
+    """
+    steps, leftover, cont = [], [], False
     for l in lines:
-        if l.strip() == "":
+        s = l.strip()
+        if s == "":
+            cont = False
             continue
-        m = re.match(r"^\*\*(.+?)\*\*[：:]\s*(.*)$", l.strip())
-        if not m:
-            continue
-        n += 1
-        name, quote = m.group(1).strip(), m.group(2).strip()
-        steps.append(
-            "  <article class=\"step\">\n"
-            "    <div class=\"step-num\">%d</div>\n"
-            "    <div class=\"step-body\">\n"
-            "      <h3>%s</h3>\n"
-            "      <p>%s</p>\n"
-            "    </div>\n"
-            "  </article>" % (n, inline(name), inline(quote))
-        )
-    return steps
+        m = re.match(r"^\*\*(.+?)\*\*[：:]\s*(.*)$", s)
+        if m:
+            steps.append([m.group(1).strip(), m.group(2).strip()])
+            cont = True
+        elif cont and steps:
+            steps[-1][1] = ("%s %s" % (steps[-1][1], s)).strip()
+        else:
+            leftover.append(l)
+    out = [
+        "  <article class=\"step\">\n"
+        "    <div class=\"step-num\">%d</div>\n"
+        "    <div class=\"step-body\">\n"
+        "      <h3>%s</h3>\n"
+        "      <p>%s</p>\n"
+        "    </div>\n"
+        "  </article>" % (i, inline(name), inline(quote))
+        for i, (name, quote) in enumerate(steps, 1)
+    ]
+    return out, leftover
 
 
 def extract_md_tables(body):
@@ -232,52 +265,81 @@ def extract_md_tables(body):
     return tables
 
 
+LAYER_ORDER = ("核心洞察", "深度解析", "对谈实录", "原声交锋", "语境与释义", "未决问题")
+
+
 def render_content_section(title, body):
     sid = slugify(title)
-    subs = split_subsections(body)
-    out = ['<h2 id="%s">%s</h2>\n' % (sid, inline(title))]
+    pre, subs_list = split_subsections(body)
 
-    if "核心洞察" in subs:
-        insight = blockquote_text(subs["核心洞察"])
+    # Claim each known layer once; whatever is left over is rendered as-is below.
+    layers, claimed = {}, set()
+    for i, (name, lines) in enumerate(subs_list):
+        if name in LAYER_ORDER and name not in layers:
+            layers[name] = lines
+            claimed.add(i)
+
+    out = ['<h2 id="%s">%s</h2>\n' % (sid, inline(title))]
+    if any(l.strip() for l in pre):
+        out.append("\n".join(render_blocks(pre)))
+
+    def timeline(layer, anchor, css, heading):
+        out.append(
+            '<h3 id="%s-%s" class="layer-heading %s">%s</h3>' % (sid, anchor, css, heading)
+        )
+        steps, extra = render_steps(layers[layer])
+        if steps:
+            out.append('<div class="timeline">\n%s\n</div>' % "\n".join(steps))
+        if any(l.strip() for l in extra):
+            out.append("\n".join(render_blocks(extra)))
+
+    if "核心洞察" in layers:
+        insight = blockquote_text(layers["核心洞察"])
+        insight_html = (
+            "<p>%s</p>" % inline(insight)
+            if insight
+            else "\n".join(render_blocks(layers["核心洞察"]))
+        )
         out.append(
             '<h3 id="%s-insight" class="layer-heading layer-insight">核心洞察</h3>\n'
             '<div class="callout callout-tip section-insight">\n'
             '  <svg class="callout-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-tip"/></svg>\n'
-            '  <div class="callout-body"><p>%s</p></div>\n'
-            "</div>" % (sid, inline(insight))
+            '  <div class="callout-body">%s</div>\n'
+            "</div>" % (sid, insight_html)
         )
-    if "深度解析" in subs:
+    if "深度解析" in layers:
         out.append(
             '<h3 id="%s-analysis" class="layer-heading layer-analysis">深度解析</h3>' % sid
         )
-        out.append("\n".join(render_blocks(subs["深度解析"])))
-    if "对谈实录" in subs:
-        out.append(
-            '<h3 id="%s-dialogue" class="layer-heading layer-dialogue">对谈实录</h3>' % sid
-        )
-        steps = render_steps(subs["对谈实录"])
-        out.append('<div class="timeline">\n%s\n</div>' % "\n".join(steps))
+        out.append("\n".join(render_blocks(layers["深度解析"])))
+    if "对谈实录" in layers:
+        timeline("对谈实录", "dialogue", "layer-dialogue", "对谈实录")
 
     # 争辩型访谈：先声后解（原声交锋 → 语境与释义 → 未决问题）
-    if "原声交锋" in subs:
-        out.append(
-            '<h3 id="%s-clash" class="layer-heading layer-clash">原声交锋</h3>' % sid
-        )
-        steps = render_steps(subs["原声交锋"])
-        out.append('<div class="timeline">\n%s\n</div>' % "\n".join(steps))
-    if "语境与释义" in subs:
+    if "原声交锋" in layers:
+        timeline("原声交锋", "clash", "layer-clash", "原声交锋")
+    if "语境与释义" in layers:
         out.append(
             '<h3 id="%s-context" class="layer-heading layer-context">语境与释义</h3>' % sid
         )
-        out.append("\n".join(render_blocks(subs["语境与释义"])))
-    if "未决问题" in subs:
+        out.append("\n".join(render_blocks(layers["语境与释义"])))
+    if "未决问题" in layers:
         out.append(
             '<h3 id="%s-open" class="layer-heading layer-open">未决问题</h3>\n'
             '<div class="callout callout-warn section-open">\n'
             '  <svg class="callout-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-warn"/></svg>\n'
             '  <div class="callout-body">\n%s\n  </div>\n'
-            "</div>" % (sid, "\n".join(render_blocks(subs["未决问题"])))
+            "</div>" % (sid, "\n".join(render_blocks(layers["未决问题"])))
         )
+
+    # Unexpected '### ' headings keep their heading and body instead of vanishing.
+    for i, (name, lines) in enumerate(subs_list):
+        if i in claimed:
+            continue
+        out.append('<h3 id="%s-%s">%s</h3>' % (sid, slugify(name), inline(name)))
+        if any(l.strip() for l in lines):
+            out.append("\n".join(render_blocks(lines)))
+
     return "\n".join(out), sid, count_cjk(" ".join(body))
 
 
@@ -328,7 +390,7 @@ def build(md_path, out_path):
             quote_label = lm.group(1).strip() if lm else ""
             quote = blockquote_text(body, strip_label=True)
             rest = [l for l in body if not l.strip().startswith(">")]
-            paras = paragraphs(rest)
+            paras = render_blocks(rest)
             hl_class = "highlight highlight-conflict" if quote_label == "核心冲突" else "highlight"
             intro_html = (
                 '<h2 id="核心导读">核心导读</h2>\n\n'

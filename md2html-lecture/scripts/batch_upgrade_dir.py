@@ -17,29 +17,41 @@ from pathlib import Path
 DEFAULT_BUILD = Path(__file__).resolve().with_name("build_html.py")
 DEFAULT_GLOB = "*_整理文档.html"
 
-FIGURE_RE = re.compile(
-    r'(<h2\s+id="([^"]+)"[^>]*>.*?</h2>)\s*'
-    r'(<figure\s+class="diagram">.*?</figure>)',
-    re.DOTALL | re.IGNORECASE,
+H2_RE = re.compile(r'<h2\s+id="([^"]+)"[^>]*>.*?</h2>', re.DOTALL | re.IGNORECASE)
+LEAD_FIGURE_RE = re.compile(
+    r'\s*(<figure\s+class="diagram">.*?</figure>)', re.DOTALL | re.IGNORECASE
 )
 BIO_ITALIC_RE = re.compile(r"(?<![</\w])\*([^*\n]{2,80})\*(?!\*)")
 
 
-def extract_diagrams(html: str) -> dict[str, str]:
-    """Map h2 id -> figure HTML (first diagram after that h2 only)."""
-    found: dict[str, str] = {}
-    for m in FIGURE_RE.finditer(html):
-        hid = m.group(2)
-        fig = m.group(3).strip()
-        if hid not in found:
-            found[hid] = fig
+def extract_diagrams(html: str) -> dict[str, list[str]]:
+    """Map h2 id -> every diagram in the run that directly follows that h2."""
+    found: dict[str, list[str]] = {}
+    for m in H2_RE.finditer(html):
+        pos = m.end()
+        figs: list[str] = []
+        while True:
+            fm = LEAD_FIGURE_RE.match(html, pos)
+            if not fm:
+                break
+            figs.append(fm.group(1).strip())
+            pos = fm.end()
+        if figs and m.group(1) not in found:
+            found[m.group(1)] = figs
     return found
 
 
-def inject_diagrams(html: str, diagrams: dict[str, str]) -> tuple[int, str]:
+def count_figures(diagrams: dict[str, list[str] | str]) -> int:
+    """Total diagrams across all sections (values may be one figure or a list)."""
+    return sum(1 if isinstance(v, str) else len(v) for v in diagrams.values())
+
+
+def inject_diagrams(html: str, diagrams: dict[str, list[str] | str]) -> tuple[int, str]:
     """Re-insert saved diagrams after matching h2 ids. Returns (added, html)."""
     added = 0
-    for hid, fig in diagrams.items():
+    for hid, figs in diagrams.items():
+        if isinstance(figs, str):
+            figs = [figs]
         pat = re.compile(
             rf'(<h2\s+id="{re.escape(hid)}"[^>]*>.*?</h2>)\s*',
             re.DOTALL | re.IGNORECASE,
@@ -51,13 +63,13 @@ def inject_diagrams(html: str, diagrams: dict[str, str]) -> tuple[int, str]:
         window = html[start : start + 400]
         if 'class="diagram"' in window:
             continue
-        html = html[: start] + fig + "\n\n" + html[start:]
-        added += 1
+        html = html[:start] + "\n\n".join(figs) + "\n\n" + html[start:]
+        added += len(figs)
     return added, html
 
 
 def patch_speakers(html: str) -> str:
-    """Replace Harrison/Andrew hardcode with generic first/second speaker + common names."""
+    """Upgrade legacy per-file speaker hardcodes to the template's generic version."""
     old = """    function tagSpeakers() {
       document.querySelectorAll(".timeline .step-body h3").forEach(h3 => {
         const step = h3.closest(".step");
@@ -68,6 +80,7 @@ def patch_speakers(html: str) -> str:
       });
     }"""
     new = """    function tagSpeakers() {
+      // First two distinct speakers in reading order = host, then guest.
       const names = [];
       document.querySelectorAll(".timeline .step-body h3").forEach(h3 => {
         const n = h3.textContent.trim();
@@ -79,15 +92,8 @@ def patch_speakers(html: str) -> str:
         const step = h3.closest(".step");
         if (!step) return;
         const name = h3.textContent.trim();
-        if (/Patrick|Lenny|主持|Nilay|Emily Chang|Host/i.test(name) || (host && name === host)) {
-          step.classList.add("speaker-host");
-        } else if (/Sam Altman|Boris|Altman|Guest/i.test(name) || (guest && name === guest)) {
-          step.classList.add("speaker-guest");
-        } else if (host && name === host) {
-          step.classList.add("speaker-host");
-        } else if (guest && name === guest) {
-          step.classList.add("speaker-guest");
-        }
+        if (host && name === host) step.classList.add("speaker-host");
+        else if (guest && name === guest) step.classList.add("speaker-guest");
       });
     }"""
     # Also match already-patched Patrick/Sam version
@@ -154,7 +160,7 @@ def process_one(md: Path, root: Path, build: Path) -> dict:
 
     old_html = html_path.read_text(encoding="utf-8")
     diagrams = extract_diagrams(old_html)
-    result["diagrams_saved"] = len(diagrams)
+    result["diagrams_saved"] = count_figures(diagrams)
 
     proc = subprocess.run(
         [sys.executable, str(build), str(md), str(html_path)],

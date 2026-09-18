@@ -11,11 +11,13 @@
 
 扫描器只做机械信号，不能证明合法。有 `stop` 信号时，先改写或停交付，再谈成稿。
 
-```powershell
-python "$env:USERPROFILE\.cursor\skills\md2wechat\scripts\scan_wechat_policy.py" "<整理文档.md>"
+```bash
+python scripts/scan_wechat_policy.py "<整理文档.md>"
 ```
 
 退出码 1 表示源稿带发布阻断风险。不要继续生成 HTML，除非已经改到扫描通过，或结论是「不可发布」并停止交付。
+
+扫描器是机械门禁。单独写「尚未核实」或「知情人士」不再停（那是谨慎标注）；只有它们贴着融资、估值、暴雷时才 `unverified_finance`。成稿 HTML 里若还留着 stop 信号，校验器会失败——审计表写「已删除」不够。误报且必须保留原词时，用 `--policy-ack code:reason`（理由 ≥8 字），不要改扫描器。
 
 ## 先判断，再写作
 

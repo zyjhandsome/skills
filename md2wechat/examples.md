@@ -61,8 +61,8 @@ no purple neon.
 After crop, overlay the **source H1** (the same string as the HTML H1; never a punchier rewrite):
 
 ```bash
-python scripts/make_cover_235.py generated.png --out "{原文文件名}_公众号封面.png"
-python scripts/overlay_cover_text.py "{原文文件名}_公众号封面.png" --title "{H1}" --people "{人物}"
+python scripts/make_cover_235.py generated.png --out /tmp/cover-crop.png
+python scripts/overlay_cover_text.py /tmp/cover-crop.png --title "{H1}" --people "{人物}" --out "{原文文件名}_公众号封面.png"
 ```
 
 Target type (already encoded in the overlay script): title `#A85533` 华文中宋 with tracking; people `#B09480` sans with wider tracking; a short hairline between them. Do not switch back to Microsoft YaHei + `#1A1A1A`.

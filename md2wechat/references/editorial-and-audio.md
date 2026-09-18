@@ -71,7 +71,7 @@ If the knowledge base already extracted a section as its own note, that judgment
 - Inline styles only inside the copied article.
 - Editorial body normally contains no native tables.
 - Visual hierarchy must survive loss of class names and page-level CSS.
-- Cover text is centered on the 2.35:1 crop with no white plate: title on top, speakers below. Title must match the article H1. Cover filename follows the source file, not the H1.
+- Cover text is centered on the 2.35:1 crop with no white plate: title on top, speakers below. Title must match the article H1 and the PNG tEXt written by `overlay_cover_text.py`. Cover filename follows the source file, not the H1.
 
 ## Suggested editorial draft shape
 

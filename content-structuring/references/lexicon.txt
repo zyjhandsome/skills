@@ -1,4 +1,4 @@
-# content-structuring 4c 统一词库（机器可读单源，v5.32 建立 / v5.33 随 spec 拆分同步指针）
+# content-structuring 4c 统一词库（机器可读单源，v5.35：行内注释承载非字面译法）
 # ============================================================
 # 本文件是 4c-1 词库 grep 的唯一模式来源：
 #   - `scripts/check_4c.py` 启动时全量加载本文件；
@@ -17,7 +17,7 @@
 #   [allow]                 专名白名单（大小写不敏感）：命中区域整体豁免
 #   [allow-case-sensitive]  大小写敏感的专名白名单（如 Harness 产品名 vs harness 普通词）
 #
-# 译法指导（如 COGS→销货成本、rollout 按语境）见 spec「默认中文化工作流」两段扩展词说明。
+# 非字面译法写在对应行的 # 注释里；判定见 language-and-gates.md「易错译法」。
 
 [blocking]
 # —— 口语与状态词 ——
@@ -78,13 +78,13 @@ product marketing
 great products
 cover their ass
 benevolent dictatorship
-down-rev
+down-rev          # 向下修订
 down rev
-term sheet
-offer letter
-outbound
-inbound
-containment
+term sheet        # 投资条款清单
+offer letter      # 录用通知书
+outbound          # 外呼线索
+inbound           # 入站线索
+containment       # 隔离边界
 horse race
 priority
 # —— 表达与写作类 ——
@@ -188,66 +188,67 @@ graph-based
 
 [contextual]
 # 多义/按语境：可能是残留，也可能是术语标签、命令名或已注全称的缩写。
-# 判定原则见 spec「专名 vs 行话」与 over-translation-guard.md。
-dogfooding?
-dogfood
-one[ -]?shot
+# 判定见 over-translation-guard.md 与 language-and-gates.md「易错译法」。
+dogfooding?   # 内部试用
+dogfood       # 内部试用
+one[ -]?shot  # 一次成功 / 单次提示词
 oneshot
-flaky
+flaky         # 不稳定（测试）
 context
 feature
 ship
-demo
-onboarding
-roadmap
-hook
-checkout
-spawn
-subprocess
-wrapper
+demo          # 演示；Demo Day / 产品名保留
+onboarding    # 新用户引导；产品模块名可留英文
+roadmap       # 路线图；栏目名可留
+hook          # 钩子；Cursor Hooks / git hook 对象名保留
+checkout      # 检出；git checkout 保留
+spawn         # 启动/拉起；API 名可留
+subprocess    # 子进程
+wrapper       # 封装层/套壳
 wrappers
-standup
-harness
+standup       # 每日站会
+harness       # 按指称；产品/层名见大小写敏感节
 sandbox
 vibe
 craft
-rollout
-pitch
-rep
+rollout       # 发布/灰度；训练采样才写采样轨迹；禁止一律「推广」
+pitch         # 推销陈述（非体育）
+rep           # 销售代表
 miss
 operator
 conservative
-ration
-tally
-chassis
-bare-bones
-launch review
-latent demand
-moderation
-primitive
-craze
+ration        # 限额/配给
+tally         # 记一笔/统计
+chassis       # 底盘
+bare-bones    # 极简
+launch review # 上线评审
+latent demand # 潜在需求
+moderation    # 人工审核
+primitive     # 原语
+craze         # 狂热
 type-ahead
 dead test
 allow.?list
 block.?list
-secret sauce
-source available
+secret sauce  # 独门秘方
+source available  # 源码可见
 learning
 hit
 die
 jump
 # —— 首现须注中文全称、其后可裸用的缩写 ——
-TAM
-COGS
-PIP
-T&E
-RAG
+TAM           # 可寻址市场
+COGS          # 销货成本
+PIP           # 绩效改进计划
+T&E           # 差旅与招待报销
+RAG           # 检索增强生成
 
 [allow]
 # 专名/产品/固定搭配白名单（大小写不敏感豁免）。
+# 泛称标签（Skill / Builder / Agent / Loop / Graph / Workflow）见下方大小写敏感节，
+# 避免小写普通义（skill gap、builder mindset）被整段抹掉。
 Skill Creator
 Agent Skills?
-Skills?
 Claude Code
 Computer Use
 Model Context Protocol
@@ -262,6 +263,20 @@ Custom GPTs?
 Composer
 Canvas
 Subagents?
+Evals?
+Tool Calls?
+Artifacts
+
+[allow-case-sensitive]
+# 首字母大写才是专名；小写普通用法仍按 [blocking]/[contextual]/4c-2 判定。
+Harness
+Craft Conference
+Behind the Craft
+Craft Ventures
+Beyond Vibe Coding
+How to build your own harness
+(?:Uber|OpenAI) Agent Builder
+Skills?
 Builders?
 Agents?
 Agent(?:ic)? Loops?
@@ -270,16 +285,3 @@ Loops?
 # Graph 专名豁免不吞掉 graph-based（后者仍属 blocking）
 Graphs?\b(?!-)
 Workflows?
-Evals?
-Tool Calls?
-Artifacts
-
-[allow-case-sensitive]
-# 首字母大写才是专名；小写普通用法仍按 [blocking]/[contextual] 判定。
-Harness
-Craft Conference
-Behind the Craft
-Craft Ventures
-Beyond Vibe Coding
-How to build your own harness
-(?:Uber|OpenAI) Agent Builder

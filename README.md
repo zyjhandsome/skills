@@ -221,7 +221,7 @@ candidate：<升级后 URL>
 
 | 技能 | 说明 |
 |------|------|
-| [content-structuring](./content-structuring/SKILL.md) | 内容结构化整理（源材料→中文深度整理稿；v5.28 含过译护栏） |
+| [content-structuring](./content-structuring/SKILL.md) | 内容结构化整理（源材料→中文深度整理稿；v5.35） |
 | [ai-agent-update-brief](./ai-agent-update-brief/SKILL.md) | AI 编码 Agent / IDE / CLI 工具更新简报生成 |
 | [github-repo-usage-article](./github-repo-usage-article/SKILL.md) | GitHub 仓库「使用示例」深度文章（房屋风格） |
 | [md2html-lecture](./md2html-lecture/SKILL.md) | 将 content-structuring 的整理稿转换成单文件 HTML 阅读页 |
@@ -229,10 +229,7 @@ candidate：<升级后 URL>
 
 ### md2html-lecture：把整理稿渲染成网页
 
-`md2html-lecture` **基于 [content-structuring](./content-structuring/SKILL.md) 输出的格式结果**进行转换：它读取该技能产出的「对谈三层结构」整理稿
-（`# 标题` / `## 文章元数据` / `## 核心导读` / 多个 `## 小节`，通常含 `核心洞察 · 深度解析`，`对谈实录` 可按 content-structuring 规则省略 / `## 延伸术语表` / `## 自检报告`），
-生成一个自包含的单文件 HTML 阅读页：Claude 橙色主题、亮/暗双色、侧边目录、层级标签、对谈时间线、callout、Mermaid 流程图支持，
-术语表与元数据默认折叠。
+`md2html-lecture` **基于 [content-structuring](./content-structuring/SKILL.md) 的成稿**做确定性转换（对谈三层或争辩型访谈），生成自包含的单文件 HTML 阅读页：Claude 橙色主题、亮/暗双色、侧边目录、层级标签、对谈时间线、callout、Mermaid 支持，术语表与元数据默认折叠。不是通用 Markdown→HTML（那用别的技能；公众号粘贴走 [md2wechat](./md2wechat/SKILL.md)）。
 
 用法：
 
@@ -244,14 +241,16 @@ python md2html-lecture/scripts/build_html.py "path/to/<整理文档>.md"
 
 ### md2wechat：整理文档 → 公众号粘贴稿 + 封面
 
-`md2wechat` 把 content-structuring 产出的 `*_整理文档.md` 转成**可粘贴进微信公众号**的内联样式 HTML，并生成 **2.35:1** 封面 PNG。默认保留正文三层结构；去掉元数据表、目录、术语表、自检报告。
+`md2wechat` 把 content-structuring 产出的 `*_整理文档.md` 转成**可粘贴进微信公众号**的内联样式 HTML，并生成 **2.35:1** 封面 PNG。默认 `editorial`：沿用源稿 H1 / 读者向 H2，节内压平三层、改成可播报叙述。用户明确要求「完整保留 / 只排版」时才走 `full`。
 
-用法：
+用法（在 `md2wechat/` 下，或把 `scripts/` 换成 `md2wechat/scripts/`）：
 
 ```bash
-python md2wechat/scripts/build_wechat_html.py "path/to/<整理文档>.md"
-python md2wechat/scripts/make_cover_235.py "cover-src.png" --out "<stem>_公众号封面_2.35x1.png"
-python md2wechat/scripts/validate_wechat_bundle.py "<stem>_公众号完整版.html" --cover "<stem>_公众号封面_2.35x1.png"
+python scripts/scan_wechat_policy.py "path/to/<整理文档>.md"
+python scripts/build_wechat_html.py "path/to/<成稿或整理文档>.md" --mode editorial --out "<stem>_公众号文章.html"
+python scripts/make_cover_235.py "cover-src.png" --out /tmp/cover-crop.png
+python scripts/overlay_cover_text.py /tmp/cover-crop.png --title "<H1>" --people "<人物>" --out "<stem>_公众号封面.png"
+python scripts/validate_wechat_bundle.py "<stem>_公众号文章.html" --cover "<stem>_公众号封面.png" --source "path/to/<整理文档>.md" --audit /tmp/公众号内容审计.md
 ```
 
 详见 `md2wechat/SKILL.md`。
@@ -389,22 +388,40 @@ content-structuring/
     └── tests/test_gates.py
 
 ai-agent-update-brief/
-└── SKILL.md              # AI Agent 工具更新简报规范
+├── SKILL.md
+├── references/
+│   ├── sources.md             # 官方来源索引（失效须同轮回填）
+│   ├── html-theme.md          # 亮/暗主题 token 与脚本契约
+│   └── report-skeleton.html   # 可复制的 HTML 骨架
+└── scripts/
+    ├── verify-brief.mjs       # 内容硬闸（章节 / 工具 / 日期 / 残片）
+    ├── verify-theme.mjs       # 可选：双主题截图
+    └── tests/test_verify_brief.mjs
 
 github-repo-usage-article/
-├── SKILL.md              # 技能加载器（工作流、五件套、验收闸门、防模板污染）
+├── SKILL.md              # 技能加载器（工作流、六件套、机械闸门、复审模式）
 ├── TEMPLATE.md           # 带注释的文章骨架模板
-├── EXAMPLE.md            # 黄金范例（Codebase Memory MCP 使用示例全文）
-└── fix-beginner-sections.py  # 批量修正常见新手专区 MCP 模板污染
+├── EXAMPLE.md            # 黄金范例（现行规则成稿，Codebase Memory MCP）
+└── scripts/
+    ├── validate.py       # 成稿机械校验（必须跑）
+    ├── fix-wikilink-anchors.py
+    ├── tests/test_validate.py
+    └── legacy/fix-beginner-sections.py  # 仅存量「新手专区」修稿
 
 md2wechat/
 ├── SKILL.md
 ├── examples.md
-├── reference-wechat-constraints.md
+├── references/
+│   ├── wechat-operation-policy.md
+│   ├── content-integrity.md
+│   ├── editorial-and-audio.md
+│   └── wechat-constraints.md
 └── scripts/
     ├── build_wechat_html.py
     ├── make_cover_235.py
-    └── validate_wechat_bundle.py
+    ├── overlay_cover_text.py
+    ├── validate_wechat_bundle.py
+    └── tests/
 
 md2html-lecture/
 ├── SKILL.md              # 技能加载器（工作流、MD 格式约定、验收清单）

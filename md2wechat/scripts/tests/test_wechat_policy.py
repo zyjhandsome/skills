@@ -16,8 +16,10 @@ SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
 
 from wechat_policy import (  # noqa: E402
+    parse_policy_ack,
     scan_source_risks,
     title_policy_errors,
+    validate_article_residuals,
     validate_policy_audit,
     validate_source_against_audit,
 )
@@ -49,6 +51,14 @@ class ScanSourceTests(unittest.TestCase):
 
     def test_keeps_ordinary_public_talk_publishable(self):
         self.assertEqual(scan_source_risks(PUBLIC_TALK_SOURCE), [])
+
+    def test_does_not_flag_careful_uncertainty_without_finance(self):
+        text = (
+            "# 短循环不是快，而是可验证\n\n"
+            "有报道称某公司正在调整审批层级，但该说法尚未核实，"
+            "这里只作为背景提及。知情人士不愿具名。\n"
+        )
+        self.assertEqual(scan_source_risks(text), [])
 
 
 class TitleTests(unittest.TestCase):
@@ -107,6 +117,35 @@ class AuditTests(unittest.TestCase):
             ),
             [],
         )
+
+
+class ResidualTests(unittest.TestCase):
+    def test_rejects_rewritten_html_that_still_carries_the_leak(self):
+        html = "<p>这篇根据外泄投资人交流整理，融资传闻尚未核实。</p>"
+        errors = validate_article_residuals(html)
+        blob = "\n".join(errors)
+        self.assertIn("leak_closed_door", blob)
+        self.assertIn("unverified_finance", blob)
+
+    def test_accepts_cleaned_html(self):
+        html = "<p>吴军在公开技术分享里谈反馈循环。</p>"
+        self.assertEqual(validate_article_residuals(html), [])
+
+    def test_ack_covers_remaining_signal(self):
+        html = "<p>源稿提到外泄，本文不转载闭门会内容。</p>"
+        errors = validate_article_residuals(
+            html, {"leak_closed_door": "quoting-the-word-to-refuse-it"}
+        )
+        self.assertEqual(errors, [])
+
+    def test_parse_ack_requires_reason(self):
+        with self.assertRaises(ValueError):
+            parse_policy_ack("leak_closed_door:short")
+        code, reason = parse_policy_ack(
+            "unverified_finance:public-filing-already-confirmed"
+        )
+        self.assertEqual(code, "unverified_finance")
+        self.assertIn("public-filing", reason)
 
 
 if __name__ == "__main__":

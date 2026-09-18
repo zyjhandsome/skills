@@ -1468,12 +1468,20 @@
 
     // ---------- Speaker tags in dialogue ----------
     function tagSpeakers() {
+      // First two distinct speakers in reading order = host, then guest.
+      const names = [];
+      document.querySelectorAll(".timeline .step-body h3").forEach(h3 => {
+        const n = h3.textContent.trim();
+        if (n && !names.includes(n)) names.push(n);
+      });
+      const host = names[0] || "";
+      const guest = names[1] || "";
       document.querySelectorAll(".timeline .step-body h3").forEach(h3 => {
         const step = h3.closest(".step");
         if (!step) return;
         const name = h3.textContent.trim();
-        if (/Harrison/i.test(name)) step.classList.add("speaker-host");
-        else if (/Andrew/i.test(name)) step.classList.add("speaker-guest");
+        if (host && name === host) step.classList.add("speaker-host");
+        else if (guest && name === guest) step.classList.add("speaker-guest");
       });
     }
 

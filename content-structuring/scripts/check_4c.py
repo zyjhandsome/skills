@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""4c unified-lexicon scan for content-structuring outputs (spec v5.33).
+"""4c lexicon + consecutive-English scan for content-structuring outputs (spec v5.34).
 
 - Loads the FULL unified lexicon from references/lexicon.txt (single source);
   the spec reference set (see references/language-and-gates.md) keeps no word-list copy
-- Greps blocking / contextual patterns against narrative-ish Markdown
+- 4c-1: greps blocking / contextual patterns against narrative-ish Markdown
+- 4c-2: open-set scan for ≥2 consecutive lowercase-bearing English words inside
+  Chinese sentences (catches code-switching that no word list can enumerate)
 - Ignores metadata「原标题」cells, glossary proper-noun column heuristically
 - Ignores first-occurrence parentheticals: 中文（English） / （English）
 - Ignores allowlisted proper-noun phrases (Skill Creator, Claude Code, ...)
@@ -12,9 +14,11 @@
 Usage:
   python check_4c.py path/to/doc.md
   python check_4c.py path/to/doc.md --json
+  python check_4c.py path/to/doc.md --fail-on-consecutive   # 4c-2 blocks too
 
-Exit 0 if no *actionable* hits; 1 if bare lexicon hits remain.
-Does NOT replace 4c-2 human pass for ≥2 consecutive English words or term intent.
+Exit 0 if no *actionable* hits; 1 if bare lexicon hits remain (and, with
+--fail-on-consecutive, if 4c-2 candidates remain). Title-Case spans are treated as
+proper nouns, so 4c-2 still needs a human pass for term intent and over-translation.
 """
 
 from __future__ import annotations
@@ -44,6 +48,10 @@ def _load_lexicon(path: Path = LEXICON_PATH) -> dict[str, list[str]]:
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if not line or line.startswith("#"):
+            continue
+        if " #" in line:
+            line = line.split(" #", 1)[0].strip()
+        if not line:
             continue
         if line.startswith("[") and line.endswith("]"):
             current = line[1:-1]
@@ -91,6 +99,12 @@ PAREN_EN = re.compile(
 )
 MARKDOWN_LINK_DEST = re.compile(r"(?<=\])\([^\n)]*\)")
 RAW_URL = re.compile(r"https?://\S+")
+# Whole markdown links: English article titles in 延伸阅读/引用 are archive layer.
+MARKDOWN_LINK = re.compile(r"\[[^\]\n]*\]\([^\n)]*\)")
+INLINE_CODE = re.compile(r"`[^`\n]+`")
+# Archive layer inside a body line: bilingual 原文 side rows and ASR audio markers.
+BILINGUAL_SIDE = re.compile(r"[（(]\s*原文[：:][^）)]*[）)]")
+ASR_MARKER = re.compile(r"\[\s*ASR[^\]]*\]")
 
 
 def _mask_allowed(text: str) -> str:
@@ -102,6 +116,14 @@ def _mask_allowed(text: str) -> str:
     for pat in ALLOW_PHRASES:
         out = re.sub(pat, lambda m: " " * len(m.group(0)), out, flags=re.IGNORECASE)
     out = PAREN_EN.sub(lambda m: " " * len(m.group(0)), out)
+    return out
+
+
+def _mask_archive_spans(text: str) -> str:
+    """Blank spans that legitimately keep English (spec「4c 检索范围」exclusions)."""
+    out = text
+    for pat in (MARKDOWN_LINK, INLINE_CODE, BILINGUAL_SIDE, ASR_MARKER):
+        out = pat.sub(lambda m: " " * len(m.group(0)), out)
     return out
 
 
@@ -173,6 +195,33 @@ def scan_contextual_english(text: str) -> list[dict]:
     return hints
 
 
+CJK = re.compile(r"[\u3400-\u9fff\u3000-\u303f\uff00-\uffef]")
+_EN_WORD = r"[A-Za-z][A-Za-z0-9'’&./+-]*"
+CONSECUTIVE_EN = re.compile(rf"{_EN_WORD}(?:[ \t]+{_EN_WORD})+")
+
+
+def scan_consecutive_english(text: str) -> list[dict]:
+    """4c-2 open-set scan: ≥2 consecutive English words inside a Chinese sentence.
+
+    Title-Case / ALL-CAPS spans are skipped as proper-noun chains (person names,
+    programme names, product names). A span is reported only when at least one word
+    is lowercase — that is the shape ordinary code-switching takes (`go to market
+    motion`, `still hesitant`). Reported for review, not auto-failed: the fix may be
+    translation *or* promoting the span into the proper-noun layer.
+    """
+    body = _mask_archive_spans(_mask_allowed(_strip_excluded_regions(text)))
+    hits: list[dict] = []
+    for line_no, line in enumerate(body.splitlines(), start=1):
+        if not CJK.search(line):
+            continue  # pure-English or structural line: not a 中文句
+        for m in CONSECUTIVE_EN.finditer(line):
+            words = m.group(0).split()
+            if all(w[:1].isupper() for w in words):
+                continue  # proper-noun chain
+            hits.append({"match": m.group(0), "line": line_no, "words": len(words)})
+    return hits
+
+
 def scan_over_translation(text: str) -> list[dict]:
     """Return non-blocking hints for Chinese text that may hide field-native labels."""
     body = _strip_excluded_regions(text)
@@ -203,13 +252,19 @@ def scan_over_translation(text: str) -> list[dict]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="4c lexicon helper scan")
+    parser = argparse.ArgumentParser(description="4c lexicon + consecutive-English scan")
     parser.add_argument("path", type=Path)
     parser.add_argument("--json", action="store_true")
+    parser.add_argument(
+        "--fail-on-consecutive",
+        action="store_true",
+        help="exit 1 when 4c-2 candidates remain (default: report only)",
+    )
     args = parser.parse_args()
     text = args.path.read_text(encoding="utf-8")
     hits = scan(text)
     contextual = scan_contextual_english(text)
+    consecutive = scan_consecutive_english(text)
     review = scan_over_translation(text)
     if args.json:
         print(
@@ -217,6 +272,8 @@ def main() -> int:
                 {
                     "hits": hits,
                     "count": len(hits),
+                    "consecutive_english": consecutive,
+                    "consecutive_count": len(consecutive),
                     "contextual_english_review": contextual,
                     "contextual_review_count": len(contextual),
                     "over_translation_review": review,
@@ -228,11 +285,20 @@ def main() -> int:
         )
     else:
         if not hits:
-            print("OK: no actionable 4c lexicon hits (parentheticals/allowlist excluded)")
+            print("OK: no actionable 4c-1 lexicon hits (parentheticals/allowlist excluded)")
         else:
             print(f"ACTIONABLE_HITS: {len(hits)}")
             for h in hits:
                 print(f"  L{h['line']}: {h['match']}  (pattern {h['pattern']})")
+        if consecutive:
+            print(
+                f"CONSECUTIVE_ENGLISH_4C2: {len(consecutive)} "
+                "(translate, or promote to proper-noun layer / lexicon [allow])"
+            )
+            for h in consecutive:
+                print(f"  L{h['line']}: {h['match']}")
+        else:
+            print("OK: no 4c-2 consecutive-English candidates (Title-Case spans excluded)")
         if review:
             print(f"OVER_TRANSLATION_REVIEW: {len(review)} (non-blocking; compare with source)")
             for h in review:
@@ -242,10 +308,14 @@ def main() -> int:
             for h in contextual:
                 print(f"  L{h['line']}: {h['match']}  (pattern {h['pattern']})")
         print(
-            "Note: 4c-2 consecutive-English and concept-label passes are still required; "
-            "see references/over-translation-guard.md."
+            "Note: Title-Case spans are assumed proper nouns, so the concept-label pass "
+            "still needs eyes; see references/over-translation-guard.md."
         )
-    return 1 if hits else 0
+    if hits:
+        return 1
+    if consecutive and args.fail_on_consecutive:
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
