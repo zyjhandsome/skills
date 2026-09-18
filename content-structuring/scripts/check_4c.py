@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Lightweight 4c lexicon scan for content-structuring outputs (spec v5.31).
+"""4c unified-lexicon scan for content-structuring outputs (spec v5.33).
 
-- Greps the unified lexicon against narrative-ish Markdown
+- Loads the FULL unified lexicon from references/lexicon.txt (single source);
+  the spec reference set (see references/language-and-gates.md) keeps no word-list copy
+- Greps blocking / contextual patterns against narrative-ish Markdown
 - Ignores metadata「原标题」cells, glossary proper-noun column heuristically
 - Ignores first-occurrence parentheticals: 中文（English） / （English）
 - Ignores allowlisted proper-noun phrases (Skill Creator, Claude Code, ...)
@@ -23,38 +25,44 @@ import re
 import sys
 from pathlib import Path
 
-# Keep in sync with high-signal terms in spec「英文源素材高频夹写词」+ AI/DevTools 簇.
-# Full alternation list is large; this script focuses on high-FP / high-value stems.
-LEXICON = [
-    r"super bullish",
-    r"operationalize",
-    r"\brefine\b",
-    r"\bholistic\b",
-    r"mass unemployment",
-]
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
+LEXICON_PATH = Path(__file__).resolve().parents[1] / "references" / "lexicon.txt"
+
+
+def _wrap_word_boundaries(pattern: str) -> str:
+    """Add \\b guards when the pattern starts/ends with word characters."""
+    prefix = r"\b" if re.match(r"\w", pattern) else ""
+    suffix = r"\b" if re.search(r"\w$", pattern) else ""
+    return f"{prefix}(?:{pattern}){suffix}"
+
+
+def _load_lexicon(path: Path = LEXICON_PATH) -> dict[str, list[str]]:
+    sections: dict[str, list[str]] = {}
+    current: str | None = None
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            current = line[1:-1]
+            sections.setdefault(current, [])
+            continue
+        if current is not None:
+            sections[current].append(line)
+    return sections
+
+
+_SECTIONS = _load_lexicon()
+
+# Bare narrative English: actionable 4c-1 failures.
+LEXICON = [_wrap_word_boundaries(p) for p in _SECTIONS.get("blocking", [])]
 
 # Ambiguous community terms: they may be unwanted English residue or intentional
 # technical labels. Report them for source-aware review; never auto-fail on the word.
 CONTEXTUAL_ENGLISH_REVIEW = [
-    r"dogfooding?",
-    r"one[ -]?shot",
-    r"\bflaky\b",
-    r"\bcontext\b",
-    r"\bfeature\b",
-    r"\bship\b",
-    r"\bdemo\b",
-    r"\bonboarding\b",
-    r"\broadmap\b",
-    r"\bhook\b",
-    r"\bcheckout\b",
-    r"\bspawn\b",
-    r"\bsubprocess\b",
-    r"\bwrapper\b",
-    r"\bstandup\b",
-    r"\bharness\b",
-    r"\bsandbox\b",
-    r"\bvibe\b",
-    r"\bcraft\b",
+    _wrap_word_boundaries(p) for p in _SECTIONS.get("contextual", [])
 ]
 
 # Likely cases where an English AI/DevTools label may have been translated away.
@@ -70,50 +78,16 @@ OVER_TRANSLATION_REVIEW = [
 ]
 
 # Proper-noun / product spans: if hit is inside these, ignore.
-ALLOW_PHRASES = [
-    r"Skill Creator",
-    r"Agent Skills?",
-    r"\bSkills?\b",  # Cursor/Claude Skill package name (see over-translation-guard)
-    r"Claude Code",
-    r"Computer Use",
-    r"Model Context Protocol",
-    r"\bMCP\b",
-    r"\bHooks\b",
-    r"feature flag",
-    r"context window",
-    r"context engineering",
-    r"git checkout",
-    r"Demo Day",
-    r"Custom GPTs?",
-    r"\bComposer\b",
-    r"\bCanvas\b",
-    r"\bSubagents?\b",
-    r"\bRAG\b",  # allowed abbreviation; first-use Chinese expansion is a separate manual gate
-    r"\bBuilders?\b",
-    r"\bAgents?\b",
-    r"\bAgent(?:ic)? Loops?\b",
-    r"\bAgent Graphs?\b",
-    r"\bLoops?\b",
-    r"\bGraphs?\b",
-    r"\bWorkflows?\b",
-    r"\bEvals?\b",
-    r"\bTool Calls?\b",
-]
+ALLOW_PHRASES = [_wrap_word_boundaries(p) for p in _SECTIONS.get("allow", [])]
 
 # Official names whose capitalization matters. Lowercase generic uses remain actionable.
 CASE_SENSITIVE_ALLOW_PHRASES = [
-    r"\bHarness\b",
-    r"\bCraft Conference\b",
-    r"\bBehind the Craft\b",
-    r"\bCraft Ventures\b",
-    r"\bBeyond Vibe Coding\b",
-    r"\bHow to build your own harness\b",
-    r"\b(?:Uber|OpenAI) Agent Builder\b",
+    _wrap_word_boundaries(p) for p in _SECTIONS.get("allow-case-sensitive", [])
 ]
 
 # Strip parenthetical Latin/ASCII terms: （dogfooding） or (dogfooding)
 PAREN_EN = re.compile(
-    r"[（(]\s*[A-Za-z][A-Za-z0-9_./+#-]*(?:\s+[A-Za-z][A-Za-z0-9_./+#-]*)*\s*[）)]"
+    r"[（(]\s*[A-Za-z][A-Za-z0-9_./+#&-]*(?:\s+[A-Za-z][A-Za-z0-9_./+#&-]*)*\s*[）)]"
 )
 MARKDOWN_LINK_DEST = re.compile(r"(?<=\])\([^\n)]*\)")
 RAW_URL = re.compile(r"https?://\S+")
@@ -132,7 +106,7 @@ def _mask_allowed(text: str) -> str:
 
 
 def _strip_excluded_regions(text: str) -> str:
-    """Drop archive/meta regions outside 4c narrative scope (spec 4c 检索范围)."""
+    """Drop archive/meta regions outside 4c scope (language-and-gates.md「4c 检索范围」)."""
     lines = text.splitlines()
     kept: list[str] = []
     skipping = False

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Gate regression tests for content-structuring scripts (v5.31)."""
+"""Gate regression tests for content-structuring scripts (v5.32)."""
 
 from __future__ import annotations
 
@@ -97,6 +97,56 @@ def test_fixture_adversarial_4d_ok() -> None:
     out = (cp.stdout or b"").decode("utf-8", errors="replace")
     err = (cp.stderr or b"").decode("utf-8", errors="replace")
     assert cp.returncode == 0, out + err
+
+
+def test_fixture_longform_4d_ok() -> None:
+    """Generic template keeps --- before 关键语录与交锋时刻 (structural, spec v5.32)."""
+    cp = run([sys.executable, str(NORM), str(FIX / "longform-generic.md"), "--check"])
+    out = (cp.stdout or b"").decode("utf-8", errors="replace")
+    err = (cp.stderr or b"").decode("utf-8", errors="replace")
+    assert cp.returncode == 0, out + err
+
+
+def test_fixture_multisource_4d_ok() -> None:
+    cp = run([sys.executable, str(NORM), str(FIX / "multisource-conflict.md"), "--check"])
+    out = (cp.stdout or b"").decode("utf-8", errors="replace")
+    err = (cp.stderr or b"").decode("utf-8", errors="replace")
+    assert cp.returncode == 0, out + err
+
+
+def test_fixture_longform_4c_ok() -> None:
+    cp = run([sys.executable, str(CHECK4C), str(FIX / "longform-generic.md")])
+    out = (cp.stdout or b"").decode("utf-8", errors="replace")
+    err = (cp.stderr or b"").decode("utf-8", errors="replace")
+    assert cp.returncode == 0, out + err
+
+
+def test_fixture_multisource_4c_ok() -> None:
+    cp = run([sys.executable, str(CHECK4C), str(FIX / "multisource-conflict.md")])
+    out = (cp.stdout or b"").decode("utf-8", errors="replace")
+    err = (cp.stderr or b"").decode("utf-8", errors="replace")
+    assert cp.returncode == 0, out + err
+
+
+def test_4c_full_lexicon_loaded_from_file() -> None:
+    """Words beyond the old 5 hard-coded stems must block (lexicon.txt is the source)."""
+    text = """# T
+
+## 第一节
+
+这家公司的 flywheel 很强，incumbent 压力大，团队仍在 pontificate。
+"""
+    with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as f:
+        f.write(text)
+        path = Path(f.name)
+    try:
+        cp = run([sys.executable, str(CHECK4C), str(path)])
+        out = (cp.stdout or b"").decode("utf-8", errors="replace")
+        err = (cp.stderr or b"").decode("utf-8", errors="replace")
+        assert cp.returncode != 0, out + err
+        assert "flywheel" in out and "incumbent" in out and "pontificate" in out, out
+    finally:
+        path.unlink(missing_ok=True)
 
 
 def test_fixture_dialogue_4c_ok() -> None:
@@ -202,6 +252,11 @@ def main() -> int:
         test_4d_detects_hr_with_blank_line,
         test_fixture_dialogue_4d_ok,
         test_fixture_adversarial_4d_ok,
+        test_fixture_longform_4d_ok,
+        test_fixture_multisource_4d_ok,
+        test_fixture_longform_4c_ok,
+        test_fixture_multisource_4c_ok,
+        test_4c_full_lexicon_loaded_from_file,
         test_fixture_dialogue_4c_ok,
         test_fixture_stock_4c_hits,
         test_4c_allows_rag_and_technical_harness,

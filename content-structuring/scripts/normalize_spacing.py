@@ -18,20 +18,23 @@ import re
 import sys
 from pathlib import Path
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 STRUCTURAL_AFTER = frozenset(
     {
         "核心导读",
         "目录",
     }
 )
-STRUCTURAL_BEFORE = frozenset(
-    {
-        "延伸术语表",
-        "自检报告",
-    }
+# Closing structural blocks: a --- immediately before these is legal (spec 4d-1 v5.32).
+STRUCTURAL_BEFORE_PREFIXES = (
+    "关键语录",
+    "延伸术语表",
+    "自检报告",
 )
 
-MAX_HR = 5
+MAX_HR = 6
 
 
 def _section_title(line: str) -> str | None:
@@ -40,8 +43,8 @@ def _section_title(line: str) -> str | None:
 
 
 def _is_body_section(title: str) -> bool:
-    skip = {"文章元数据", "核心导读", "目录", "延伸术语表", "自检报告"}
-    return title not in skip and not title.startswith("延伸术语表") and not title.startswith("自检报告")
+    skip = {"文章元数据", "核心导读", "目录"}
+    return title not in skip and not title.startswith(STRUCTURAL_BEFORE_PREFIXES)
 
 
 def check(text: str) -> list[str]:
@@ -78,7 +81,7 @@ def check(text: str) -> list[str]:
             continue
         if not past_toc:
             continue
-        if title and (title.startswith("延伸术语表") or title.startswith("自检报告")):
+        if title and title.startswith(STRUCTURAL_BEFORE_PREFIXES):
             break
         if title and _is_body_section(title):
             seen_body = True
@@ -155,9 +158,7 @@ def normalize(text: str) -> str:
             prev_title = _section_title(normalized_blocks[i - 1][0]) if i > 0 else None
             if prev_title == "目录" and (not result or result[-1] != "---"):
                 result.extend(["", "---", ""])
-        elif title.startswith("延伸术语表"):
-            result.extend(["", "---", ""])
-        elif title.startswith("自检报告"):
+        elif title.startswith(STRUCTURAL_BEFORE_PREFIXES):
             result.extend(["", "---", ""])
 
         result.extend(block)

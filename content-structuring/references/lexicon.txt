@@ -1,0 +1,285 @@
+# content-structuring 4c 统一词库（机器可读单源，v5.32 建立 / v5.33 随 spec 拆分同步指针）
+# ============================================================
+# 本文件是 4c-1 词库 grep 的唯一模式来源：
+#   - `scripts/check_4c.py` 启动时全量加载本文件；
+#   - agent 手工执行 4c-1 时也应对本文件的 [blocking] + [contextual] 全量 grep；
+#   - `references/language-and-gates.md`（4c 规则与译法指导所在分册）与
+#     `references/over-translation-guard.md` 只保留判定原则，不再另行维护词表副本。
+#     新词只加在这里。
+#
+# 格式：INI 风格分节；每行一个正则片段（区分大小写仅限 [allow-case-sensitive]）；
+# 以 # 开头为注释。加载器自动为词首/词尾是字母数字的模式补 \b 边界。
+#
+# 分节语义：
+#   [blocking]              裸露即判 4c-1 失败的普通叙述夹写词（脚本 ACTIONABLE_HITS）
+#   [contextual]            多义/按语境判定词：可能是残留夹写，也可能是合法术语标签、
+#                           命令名或「首现注全称后合法复现」的缩写（脚本非阻断，人工复核）
+#   [allow]                 专名白名单（大小写不敏感）：命中区域整体豁免
+#   [allow-case-sensitive]  大小写敏感的专名白名单（如 Harness 产品名 vs harness 普通词）
+#
+# 译法指导（如 COGS→销货成本、rollout 按语境）见 spec「默认中文化工作流」两段扩展词说明。
+
+[blocking]
+# —— 口语与状态词 ——
+okay
+vibes forecasting
+grokked
+meta 问
+sidebar
+wind back
+pontificate
+temporary
+compressed
+adamant
+steer
+transformed
+comforting
+no alternative
+fake
+tangible
+largely
+for sure
+it depends
+horseshit
+morons
+what even
+Absolutely
+freak out
+incredible
+for real
+# —— 商业/创投叙述词 ——
+margin
+pricing power
+capex
+commodity
+network effects
+deterministic thesis
+value capture
+value upstack
+upstack
+incumbent
+distribution matters
+flywheel
+rappers
+steady state
+equilibrium
+main street
+econometric
+meaningful usage
+fireman stage
+billion dollar
+long term
+early adopters?
+laggards
+earned media
+competitor
+infomercial
+product marketing
+great products
+cover their ass
+benevolent dictatorship
+down-rev
+down rev
+term sheet
+offer letter
+outbound
+inbound
+containment
+horse race
+priority
+# —— 表达与写作类 ——
+proofreading
+struggle to find
+blank screen
+jagged edge
+white space gone
+breakout yet
+perplexing
+still charges
+converge
+unsubscribe
+push on
+being right
+being early
+right price
+right company
+platonic ideal
+spray everywhere
+default power
+everything yesterday
+storytelling
+boil down
+punchline
+gobbledegook
+back-calculate
+human writing
+good excuse
+not fundamentally
+day looks similar
+hands in it
+speed up
+closed loop
+massive shift
+wait and see
+daily driver
+paper over
+turn over rocks
+stand behind
+stick head in sand
+dive in
+submerge
+draw distinction
+presume today
+look crazy
+old thing but more
+evil AI
+happy for you
+not going to help
+too comforting
+# —— 产品/工程叙述词（非专名用法） ——
+thin wrapper
+hot.?swap
+inspectable
+versionable
+refine
+refinement
+leverage
+super bullish
+operationalize
+mass unemployment
+vibe code
+functional
+dysfunctional
+holistic
+tech-led
+gut feeling
+informed gut
+gut
+aware
+unaware
+orchestrate
+micromanagement
+stepchild
+centerpiece
+genius
+sublime
+backwards
+frictionless
+tentpole
+brittle
+persona
+gizmo
+deprecate
+crutch
+unsustainable
+painkiller
+addict
+junk food
+lizard brain
+double-edged
+unintended consequence
+disposable
+cosmetic
+live demo
+prompt caching
+grading criteria
+setup 脚本
+graph-based
+
+[contextual]
+# 多义/按语境：可能是残留，也可能是术语标签、命令名或已注全称的缩写。
+# 判定原则见 spec「专名 vs 行话」与 over-translation-guard.md。
+dogfooding?
+dogfood
+one[ -]?shot
+oneshot
+flaky
+context
+feature
+ship
+demo
+onboarding
+roadmap
+hook
+checkout
+spawn
+subprocess
+wrapper
+wrappers
+standup
+harness
+sandbox
+vibe
+craft
+rollout
+pitch
+rep
+miss
+operator
+conservative
+ration
+tally
+chassis
+bare-bones
+launch review
+latent demand
+moderation
+primitive
+craze
+type-ahead
+dead test
+allow.?list
+block.?list
+secret sauce
+source available
+learning
+hit
+die
+jump
+# —— 首现须注中文全称、其后可裸用的缩写 ——
+TAM
+COGS
+PIP
+T&E
+RAG
+
+[allow]
+# 专名/产品/固定搭配白名单（大小写不敏感豁免）。
+Skill Creator
+Agent Skills?
+Skills?
+Claude Code
+Computer Use
+Model Context Protocol
+MCP
+Hooks
+feature flag
+context window
+context engineering
+git checkout
+Demo Day
+Custom GPTs?
+Composer
+Canvas
+Subagents?
+Builders?
+Agents?
+Agent(?:ic)? Loops?
+Agent Graphs?
+Loops?
+# Graph 专名豁免不吞掉 graph-based（后者仍属 blocking）
+Graphs?\b(?!-)
+Workflows?
+Evals?
+Tool Calls?
+Artifacts
+
+[allow-case-sensitive]
+# 首字母大写才是专名；小写普通用法仍按 [blocking]/[contextual] 判定。
+Harness
+Craft Conference
+Behind the Craft
+Craft Ventures
+Beyond Vibe Coding
+How to build your own harness
+(?:Uber|OpenAI) Agent Builder

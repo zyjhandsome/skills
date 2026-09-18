@@ -7,7 +7,7 @@ description: >-
   GitHub repo tutorials, AI-tool update HTML briefs, or generic MD→HTML (md2html /
   md2html-lecture).
 metadata:
-  version: "5.31"
+  version: "5.33"
 ---
 
 # 内容结构化整理（Content Structuring）
@@ -18,7 +18,7 @@ metadata:
 
 默认输出为中文，体裁是兼顾结构化与可读性的**深度文章版**。**信息型多人播客、访谈、圆桌 Q&A** 默认采用「**对谈三层节结构**」：每节 **核心洞察 → 深度解析 → 对谈实录**（篇末省略独立关键语录节，金句沉入实录）。若核心嘉宾存在明确的**旧判断 → 触发证据 → 新判断 → 组织实践 / 制度方案 → 个人行动**，仍用对谈三层，但按这条**立场演化轴**合并相邻问答，禁止把每个主持人问题机械拆成一节。若素材存在**持续分歧、连续追问、拒绝回答、纠错或立场升级**，改走「**争辩型访谈 / 原声增强模式**」：按原始交锋顺序组织，每节 **原声交锋 → 语境与释义 → 未决问题（按需）**，不得先用编者结论压平双方立场。**成稿即中文**：叙述层与**对谈实录/原声交锋/关键语录**均直接用中文写；仅当用户显式要求「保留英文原文 / 中英双语」时才覆盖引语语言。用户可显式要求专栏文章模式、纯粹对话模式、不要对谈实录、简洁版等。
 
-当用户**指定跨文化受众**（如「中国公民、赴美大一、熟悉课堂英文但不熟悉美国文化梗与高校语境」）或素材文化梗密集时，可启用**可选的「受众可读性内化适配」**：首次出现处补文化/人物/语境背景、客观第三人称口吻、**禁元叙述/禁「你们」说教/禁国内场景硬类比**，且**不降信息密度**——详见 spec「可读性内化适配（受众导向，可选）」。
+当用户**指定跨文化受众**（如「中国公民、赴美大一、熟悉课堂英文但不熟悉美国文化梗与高校语境」）或素材文化梗密集时，可启用**可选的「受众可读性内化适配」**：首次出现处补文化/人物/语境背景、客观第三人称口吻、**禁元叙述/禁「你们」说教/禁国内场景硬类比**，且**不降信息密度**——详见 `references/language-and-gates.md`「可读性内化适配（受众导向，可选）」。
 
 ## 默认中文化（必读摘要）
 
@@ -30,13 +30,13 @@ metadata:
 
 **过译红线（v5.31）**：整理 Cursor / Claude / Agent 工具向素材时，不只产品专名要保留英文，讲者用来命名**角色、范式、工作流原语或对照组**的社区原生标签也要保真。**Skill / Agent Skill / Skill Creator / Hooks / Computer Use / Composer / Canvas / Subagent** 保留英文；**Builder、Agent、Agent Loop、Loop、Graph、Workflow、Harness、Evals** 等在承担概念标签时也保留英文，首次可补一句中文释义。❌ 不要把 `Agent → Loop → Graph` 抹平成「代理→循环→图」，也不要因 4c 词库命中就机械翻译。普通动作、状态和形容词仍写中文；同一个词按指称判断。细则见 `references/over-translation-guard.md`。
 
-**成稿后必做**：对叙述层与**对谈实录/关键语录**跑 spec **4c 检索** + **4c 验收闸门**（4c-1 词库 grep → 4c-2 连续英文通读 + 反向过译检查 → 4c-3 对谈实录或关键语录独立扫）；**裸词**自检写 **grep 命中 X→修正后 Y**（首现 `中文（English）` 括注与专名白名单**不计入**失败），多义术语与疑似过译命中写明「已对照来源逐项核实」。**未核实不得标 ✅**。可辅以 `scripts/check_4c.py`：其 `CONTEXTUAL_ENGLISH_REVIEW` / `OVER_TRANSLATION_REVIEW` 是人工复核提示，不是机械替换清单。成稿后还须跑 **4d 节间空白验收闸门**（或 `scripts/normalize_spacing.py --check`），**未过不得标纯净排版 ✅**。优化存量 output 稿时：**最小 diff** 增量中文化，见 spec「默认中文化工作流」。
+**成稿后必做**：对叙述层与**对谈实录/关键语录**跑 spec **4c 检索** + **4c 验收闸门**（4c-1 词库 grep → 4c-2 连续英文通读 + 反向过译检查 → 4c-3 对谈实录或关键语录独立扫）；**裸词**自检写 **grep 命中 X→修正后 Y**（首现 `中文（English）` 括注与专名白名单**不计入**失败），多义术语与疑似过译命中写明「已对照来源逐项核实」。**未核实不得标 ✅**。可辅以 `scripts/check_4c.py`：其 `CONTEXTUAL_ENGLISH_REVIEW` / `OVER_TRANSLATION_REVIEW` 是人工复核提示，不是机械替换清单。成稿后还须跑 **4d 节间空白验收闸门**（或 `scripts/normalize_spacing.py --check`），**未过不得标纯净排版 ✅**。优化存量 output 稿时：**最小 diff** 增量中文化，见 `references/language-and-gates.md`「默认中文化工作流」。
 
 ## 技术素材与多源合并（v5.27+）
 
 - **AI/DevTools 行话**：整理 AI 编码、开发者工具类素材时，4c 须额外 grep「AI/DevTools 行话簇」。**判定原则**：产品/命令/协议/模型名，以及承担角色、范式、工作流原语或对照组的社区原生标签（如 `Builder`、`Agent Loop`、`Loop`、`Graph`）保留英文或首现中英并写；**普通行为、状态、口语形容词**中文化。若原文把若干词并列成一套 taxonomy，整组保留，不拆散翻译。
 - **首现缩写注释**：行业缩写（IC/ASL/MTS/RAG/GTM 等）首次出现须注中文全称「中文全称（英文缩写）」；MCP/API/LLM/SaaS 等已普及缩写可免。自检新增「首现缩写注释」行。
-- **多源合并稿（≥2 来源）**：走「通用模板 + **源口径标注** + **多源一致性核对**」；冲突须 `[编者注]` 并存或点明「**互补/不同维度**」，禁自称「互证」。详见 spec「多源合并稿」。
+- **多源合并稿（≥2 来源）**：走「通用模板 + **源口径标注** + **多源一致性核对**」；冲突须 `[编者注]` 并存或点明「**互补/不同维度**」，禁自称「互证」。详见 `references/interview-structures.md`「多源合并稿」。
 
 ## 对谈三层节结构（播客/访谈默认，v5.23）
 
@@ -75,9 +75,13 @@ metadata:
 ## 加载策略
 
 1. 先读本 `SKILL.md`，确认触发条件、交付物和红线。
-2. 再读 `references/spec.md`（模板、闸门、词库、防幻觉的单一事实来源）。
-3. 技术/Agent 工具向素材：加读 `references/over-translation-guard.md`。
-4. 上下文紧张时，至少读 spec 中与素材类型相关的章节，以及：「执行决策流程图」「对谈三层节结构」「争辩型访谈 / 原声增强模式」「多源合并稿」「核心导读写法」「4d」「4c 验收闸门」「专名 vs 行话 / 过译」「防幻觉」「输出格式与文档模板」「执行步骤清单」。
+2. 再读 `references/spec.md`（**参考集入口**：角色、偏好覆盖、决策流程图、快速参考、执行步骤清单 + 分册路由表）。
+3. 按素材与任务加载分册（v5.33 拆分，路由表见 spec.md 顶部）：
+   - **成稿与验收必读**：`references/language-and-gates.md`（三层语言分区、4c/4d 闸门、默认中文化工作流、存量优化清单、可读性内化）+ `references/editorial-standards.md`（称谓全名、说话人对齐、防幻觉、原数据快照、术语校准）。
+   - **播客/访谈/圆桌/多源素材**：加读 `references/interview-structures.md`（对谈三层、争辩型、多源合并、核心导读写法）。
+   - **组装输出时**：加读 `references/templates.md`（文件命名 + 三个文档模板与自检表）。
+   - **技术/Agent 工具向素材**：加读 `references/over-translation-guard.md`。
+4. 4c 词库单源：`references/lexicon.txt`（`scripts/check_4c.py` 自动加载；手工 4c-1 grep 也以它为准）。
 5. 金样（可选）：`fixtures/` 下迷你稿，用于核对结构与闸门，不必当正文素材。
 
 ## 链接类素材：浏览器优先（正文 + 元数据）
@@ -105,7 +109,7 @@ metadata:
 
 - 默认目录：`output/`，除非用户指定其他位置。
 - 文件名：`{发布日YYYYMMDD} {内容标题}_整理文档.md`；日期前缀必须来自内容发布时间。
-- 存量优化：最小 diff，见 spec。
+- 存量优化：最小 diff，见 `references/language-and-gates.md`「存量 output 优化检查清单」。
 
 ## 硬性红线
 
@@ -116,7 +120,7 @@ metadata:
 
 ## 最低限度检查清单
 
-- [ ] 已读 `references/spec.md` 中与素材类型匹配的模板与自检章节。
+- [ ] 已读 `references/spec.md`（入口）并按路由表加载了与素材类型匹配的分册（结构 / 闸门 / 模板）。
 - [ ] 多人播客/访谈已判定「信息型三层」或「争辩型原声增强」，并在自检登记模式与依据。
 - [ ] 信息型访谈已检查是否存在立场演化轴；相邻章节均推进论点，不能无损合并。
 - [ ] 原标题核心承诺已在 H1 / 全文论点 / 前段落地，或已注明标题包装边界。
@@ -132,17 +136,18 @@ metadata:
 
 ## 维护说明
 
-`references/spec.md` 是**单一事实来源**。本 `SKILL.md` 为加载器与红线摘要。
+`references/` 参考集是**单一事实来源**：`spec.md` 为入口路由（角色/流程/步骤清单），主题细则在 `language-and-gates.md` / `interview-structures.md` / `editorial-standards.md` / `templates.md` 四个分册，词库在 `lexicon.txt`。本 `SKILL.md` 为加载器与红线摘要。
 
 **同步**：
 
-1. 编辑 `references/spec.md`（及按需 `over-translation-guard.md`、`scripts/`）
+1. 编辑对应分册（及按需 `over-translation-guard.md`、`lexicon.txt`、`scripts/`）；跨分册引用靠 `spec.md` 路由表，不复制内容副本
 2. 同步本 `SKILL.md` 的 version / 摘要 / 清单
 3. 若使用 Codex 镜像目录，将本技能目录复制到 `~/.codex/skills/content-structuring/`（保持同 version）
 
 **不再要求**维护已缺失的 `.cursor/rules/content-structuring.mdc` / `.codex/rules/...mdc` 四副本链；若将来恢复规则文件，须从 spec 生成且 version 一致。
 
-**脚本**（均相对本技能根目录）：
+**脚本与数据**（均相对本技能根目录）：
 
 - `scripts/normalize_spacing.py` — 4d
 - `scripts/check_4c.py` — 4c 裸词辅助（不替代通读）
+- `references/lexicon.txt` — **4c 统一词库单源**（blocking / contextual / allow 分节）；新词只加这里，spec 不再维护词表副本，`check_4c.py` 自动加载
