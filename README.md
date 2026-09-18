@@ -261,8 +261,10 @@ python md2wechat/scripts/validate_wechat_bundle.py "<stem>_公众号完整版.ht
 | 技能 | 说明 |
 |------|------|
 | [eli5](./eli5/SKILL.md) | 按听众校准讲解（年龄 / 年级 / 岗位 / 家人）：词汇、类比、语气、深度；来源 [DreambigOu/ELI5](https://github.com/DreambigOu/ELI5) |
+| [show-me](./show-me/SKILL.md) | 先渲染再开口：计划、对比、布局、选项写成自包含 HTML 并在浏览器前置打开；来源 [charlie947/show-me](https://github.com/charlie947/show-me) |
 
-触发示例：`ELI5 what a database index is`、`Explain this to my manager`、`Break this down for a 5th grader`。未指定听众时默认 Age 5。
+触发示例：`ELI5 what a database index is`、`Explain this to my manager`、`Break this down for a 5th grader`。未指定听众时默认 Age 5。  
+`show-me` 触发示例：`show me`、`let me see it`、`give me options`、对比/选型时不要用文字描述视觉方案。
 
 ## 目录结构
 
@@ -413,6 +415,10 @@ md2html-lecture/
 
 eli5/
 ├── SKILL.md              # 听众校准讲解（上游 DreambigOu/ELI5）
+└── LICENSE               # MIT
+
+show-me/
+├── SKILL.md              # 先渲染再开口（上游 charlie947/show-me）
 └── LICENSE               # MIT
 ```
 
