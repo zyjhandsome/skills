@@ -19,6 +19,13 @@
 
 `color`, `background` / `background-color`, `font-size`, `font-weight`, `font-family`, `line-height`, `letter-spacing`, `text-align`, `margin`, `padding`, `border`, `border-radius`, `max-width`, `width`
 
+## Paste detector (结构异常)
+
+The editor flags two things this builder must not emit inside `#wechat-article`:
+
+1. **`text-align`.** Allowed values are only `left`, `right`, `center`, `justify`. Leaving it unset is not safe: copying from Chrome serializes the initial value as `text-align:start`, and the editor reports every such block. Set `text-align:left` on `section`, `p`, `h2`, `h3`, `td`, `table`, and inline `span` / `strong` / `a`. Keep `center` only on the title and byline.
+2. **`line-height`.** Use a px length greater than that element's `font-size` (`16px` body → `28px`). A unitless number is estimated as that many pixels (`1.75` → `1.75px`). The measured check also counts each inline box as a line, so bold and highlight in a paragraph look like overlap. Put the text of every `p`, `h1`–`h3`, and `td` inside one wrapper `<span>` so the block has no direct text node. Highlight and code marks use horizontal padding only (`padding:0 4px`), not vertical padding.
+
 ## Risky / often stripped
 
 `position: fixed`, animations, `@media`, CSS variables, `class`/`id` selectors (IDs OK for local preview but styles must not depend on them after paste), flex/grid (sometimes OK, prefer simple block layout for cards).

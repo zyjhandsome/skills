@@ -69,12 +69,36 @@ def esc(s: str) -> str:
     return html.escape(s, quote=False)
 
 
+def lh(size: str, ratio: float) -> str:
+    """Pixel line-height strictly taller than font-size.
+
+    Unitless values are read as raw px by the WeChat paste checker
+    (1.75 → 1.75px), which is always shorter than the font.
+    """
+    px = int(str(size).removesuffix("px"))
+    value = int(px * ratio + 0.5)
+    if value <= px:
+        value = px + 2
+    return f"{value}px"
+
+
+def shield(inner: str, color: str, align: str = "left") -> str:
+    """Keep block elements free of direct text nodes.
+
+    The paste checker treats each inline box as its own line. Bold and
+    highlight then look like overlapping lines. A single wrapper span
+    moves the text off the block, and an explicit text-align stops the
+    browser from serializing the initial value `start`.
+    """
+    return f'<span style="color:{color};text-align:{align};">{inner}</span>'
+
+
 def _inline_no_link(text: str) -> str:
     s = esc(text)
 
     def bold(m: re.Match) -> str:
         return (
-            f'<strong style="font-weight:700;color:{C["text"]};">'
+            f'<strong style="font-weight:700;color:{C["text"]};text-align:left;">'
             f"{m.group(1)}</strong>"
         )
 
@@ -82,7 +106,7 @@ def _inline_no_link(text: str) -> str:
         inner = re.sub(r"\*\*(.+?)\*\*", bold, m.group(1))
         return (
             f'<span style="background:{C["accent_soft"]};color:{C["text"]};'
-            f'padding:1px 4px;border-radius:3px;">'
+            f'text-align:left;padding:0 4px;border-radius:3px;">'
             f"{inner}</span>"
         )
 
@@ -92,8 +116,9 @@ def _inline_no_link(text: str) -> str:
 
     def code(m: re.Match) -> str:
         return (
-            f'<code style="padding:1px 5px;background:{C["code_bg"]};'
-            f'border-radius:3px;font-size:13px;color:#2A2A2A;">'
+            f'<code style="padding:0 5px;background:{C["code_bg"]};'
+            f'border-radius:3px;font-size:13px;line-height:{lh("13px", 1.6)};'
+            f'color:#2A2A2A;text-align:left;">'
             f"{m.group(1)}</code>"
         )
 
@@ -109,7 +134,7 @@ def inline_md_raw(text: str) -> str:
         url = esc(m.group(2))
         parts.append(
             f'<a href="{url}" style="color:{C["accent_strong"]};'
-            f'text-decoration:underline;">{label}</a>'
+            f'text-align:left;text-decoration:underline;">{label}</a>'
         )
         pos = m.end()
     parts.append(_inline_no_link(text[pos:]))
@@ -125,75 +150,94 @@ def p(text: str, size: str = "15px", color: str | None = None, mb: str = "12px")
         return ""
     return (
         f'<p style="margin:0 0 {mb};padding:0;font-size:{size};'
-        f'line-height:1.75;color:{color};">{inline_md_raw(text)}</p>'
+        f'line-height:{lh(size, 1.75)};color:{color};text-align:left;">'
+        f'{shield(inline_md_raw(text), color)}</p>'
     )
 
 
 def h1(text: str) -> str:
+    color = C["text"]
     return (
         f'<h1 style="margin:0 0 12px;padding:0;font-size:22px;font-weight:700;'
-        f'line-height:1.45;color:{C["text"]};text-align:center;">'
-        f"{esc(text)}</h1>"
+        f'line-height:{lh("22px", 1.45)};color:{color};text-align:center;">'
+        f'{shield(esc(text), color, "center")}</h1>'
     )
 
 
 def h2(text: str) -> str:
+    color = C["text"]
     return (
         f'<h2 style="margin:28px 0 14px;padding:10px 0 8px;font-size:18px;'
-        f'font-weight:700;line-height:1.4;color:{C["text"]};'
-        f'border-bottom:2px solid {C["accent_border"]};">{esc(text)}</h2>'
+        f'font-weight:700;line-height:{lh("18px", 1.45)};color:{color};'
+        f'text-align:left;border-bottom:2px solid {C["accent_border"]};">'
+        f'{shield(esc(text), color)}</h2>'
     )
 
 
 def h3(text: str) -> str:
+    color = C["accent_strong"]
     return (
         f'<h3 style="margin:16px 0 10px;padding:0;font-size:15px;font-weight:700;'
-        f'color:{C["accent_strong"]};">{esc(text)}</h3>'
+        f'line-height:{lh("15px", 1.6)};color:{color};text-align:left;">'
+        f'{shield(esc(text), color)}</h3>'
     )
 
 
 def insight_card(quote: str) -> str:
+    color = C["text"]
     return (
         f'<section style="margin:0 0 14px;padding:12px 14px;background:{C["surface"]};'
-        f'border:1px solid {C["accent_border"]};border-radius:8px;">'
-        f'<p style="margin:0;padding:0;font-size:15px;line-height:1.65;'
-        f'color:{C["text"]};">{inline_md_raw(quote)}</p></section>'
+        f'border:1px solid {C["accent_border"]};border-radius:8px;text-align:left;">'
+        f'<p style="margin:0;padding:0;font-size:15px;line-height:{lh("15px", 1.65)};'
+        f'color:{color};text-align:left;">{shield(inline_md_raw(quote), color)}</p></section>'
     )
 
 
 def thesis_card(label: str, body: str) -> str:
+    label_color = C["accent_strong"]
+    body_color = C["text"]
     return (
         f'<section style="margin:0 0 18px;padding:16px 16px 14px;'
         f'background:{C["accent_soft"]};border-left:4px solid {C["accent"]};'
-        f'border-radius:0 8px 8px 0;">'
+        f'border-radius:0 8px 8px 0;text-align:left;">'
         f'<p style="margin:0 0 8px;padding:0;font-size:12px;font-weight:600;'
-        f'color:{C["accent_strong"]};letter-spacing:0.08em;">{esc(label)}</p>'
-        f'<p style="margin:0;padding:0;font-size:15px;line-height:1.7;'
-        f'color:{C["text"]};">{inline_md_raw(body)}</p></section>'
+        f'line-height:{lh("12px", 1.6)};color:{label_color};letter-spacing:0.08em;'
+        f'text-align:left;">{shield(esc(label), label_color)}</p>'
+        f'<p style="margin:0;padding:0;font-size:15px;line-height:{lh("15px", 1.7)};'
+        f'color:{body_color};text-align:left;">'
+        f'{shield(inline_md_raw(body), body_color)}</p></section>'
     )
 
 
 def bio_card(text: str) -> str:
+    label_color = C["accent_strong"]
+    body_color = C["muted"]
     return (
         f'<section style="margin:0 0 20px;padding:14px 16px;background:{C["surface"]};'
-        f'border:1px solid {C["border"]};border-radius:8px;">'
+        f'border:1px solid {C["border"]};border-radius:8px;text-align:left;">'
         f'<p style="margin:0 0 6px;padding:0;font-size:12px;font-weight:600;'
-        f'color:{C["accent_strong"]};">人物背景</p>'
-        f'<p style="margin:0;padding:0;font-size:14px;line-height:1.7;'
-        f'color:{C["muted"]};">{inline_md_raw(text)}</p></section>'
+        f'line-height:{lh("12px", 1.6)};color:{label_color};text-align:left;">'
+        f'{shield("人物背景", label_color)}</p>'
+        f'<p style="margin:0;padding:0;font-size:14px;line-height:{lh("14px", 1.7)};'
+        f'color:{body_color};text-align:left;">'
+        f'{shield(inline_md_raw(text), body_color)}</p></section>'
     )
 
 
 def dialogue_card(speaker: str, quote: str) -> str:
-    return (
-        f'<section style="margin:0 0 8px;padding:12px 14px;background:{C["surface"]};'
-        f'border-radius:8px;border:1px solid {C["border"]};">'
-        f'<p style="margin:0;padding:0;font-size:14px;line-height:1.7;'
-        f'color:{C["muted"]};">'
+    color = C["muted"]
+    inner = (
         f'<span style="display:inline-block;margin-right:6px;padding:1px 8px;'
         f'background:{C["accent_soft"]};color:{C["accent_strong"]};font-size:12px;'
-        f'border-radius:4px;font-weight:600;">{esc(speaker)}</span>'
-        f"{inline_md_raw(quote)}</p></section>"
+        f'line-height:{lh("12px", 1.6)};border-radius:4px;font-weight:600;'
+        f'text-align:left;">{esc(speaker)}</span>'
+        f"{inline_md_raw(quote)}"
+    )
+    return (
+        f'<section style="margin:0 0 8px;padding:12px 14px;background:{C["surface"]};'
+        f'border-radius:8px;border:1px solid {C["border"]};text-align:left;">'
+        f'<p style="margin:0;padding:0;font-size:14px;line-height:{lh("14px", 1.7)};'
+        f'color:{color};text-align:left;">{shield(inner, color)}</p></section>'
     )
 
 
@@ -245,9 +289,9 @@ def _td(text: str, *, header: bool = False, first_col: bool = False) -> str:
     border = C["accent_border"] if header else C["border"]
     return (
         f'<td style="padding:8px 10px;background:{bg};color:{color};'
-        f'font-size:{size};font-weight:{weight};line-height:1.55;'
+        f'font-size:{size};font-weight:{weight};line-height:{lh(size, 1.6)};'
         f'text-align:left;vertical-align:top;border:1px solid {border};'
-        f'word-break:break-word;">{inline_md_raw(text)}</td>'
+        f'word-break:break-word;">{shield(inline_md_raw(text), color)}</td>'
     )
 
 
@@ -259,21 +303,29 @@ def render_table_cards(header: list[str], rows: list[list[str]]) -> str:
         for j, cell in enumerate(row):
             label = header[j] if j < len(header) else ""
             if j == 0:
+                title_color = C["text"]
                 inner.append(
                     f'<p style="margin:0 0 6px;padding:0;font-size:15px;'
-                    f'font-weight:700;color:{C["text"]};">{inline_md_raw(cell)}</p>'
+                    f'font-weight:700;line-height:{lh("15px", 1.6)};'
+                    f'color:{title_color};text-align:left;">'
+                    f'{shield(inline_md_raw(cell), title_color)}</p>'
                 )
             else:
+                muted = C["muted"]
+                label_html = (
+                    f'<span style="color:{C["accent_strong"]};font-weight:600;'
+                    f'text-align:left;">{inline_md_raw(label)}</span>'
+                    f"　{inline_md_raw(cell)}"
+                )
                 inner.append(
                     f'<p style="margin:0 0 4px;padding:0;font-size:13px;'
-                    f'line-height:1.65;color:{C["muted"]};">'
-                    f'<span style="color:{C["accent_strong"]};font-weight:600;">'
-                    f"{inline_md_raw(label)}</span>　{inline_md_raw(cell)}</p>"
+                    f'line-height:{lh("13px", 1.65)};color:{muted};text-align:left;">'
+                    f"{shield(label_html, muted)}</p>"
                 )
         parts.append(
             f'<section style="margin:0 0 10px;padding:12px 14px;'
             f'background:{C["surface"]};border:1px solid {C["border"]};'
-            f'border-radius:8px;">{"".join(inner)}</section>'
+            f'border-radius:8px;text-align:left;">{"".join(inner)}</section>'
         )
     return "".join(parts)
 
@@ -291,9 +343,10 @@ def render_wechat_table(header: list[str], rows: list[list[str]]) -> str:
         trs.append(f"<tr>{cells}</tr>")
     return (
         f'<section style="margin:0 0 16px;padding:0;overflow:hidden;'
-        f'border-radius:8px;">'
+        f'border-radius:8px;text-align:left;">'
         f'<table cellspacing="0" cellpadding="0" style="border-collapse:collapse;'
-        f'width:100%;margin:0;font-size:14px;font-family:{FONT};">'
+        f'width:100%;margin:0;font-size:14px;line-height:{lh("14px", 1.6)};'
+        f'font-family:{FONT};text-align:left;">'
         f"{''.join(trs)}</table></section>"
     )
 
@@ -379,11 +432,14 @@ def source_footer(meta: dict[str, str]) -> str:
     title = bare(meta.get("原标题", "") or meta.get("标题", ""))
     line1 = "原文：" + (title if title else "（见正文来源）")
     return (
-        f'<section style="margin:28px 0 0;padding:16px 0 0;border-top:1px solid {C["border"]};">'
+        f'<section style="margin:28px 0 0;padding:16px 0 0;border-top:1px solid {C["border"]};'
+        f'text-align:left;">'
         f'<p style="margin:0 0 8px;padding:0;font-size:13px;font-weight:600;'
-        f'color:{C["muted"]};">来源与说明</p>'
-        f'<p style="margin:0;padding:0;font-size:13px;line-height:1.65;'
-        f'color:{C["subtle"]};">{esc(line1)}</p>'
+        f'line-height:{lh("13px", 1.6)};color:{C["muted"]};text-align:left;">'
+        f'{shield("来源与说明", C["muted"])}</p>'
+        f'<p style="margin:0;padding:0;font-size:13px;line-height:{lh("13px", 1.65)};'
+        f'color:{C["subtle"]};text-align:left;">'
+        f'{shield(esc(line1), C["subtle"])}</p>'
         f"</section>"
     )
 
@@ -597,8 +653,9 @@ def parse_md(md: str, mode: str = "auto") -> tuple[str, list[str], str]:
 
     sub = subtitle_from_meta(meta)
     out[subtitle_placeholder_idx] = (
-        f'<p style="margin:0 0 20px;padding:0;font-size:13px;line-height:1.6;'
-        f'color:{C["subtle"]};text-align:center;">{esc(sub)}</p>'
+        f'<p style="margin:0 0 20px;padding:0;font-size:13px;line-height:{lh("13px", 1.6)};'
+        f'color:{C["subtle"]};text-align:center;">'
+        f'{shield(esc(sub), C["subtle"], "center")}</p>'
         if sub
         else ""
     )
@@ -628,7 +685,7 @@ def wrap(title: str, body_parts: list[str], mode: str = "full") -> str:
   </div>
   <p class="copy-hint">↓ 从这里开始复制到微信 ↓</p>
   <div class="stage">
-  <section id="wechat-article" style="max-width:677px;margin:0 auto;padding:24px 18px 32px;background:{C["bg"]};color:{C["text"]};font-family:{FONT};font-size:16px;line-height:1.75;letter-spacing:0.02em;word-break:break-word;">
+  <section id="wechat-article" style="max-width:677px;margin:0 auto;padding:24px 18px 32px;background:{C["bg"]};color:{C["text"]};font-family:{FONT};font-size:16px;line-height:28px;letter-spacing:0.02em;word-break:break-word;text-align:left;">
 {article}
   </section>
   </div>
@@ -685,6 +742,24 @@ def _self_test() -> None:
     _, noisy_parts, _ = parse_md(noisy, mode="editorial")
     noisy_html = "".join(noisy_parts)
     assert "编辑说明" not in noisy_html and "免责声明" not in noisy_html
+    sample = wrap(
+        "标题",
+        [
+            h1("标题"),
+            h2("核心导读"),
+            p("正文有==重点==和**人名**。", size="16px"),
+            thesis_card("全文论点", "到 2035 年仍在增长。"),
+        ],
+    )
+    start = sample.find('<section id="wechat-article"')
+    article = sample[start : sample.rfind("</section>")]
+    assert not re.search(r"line-height:\d+(?:\.\d+)?(?!\d)(?!px)", article), article
+    assert "text-align:start" not in article and "text-align:end" not in article
+    assert "text-align:left" in article and "text-align:center" in article
+    assert re.search(r"<p style=\"[^\"]*line-height:28px[^\"]*\">", article)
+    assert re.search(r"<h2 style=\"[^\"]*line-height:26px[^\"]*\">", article)
+    assert "<p style=\"" in article and "><span style=\"color:" in article
+    assert not re.search(r"<(?:p|h1|h2|h3|td)\b[^>]*>[^<\s]", article)
     print("self-test OK")
 
 

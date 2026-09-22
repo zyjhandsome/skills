@@ -96,7 +96,7 @@ python scripts/build_wechat_html.py "<整理文档.md>" --mode full
 
 默认输出 `{原文文件名}_公众号文章.html`，与源文件同目录。从临时成稿构建时必须 `--out` 到该路径。
 
-复制区域 `#wechat-article` 内必须全是内联样式，不依赖 class、外链 CSS、JavaScript 或 Mermaid。正文表格在 `editorial` 中改写为句子；`full` 中 ≤4 列转内联表，≥5 列转卡片。只有用户明确要求保留 Mermaid/流程图时，才从同名 HTML 或源码渲染为 PNG，再以普通图片插入；不得保留 Mermaid 源码。
+复制区域 `#wechat-article` 内必须全是内联样式，不依赖 class、外链 CSS、JavaScript 或 Mermaid。行高用大于该元素字号的 `px`，不要无单位倍数。每个块写明 `text-align:left` 或 `center`（只有标题和副标题居中）。`p` / `h1`–`h3` / `td` 的文字包在一个 `<span>` 里，避免浏览器复制出 `text-align:start`，也避免加粗和荧光笔被行高检测当成叠字。正文表格在 `editorial` 中改写为句子；`full` 中 ≤4 列转内联表，≥5 列转卡片。只有用户明确要求保留 Mermaid/流程图时，才从同名 HTML 或源码渲染为 PNG，再以普通图片插入；不得保留 Mermaid 源码。
 
 ### 4. Make the cover
 
