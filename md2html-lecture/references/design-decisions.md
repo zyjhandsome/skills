@@ -3,13 +3,46 @@
 Read this only when changing the global design. The converter injects content
 into the template; do not re-encode these rules in `build_html.py`.
 
-- One unified reading measure (`--measure: 75ch`) for all blocks (text,
-  callouts, diagrams, timeline, tables) so widths stay consistent.
+- One unified reading measure (`--measure: 44rem`, ~44 CJK chars at 16px) for
+  all blocks (headings, text, callouts, thesis, diagrams, timeline, tables,
+  footer) so every outer edge aligns. Keep it a fixed length — `ch` resolves
+  per element font-size and makes smaller-type boxes narrower. Inner text
+  may be narrower (padding, avatar indent); outer edges may not differ.
+  Use `.full-bleed` for a deliberately column-wide table or diagram.
 - TOC shows section titles only (no repeated 洞察/解析/实录 links); the bio
   label is the first TOC entry when present.
 - No per-section jump-pill row (`injectSectionJumps` is intentionally not
   called).
-- Tight 对谈实录 spacing.
+- Tight 对谈实录 spacing. Dialogue quotes use body color at 15.5px / 1.8 — they
+  are evidence, not captions. Speaker names are `<p class="step-speaker">`,
+  never headings (keeps the h3 outline to the three layers).
+- Speaker roles are assigned by `build_html.py`, not JS: host = the 对谈人物
+  entry whose note contains「主持」; others `speaker-guest-1..4` in 对谈人物
+  order, then first appearance. Avatars show initials; consecutive turns by
+  one speaker share one step.
+- Layer headings (`洞察/解析/实录/…`) show only the pill; the rule must be
+  `.content h3.layer-heading` or `.content h3` wins and both render.
+- CJK typography: no italic blockquotes (faux-oblique CJK), no negative
+  letter-spacing on headings, body line-height 1.78, `lang="zh-CN"`.
+- No decorative motion (brand-dot pulse, step hover) on a long-read page.
+- Print opens every `<details>` (beforeprint) and restores them afterwards.
+- 对谈实录 / 原声交锋 are each one `<details class="dialogue-fold" open>` whose
+  `<summary>` holds the layer h3 + "N 轮发言". Topbar 「只看要点」 closes/opens
+  all folds, remembers the choice (localStorage), and keeps the current h2 at
+  the same screen position (disable `overflow-anchor` while toggling, or the
+  browser's own scroll anchoring doubles the correction).
+- TOC: desktop links are 30px min-height (drawer keeps 36px touch targets) so
+  15–20 entries fit; the TOC scrollbar is transparent until hover/focus (a
+  TOC that overflows by a few px otherwise shows a near-full-height thumb that
+  reads as a divider); scrollspy keeps the active entry inside the TOC.
+- 「只看要点」 state is stored per note (`md2html-skim:` + pathname), never
+  globally — all local files share one storage origin.
+- Content sections are numbered by CSS counters in both TOC (`.toc-sec`) and
+  body (`h2.sec`), so numbers never drift from order and are not copied as text.
+- No subtitle under the title: it could only repeat the 全文论点.
+- System font stack only (no Google Fonts): CJK always came from system fonts;
+  the web font was slow/blocked in mainland China and failed offline.
+- Mermaid diagrams sit after 核心洞察 (conclusion first, then the picture).
 - Key-info hierarchy: body `strong` uses a soft accent chip; thesis
   `.highlight` is stronger (border/shadow + CSS `全文论点` pill);
   `.section-insight` tip callouts get a left accent bar + slightly larger

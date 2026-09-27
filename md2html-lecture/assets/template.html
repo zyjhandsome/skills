@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh" data-theme="light" style="--rec-label: '★ 推荐'">
+<html lang="zh-CN" data-theme="light" style="--rec-label: '★ 推荐'">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -16,9 +16,6 @@
       } catch (e) { /* private mode / blocked storage */ }
     })();
   </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     /* ============================================================
        TOKENS
@@ -68,9 +65,13 @@
       --radius: 12px;
       --radius-sm: 8px;
       --radius-lg: 16px;
-      --measure: 75ch;
-      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Noto Sans CJK JP', 'Noto Sans CJK KR', sans-serif;
-      --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+      /* Fixed length, not ch: ch resolves per element font-size, so callouts
+         (14.5px) shrank and the thesis box (17px) overflowed the column. */
+      --measure: 44rem;
+      /* System fonts only: web fonts are slow/blocked in mainland China and
+         useless offline; CJK glyphs always came from the system anyway. */
+      --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Source Han Sans SC', sans-serif;
+      --font-mono: 'SF Mono', 'Cascadia Code', Consolas, Menlo, monospace;
       --z-progress: 200;
       --z-topbar: 100;
       --z-drawer: 300;
@@ -129,7 +130,7 @@
       font-family: var(--font-sans);
       background: var(--bg);
       color: var(--text);
-      line-height: 1.65;
+      line-height: 1.78;
       font-size: 16px;
       -webkit-font-smoothing: antialiased;
       transition: background-color 0.2s, color 0.2s;
@@ -200,11 +201,6 @@
       width: 10px; height: 10px; border-radius: 50%;
       background: var(--accent);
       box-shadow: 0 0 0 4px var(--accent-soft);
-      animation: brand-pulse 2.8s ease-in-out infinite;
-    }
-    @keyframes brand-pulse {
-      0%, 100% { box-shadow: 0 0 0 4px var(--accent-soft); }
-      50%      { box-shadow: 0 0 0 7px transparent; }
     }
     .topbar-actions { display: flex; gap: 6px; align-items: center; }
     .icon-btn {
@@ -219,6 +215,24 @@
       padding: 0;
     }
     .icon-btn .icon { width: 18px; height: 18px; stroke-width: 2; }
+    .text-btn {
+      height: 40px;
+      padding: 0 14px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-muted);
+      border-radius: var(--radius-sm);
+      font: inherit;
+      font-size: 13.5px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .text-btn[hidden] { display: none; }
+    .text-btn[aria-pressed="true"] {
+      background: var(--accent-fill);
+      border-color: var(--accent-fill);
+      color: var(--accent-on);
+    }
     .icon-btn[hidden] { display: none; }
 
     /* ============================================================
@@ -250,9 +264,17 @@
       overflow-y: auto;
       padding-right: 8px;
     }
+    /* Scrollbar stays invisible until the reader points at the TOC: a TOC that
+       overflows by a few px otherwise shows a near-full-height thumb that reads
+       as a heavy divider between TOC and article. The active link is kept in
+       view by the scrollspy, so the bar is rarely needed. */
+    .toc { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+    .toc:hover, .toc:focus-within { scrollbar-color: var(--border-strong) transparent; }
     .toc::-webkit-scrollbar { width: 6px; }
     .toc::-webkit-scrollbar-track { background: transparent; }
-    .toc::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+    .toc::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
+    .toc:hover::-webkit-scrollbar-thumb,
+    .toc:focus-within::-webkit-scrollbar-thumb { background: var(--border-strong); }
     .toc-head {
       display: flex; align-items: center; justify-content: space-between;
       padding: 0 12px 12px;
@@ -286,6 +308,18 @@
       font-weight: 500;
     }
     .toc-nav a.lvl-3 { padding-left: 26px; font-size: 12.5px; }
+    /* Content sections are numbered in both TOC and body (same counter order). */
+    .toc-nav { counter-reset: toc-sec; }
+    .toc-nav a.toc-sec { align-items: baseline; }
+    .toc-nav a.toc-sec::before {
+      counter-increment: toc-sec;
+      content: counter(toc-sec);
+      flex: 0 0 1.7em;
+      color: var(--text-subtle);
+      font-variant-numeric: tabular-nums;
+      font-weight: 500;
+    }
+    .toc-nav a.toc-sec.active::before { color: var(--link); }
     .toc-backdrop {
       display: none;
       position: fixed; inset: 0;
@@ -319,8 +353,8 @@
     .doc-title {
       font-size: clamp(28px, 3vw + 16px, 40px);
       font-weight: 700;
-      line-height: 1.15;
-      letter-spacing: -0.02em;
+      line-height: 1.25;
+      letter-spacing: 0;
       margin: 0 0 12px;
       color: var(--text);
       text-wrap: balance;
@@ -333,6 +367,7 @@
       max-width: var(--measure);
       text-wrap: pretty;
     }
+    .doc-subtitle:empty { display: none; }
     .doc-meta {
       display: flex;
       flex-wrap: wrap;
@@ -348,8 +383,8 @@
        ============================================================ */
     .content h1, .content h2, .content h3, .content h4 {
       color: var(--text);
-      line-height: 1.3;
-      letter-spacing: -0.01em;
+      line-height: 1.4;
+      letter-spacing: 0;
       scroll-margin-top: 80px;
       text-wrap: balance;
     }
@@ -359,6 +394,46 @@
       margin: 56px 0 16px;
       padding-top: 8px;
       position: relative;
+    }
+    .content { counter-reset: sec; }
+    .content h2.sec::before {
+      counter-increment: sec;
+      content: counter(sec, decimal-leading-zero);
+      display: block;
+      margin-bottom: 4px;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      color: var(--accent-strong);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* 对谈实录 / 原声交锋 fold (「只看要点」 closes them all) */
+    details.dialogue-fold { margin: 0; }
+    details.dialogue-fold > summary {
+      list-style: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 28px;
+      border-radius: var(--radius-sm);
+    }
+    details.dialogue-fold > summary::-webkit-details-marker { display: none; }
+    details.dialogue-fold > summary .layer-heading { margin: 0; }
+    details.dialogue-fold > summary .anchor { display: none; }
+    .fold-count { font-size: 12.5px; color: var(--text-subtle); }
+    details.dialogue-fold > summary::after {
+      content: "收起";
+      font-size: 12.5px;
+      color: var(--link);
+    }
+    details.dialogue-fold:not([open]) > summary::after { content: "展开"; }
+    details.dialogue-fold:not([open]) > summary {
+      padding: 10px 14px;
+      margin-top: 20px;
+      border: 1px dashed var(--border-strong);
+      background: var(--surface);
     }
     .content h3 {
       font-size: 19px;
@@ -555,21 +630,24 @@
       color: var(--accent);
       border-radius: 50%;
       font-weight: 600;
-      font-size: 14px;
+      font-size: 12.5px;
+      letter-spacing: 0.02em;
       flex-shrink: 0;
       box-shadow: var(--shadow-sm);
       position: relative;
       z-index: 1;
-      transition: background-color 0.15s, color 0.15s, transform 0.15s;
     }
     .step.done .step-num { background: var(--accent-fill); color: var(--accent-on); }
-    .step-body { padding-top: 6px; min-width: 0; }
-    .step-body h3 {
-      margin: 0 0 6px;
-      font-size: 16px;
+    .step-body { padding-top: 7px; min-width: 0; }
+    .step-body h3,
+    .step-body .step-speaker {
+      margin: 0 0 4px;
+      font-size: 15px;
       font-weight: 600;
+      line-height: 1.5;
     }
-    .step-body p { margin: 0 0 8px; color: var(--text-muted); font-size: 14.5px; max-width: var(--measure); }
+    .step-body p { margin: 0 0 10px; color: var(--text); font-size: 15.5px; line-height: 1.8; max-width: var(--measure); }
+    .step-body p:last-child { margin-bottom: 0; }
     .step-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
     .tag {
       display: inline-block;
@@ -855,11 +933,14 @@
        ============================================================ */
     .content blockquote {
       margin: 20px 0;
-      padding: 4px 20px;
-      border-left: 3px solid var(--accent-border);
+      padding: 12px 18px;
+      border-left: 3px solid var(--border-strong);
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      background: var(--surface-2);
       color: var(--text-muted);
-      font-style: italic;
+      font-size: 15px;
     }
+    .content blockquote p:last-child { margin-bottom: 0; }
 
     /* ============================================================
        FOOTER
@@ -903,8 +984,6 @@
       .compare-card.recommended:hover { border-color: var(--accent); }
       .content tr:hover td { background: var(--surface-2); }
       details.collapsible > summary:hover { background: var(--surface-2); }
-      .step:hover { background: var(--surface-2); }
-      .step:hover .step-num { transform: scale(1.05); }
       .anchor:hover { color: var(--link); }
       .content h2:hover .anchor,
       .content h3:hover .anchor { opacity: 1; }
@@ -972,6 +1051,9 @@
     }
     @media (min-width: 901px) {
       .toc-mobile-trigger { display: none !important; }
+      /* Desktop: pointer targets can be tighter than the touch drawer's 36px,
+         which lets a 15–20 entry TOC fit without its own scroll. */
+      .toc-nav a { min-height: 30px; padding: 5px 14px; }
     }
 
     /* ============================================================
@@ -1001,10 +1083,15 @@
       flex-shrink: 0;
       padding: 2px 10px;
       border-radius: 999px;
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 600;
       letter-spacing: 0.04em;
     }
+    /* Pill replaces the visible heading text (still read by screen readers).
+       Must out-rank `.content h3` or both the pill and the text render. */
+    .content h3.layer-heading { font-size: 0; }
+    .content h3.layer-heading::before { font-size: 12px; }
+    .content h3.layer-heading .anchor { font-size: 14px; }
     .layer-insight::before {
       content: "洞察";
       background: var(--accent-soft);
@@ -1023,15 +1110,6 @@
       color: var(--info);
       border: 1px solid var(--info-border);
     }
-    .layer-insight { font-size: 0; }
-    .layer-insight::before { font-size: 11px; }
-    .layer-insight .anchor { font-size: 14px; }
-    .layer-analysis { font-size: 0; }
-    .layer-analysis::before { font-size: 11px; }
-    .layer-analysis .anchor { font-size: 14px; }
-    .layer-dialogue { font-size: 0; }
-    .layer-dialogue::before { font-size: 11px; }
-    .layer-dialogue .anchor { font-size: 14px; }
     .layer-clash::before {
       content: "交锋";
       background: var(--decision-soft);
@@ -1050,15 +1128,6 @@
       color: var(--warn);
       border: 1px solid var(--warn-border);
     }
-    .layer-clash { font-size: 0; }
-    .layer-clash::before { font-size: 11px; }
-    .layer-clash .anchor { font-size: 14px; }
-    .layer-context { font-size: 0; }
-    .layer-context::before { font-size: 11px; }
-    .layer-context .anchor { font-size: 14px; }
-    .layer-open { font-size: 0; }
-    .layer-open::before { font-size: 11px; }
-    .layer-open .anchor { font-size: 14px; }
     .section-insight {
       margin-top: 12px;
       margin-bottom: 20px;
@@ -1134,19 +1203,18 @@
       background: var(--accent-soft);
     }
 
-    /* Speaker differentiation in dialogue timeline */
-    .step.speaker-host .step-num {
-      border-color: var(--info);
-      color: var(--info);
-      background: var(--info-soft);
-    }
-    .step.speaker-guest .step-num {
-      border-color: var(--accent);
-      color: var(--accent);
-      background: var(--accent-soft);
-    }
-    .step.speaker-host .step-body h3 { color: var(--info); }
-    .step.speaker-guest .step-body h3 { color: var(--accent-strong); }
+    /* Speaker differentiation in dialogue timeline.
+       Roles are assigned by build_html.py: host from 对谈人物「主持」, guests in
+       order of first appearance (palette cycles after 4). */
+    .step { --spk: var(--accent-strong); --spk-soft: var(--accent-soft); }
+    .step.speaker-host    { --spk: var(--info);          --spk-soft: var(--info-soft); }
+    .step.speaker-guest-1 { --spk: var(--accent-strong); --spk-soft: var(--accent-soft); }
+    .step.speaker-guest-2 { --spk: var(--success);       --spk-soft: var(--success-soft); }
+    .step.speaker-guest-3 { --spk: var(--decision);      --spk-soft: var(--decision-soft); }
+    .step.speaker-guest-4 { --spk: var(--warn);          --spk-soft: var(--warn-soft); }
+    .step .step-num { border-color: var(--spk); color: var(--spk); background: var(--spk-soft); }
+    .step .step-body h3,
+    .step .step-body .step-speaker { color: var(--spk); }
 
     /* Meta panel + table URL wrap */
     .meta-panel { margin-bottom: 32px; }
@@ -1187,7 +1255,7 @@
        PRINT
        ============================================================ */
     @media print {
-      .topbar, .toc, .toc-backdrop, .icon-btn, .copy-btn, .anchor, .scroll-progress, .back-to-top, .section-jump { display: none !important; }
+      .topbar, .toc, .toc-backdrop, .icon-btn, .text-btn, .copy-btn, .anchor, .scroll-progress, .back-to-top, .section-jump { display: none !important; }
       .layout { grid-template-columns: 1fr; padding: 0; max-width: 100%; }
       body { background: #fff; color: #000; }
       a { color: #000; }
@@ -1237,6 +1305,7 @@
         <span>笔记</span>
       </div>
       <div class="topbar-actions">
+        <button class="text-btn" id="skim-toggle" type="button" aria-pressed="false" title="折叠全部对谈实录，只读洞察与解析" hidden>只看要点</button>
         <button class="icon-btn" onclick="window.print()" title="打印 / 保存 PDF" aria-label="打印 / 保存 PDF">
           <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-printer"/></svg>
         </button>
@@ -1339,7 +1408,7 @@
         clusterBorder: isDark ? "#5A524A" : "#CDCDC4",
         titleColor: isDark ? "#F5F0E8" : "#1A1A1A",
         edgeLabelBackground: isDark ? "#221E1A" : "#FFFFFF",
-        fontFamily: "Inter, system-ui, sans-serif",
+        fontFamily: "-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif",
       };
     }
     function initMermaid() {
@@ -1429,6 +1498,14 @@
           if (el.getBoundingClientRect().top <= offset) current = link;
         }
         links.forEach(l => l.classList.toggle("active", l === current));
+        // Keep the active entry inside the TOC's own viewport (scrolls the TOC only).
+        const toc = document.getElementById("toc");
+        if (current && toc && !isMobileToc() && toc.scrollHeight > toc.clientHeight) {
+          const lt = current.getBoundingClientRect().top - toc.getBoundingClientRect().top + toc.scrollTop;
+          const lb = lt + current.offsetHeight;
+          if (lt < toc.scrollTop) toc.scrollTop = lt - 8;
+          else if (lb > toc.scrollTop + toc.clientHeight) toc.scrollTop = lb - toc.clientHeight + 8;
+        }
       };
       const onScroll = () => {
         if (!ticking) {
@@ -1466,22 +1543,50 @@
       });
     }
 
-    // ---------- Speaker tags in dialogue ----------
-    function tagSpeakers() {
-      // First two distinct speakers in reading order = host, then guest.
-      const names = [];
-      document.querySelectorAll(".timeline .step-body h3").forEach(h3 => {
-        const n = h3.textContent.trim();
-        if (n && !names.includes(n)) names.push(n);
+    // ---------- 只看要点: fold every dialogue layer, keep reading position ----------
+    // Per note: local files share one storage origin, and a global key made
+    // every other note open already folded.
+    const SKIM_KEY = "md2html-skim:" + location.pathname;
+    function setupSkim() {
+      const btn = document.getElementById("skim-toggle");
+      const folds = Array.from(document.querySelectorAll("details.dialogue-fold"));
+      if (!btn || !folds.length) return;
+      btn.hidden = false;
+      const apply = (on, keepPlace) => {
+        const anchor = keepPlace
+          ? Array.from(document.querySelectorAll(".content h2")).find(h => h.getBoundingClientRect().bottom > 80)
+          : null;
+        const before = anchor ? anchor.getBoundingClientRect().top : 0;
+        // Browser scroll anchoring would compensate too, doubling the correction.
+        const root = document.documentElement;
+        root.style.overflowAnchor = "none";
+        folds.forEach(d => { d.open = !on; });
+        btn.setAttribute("aria-pressed", on ? "true" : "false");
+        if (anchor) {
+          window.scrollTo({ top: window.scrollY + anchor.getBoundingClientRect().top - before, behavior: "instant" });
+        }
+        requestAnimationFrame(() => { root.style.overflowAnchor = ""; });
+      };
+      btn.addEventListener("click", () => {
+        const on = btn.getAttribute("aria-pressed") !== "true";
+        try { localStorage.setItem(SKIM_KEY, on ? "1" : "0"); } catch (e) {}
+        apply(on, true);
       });
-      const host = names[0] || "";
-      const guest = names[1] || "";
-      document.querySelectorAll(".timeline .step-body h3").forEach(h3 => {
-        const step = h3.closest(".step");
-        if (!step) return;
-        const name = h3.textContent.trim();
-        if (host && name === host) step.classList.add("speaker-host");
-        else if (guest && name === guest) step.classList.add("speaker-guest");
+      let saved = null;
+      try { saved = localStorage.getItem(SKIM_KEY); } catch (e) {}
+      if (saved === "1") apply(true, false);
+    }
+
+    // ---------- Print: expand collapsed panels, restore afterwards ----------
+    function setupPrintExpand() {
+      let reopened = [];
+      window.addEventListener("beforeprint", () => {
+        reopened = Array.from(document.querySelectorAll("details:not([open])"));
+        reopened.forEach(d => { d.open = true; });
+      });
+      window.addEventListener("afterprint", () => {
+        reopened.forEach(d => { d.open = false; });
+        reopened = [];
       });
     }
 
@@ -1555,7 +1660,8 @@
     document.addEventListener("DOMContentLoaded", () => {
       applyThemeIcon();
       syncTocA11y(false);
-      tagSpeakers();
+      setupPrintExpand();
+      setupSkim();
       injectAnchors();
       injectCopyButtons();
       renderMermaid();

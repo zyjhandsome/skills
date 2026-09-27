@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Machine-fill 4c/4d rows for a content-structuring draft (spec v5.34).
+"""Machine-fill 4c/4d rows for a content-structuring draft (spec v5.36).
 
 Prints Markdown table rows the agent can paste into「自检报告」. Judgment rows
-(语义保真 / 声纹 / 事实状态 / 信息覆盖抽样) stay human-written.
+(语义保真 / 声纹附证据 / 遮名检验 / 原声占比 / 事实状态 / 信息覆盖抽样)
+stay human-written. This script does not score voice.
 
 Usage:
   python selfcheck.py path/to/doc.md
   python selfcheck.py path/to/doc.md --json
 
-Exit 1 if 4c-1 actionable hits remain or 4d fails. 4c-2 consecutive hits are
-listed for review and do not fail the process by themselves.
+Exit 1 if 4c-1 actionable hits remain or 4d fails. 4c-2 consecutive hits and
+4e readability warnings are listed for review and do not fail the process.
 """
 
 from __future__ import annotations
@@ -27,6 +28,8 @@ if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 import check_4c  # noqa: E402
+import check_readability  # noqa: E402
+import check_revision_loss  # noqa: E402
 import normalize_spacing  # noqa: E402
 
 
@@ -36,7 +39,12 @@ def collect(text: str) -> dict:
     contextual = check_4c.scan_contextual_english(text)
     over = check_4c.scan_over_translation(text)
     spacing = normalize_spacing.check(text)
+    sections, readability_global = check_readability.check(text)
     return {
+        "readability_row": check_readability.format_row(sections, readability_global),
+        "readability_issues": [
+            f"{s.title[:20]}: {i}" for s in sections for i in s.issues
+        ] + readability_global,
         "actionable": hits,
         "actionable_count": len(hits),
         "consecutive": consecutive,
@@ -83,7 +91,8 @@ def format_rows(report: dict) -> str:
     )
     return (
         f"| 正文中文叙事 | {c4_status} | {narrative} |\n"
-        f"| 纯净排版 | {d4_status} | {spacing_note} |"
+        f"| 纯净排版 | {d4_status} | {spacing_note} |\n"
+        f"{report['readability_row']}"
     )
 
 
@@ -91,9 +100,19 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Fill 4c/4d self-check rows from scripts")
     parser.add_argument("path", type=Path)
     parser.add_argument("--json", action="store_true")
+    parser.add_argument(
+        "--before",
+        type=Path,
+        help="修订前的稿子；给出时追加 4f 修订完整性比对",
+    )
     args = parser.parse_args()
     text = args.path.read_text(encoding="utf-8")
     report = collect(text)
+    revision = None
+    if args.before:
+        revision = check_revision_loss.compare(
+            args.before.read_text(encoding="utf-8"), text
+        )
     if args.json:
         print(
             json.dumps(
@@ -123,6 +142,21 @@ def main() -> int:
             print("\n4d issues:")
             for issue in report["spacing"]:
                 print(f"  {issue}")
+        if report["readability_issues"]:
+            print("\n4e READABILITY:")
+            for issue in report["readability_issues"]:
+                print(f"  {issue}")
+        if revision is not None:
+            lost_facts, lost = revision
+            status = "✅" if not lost_facts and not lost else "⚠️"
+            print(
+                f"\n| 修订完整性 | {status} | 4f-1 缺失数字/专名 {len(lost_facts)} 项；"
+                f"4f-2 找不到对应表述的句子 {len(lost)} 句 |"
+            )
+            if lost_facts:
+                print("4f-1 LOST_FACTS:", "、".join(lost_facts))
+            for s in lost[:40]:
+                print(f"  - {s[:100]}")
     if report["actionable_count"] or report["spacing_count"]:
         return 1
     return 0

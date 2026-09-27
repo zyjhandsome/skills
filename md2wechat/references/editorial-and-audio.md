@@ -24,8 +24,10 @@ If the knowledge base already extracted a section as its own note, that judgment
 
 - One paragraph should carry one move in the argument.
 - Use short paragraphs and visible section breaks; do not split every sentence into a paragraph.
+- Keep a paragraph to about 150 汉字. A phone line holds ~20 characters, so 150 is ~7 lines; the validator warns above 200 (~10 lines of unbroken text). Split at the next move in the argument, not mid-sentence. Judge length with the preview page's「按手机宽度预览」, not the desktop width.
 - Keep the source H2 wording. Do not replace it with a punchier claim. If a source heading is generic (“背景”), keep it; do not invent a new label.
 - Keep only the numbers and names that change the conclusion.
+- Terms the audience already knows in English stay recognizable: on first mention write 中文（English）— 「未来股权简单协议（SAFE）」「氛围式编程（vibe coding）」 — then use whichever is shorter. Never coin a Chinese rendering that replaces the English term outright; product and company names stay in English.
 - When the 整理文档 already marks a judgment (`**加粗**` / 核心洞察 / 术语表词条), carry that same phrase into the WeChat draft as `==荧光笔==`. One to three marks per section. Do not highlight speaker names, metadata, or every oral number.
 
 ### 2. Listenability
@@ -48,7 +50,9 @@ If the knowledge base already extracted a section as its own note, that judgment
 ### 4. Credibility
 
 - Attribute opinions and oral statistics to the speaker unless independently verified.
-- Keep source caveats that affect the conclusion, but move process notes out of the reader copy.
+- Put the attribution in the verb, not in a trailing disclaimer: 「他估计两成到五成」「据他回忆」「他听说有投资人……」, not 「……。这是他的体感，不是调查。」 At most one stand-alone boundary sentence per section (validator warns on more), and only where the caveat changes the conclusion.
+- Keep source caveats that affect the conclusion, but move process notes out of the reader copy. Process notes are anything about how the transcript was made or checked: ASR/字幕 corrections, 「口播里听成…」, 「没有核对」, 「两人都没有姓」, spelling variants of a name. The validator fails on these; if a name is uncertain, just use the best-supported form.
+- The source 整理文档's 深度解析 and 术语表 may still carry such notes; do not carry them over.
 - Do not promote a question from a video description into a claim made during the talk.
 - Prefer precise paraphrase to long quotation.
 - Attribution does not make a leak or unverified financing rumor publishable. Run the 运营规范 gate in `wechat-operation-policy.md` before writing.

@@ -79,6 +79,9 @@ def _is_table_separator(line):
     return bool(re.fullmatch(r"\|?[\s:|-]+\|?", s)) and "-" in s and "|" in s
 
 
+LIST_ITEM_RE = re.compile(r"^\s*(?:\d+[.)]|[-*])\s+\S")
+
+
 def render_blocks(lines):
     """Render a body into <p>, tables, lists, blockquotes and code blocks.
 
@@ -96,6 +99,20 @@ def render_blocks(lines):
 
     def flush():
         if not block:
+            return
+        # "**Lead-in**" line(s) followed directly by a list: paragraph + list.
+        lead = next(
+            (k for k in range(1, len(block))
+             if all(LIST_ITEM_RE.match(l) for l in block[k:])),
+            None,
+        )
+        if lead is not None and not LIST_ITEM_RE.match(block[0]):
+            head, tail = block[:lead], block[lead:]
+            del block[:]
+            block.extend(head)
+            flush()
+            block.extend(tail)
+            flush()
             return
         if len(block) >= 2 and block[0].strip().startswith("|") and _is_table_separator(block[1]):
             out.append('<div class="table-wrap">%s</div>' % render_table(block))
@@ -196,13 +213,54 @@ def split_subsections(body):
     return pre, subs
 
 
-def render_steps(lines):
+def speaker_initials(name):
+    """Avatar label: 'Erik Torenberg' → 'ET', 'Sam' → 'S', '主持人' → '主'."""
+    n = re.split(r"[（(]", strip_md(name))[0].strip()
+    words = re.findall(r"[A-Za-z][A-Za-z'’.-]*", n)
+    if len(words) >= 2:
+        return (words[0][0] + words[-1][0]).upper()
+    if words:
+        return words[0][0].upper()
+    return n[:1] or "?"
+
+
+class SpeakerRoles:
+    """Stable per-document speaker → CSS role.
+
+    Hosts are named in 对谈人物 with「主持」; every other speaker becomes
+    guest-1..4 in 对谈人物 order, then in order of first appearance.
+    """
+
+    GUEST_SLOTS = 4
+
+    def __init__(self, people=()):
+        self.roles, self.guests = {}, 0
+        for name, is_host in people:
+            if is_host:
+                self.roles[name] = "speaker-host"
+        for name, is_host in people:
+            if not is_host:
+                self.role(name)
+
+    def role(self, name):
+        if name not in self.roles:
+            if "主持" in name:
+                self.roles[name] = "speaker-host"
+            else:
+                self.guests += 1
+                self.roles[name] = "speaker-guest-%d" % ((self.guests - 1) % self.GUEST_SLOTS + 1)
+        return self.roles[name]
+
+
+def render_steps(lines, roles=None):
     """Return (step_html, leftover_lines) for a '**讲者**：「台词」' block.
 
     A line that does not open a new step continues the previous quote (quotes
-    wrap across lines in the source); anything else is handed back so the caller
-    can render it as prose rather than discard it.
+    wrap across lines in the source); consecutive turns by the same speaker
+    share one step. Anything else is handed back so the caller can render it
+    as prose rather than discard it.
     """
+    roles = roles or SpeakerRoles()
     steps, leftover, cont = [], [], False
     for l in lines:
         s = l.strip()
@@ -211,21 +269,31 @@ def render_steps(lines):
             continue
         m = re.match(r"^\*\*(.+?)\*\*[：:]\s*(.*)$", s)
         if m:
-            steps.append([m.group(1).strip(), m.group(2).strip()])
+            name, quote = m.group(1).strip(), m.group(2).strip()
+            if steps and steps[-1][0] == name:
+                steps[-1][1].append(quote)
+            else:
+                steps.append([name, [quote]])
             cont = True
         elif cont and steps:
-            steps[-1][1] = ("%s %s" % (steps[-1][1], s)).strip()
+            steps[-1][1][-1] = ("%s %s" % (steps[-1][1][-1], s)).strip()
         else:
             leftover.append(l)
     out = [
-        "  <article class=\"step\">\n"
-        "    <div class=\"step-num\">%d</div>\n"
+        "  <article class=\"step %s\">\n"
+        "    <div class=\"step-num\" aria-hidden=\"true\">%s</div>\n"
         "    <div class=\"step-body\">\n"
-        "      <h3>%s</h3>\n"
-        "      <p>%s</p>\n"
+        "      <p class=\"step-speaker\">%s</p>\n"
+        "%s\n"
         "    </div>\n"
-        "  </article>" % (i, inline(name), inline(quote))
-        for i, (name, quote) in enumerate(steps, 1)
+        "  </article>"
+        % (
+            roles.role(name),
+            html.escape(speaker_initials(name), quote=False),
+            inline(name),
+            "\n".join("      <p>%s</p>" % inline(q) for q in quotes),
+        )
+        for name, quotes in steps
     ]
     return out, leftover
 
@@ -268,7 +336,7 @@ def extract_md_tables(body):
 LAYER_ORDER = ("核心洞察", "深度解析", "对谈实录", "原声交锋", "语境与释义", "未决问题")
 
 
-def render_content_section(title, body):
+def render_content_section(title, body, roles=None):
     sid = slugify(title)
     pre, subs_list = split_subsections(body)
 
@@ -279,19 +347,25 @@ def render_content_section(title, body):
             layers[name] = lines
             claimed.add(i)
 
-    out = ['<h2 id="%s">%s</h2>\n' % (sid, inline(title))]
+    out = ['<h2 id="%s" class="sec">%s</h2>\n' % (sid, inline(title))]
     if any(l.strip() for l in pre):
         out.append("\n".join(render_blocks(pre)))
 
     def timeline(layer, anchor, css, heading):
-        out.append(
-            '<h3 id="%s-%s" class="layer-heading %s">%s</h3>' % (sid, anchor, css, heading)
-        )
-        steps, extra = render_steps(layers[layer])
+        # Folded as one unit so 「只看要点」 can collapse every dialogue layer.
+        steps, extra = render_steps(layers[layer], roles)
+        n = len(steps)
+        body = []
         if steps:
-            out.append('<div class="timeline">\n%s\n</div>' % "\n".join(steps))
+            body.append('<div class="timeline">\n%s\n</div>' % "\n".join(steps))
         if any(l.strip() for l in extra):
-            out.append("\n".join(render_blocks(extra)))
+            body.append("\n".join(render_blocks(extra)))
+        out.append(
+            '<details class="dialogue-fold" open>\n'
+            '<summary><h3 id="%s-%s" class="layer-heading %s">%s</h3>'
+            '<span class="fold-count">%d 轮发言</span></summary>\n%s\n</details>'
+            % (sid, anchor, css, heading, n, "\n".join(body))
+        )
 
     if "核心洞察" in layers:
         insight = blockquote_text(layers["核心洞察"])
@@ -347,6 +421,71 @@ def render_content_section(title, body):
 # Main
 # --------------------------------------------------------------------------
 SKIP_TITLES = {"目录"}
+URL_RE = re.compile(r"https?://[^\s)\]（）<>|]+")
+
+
+def parse_people(meta):
+    """[(name, is_host, desc)] from 核心人物 / 对谈人物 / 讲者."""
+    raw = meta.get("核心人物", "") or meta.get("对谈人物", "") or meta.get("讲者", "")
+    people = []
+    for p in re.split(r"[；;]|×", strip_md(raw)):
+        m = re.match(r"^\s*([^（(]+?)\s*(?:[（(](.*)[）)])?\s*$", p)
+        if not m or not m.group(1).strip():
+            continue
+        desc = (m.group(2) or "").strip()
+        people.append((m.group(1).strip(), "主持" in desc, desc))
+    return people
+
+
+def show_from_host(people):
+    """'The a16z Show 主持人' → 'The a16z Show' (first clause must end in 主持/主持人)."""
+    for _, is_host, desc in people:
+        if is_host:
+            head = re.split(r"[，,；;]", desc)[0].strip()
+            m = re.match(r"^(.+?)\s*(?:联合)?主持人?$", head)
+            if m:
+                return m.group(1).strip()
+    return ""
+
+
+EDITOR_NOTE_RE = re.compile(r"ASR|字幕|转写|逐字稿|核对|编者注|待核|机检")
+
+
+def source_warnings(sections, people):
+    """Upstream (content-structuring) issues the converter can see but not fix."""
+    warns = []
+    if len(people) >= 2 and not any(h for _, h, _ in people):
+        warns.append("对谈人物 has %d people but none is marked「主持」— no host color" % len(people))
+    for title, body in sections:
+        if title in ("文章元数据", "自检报告", "延伸术语表"):
+            continue
+        blocks, cur = [], []
+        for l in body + [""]:
+            if l.strip():
+                cur.append(l.strip())
+            elif cur:
+                blocks.append("\n".join(cur))
+                cur = []
+        for a, b in zip(blocks, blocks[1:]):
+            if a == b and a.startswith(">"):
+                warns.append("duplicated blockquote in「%s」: %s…" % (title, a[:30]))
+        # Short tags like ［预测］［编者推断］［主持人口播］ are reader-facing by design;
+        # only process notes (ASR/字幕/核对…) or long bracketed asides are flagged.
+        for m in re.finditer(r"［([^］]+)］", "\n".join(body)):
+            note = m.group(1)
+            if EDITOR_NOTE_RE.search(note) or len(note) > 20:
+                warns.append("editor note in「%s」: %s" % (title, m.group(0)[:40]))
+    return warns
+
+
+def render_selfcheck(body):
+    """Every table, list and '### ' block of 自检报告, in source order."""
+    pre, subs = split_subsections(body)
+    out = render_blocks(pre)
+    for name, lines in subs:
+        out.append("<h3>%s</h3>" % inline(name))
+        out += render_blocks(lines)
+    return "\n".join(out)
 
 
 def build(md_path, out_path):
@@ -363,6 +502,7 @@ def build(md_path, out_path):
     selfcheck_html = ""
     content_sections = []   # (html, sid, title)
     cjk_total = 0
+    roles = None
 
     for title, body in sections:
         if title in SKIP_TITLES:
@@ -374,7 +514,7 @@ def build(md_path, out_path):
                 if len(r) >= 2:
                     meta[strip_md(r[0])] = r[1]
             for v in meta.values():
-                m = re.search(r"https?://\S+", v)
+                m = URL_RE.search(v)
                 if m and not source_url:
                     source_url = m.group(0)
             q = [l for l in body if l.strip().startswith(">")]
@@ -397,9 +537,8 @@ def build(md_path, out_path):
                 '<div class="%s">\n  <p>%s</p>\n</div>\n\n%s'
                 % (hl_class, inline(quote), "\n\n".join(paras))
             )
-            subtitle = strip_md(re.split(r"[；。]", quote)[0]).strip()
-            if subtitle and not subtitle.endswith("。"):
-                subtitle += "。"
+            # The thesis box already shows this sentence; a subtitle would repeat it.
+            subtitle = ""
             cjk_total += count_cjk(quote + " ".join(rest))
             continue
         if title == "延伸术语表":
@@ -416,13 +555,14 @@ def build(md_path, out_path):
                 '<h2 id="自检报告" hidden>自检报告</h2>\n\n'
                 '<details class="collapsible">\n'
                 "  <summary>展开自检报告详情</summary>\n"
-                '  <div class="collapsible-body">\n'
-                '    <div class="table-wrap">\n    %s\n    </div>\n'
-                "  </div>\n</details>" % render_table(body)
+                '  <div class="collapsible-body">\n%s\n'
+                "  </div>\n</details>" % render_selfcheck(body)
             )
             continue
-        # regular content section
-        sec_html, sid, n = render_content_section(title, body)
+        # regular content section (文章元数据 precedes these, so roles see 对谈人物)
+        if roles is None:
+            roles = SpeakerRoles([(n, h) for n, h, _ in parse_people(meta)])
+        sec_html, sid, n = render_content_section(title, body, roles)
         content_sections.append((sec_html, sid, title))
         cjk_total += n
 
@@ -488,7 +628,7 @@ def build(md_path, out_path):
         )
     toc.append('        <a href="#核心导读" class="lvl-2">核心导读</a>')
     for _, sid, t in content_sections:
-        toc.append('        <a href="#%s" class="lvl-2">%s</a>' % (sid, inline(t)))
+        toc.append('        <a href="#%s" class="lvl-2 toc-sec">%s</a>' % (sid, inline(t)))
     if glossary_html:
         toc.append('        <a href="#延伸术语表" class="lvl-2">延伸术语表</a>')
     if metadata_html:
@@ -500,22 +640,17 @@ def build(md_path, out_path):
         meta.get("活动", "") or meta.get("节目", "") or meta.get("节目名称", "")
     )
     activity_short = re.split(r"——|—|--", activity)[0].strip()
-    # Prefer 核心人物; fall back to 对谈人物 / 讲者 (common in podcast notes)
-    people_raw = (
-        meta.get("核心人物", "")
-        or meta.get("对谈人物", "")
-        or meta.get("讲者", "")
-    )
-    people = []
-    for p in re.split(r"[；;]|×", strip_md(people_raw)):
-        name = re.split(r"[（(]", p)[0].strip()
-        if name:
-            people.append(name)
+    people_info = parse_people(meta)
+    people = [n for n, _, _ in people_info]
     people_str = " × ".join(people)
+    if not activity_short:
+        activity_short = show_from_host(people_info)
     if not activity_short:
         # Derive a short show name from 原标题 when 活动 is absent
         # e.g. "On Purpose with Jay Shetty — Lucy Guo on ..." → "On Purpose"
         orig = strip_md(meta.get("原标题", ""))
+        orig = re.split(r"[；;]", orig)[0]
+        orig = re.sub(r"[（(][^（）()]*[）)]", "", orig).strip()
         head = re.split(r"\s*[—–]\s*", orig)[0].strip() if orig else ""
         if re.search(r"\s+with\s+", head, re.I):
             activity_short = re.split(r"\s+with\s+", head, flags=re.I)[0].strip()
@@ -557,9 +692,14 @@ def build(md_path, out_path):
     print("  sections=%d  cjk=%d  read=%s" % (len(content_sections), cjk_total, read_time))
     if not source_url:
         print("  WARN: no source URL found in 文章元数据")
+    for w in source_warnings(sections, people_info):
+        print("  WARN: %s" % w)
 
 
 def main():
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
     if len(sys.argv) < 2:
         print(__doc__)
         sys.exit(1)

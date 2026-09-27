@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import re
 import sys
 from pathlib import Path
@@ -43,7 +44,22 @@ FORBIDDEN_IN_ARTICLE = [
     (r"元数据抓取", "pipeline note leaked (抓取时间)"),
     (r"\[编者注", "editor note leaked into reader copy"),
     (r">&gt;\s", "leftover Markdown blockquote marker"),
+    # Transcript-correction notes from 整理文档 解析 / 自检 — process, not reader prose.
+    (r"\bASR\b", "process note leaked (ASR)"),
+    (r"字幕(?:作|里|误|写成|听成)", "process note leaked (字幕纠错)"),
+    (r"听成", "process note leaked (听成…)"),
+    (r"(?:没有|未)核对", "process note leaked (核对说明)"),
+    (r"没有姓", "process note leaked (人名无姓说明)"),
+    (r"口播里", "process note leaked (口播口径)"),
 ]
+
+LONG_PARAGRAPH = 200
+DISCLAIMER_RE = re.compile(
+    r"这是(?:他|她|他们|两人)的(?:判断|回忆|体感|听说|主张|估计)"
+    r"|不是(?:一份|一项)?(?:调查|统计|就业统计)"
+    r"|这场没有|这是(?:当场的|阅读)?转述"
+)
+FINGERPRINT_RE = re.compile(r"<!-- md2wechat-source: (.+?) sha256:([0-9a-f]{16}) -->")
 
 COMMON_REQUIRED_IN_ARTICLE = [
     (r'id="wechat-article"', "wechat-article container"),
@@ -126,6 +142,42 @@ def validate_html(path: Path, profile: str = "auto") -> list[str]:
             errors.append("FORBIDDEN: editorial body contains a table; rewrite it for listening")
 
     return errors
+
+
+def article_warnings(article: str) -> list[str]:
+    """Readability smells that need judgment, not a hard stop."""
+    warns: list[str] = []
+    for raw in re.findall(r"<p\b[^>]*>(.*?)</p>", article, flags=re.S | re.I):
+        text = re.sub(r"<[^>]+>", "", raw).strip()
+        if len(text) > LONG_PARAGRAPH:
+            warns.append(
+                f"LONG PARAGRAPH {len(text)} chars (>{LONG_PARAGRAPH}; ~{len(text) // 20} phone lines): "
+                f"{text[:24]}…"
+            )
+    chunks = re.split(r"<h2\b[^>]*>", article, flags=re.I)
+    for chunk in chunks[1:]:
+        heading = re.sub(r"<[^>]+>", "", chunk.split("</h2>", 1)[0]).strip()
+        hits = DISCLAIMER_RE.findall(re.sub(r"<[^>]+>", "", chunk))
+        if len(hits) > 1:
+            warns.append(
+                f"TRAILING DISCLAIMERS x{len(hits)} in「{heading[:20]}」: fold attribution into "
+                "the verb (他估计/他听说/据他回忆); keep at most one boundary sentence per section"
+            )
+    return warns
+
+
+def validate_source_fingerprint(html_text: str, source: Path) -> list[str]:
+    m = FINGERPRINT_RE.search(html_text)
+    if not m:
+        return ["MISSING source fingerprint; rebuild with build_wechat_html.py --source <整理文档.md>"]
+    name, digest = m.group(1), m.group(2)
+    actual = hashlib.sha256(source.read_bytes()).hexdigest()[:16]
+    if name != source.name or digest != actual:
+        return [
+            f"STALE: article was built from {name} sha256:{digest}, but {source.name} is now "
+            f"sha256:{actual}; regenerate the article from the current 整理文档"
+        ]
+    return []
 
 
 def source_sections(path: Path) -> list[str]:
@@ -410,6 +462,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.source is not None and args.audit is not None:
             errors.extend(validate_coverage(args.source, args.audit, resolved_profile))
         if args.source is not None and args.source.is_file():
+            errors.extend(
+                validate_source_fingerprint(args.html.read_text(encoding="utf-8"), args.source)
+            )
             source_text = args.source.read_text(encoding="utf-8")
             audit_text = (
                 args.audit.read_text(encoding="utf-8")
@@ -442,12 +497,17 @@ def main(argv: list[str] | None = None) -> int:
                 )
             )
 
+    warnings = article_warnings(article)
     if errors:
         print("FAIL")
         for e in errors:
             print(" -", e)
+        for w in warnings:
+            print(" - WARN", w)
         return 1
     print("OK")
+    for w in warnings:
+        print("WARN", w)
     print(
         f"PROFILE {resolved_profile} | Han chars {han_chars} | "
         f"estimated voice {minutes:.1f} min @ 260 chars/min"

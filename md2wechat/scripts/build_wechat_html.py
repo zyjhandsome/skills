@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import html
 import re
 import sys
@@ -14,7 +15,7 @@ if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 from paths import article_html_name
-from sections import BUILDER_OMIT_H2, TRUNCATE_H2
+from sections import BUILDER_OMIT_H2, STRUCTURAL_H2, TRUNCATE_H2
 
 C = {
     "bg": "#FAFAF7",
@@ -174,6 +175,39 @@ def h2(text: str) -> str:
     )
 
 
+def section_kicker(n: int) -> str:
+    """Small「第 N 节」line above a reader-facing H2.
+
+    Separate from the H2 so heading fidelity is untouched; spelled out so the
+    WeChat 听全文 voice reads「第一节」rather than「零一」.
+    """
+    color = C["accent_strong"]
+    return (
+        f'<p style="margin:32px 0 0;padding:0;font-size:13px;font-weight:700;'
+        f'line-height:{lh("13px", 1.6)};color:{color};letter-spacing:0.08em;text-align:left;">'
+        f'{shield(esc("第 %d 节" % n), color)}</p>'
+    )
+
+
+def number_sections(parts: list[str]) -> list[str]:
+    """Prefix every source H2 (not 核心导读) with a section kicker."""
+    out, n = [], 0
+    for part in parts:
+        m = re.match(r"<h2\b[^>]*>(.*?)</h2>", part, flags=re.S)
+        if m and re.sub(r"<[^>]+>", "", m.group(1)).strip() not in STRUCTURAL_H2:
+            n += 1
+            out.append(section_kicker(n))
+            part = part.replace("margin:28px 0 14px", "margin:6px 0 14px", 1)
+        out.append(part)
+    return out
+
+
+def source_fingerprint(src: Path) -> str:
+    """HTML comment tying the article to the exact 整理文档 it was written from."""
+    digest = hashlib.sha256(src.read_bytes()).hexdigest()[:16]
+    return f"<!-- md2wechat-source: {src.name} sha256:{digest} -->"
+
+
 def h3(text: str) -> str:
     color = C["accent_strong"]
     return (
@@ -225,19 +259,30 @@ def bio_card(text: str) -> str:
 
 
 def dialogue_card(speaker: str, quote: str) -> str:
+    """Keep the speaker off the quote line.
+
+    An inline-block badge with vertical padding shares the quote's line box.
+    The paste checker measures that as overlapping lines once the quote wraps.
+    The name sits in its own single-line paragraph; the quote paragraph has
+    only text inside the wrapper span. Padding is horizontal only.
+    """
     color = C["muted"]
-    inner = (
-        f'<span style="display:inline-block;margin-right:6px;padding:1px 8px;'
-        f'background:{C["accent_soft"]};color:{C["accent_strong"]};font-size:12px;'
-        f'line-height:{lh("12px", 1.6)};border-radius:4px;font-weight:600;'
-        f'text-align:left;">{esc(speaker)}</span>'
-        f"{inline_md_raw(quote)}"
+    label_color = C["accent_strong"]
+    badge = (
+        f'<span style="padding:0 8px;background:{C["accent_soft"]};'
+        f'color:{label_color};font-size:12px;line-height:{lh("12px", 1.6)};'
+        f'border-radius:4px;font-weight:600;text-align:left;">'
+        f"{esc(speaker)}</span>"
     )
     return (
         f'<section style="margin:0 0 8px;padding:12px 14px;background:{C["surface"]};'
         f'border-radius:8px;border:1px solid {C["border"]};text-align:left;">'
+        f'<p style="margin:0 0 6px;padding:0;font-size:12px;'
+        f'line-height:{lh("12px", 1.6)};color:{label_color};text-align:left;">'
+        f"{shield(badge, label_color)}</p>"
         f'<p style="margin:0;padding:0;font-size:14px;line-height:{lh("14px", 1.7)};'
-        f'color:{color};text-align:left;">{shield(inner, color)}</p></section>'
+        f'color:{color};text-align:left;">'
+        f"{shield(inline_md_raw(quote), color)}</p></section>"
     )
 
 
@@ -454,7 +499,9 @@ def subtitle_from_meta(meta: dict[str, str]) -> str:
     venue = public_source_line(bare(meta.get("内容来源", "") or meta.get("来源", "")))
 
     if people and ("×" in people or "、" in people or len(people) > 48):
-        return people
+        # Byline is names only; roles already live in the 人物背景 card.
+        names = [re.split(r"[（(]", x)[0].strip() for x in re.split(r"\s*×\s*", people)]
+        return " × ".join(n for n in names if n) if "×" in people else people
     if people:
         name = re.split(r"[（(]", people)[0].strip()
         if venue:
@@ -660,10 +707,10 @@ def parse_md(md: str, mode: str = "auto") -> tuple[str, list[str], str]:
         else ""
     )
     out.append(source_footer(meta))
-    return title, [x for x in out if x], mode
+    return title, number_sections([x for x in out if x]), mode
 
 
-def wrap(title: str, body_parts: list[str], mode: str = "full") -> str:
+def wrap(title: str, body_parts: list[str], mode: str = "full", fingerprint: str = "") -> str:
     article = "\n".join(body_parts)
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -671,17 +718,20 @@ def wrap(title: str, body_parts: list[str], mode: str = "full") -> str:
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{esc(title)}｜公众号文章</title>
+  {fingerprint}
   <style>
     body {{ margin: 0; background: #efeee8; font-family: {FONT}; color: #1a1a1a; }}
     .howto {{ max-width: 720px; margin: 0 auto; padding: 20px 16px 8px; font-size: 14px; line-height: 1.6; color: #4a4a45; }}
     .howto strong {{ color: #a85533; }}
     .stage {{ max-width: 720px; margin: 0 auto 40px; padding: 0 12px 40px; }}
+    body.phone .stage {{ max-width: 399px; }}
     .copy-hint {{ text-align: center; font-size: 13px; color: #6b6b66; margin: 8px 0 16px; }}
+    .width-toggle {{ margin-left: 8px; padding: 2px 10px; font: inherit; font-size: 13px; border: 1px solid #cdcdc4; border-radius: 6px; background: #fff; color: #4a4a45; cursor: pointer; }}
   </style>
 </head>
 <body>
   <div class="howto">
-    <p><strong>使用方法：</strong>浏览器打开 → 选中下方米色卡片内<strong>全部正文</strong> → 复制 → 粘贴到微信公众号编辑器 → 手机预览。</p>
+    <p><strong>使用方法：</strong>浏览器打开 → 选中下方米色卡片内<strong>全部正文</strong> → 复制 → 粘贴到微信公众号编辑器 → 手机预览。<button class="width-toggle" type="button" onclick="this.textContent=document.body.classList.toggle('phone')?'切回电脑宽度':'按手机宽度预览'">按手机宽度预览</button></p>
   </div>
   <p class="copy-hint">↓ 从这里开始复制到微信 ↓</p>
   <div class="stage">
@@ -760,6 +810,18 @@ def _self_test() -> None:
     assert re.search(r"<h2 style=\"[^\"]*line-height:26px[^\"]*\">", article)
     assert "<p style=\"" in article and "><span style=\"color:" in article
     assert not re.search(r"<(?:p|h1|h2|h3|td)\b[^>]*>[^<\s]", article)
+    card = dialogue_card("Zanny Minton Beddoes", "十年后，如果这些都做成，世界会是什么样？")
+    assert "padding:1px" not in card and "display:inline-block" not in card
+    assert "padding:0 8px" in card and card.count("<p ") == 2
+    quote_p = card.rsplit("<p ", 1)[-1]
+    assert "Zanny" not in quote_p
+    byline = subtitle_from_meta({"对谈人物": "**甲某**（某节目主持人）× **乙某**（某公司创始人）"})
+    assert byline == "甲某 × 乙某", byline
+    numbered = number_sections([h2("核心导读"), p("论点"), h2("第一个话题"), h2("第二个话题")])
+    joined = "".join(numbered)
+    assert "第 1 节" in joined and "第 2 节" in joined and "第 3 节" not in joined
+    assert joined.index("第 1 节") < joined.index("第一个话题")
+    assert not re.search(r"<(?:p|h1|h2|h3|td)\b[^>]*>[^<\s]", joined)
     print("self-test OK")
 
 
@@ -772,6 +834,13 @@ def main(argv: list[str] | None = None) -> int:
         choices=("auto", "editorial", "full"),
         default="auto",
         help="editorial article or complete three-layer conversion",
+    )
+    ap.add_argument(
+        "--source",
+        type=Path,
+        default=None,
+        help="Original *_整理文档.md when building from a temp editorial draft "
+        "(fingerprinted so the validator can flag a stale article; default: the input)",
     )
     ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args(argv)
@@ -793,7 +862,11 @@ def main(argv: list[str] | None = None) -> int:
             "rewrite comparisons as sentences and rebuild.",
             file=sys.stderr,
         )
-    html_out = wrap(title, parts, mode=mode)
+    origin = args.source or src
+    if not origin.is_file():
+        print(f"ERROR: --source not found: {origin}", file=sys.stderr)
+        return 2
+    html_out = wrap(title, parts, mode=mode, fingerprint=source_fingerprint(origin))
     out = args.out or default_out_path(src)
     out.write_text(html_out, encoding="utf-8")
     print(f"Wrote {out} ({len(html_out)} chars, mode={mode})")

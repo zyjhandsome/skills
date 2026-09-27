@@ -235,7 +235,101 @@ def test_italics(tmp_path):
 def test_speaker_tagging_is_generic(tmp_path):
     html = _build(tmp_path)
     assert "Harrison" not in html             # no hardcoded speaker names
-    assert "names.includes" in html           # generic tagSpeakers present
+    assert "tagSpeakers" not in html          # roles come from the converter now
+    assert 'class="step speaker-host"' in html     # "主持人" → host
+    assert 'class="step speaker-guest-1"' in html
+
+
+THREE_MD = """# 三人谈
+
+## 文章元数据
+
+| 项目 | 内容 |
+|------|------|
+| 原标题 | Guest A on Learning（YouTube）；播客题为 Other Title |
+| 内容链接 | [YouTube](https://www.youtube.com/watch?v=abc)；活动页：[Site](https://example.com/x) |
+| 对谈人物 | **Host Person**（The Demo Show 主持人）× **Guest A**（公司甲创始人）× **Guest B**（学院乙联合创始人） |
+
+## 核心导读
+
+> **全文论点**：论点。
+
+## 一节
+
+### 对谈实录
+
+**Guest A**：「嘉宾甲先开口。」
+
+**Guest A**：「嘉宾甲接着说。」
+
+**Host Person**：「主持人追问。」
+
+**Guest B**：「嘉宾乙回答。」
+
+## 自检报告
+
+| 项 | 结果 |
+|----|------|
+| 完整性 | OK |
+
+### 人物声纹
+
+**Guest A**
+1. 先讲故事
+2. 再落判断
+
+### 遮名检验
+
+1. 「一句话」→ Guest A
+"""
+
+
+def test_host_comes_from_metadata_not_speaking_order(tmp_path):
+    html = _build(tmp_path, THREE_MD, "three_项目式学习")
+    # Guest A speaks first but is not the host
+    assert '<article class="step speaker-guest-1">' in html
+    assert '<article class="step speaker-host">' in html
+    assert '<article class="step speaker-guest-2">' in html
+    host_step = html.split('<article class="step speaker-host">')[1]
+    assert "Host Person" in host_step.split("</article>")[0]
+
+
+def test_consecutive_turns_merge_and_use_initials(tmp_path):
+    html = _build(tmp_path, THREE_MD, "three_项目式学习")
+    assert html.count('<p class="step-speaker">Guest A</p>') == 1
+    assert "嘉宾甲先开口" in html and "嘉宾甲接着说" in html
+    assert '<div class="step-num" aria-hidden="true">GA</div>' in html
+    assert '<div class="step-num" aria-hidden="true">HP</div>' in html
+    timeline = html.split('class="timeline"')[1].split("</details>")[0]
+    assert "<h3>" not in timeline             # speaker names are not headings
+
+
+def test_meta_source_prefers_show_from_host(tmp_path):
+    html = _build(tmp_path, THREE_MD, "three_项目式学习")
+    assert "The Demo Show · Host Person × Guest A × Guest B" in html
+    assert "Other Title" not in html.split('class="doc-meta"')[1].split("</header>")[0]
+
+
+def test_source_url_stops_at_markdown_link_end(tmp_path):
+    html = _build(tmp_path, THREE_MD, "three_项目式学习")
+    assert 'href="https://www.youtube.com/watch?v=abc" target="_blank"' in html
+
+
+def test_selfcheck_keeps_every_subsection(tmp_path):
+    html = _build(tmp_path, THREE_MD, "three_项目式学习")
+    panel = html.split('id="自检报告" hidden')[1]
+    assert "<h3>人物声纹</h3>" in panel
+    assert "<h3>遮名检验</h3>" in panel
+    assert "<ol><li>先讲故事</li><li>再落判断</li></ol>" in panel
+    assert panel.count("<table>") == 1
+
+
+def test_layer_heading_pill_outranks_content_h3(tmp_path):
+    html = _build(tmp_path)
+    assert ".content h3.layer-heading { font-size: 0; }" in html
+    assert "font-style: italic" not in html   # no faux-italic CJK blockquotes
+    assert 'lang="zh-CN"' in html
+    assert "--measure: 44rem;" in html        # font-size-independent column
 
 
 def test_meta_and_selfcheck_panels(tmp_path):
@@ -262,6 +356,64 @@ def test_extract_and_inject_multiple_diagrams():
     assert out.count('<figure class="diagram">') == 2
     # both figures sit between the h2 and the paragraph
     assert out.index("sec-a") < out.index("flowchart LR") < out.index("flowchart TD") < out.index("<p>x</p>")
+
+
+INSIGHT = (
+    '<h3 id="sec-a-insight" class="layer-heading layer-insight">核心洞察</h3>\n'
+    '<div class="callout callout-tip section-insight">\n'
+    '  <svg class="callout-icon"></svg>\n'
+    '  <div class="callout-body"><p>洞察句</p></div>\n'
+    "</div>\n"
+)
+
+
+def test_diagram_goes_after_insight_and_mid_section_figures_survive():
+    old = '<h2 id="sec-a">A</h2>\n%s<p>解析</p>\n%s\n<h2 id="sec-b">B</h2>' % (INSIGHT, FIG)
+    diagrams = batch.extract_diagrams(old)
+    assert diagrams == {"sec-a": [FIG]}          # not only figures right after h2
+    rebuilt = '<h2 id="sec-a" class="sec">A</h2>\n%s<p>解析</p>\n<h2 id="sec-b">B</h2>' % INSIGHT
+    added, out = batch.inject_diagrams(rebuilt, diagrams)
+    assert added == 1
+    assert out.index("洞察句") < out.index("flowchart LR") < out.index("<p>解析</p>")
+
+
+def test_dialogue_fold_numbering_subtitle_and_fonts(tmp_path):
+    html = _build(tmp_path, THREE_MD, "three_项目式学习")
+    assert '<details class="dialogue-fold" open>' in html
+    assert '<span class="fold-count">3 轮发言</span>' in html   # merged turns count once each
+    assert 'id="skim-toggle"' in html
+    assert '<h2 id="一节" class="sec">' in html
+    assert 'class="lvl-2 toc-sec"' in html
+    assert '<p class="doc-subtitle"></p>' in html              # thesis box already says it
+    assert "fonts.googleapis.com" not in html
+    assert '"md2html-skim:" + location.pathname' in html      # not shared across notes
+    assert "scrollbar-color: transparent transparent" in html  # no divider-like TOC bar
+
+
+def test_source_warnings_flag_upstream_issues():
+    md = "\n".join([
+        "## 文章元数据", "| 项目 | 内容 |", "|--|--|",
+        "| 对谈人物 | **甲**（嘉宾）× **乙**（嘉宾） |",
+        "## 一节", "> **事实边界**：同一句。", "", "> **事实边界**：同一句。",
+        "", "正文［编辑备注：待核对］。", "", "他说会涨价［预测］［主持人口播］。",
+    ])
+    _, sections = build_html.split_sections(md)
+    meta_rows = {"对谈人物": "**甲**（嘉宾）× **乙**（嘉宾）"}
+    warns = build_html.source_warnings(sections, build_html.parse_people(meta_rows))
+    joined = "\n".join(warns)
+    assert "none is marked「主持」" in joined
+    assert "duplicated blockquote" in joined
+    assert "editor note" in joined
+    assert "［预测］" not in joined and "［主持人口播］" not in joined   # reader-facing tags
+
+
+def test_batch_targets_only_generated_html(tmp_path):
+    lecture = tmp_path / "a_项目式学习.html"
+    lecture.write_text("<footer>Generated by md2html</footer>", encoding="utf-8")
+    wechat = tmp_path / "a_公众号文章.html"
+    wechat.write_text("<section>paste</section>", encoding="utf-8")
+    assert batch.is_generated(lecture)
+    assert not batch.is_generated(wechat)
 
 
 def test_inject_skips_when_diagram_already_present():
