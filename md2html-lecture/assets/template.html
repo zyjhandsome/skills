@@ -456,7 +456,7 @@
     .content p { margin: 0 0 16px; text-wrap: pretty; overflow-wrap: anywhere; }
     .content a { color: var(--link); text-decoration: none; border-bottom: 1px solid var(--accent-border); }
     .content ul, .content ol { padding-left: 24px; margin: 0 0 16px; }
-    .content li { margin: 4px 0; }
+    .content li { margin: 8px 0; }
     /* Key-info mark: soft accent chip — not link-blue, keeps hierarchy with tip/highlight */
     .content strong {
       color: var(--accent-strong);
@@ -599,7 +599,7 @@
     .timeline {
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: 12px;
       margin: 20px 0;
       position: relative;
     }
@@ -646,7 +646,7 @@
       font-weight: 600;
       line-height: 1.5;
     }
-    .step-body p { margin: 0 0 10px; color: var(--text); font-size: 15.5px; line-height: 1.8; max-width: var(--measure); }
+    .step-body p { margin: 0 0 16px; color: var(--text); font-size: 15.5px; line-height: 1.8; max-width: var(--measure); }
     .step-body p:last-child { margin-bottom: 0; }
     .step-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
     .tag {
@@ -1305,7 +1305,7 @@
         <span>笔记</span>
       </div>
       <div class="topbar-actions">
-        <button class="text-btn" id="skim-toggle" type="button" aria-pressed="false" title="折叠全部对谈实录，只读洞察与解析" hidden>只看要点</button>
+        <button class="text-btn" id="skim-toggle" type="button" aria-pressed="true" title="展开全部对谈实录" hidden>只看要点</button>
         <button class="icon-btn" onclick="window.print()" title="打印 / 保存 PDF" aria-label="打印 / 保存 PDF">
           <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-printer"/></svg>
         </button>
@@ -1562,6 +1562,7 @@
         root.style.overflowAnchor = "none";
         folds.forEach(d => { d.open = !on; });
         btn.setAttribute("aria-pressed", on ? "true" : "false");
+        btn.title = on ? "展开全部对谈实录" : "折叠全部对谈实录，只读洞察与解析";
         if (anchor) {
           window.scrollTo({ top: window.scrollY + anchor.getBoundingClientRect().top - before, behavior: "instant" });
         }
@@ -1575,6 +1576,7 @@
       let saved = null;
       try { saved = localStorage.getItem(SKIM_KEY); } catch (e) {}
       if (saved === "1") apply(true, false);
+      else if (saved === "0") apply(false, false);
     }
 
     // ---------- Print: expand collapsed panels, restore afterwards ----------

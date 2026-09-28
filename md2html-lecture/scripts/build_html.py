@@ -166,6 +166,33 @@ def blockquote_text(lines, strip_label=False):
     return text
 
 
+def quote_paragraphs(lines):
+    """Split a blockquote into paragraphs.
+
+    A blank line, or a `>` line with no text, starts the next paragraph.
+    Other lines (tables, prose) are ignored. Consecutive `>` lines in one
+    paragraph are joined with spaces.
+    """
+    groups, cur = [], []
+
+    def flush():
+        if cur:
+            groups.append(blockquote_text(cur))
+            del cur[:]
+
+    for l in lines:
+        s = l.strip()
+        if s.startswith(">"):
+            if re.fullmatch(r">\s*", s):
+                flush()
+            else:
+                cur.append(l)
+        elif s == "" and cur:
+            flush()
+    flush()
+    return [g for g in groups if g.strip()]
+
+
 def count_cjk(text):
     return len(re.findall(r"[\u4e00-\u9fff]", text))
 
@@ -361,7 +388,7 @@ def render_content_section(title, body, roles=None):
         if any(l.strip() for l in extra):
             body.append("\n".join(render_blocks(extra)))
         out.append(
-            '<details class="dialogue-fold" open>\n'
+            '<details class="dialogue-fold">\n'
             '<summary><h3 id="%s-%s" class="layer-heading %s">%s</h3>'
             '<span class="fold-count">%d 轮发言</span></summary>\n%s\n</details>'
             % (sid, anchor, css, heading, n, "\n".join(body))
@@ -494,7 +521,7 @@ def build(md_path, out_path):
 
     meta = {}            # metadata table key -> raw value
     bio_label = ""       # 人物背景 / 讲者背景 (from blockquote label)
-    bio_body = ""        # bio text with label stripped
+    bio_paras = []       # bio paragraphs with the label stripped
     source_url = ""
     intro_html = ""
     subtitle = ""
@@ -517,12 +544,12 @@ def build(md_path, out_path):
                 m = URL_RE.search(v)
                 if m and not source_url:
                     source_url = m.group(0)
-            q = [l for l in body if l.strip().startswith(">")]
-            if q:
-                raw = blockquote_text(q)
-                lm = re.match(r"^\*\*([^*]+)\*\*[：:]\s*", raw)
+            paras = quote_paragraphs(body)
+            if paras:
+                lm = re.match(r"^\*\*([^*]+)\*\*[：:]\s*", paras[0])
                 bio_label = lm.group(1).strip() if lm else "人物背景"
-                bio_body = blockquote_text(q, strip_label=True)
+                first = re.sub(r"^\*\*[^*]+\*\*[：:]\s*", "", paras[0]).strip()
+                bio_paras = ([first] if first else []) + [p.strip() for p in paras[1:]]
             continue
         if title == "核心导读":
             raw_quote = blockquote_text(body)
@@ -568,7 +595,7 @@ def build(md_path, out_path):
 
     # ---- speaker / people bio (opens the article, before 核心导读) ----
     bio_html = ""
-    if bio_body:
+    if bio_paras:
         bio_html = (
             '<aside class="callout callout-info speaker-bio" id="人物背景" '
             'aria-label="%s">\n'
@@ -576,12 +603,16 @@ def build(md_path, out_path):
             '<use href="#i-info"/></svg>\n'
             '  <div class="callout-body">\n'
             '    <p class="callout-title">%s</p>\n'
-            "    <p>%s</p>\n"
+            "%s\n"
             "  </div>\n"
             "</aside>"
-            % (html.escape(bio_label, quote=True), inline(bio_label), inline(bio_body))
+            % (
+                html.escape(bio_label, quote=True),
+                inline(bio_label),
+                "\n".join("    <p>%s</p>" % inline(p) for p in bio_paras),
+            )
         )
-        cjk_total += count_cjk(bio_body)
+        cjk_total += count_cjk(" ".join(bio_paras))
 
     # ---- metadata collapsible (source table + optional extra tables) ----
     meta_tables = []

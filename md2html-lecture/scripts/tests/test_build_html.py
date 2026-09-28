@@ -379,9 +379,11 @@ def test_diagram_goes_after_insight_and_mid_section_figures_survive():
 
 def test_dialogue_fold_numbering_subtitle_and_fonts(tmp_path):
     html = _build(tmp_path, THREE_MD, "three_项目式学习")
-    assert '<details class="dialogue-fold" open>' in html
+    assert '<details class="dialogue-fold">' in html
+    assert '<details class="dialogue-fold" open>' not in html
     assert '<span class="fold-count">3 轮发言</span>' in html   # merged turns count once each
     assert 'id="skim-toggle"' in html
+    assert 'aria-pressed="true"' in html
     assert '<h2 id="一节" class="sec">' in html
     assert 'class="lvl-2 toc-sec"' in html
     assert '<p class="doc-subtitle"></p>' in html              # thesis box already says it
@@ -466,3 +468,14 @@ def test_speaker_bio_opens_before_thesis(tmp_path):
     thesis_at = html.index('<h2 id="核心导读">')
     assert bio_at < thesis_at
     assert "李四是对谈嘉宾" in html
+
+
+def test_bio_paragraphs_stay_separate(tmp_path):
+    md = SAMPLE_MD.replace(
+        "> **人物背景**：张三是某公司创始人，写过 *一本书*。",
+        "> **人物背景**：张三是某公司创始人。\n>\n> 李四主持这场对谈。",
+    )
+    html = _build(tmp_path, md, "bio_整理文档")
+    assert "<p>张三是某公司创始人。</p>" in html
+    assert "<p>李四主持这场对谈。</p>" in html
+    assert "张三是某公司创始人。 李四" not in html

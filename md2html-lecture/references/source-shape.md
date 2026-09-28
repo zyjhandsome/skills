@@ -102,3 +102,7 @@ content sections…
 
 Readers need speaker context before the thesis. The end metadata panel keeps
 the source table only (no duplicate bio).
+
+A blank `>` line, or a blank line between `>` lines, is a new paragraph in
+that callout. One person per paragraph in the source stays one paragraph on
+the page. A single blockquote with no break stays one paragraph.

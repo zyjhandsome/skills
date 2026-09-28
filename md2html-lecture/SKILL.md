@@ -159,8 +159,10 @@ needs a better fit:
       insight, 事实边界, diagrams, dialogue, panels, footer)
 - [ ] TOC and section `<h2>` show the same numbers (01, 02 …); bio / 导读 /
       术语表 are unnumbered
-- [ ] 「只看要点」 folds every 实录 / 交锋 block and keeps the current section in
-      place; each fold can be re-opened on its own; print expands everything
+- [ ] 「只看要点」 is the arrival state: every 实录 / 交锋 block starts closed,
+      the button is pressed, and one click opens them all; each fold can still
+      be re-opened on its own; a saved "show transcript" choice is restored;
+      print expands everything
 - [ ] Diagrams sit after 核心洞察, before 深度解析
 - [ ] Mermaid diagrams render (open the file in a browser)
 - [ ] Dark mode: toggle theme — no flash on reload; callouts / highlight / strong chips /

@@ -13,9 +13,11 @@ into the template; do not re-encode these rules in `build_html.py`.
   label is the first TOC entry when present.
 - No per-section jump-pill row (`injectSectionJumps` is intentionally not
   called).
-- Tight 对谈实录 spacing. Dialogue quotes use body color at 15.5px / 1.8 — they
-  are evidence, not captions. Speaker names are `<p class="step-speaker">`,
-  never headings (keeps the h3 outline to the three layers).
+- Dialogue inside a turn uses 15.5px / line-height 1.8, with 16px between
+  paragraphs and 12px between turns, so a long monologue is not one slab.
+  Quotes use body color — they are evidence, not captions. Speaker names are
+  `<p class="step-speaker">`, never headings (keeps the h3 outline to the
+  three layers).
 - Speaker roles are assigned by `build_html.py`, not JS: host = the 对谈人物
   entry whose note contains「主持」; others `speaker-guest-1..4` in 对谈人物
   order, then first appearance. Avatars show initials; consecutive turns by
@@ -26,11 +28,13 @@ into the template; do not re-encode these rules in `build_html.py`.
   letter-spacing on headings, body line-height 1.78, `lang="zh-CN"`.
 - No decorative motion (brand-dot pulse, step hover) on a long-read page.
 - Print opens every `<details>` (beforeprint) and restores them afterwards.
-- 对谈实录 / 原声交锋 are each one `<details class="dialogue-fold" open>` whose
-  `<summary>` holds the layer h3 + "N 轮发言". Topbar 「只看要点」 closes/opens
-  all folds, remembers the choice (localStorage), and keeps the current h2 at
-  the same screen position (disable `overflow-anchor` while toggling, or the
-  browser's own scroll anchoring doubles the correction).
+- 对谈实录 / 原声交锋 are each one `<details class="dialogue-fold">` (closed
+  on arrival) whose `<summary>` holds the layer h3 + "N 轮发言". Topbar
+  「只看要点」 starts pressed. Clicking it opens or closes every fold,
+  remembers the choice (localStorage, including an explicit "show the
+  transcript"), and keeps the current h2 at the same screen position
+  (disable `overflow-anchor` while toggling, or the browser's own scroll
+  anchoring doubles the correction). Print still opens every panel.
 - TOC: desktop links are 30px min-height (drawer keeps 36px touch targets) so
   15–20 entries fit; the TOC scrollbar is transparent until hover/focus (a
   TOC that overflows by a few px otherwise shows a near-full-height thumb that
