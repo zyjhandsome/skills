@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Normalize content-structuring output Markdown spacing (spec v5.24/v5.25).
+"""Normalize content-structuring output Markdown spacing (spec 4d).
 
 Fixes:
 - Remove --- between body ## sections (keep only structural ---)
@@ -27,7 +27,7 @@ STRUCTURAL_AFTER = frozenset(
         "目录",
     }
 )
-# Closing structural blocks: a --- immediately before these is legal (spec 4d-1 v5.32).
+# Closing structural blocks: a --- immediately before these is legal (spec 4d-1).
 STRUCTURAL_BEFORE_PREFIXES = (
     "关键语录",
     "延伸术语表",

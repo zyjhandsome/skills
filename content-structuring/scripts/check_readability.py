@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """4e readability gate for content-structuring drafts.
 
+Scans both layer orders: 对谈三层 (解析 → 实录) and 争辩型 (交锋 → 释义).
+
 Checks that humans reliably miss:
   4e-1 解析/实录重合度  — the analysis layer retelling the dialogue
   4e-2 解析篇幅        — analysis longer than half of its section's dialogue
@@ -76,8 +78,11 @@ def split_sections(text: str) -> list[Section]:
         if not any(h in chunk for h in ANALYSIS_HEADINGS):
             continue
         sec = Section(title=chunk.splitlines()[0][3:].strip(), text=chunk)
+        # 三层：解析在前、实录在后；争辩型：交锋在前、释义在后。两种顺序下，
+        # 每一层都要在另一层的标题处截断，否则实录会把解析自身包含进去，
+        # 4e-1 重合度被算成假阳性。
         sec.analysis = _cut(chunk, ANALYSIS_HEADINGS, DIALOGUE_HEADINGS + ("### 未决问题",))
-        sec.dialogue = _cut(chunk, DIALOGUE_HEADINGS, ("### 未决问题",))
+        sec.dialogue = _cut(chunk, DIALOGUE_HEADINGS, ANALYSIS_HEADINGS + ("### 未决问题",))
         sections.append(sec)
     return sections
 

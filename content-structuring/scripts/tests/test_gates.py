@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Gate regression tests for content-structuring scripts (v5.34)."""
+"""Gate regression tests for content-structuring scripts."""
 
 from __future__ import annotations
 
@@ -100,7 +100,7 @@ def test_fixture_adversarial_4d_ok() -> None:
 
 
 def test_fixture_longform_4d_ok() -> None:
-    """Generic template keeps --- before 关键语录与交锋时刻 (structural, spec v5.32)."""
+    """Generic template keeps --- before 关键语录与交锋时刻 (structural, spec 4d-1)."""
     cp = run([sys.executable, str(NORM), str(FIX / "longform-generic.md"), "--check"])
     out = (cp.stdout or b"").decode("utf-8", errors="replace")
     err = (cp.stderr or b"").decode("utf-8", errors="replace")
@@ -411,8 +411,35 @@ tokens of context
         path.unlink(missing_ok=True)
 
 
+def test_readability_adversarial_order_does_not_self_overlap() -> None:
+    """争辩型节（交锋在前、释义在后）：实录切分必须在「语境与释义」处截断，
+    否则解析被算进实录，4e-1 重合度出现假阳性。"""
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import check_readability  # noqa: WPS433
+
+    sections, _ = check_readability.check((FIX / "adversarial-interview.md").read_text(encoding="utf-8"))
+    assert sections, "fixture should yield scanned sections"
+    for sec in sections:
+        assert "### 语境与释义" not in sec.dialogue, sec.title
+        assert not any(i.startswith("4e-1") for i in sec.issues), (sec.title, sec.issues)
+
+
+def test_fixture_adversarial_readability_ok() -> None:
+    """The adversarial fixture is a golden sample: it must pass its own 4e row."""
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import check_readability  # noqa: WPS433
+
+    sections, global_issues = check_readability.check(
+        (FIX / "adversarial-interview.md").read_text(encoding="utf-8")
+    )
+    row = check_readability.format_row(sections, global_issues)
+    assert row.startswith("| 可读性机检 | ✅ |"), row
+
+
 def main() -> int:
     tests = [
+        test_readability_adversarial_order_does_not_self_overlap,
+        test_fixture_adversarial_readability_ok,
         test_4d_detects_hr_with_blank_line,
         test_fixture_dialogue_4d_ok,
         test_fixture_adversarial_4d_ok,

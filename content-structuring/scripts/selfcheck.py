@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Machine-fill 4c/4d/4f-3 rows for a content-structuring draft (spec v5.41).
+"""Machine-fill 4c/4d/4e/4f-3 rows for a content-structuring draft.
 
 Prints Markdown table rows the agent can paste into「自检报告」. Judgment rows
 (语义保真 / 声纹附证据 / 遮名检验 / 原声占比 / 事实状态 / 信息覆盖抽样)

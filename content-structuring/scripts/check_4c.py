@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""4c lexicon + consecutive-English scan for content-structuring outputs (spec v5.34).
+"""4c lexicon + consecutive-English scan for content-structuring outputs.
 
 - Loads the FULL unified lexicon from references/lexicon.txt (single source);
   the spec reference set (see references/language-and-gates.md) keeps no word-list copy
