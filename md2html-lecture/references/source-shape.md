@@ -17,6 +17,8 @@ Matched by exact name:
 | `自检报告` | hidden `<h2>` + collapsed `<details>` |
 | any other `## ` | content section |
 
+A content heading may still begin with a section index (`1. ` … `12. `, also `1．`). The converter drops that prefix from the visible `<h2>` and the TOC label. CSS counters draw 01, 02. The anchor stays derived from the original heading, so existing links and saved diagrams still match. A heading that merely starts with a number (`12% 批次`, `2012 年的 Chrome`, `66 岁`) is left whole.
+
 Expected 对谈三层 subsections: `核心洞察` / `深度解析` / `对谈实录`.
 **`对谈实录` is optional** — omit the whole block when there is no dialogue
 worth quoting; the converter skips a missing layer and does not invent an

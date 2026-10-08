@@ -119,6 +119,16 @@ def validate_html(path: Path, profile: str = "auto") -> list[str]:
             errors.append("MISSING: 原文 in 来源与说明")
         if re.search(r"视频：|查看原视频|非逐字稿|href=", footer, flags=re.I):
             errors.append("FORBIDDEN: 来源与说明 must contain only 原文")
+        # a GFM `\|` in 原标题 that was split naively leaves `… Work \` or a bare `\|`
+        footer_text = re.sub(r"<[^>]+>", "", footer)
+        m_title = re.search(r"原文：([^\n]*)", footer_text)
+        if m_title:
+            title_text = m_title.group(1).strip()
+            if title_text.endswith("\\") or "\\|" in title_text:
+                errors.append(
+                    f"TRUNCATED 原文 title in 来源与说明: 「{title_text[-30:]}」 "
+                    "(escaped pipe in 原标题 was not restored; rebuild with the current build script)"
+                )
 
     if resolved_profile == "full":
         # Full mode keeps 核心洞察 / 深度解析. 对谈实录 is optional (keynotes).

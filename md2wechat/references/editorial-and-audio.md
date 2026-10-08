@@ -53,6 +53,8 @@ If the knowledge base already extracted a section as its own note, that judgment
 - Put the attribution in the verb, not in a trailing disclaimer: 「他估计两成到五成」「据他回忆」「他听说有投资人……」, not 「……。这是他的体感，不是调查。」 At most one stand-alone boundary sentence per section (validator warns on more), and only where the caveat changes the conclusion.
 - Keep source caveats that affect the conclusion, but move process notes out of the reader copy. Process notes are anything about how the transcript was made or checked: ASR/字幕 corrections, 「口播里听成…」, 「没有核对」, 「两人都没有姓」, spelling variants of a name. The validator fails on these; if a name is uncertain, just use the best-supported form.
 - The source 整理文档's 深度解析 and 术语表 may still carry such notes; do not carry them over.
+- Named third parties stay named. If the guest answers Dario Amodei or Elon Musk by name, the article says so; 「某人」「一个流行说法」 is a cut, not a paraphrase. Where two speakers own two figures (a 25 % from the guest's opponent, a 75 % extrapolated by the host), keep each number with its owner.
+- Do not re-grade the claim while shortening it. Keep the guest's concessions (「他也赞赏说话的勇气」), keep the hedge words that limit a number, and do not add intensifiers or verdicts the guest never said. Reading the WeChat sentence next to the 整理文档 sentence, the force should match.
 - Do not promote a question from a video description into a claim made during the talk.
 - Prefer precise paraphrase to long quotation.
 - Attribution does not make a leak or unverified financing rumor publishable. Run the 运营规范 gate in `wechat-operation-policy.md` before writing.

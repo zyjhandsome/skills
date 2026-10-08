@@ -81,9 +81,12 @@ output path. The script prints `sections`, `cjk` count, and reading time, and
 | WARN | Fix in the .md, then re-run |
 |---|---|
 | no source URL | restore 内容链接 in 文章元数据 |
-| none is marked「主持」 | add「主持人」to the host's note in 对谈人物 (else no host color) |
+| none is marked「主持」 | add「主持人」to the host's note in 对谈人物 (else no host color). `×` and `；` / `;` split people only outside `（）` / `()`, so a semicolon inside one person's note does not drop the host |
 | duplicated blockquote | delete the repeated 事实边界 / quote block |
-| editor note ［…］ | a process note (ASR/字幕/核对/编者注) or a >20-char aside leaked into the body: move it into 自检报告 or rewrite as reader prose. Short tags like ［预测］［编者推断］［主持人口播］ are intended and never flagged |
+| editor note ［…］ | a process note (ASR/字幕/核对/编者注) or a >20-char aside leaked into the body: move it into 自检报告 or rewrite as reader prose. Short tags like ［预测］［编者推断］［主持人口播］ are intended and never flagged. A closed halfwidth `[编者注：…]` is left as written |
+| unclosed editor note | `[编者注` / `[ASR` / `［编者注` (same process-note words) opened and not closed before the blank line: close it in the .md. The converter does not close it |
+| orphan closing bracket | a line that is only `]` or `］`: join it back onto the note |
+| bracket leaked into dialogue | a 实录 line whose quote starts with `]` / `］`, including `「]」`: that closer was turned into speech. Restore the note in the .md; the converter still prints the line |
 
 Treat every WARN as a to-do before publishing.
 
@@ -91,7 +94,15 @@ It requires only the Python standard library (no pip installs).
 
 **Re-running the converter on a file overwrites hand-added Mermaid diagrams.**
 To rebuild an already-published note, use `batch_upgrade_dir.py` (see below),
-which saves and restores them.
+which saves and restores them. To rebuild just one note, pass its filename as
+the glob: `batch_upgrade_dir.py "<notes-dir>" --glob "<name>.html"`.
+
+**If the `.md` is renamed after publishing** (for example a longer descriptive
+stem), rename the `.html` to the same stem *and* rebuild it: the footer
+`来源:` line is derived from the source filename at build time and will
+otherwise keep pointing at a file that no longer exists. The companion 公众号
+files from `md2wechat` must be regenerated too (their fingerprint and filename
+stem are both checked against the `.md`).
 
 ### 2. Add Mermaid diagrams (judgment step)
 
@@ -118,9 +129,21 @@ flowchart LR
 Guidance:
 - Keep diagrams small (3–6 nodes). Use `flowchart LR` for sequences, `flowchart
   TD` for one-to-many fan-out. Labels in Chinese.
+- Quote any label that carries punctuation: `D["护士、电工、教师"]`, not
+  `D[护士电工教师]`. Gluing nouns together to dodge the quotes makes the node
+  unreadable; `、` `，` `：` are all fine inside `["…"]`.
+- A relation the speaker says is *absent* or *missing* is a dotted, labelled
+  edge: `A -. 没有被培植 .-> D["中间：…"]`. The caption then states the gap.
+- Typical shapes worth a picture: a "what to learn / what to do" list the
+  speaker enumerates (fan-out), two poles with an empty middle, a two-path
+  fork with different outcomes. A section whose 深度解析 already has a table
+  usually does not need a diagram too.
 - Only add a diagram when it genuinely clarifies; not every section needs one.
 - Diagrams render inside a card capped at the same reading width as the text
-  (the theme handles light/dark colors automatically).
+  (the theme handles light/dark colors automatically). When the Mermaid CDN
+  cannot be reached, the page renders each edge as a plain `A → B` line (dotted
+  edges as `A ⇢（label）B`), so the diagram still reads offline; the caption
+  must therefore make sense next to that text form too.
 
 ### 3. Refine auto-derived header fields (optional)
 
@@ -134,7 +157,7 @@ needs a better fit:
 | `doc-subtitle` | left empty (hidden) — the 全文论点 box already states the thesis | do not refill it with the thesis |
 | meta source line | 活动/节目/节目名称 短名 (else 对谈人物 host note "X 主持人" → X, else 原标题) + 核心人物/对谈人物/讲者 | e.g. "On Purpose · A × B" |
 | dialogue colors | 对谈人物: entry noted「主持」→ host; others guest-1..4 | mark the host in 对谈人物 |
-| meta date | 发布时间 | |
+| meta date | 发布时间 | the `（…口径/抓取…）` parenthetical and any `；` tail are dropped from the header; the full field stays in the 文章元数据 panel |
 | reading time | CJK chars ÷ 300 | estimate |
 
 ### 4. Verify
@@ -156,15 +179,26 @@ needs a better fit:
 - [ ] Footer "来源" matches the current .md filename
 - [ ] The build printed no WARN lines (or each was fixed in the .md)
 - [ ] Every block's outer edge aligns to one column (headings, bio, thesis,
-      insight, 事实边界, diagrams, dialogue, panels, footer)
+      insight, 事实边界, diagrams, dialogue, tables, panels, footer). A top-level
+      `.table-wrap` is `--measure` wide, the same edge as the paragraph above
+      it; it does not stretch to the grid column. Glossary and metadata tables
+      stay inside their panel, which is already on that measure. A table that
+      truly cannot fit uses `.full-bleed`, not a wider default column.
 - [ ] TOC and section `<h2>` show the same numbers (01, 02 …); bio / 导读 /
-      术语表 are unnumbered
+      术语表 are unnumbered. A source heading `## 3. 标题` shows that one number,
+      not `03` plus `3.`. Headings that start with `12%` or `2012 年` keep those digits
 - [ ] 「只看要点」 is the arrival state: every 实录 / 交锋 block starts closed,
       the button is pressed, and one click opens them all; each fold can still
       be re-opened on its own; a saved "show transcript" choice is restored;
       print expands everything
+- [ ] 「只看嘉宾」 appears only on notes with a host-colored speaker; pressing it
+      hides every `.step.speaker-host` turn (guest turns stay), the choice is
+      restored on reload, and it is off by default
 - [ ] Diagrams sit after 核心洞察, before 深度解析
 - [ ] Mermaid diagrams render (open the file in a browser)
+- [ ] Offline fallback: with the CDN blocked (DevTools → block
+      `cdn.jsdelivr.net`, or `delete window.mermaid; renderMermaid()`), each
+      diagram shows readable `A → B` lines, not raw Mermaid source
 - [ ] Dark mode: toggle theme — no flash on reload; callouts / highlight / strong chips /
       tables / code / Mermaid stay readable (borders + accent-on badges not washed out)
 - [ ] Light mode: body links / TOC active use readable terracotta (--link); filled badges
@@ -181,6 +215,7 @@ needs a better fit:
 | Auto-add Mermaid while batch-converting | Diagrams need per-file judgment; batch never invents them |
 | Ignore `WARN:` lines | Fix the source .md (see the WARN table in step 1), then re-run |
 | Patch duplicates / editor notes in the generated HTML | Fix the .md — a rebuild would bring them back |
+| Hand-delete a leading `1. ` from the generated `<h2>` | The converter already strips a section index (`N. ` / `N．`) from the visible title and TOC. Anchors stay on the original heading |
 | Use this as a generic md2html | Stop; see When not to use |
 
 ## Batch conversion

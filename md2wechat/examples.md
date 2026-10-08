@@ -50,13 +50,21 @@ Do **not** ask the image model to draw the title. The generated scene must stay 
 ```
 Ultra-wide WeChat cover illustration for a 2.35:1 crop. Cream #FAFAF7
 background, terracotta #D97757 accents. Put the metaphor on the LEFT and
-RIGHT sides. Keep the exact vertical and horizontal CENTER empty — a large
-quiet cream field with no objects — for later typography.
+RIGHT sides only, inside the outer 15% strips of the width, small, hugging
+the border (partially cropped by the edge is fine). The middle 70% of the
+width must be a completely empty quiet cream field — no objects, no shadows,
+no texture — for later typography.
 
 Absolutely no text, no letters, no Chinese characters, no numbers, no
 arrows, no UI, no logos, no captions, no watermarks, no white plates,
 no purple neon.
 ```
+
+Why so strict: the 2.35:1 crop keeps the full width, so a two-line title plus
+people line spans well over half of it. Image models drift objects toward the
+centre; "keep the centre empty" alone produced covers whose title overlapped
+the artwork and had to be regenerated. If the cropped image has anything
+inside the middle 70%, regenerate before overlaying.
 
 After crop, overlay the **source H1** (the same string as the HTML H1; never a punchier rewrite):
 

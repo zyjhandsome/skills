@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Machine-fill 4c/4d rows for a content-structuring draft (spec v5.36).
+"""Machine-fill 4c/4d/4f-3 rows for a content-structuring draft (spec v5.41).
 
 Prints Markdown table rows the agent can paste into「自检报告」. Judgment rows
 (语义保真 / 声纹附证据 / 遮名检验 / 原声占比 / 事实状态 / 信息覆盖抽样)
@@ -146,18 +146,31 @@ def main() -> int:
             print("\n4e READABILITY:")
             for issue in report["readability_issues"]:
                 print(f"  {issue}")
+        brackets = check_revision_loss.bracket_issues(text)
+        bracket_status = "✅" if not brackets else "⚠️"
+        print(
+            f"\n| 括注完整 | {bracket_status} | 4f-3 未收口或被写成发言的括注 {len(brackets)} 处 |"
+        )
+        for item in brackets:
+            print(f"  - {item}")
         if revision is not None:
             lost_facts, lost = revision
-            status = "✅" if not lost_facts and not lost else "⚠️"
+            lifted = check_revision_loss.lifted_notes(
+                args.before.read_text(encoding="utf-8"), text
+            )
+            status = "✅" if not lost_facts and not lost and not brackets and not lifted else "⚠️"
             print(
                 f"\n| 修订完整性 | {status} | 4f-1 缺失数字/专名 {len(lost_facts)} 项；"
-                f"4f-2 找不到对应表述的句子 {len(lost)} 句 |"
+                f"4f-2 找不到对应表述的句子 {len(lost)} 句；"
+                f"4f-4 编者注被写成发言 {len(lifted)} 句 |"
             )
             if lost_facts:
                 print("4f-1 LOST_FACTS:", "、".join(lost_facts))
             for s in lost[:40]:
                 print(f"  - {s[:100]}")
-    if report["actionable_count"] or report["spacing_count"]:
+            for s in lifted[:40]:
+                print(f"  NOTE_AS_SPEECH: {s[:100]}")
+    if report["actionable_count"] or report["spacing_count"] or check_revision_loss.bracket_issues(text):
         return 1
     return 0
 

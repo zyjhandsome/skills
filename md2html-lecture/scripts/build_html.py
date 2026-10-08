@@ -34,6 +34,16 @@ def strip_md(s):
     return re.sub(r"[*`]", "", s).strip()
 
 
+# Lecture CSS numbers content sections. "12. " is that index; "12%" and
+# "2012 年" are part of the title. Fullwidth ． is the same prefix.
+SECTION_INDEX_RE = re.compile(r"^\d{1,2}[.．]\s+")
+
+
+def display_section_title(title):
+    """Drop a leading section index so the page does not show 01 and 1. together."""
+    return SECTION_INDEX_RE.sub("", title, count=1)
+
+
 def slugify(title):
     s = strip_md(title).strip().lower()
     s = s.replace(".", "")
@@ -374,7 +384,9 @@ def render_content_section(title, body, roles=None):
             layers[name] = lines
             claimed.add(i)
 
-    out = ['<h2 id="%s" class="sec">%s</h2>\n' % (sid, inline(title))]
+    # Anchor stays on the original heading so existing links and saved diagrams
+    # still match. Only the visible words lose a leading "N. ".
+    out = ['<h2 id="%s" class="sec">%s</h2>\n' % (sid, inline(display_section_title(title)))]
     if any(l.strip() for l in pre):
         out.append("\n".join(render_blocks(pre)))
 
@@ -451,11 +463,32 @@ SKIP_TITLES = {"目录"}
 URL_RE = re.compile(r"https?://[^\s)\]（）<>|]+")
 
 
+def _split_people_field(raw):
+    """Split on × / ； / ; only outside （） or ()."""
+    parts, buf, depth = [], [], 0
+    for ch in raw:
+        if ch in "（(":
+            depth += 1
+        elif ch in "）)" and depth:
+            depth -= 1
+        elif depth == 0 and ch in "；;×":
+            parts.append("".join(buf))
+            buf = []
+            continue
+        buf.append(ch)
+    parts.append("".join(buf))
+    return parts
+
+
 def parse_people(meta):
-    """[(name, is_host, desc)] from 核心人物 / 对谈人物 / 讲者."""
+    """[(name, is_host, desc)] from 核心人物 / 对谈人物 / 讲者.
+
+    A semicolon inside one person's parentheses stays in that note. 「主持」
+    in the note still marks the host.
+    """
     raw = meta.get("核心人物", "") or meta.get("对谈人物", "") or meta.get("讲者", "")
     people = []
-    for p in re.split(r"[；;]|×", strip_md(raw)):
+    for p in _split_people_field(strip_md(raw)):
         m = re.match(r"^\s*([^（(]+?)\s*(?:[（(](.*)[）)])?\s*$", p)
         if not m or not m.group(1).strip():
             continue
@@ -475,7 +508,28 @@ def show_from_host(people):
     return ""
 
 
+def public_date(date):
+    """Header date only: drop the 口径/抓取 parenthetical and any `；` tail.
+
+    '2026-10-07（用户所记；2026-10-08 打开页面时显示为发布后 1 天）' → '2026-10-07'.
+    The full field still appears in the 文章元数据 panel, so nothing is lost.
+    """
+    if not date:
+        return ""
+    s = re.sub(r"[（(][^（）()]*[）)]", "", date)
+    s = re.split(r"[；;]", s)[0]
+    s = re.sub(r"\s+", " ", s).strip(" ，,、")
+    return s or date.strip()
+
+
 EDITOR_NOTE_RE = re.compile(r"ASR|字幕|转写|逐字稿|核对|编者注|待核|机检")
+# Same process-note words, but only as the start of a bracket. A closed
+# halfwidth [编者注：…] is left alone; an opener with no ] / ］ before the
+# blank line is the split-note failure.
+_NOTE_OPEN = re.compile(
+    r"[\[［]\s*(?:逐字稿|编者注|待核|字幕|转写|核对|机检|ASR)"
+)
+_LEAKED_QUOTE = re.compile(r"^\*\*[^*]+\*\*[：:]\s*「\s*[\]］]")
 
 
 def source_warnings(sections, people):
@@ -496,8 +550,22 @@ def source_warnings(sections, people):
         for a, b in zip(blocks, blocks[1:]):
             if a == b and a.startswith(">"):
                 warns.append("duplicated blockquote in「%s」: %s…" % (title, a[:30]))
+        for block in blocks:
+            for m in _NOTE_OPEN.finditer(block):
+                if not re.search(r"[\]］]", block[m.end():]):
+                    snippet = re.sub(r"\s+", " ", block[m.start():m.start() + 40])
+                    warns.append("unclosed editor note in「%s」: %s" % (title, snippet))
+        for line in body:
+            s = line.strip()
+            if s in ("]", "］"):
+                warns.append("orphan closing bracket in「%s」" % title)
+            elif _LEAKED_QUOTE.match(s):
+                warns.append(
+                    "bracket leaked into dialogue in「%s」: %s" % (title, s[:40])
+                )
         # Short tags like ［预测］［编者推断］［主持人口播］ are reader-facing by design;
         # only process notes (ASR/字幕/核对…) or long bracketed asides are flagged.
+        # Closed halfwidth [编者注：…] is a writing choice and is not rewritten here.
         for m in re.finditer(r"［([^］]+)］", "\n".join(body)):
             note = m.group(1)
             if EDITOR_NOTE_RE.search(note) or len(note) > 20:
@@ -659,7 +727,10 @@ def build(md_path, out_path):
         )
     toc.append('        <a href="#核心导读" class="lvl-2">核心导读</a>')
     for _, sid, t in content_sections:
-        toc.append('        <a href="#%s" class="lvl-2 toc-sec">%s</a>' % (sid, inline(t)))
+        toc.append(
+            '        <a href="#%s" class="lvl-2 toc-sec">%s</a>'
+            % (sid, inline(display_section_title(t)))
+        )
     if glossary_html:
         toc.append('        <a href="#延伸术语表" class="lvl-2">延伸术语表</a>')
     if metadata_html:
@@ -694,7 +765,7 @@ def build(md_path, out_path):
     else:
         meta_source = strip_md(meta.get("原标题", "")) or doc_title
 
-    meta_date = strip_md(meta.get("发布时间", ""))
+    meta_date = public_date(strip_md(meta.get("发布时间", "")))
     read_min = max(1, round(cjk_total / 300))
     read_time = "~%d 分钟阅读" % read_min
 

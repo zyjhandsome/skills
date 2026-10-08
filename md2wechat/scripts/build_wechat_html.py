@@ -321,8 +321,17 @@ def is_sep_row(line: str) -> bool:
     return bool(_SEP_ROW.match(line.strip()))
 
 
+_ESC_PIPE = "\x00PIPE\x00"
+
+
 def split_cells(row: str) -> list[str]:
-    return [c.strip() for c in row.strip().strip("|").split("|")]
+    """Split a GFM table row on `|`, honouring the `\\|` escape.
+
+    Titles like `… Changes Work \\| Daron Acemoglu` must survive as one cell;
+    a naive split truncated them to `… Work \\` in the footer.
+    """
+    s = row.strip().replace("\\|", _ESC_PIPE).strip("|")
+    return [c.replace(_ESC_PIPE, "|").strip() for c in s.split("|")]
 
 
 def _td(text: str, *, header: bool = False, first_col: bool = False) -> str:
@@ -433,7 +442,7 @@ def parse_meta_table(lines: list[str], start: int) -> tuple[dict[str, str], int]
         i += 1
         if re.match(r"^\|[\s\-:|]+\|$", row.strip()):
             continue
-        cells = [c.strip() for c in row.strip().strip("|").split("|")]
+        cells = split_cells(row)
         if len(cells) >= 2 and bare(cells[0]) not in ("项目",):
             meta[bare(cells[0])] = cells[1]
     return meta, i
@@ -775,6 +784,21 @@ def _self_test() -> None:
     assert "原文：Garry Tan: Own Your Intelligence" in foot
     assert "视频" not in foot and "非逐字稿" not in foot
     assert "http" not in foot and "2026-08-07" not in foot
+    # escaped pipe inside a metadata cell (原标题 with a `|` separator)
+    assert split_cells(r"| 原标题 | How to Stay Valuable \| Daron Acemoglu |") == [
+        "原标题",
+        "How to Stay Valuable | Daron Acemoglu",
+    ]
+    piped_meta, _ = parse_meta_table(
+        [
+            "| 项目 | 内容 |",
+            "|---|---|",
+            r"| 原标题 | Nobel Economist: How to Stay Valuable \| Daron Acemoglu |",
+        ],
+        0,
+    )
+    assert piped_meta["原标题"] == "Nobel Economist: How to Stay Valuable | Daron Acemoglu", piped_meta
+    assert "原文：Nobel Economist: How to Stay Valuable | Daron Acemoglu" in source_footer(piped_meta)
     assert default_out_path(Path("20260803 刘润×吴军_整理文档.md")).name == (
         "20260803 刘润×吴军_整理文档_公众号文章.html"
     )

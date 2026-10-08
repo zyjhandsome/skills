@@ -72,6 +72,9 @@ Do not put the audit inside the pasted WeChat article, and do not leave it next 
 ### Attribution
 
 - Attribute oral statistics, market observations, predictions and contested causal claims to the speaker.
+- Keep the names the speaker names. When the source quotes or argues with a public figure (Dario Amodei, Elon Musk, Sam Altman …), the WeChat copy keeps the name; 「某人」「一个说法」「有人预测」 is an information loss, not a safety measure. Anonymise only when the 运营规范 gate requires it, and then say so in the audit.
+- When two people in the source own two numbers, keep both owners. 「Dario 说 25%，主持人推到 75%」 must not collapse into 「有人说 25%、75%」 or into one speaker owning both.
+- Keep the speaker's hedges and concessions (「他也赞赏说话的勇气」「有真正的挑战」). Dropping the hedge sharpens the claim; so does adding a judgment the speaker never made (「更神圣」「对不上这笔钱」). Compression may shorten a sentence, never re-grade it.
 - Label editor synthesis with language such as “可以把这条规律概括为”.
 - Use quotation marks only for wording supported as a direct quote; use a card without quote marks for editorial summaries.
 
@@ -83,7 +86,7 @@ Do not put the audit inside the pasted WeChat article, and do not leave it next 
 
 ### Reader-facing provenance
 
-Attribute oral claims in the body. 来源与说明 only contains `原文：{原标题}` — no video URL, date parenthesis, or “非逐字稿” note.
+Attribute oral claims in the body. 来源与说明 only contains `原文：{原标题}` — no video URL, date parenthesis, or “非逐字稿” note. The 原标题 is copied whole: a title written as `… Work \| Daron Acemoglu` in the 整理文档 metadata table (the GFM escape for a literal `|`) must come out as `… Work | Daron Acemoglu`, not `… Work \`. The build script handles the escape; the validator fails a footer that ends in `\` or still shows `\|`.
 
 Keep operational details such as crawler failures or ASR tooling out of the article unless they materially affect reliability. If automatic transcription materially limits quote accuracy, avoid long direct quotations.
 

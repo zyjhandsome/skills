@@ -793,6 +793,20 @@
       white-space: pre-wrap;
       text-align: left;
     }
+    /* CDN unreachable (offline / blocked): show the flow as plain "A → B" lines
+       instead of raw Mermaid source. */
+    .mermaid.mermaid-fallback {
+      opacity: 1;
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 1.9;
+      color: var(--text-muted);
+      white-space: pre-line;
+      text-align: left;
+    }
+
+    /* 只看嘉宾: hide the host's turns in 对谈实录 (reader toggle, default off) */
+    body.guest-only .step.speaker-host { display: none; }
 
     /* ============================================================
        PROS / CONS
@@ -893,8 +907,14 @@
       margin: 20px 0;
       border-radius: var(--radius);
       border: 1px solid var(--border);
+      /* 100% fills a parent already on --measure (glossary, metadata).
+         A top-level wrap is also `.content > *`. This rule is the same
+         specificity and comes later, so it would stretch body tables to the
+         grid column. The restatement below keeps those on the reading measure. */
       max-width: 100%;
     }
+    .content > .table-wrap,
+    .content > table { max-width: var(--measure); }
     .content table {
       width: 100%;
       border-collapse: collapse;
@@ -1306,6 +1326,7 @@
       </div>
       <div class="topbar-actions">
         <button class="text-btn" id="skim-toggle" type="button" aria-pressed="true" title="展开全部对谈实录" hidden>只看要点</button>
+        <button class="text-btn" id="guest-only-toggle" type="button" aria-pressed="false" title="隐藏主持人的发言，只读嘉宾原声" hidden>只看嘉宾</button>
         <button class="icon-btn" onclick="window.print()" title="打印 / 保存 PDF" aria-label="打印 / 保存 PDF">
           <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-printer"/></svg>
         </button>
@@ -1419,12 +1440,35 @@
         themeVariables: mermaidThemeVariables(isDark),
       });
     }
+    // Plain-text rendering of a small flowchart for when the CDN did not load:
+    // node ids are replaced by their labels, each edge becomes one "A → B" line
+    // (dotted edges become "A ⇢（label）B").
+    function mermaidTextFallback(src) {
+      const labels = {};
+      src.replace(/(\w+)\[\s*"?([^\]"]+?)"?\s*\]/g, (m, id, label) => { labels[id] = label; return m; });
+      const lines = [];
+      src.split("\n").forEach(line => {
+        const m = line.match(/^\s*(\w+)(?:\[[^\]]*\])?\s*(-->|-\.\s*([^.]*?)\s*\.->|-\.->)\s*(\w+)(?:\[[^\]]*\])?/);
+        if (!m) return;
+        const arrow = m[2] === "-->" ? " → " : (m[3] ? ` ⇢（${m[3]}）` : " ⇢ ");
+        lines.push((labels[m[1]] || m[1]) + arrow + (labels[m[4]] || m[4]));
+      });
+      return lines.join("\n");
+    }
     async function renderMermaid() {
-      if (typeof mermaid === "undefined") return;
-      initMermaid();
       const els = document.querySelectorAll(".mermaid");
       els.forEach(el => {
         if (!diagramSources.has(el)) diagramSources.set(el, el.textContent.trim());
+      });
+      if (typeof mermaid === "undefined") {
+        els.forEach(el => {
+          const text = mermaidTextFallback(diagramSources.get(el));
+          if (text) { el.textContent = text; el.classList.add("mermaid-fallback"); }
+        });
+        return;
+      }
+      initMermaid();
+      els.forEach(el => {
         el.textContent = diagramSources.get(el);
         el.removeAttribute("data-processed");
       });
@@ -1579,6 +1623,28 @@
       else if (saved === "0") apply(false, false);
     }
 
+    // ---------- 只看嘉宾: hide host turns inside 对谈实录 ----------
+    // Shown only when the note has a host-colored speaker. Per-note key, like skim.
+    const GUEST_KEY = "md2html-guest-only:" + location.pathname;
+    function setupGuestOnly() {
+      const btn = document.getElementById("guest-only-toggle");
+      if (!btn || !document.querySelector(".step.speaker-host")) return;
+      btn.hidden = false;
+      const apply = (on) => {
+        document.body.classList.toggle("guest-only", on);
+        btn.setAttribute("aria-pressed", on ? "true" : "false");
+        btn.title = on ? "恢复显示主持人的发言" : "隐藏主持人的发言，只读嘉宾原声";
+      };
+      btn.addEventListener("click", () => {
+        const on = btn.getAttribute("aria-pressed") !== "true";
+        try { localStorage.setItem(GUEST_KEY, on ? "1" : "0"); } catch (e) {}
+        apply(on);
+      });
+      let saved = null;
+      try { saved = localStorage.getItem(GUEST_KEY); } catch (e) {}
+      apply(saved === "1");
+    }
+
     // ---------- Print: expand collapsed panels, restore afterwards ----------
     function setupPrintExpand() {
       let reopened = [];
@@ -1664,6 +1730,7 @@
       syncTocA11y(false);
       setupPrintExpand();
       setupSkim();
+      setupGuestOnly();
       injectAnchors();
       injectCopyButtons();
       renderMermaid();
