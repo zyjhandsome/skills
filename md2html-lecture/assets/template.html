@@ -313,7 +313,7 @@
     .toc-nav a.toc-sec { align-items: baseline; }
     .toc-nav a.toc-sec::before {
       counter-increment: toc-sec;
-      content: counter(toc-sec);
+      content: counter(toc-sec, decimal-leading-zero);
       flex: 0 0 1.7em;
       color: var(--text-subtle);
       font-variant-numeric: tabular-nums;
@@ -1278,6 +1278,7 @@
       .topbar, .toc, .toc-backdrop, .icon-btn, .text-btn, .copy-btn, .anchor, .scroll-progress, .back-to-top, .section-jump { display: none !important; }
       .layout { grid-template-columns: 1fr; padding: 0; max-width: 100%; }
       body { background: #fff; color: #000; }
+      body.guest-only .step.speaker-host { display: grid; }
       a { color: #000; }
       .content pre, .callout, .compare-card, .step, .diagram { break-inside: avoid; }
       .doc-footer { break-before: avoid; }
@@ -1389,6 +1390,7 @@
     <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-arrow-up"/></svg>
   </button>
 
+  <script type="application/json" id="lecture-header-defaults">{{HEADER_DEFAULTS}}</script>
   <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
   <script>
     // ---------- Theme ----------
@@ -1401,12 +1403,12 @@
     // Head script already set data-theme; keep icon + OS-sync in sync here.
     function setTheme(theme, { persist } = { persist: true }) {
       document.documentElement.dataset.theme = theme;
-      if (persist) localStorage.setItem(STORAGE_KEY, theme);
+      if (persist) { try { localStorage.setItem(STORAGE_KEY, theme); } catch (e) {} }
       applyThemeIcon();
       renderMermaid();
     }
     window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (e) => {
-      if (localStorage.getItem(STORAGE_KEY)) return;
+      try { if (localStorage.getItem(STORAGE_KEY)) return; } catch (e) {}
       setTheme(e.matches ? "dark" : "light", { persist: false });
     });
 

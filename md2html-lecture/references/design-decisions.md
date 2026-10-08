@@ -54,8 +54,9 @@ into the template; do not re-encode these rules in `build_html.py`.
   note has a host-colored speaker. It adds `body.guest-only`, which hides
   `.step.speaker-host` turns so a reader can read the guest's voice straight
   through; it never deletes or reorders content, and it is stored per note
-  (`md2html-guest-only:` + pathname) like skim. Print is unaffected (the body
-  class is a reader filter, not a print state).
+  (`md2html-guest-only:` + pathname) like skim. Print CSS explicitly restores
+  host turns as grid items, while beforeprint expands folds; afterprint restores
+  the folds and the reader's guest-only filter still applies on screen.
 - Mermaid still loads from the CDN (an inline copy would add ~2 MB per note),
   but when `mermaid` is undefined at render time each `.mermaid` block is
   rewritten as plain `A → B` lines (`mermaidTextFallback`: node ids replaced
@@ -66,6 +67,10 @@ into the template; do not re-encode these rules in `build_html.py`.
 - Content sections are numbered by CSS counters in both TOC (`.toc-sec`) and
   body (`h2.sec`), so numbers never drift from order and are not copied as text.
 - No subtitle under the title: it could only repeat the 全文论点.
+- `lecture-header-defaults` is a non-executable JSON snapshot of auto-derived
+  header contents. Keep it in the template: upgrades compare current fields
+  against this snapshot to preserve manual edits while refreshing other fields.
+  Reading time and the source footer always follow the current Markdown.
 - System font stack only (no Google Fonts): CJK always came from system fonts;
   the web font was slow/blocked in mainland China and failed offline.
 - Mermaid diagrams sit after 核心洞察 (conclusion first, then the picture).

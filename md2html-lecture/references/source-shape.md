@@ -19,6 +19,12 @@ Matched by exact name:
 
 A content heading may still begin with a section index (`1. ` … `12. `, also `1．`). The converter drops that prefix from the visible `<h2>` and the TOC label. CSS counters draw 01, 02. The anchor stays derived from the original heading, so existing links and saved diagrams still match. A heading that merely starts with a number (`12% 批次`, `2012 年的 Chrome`, `66 岁`) is left whole.
 
+Repeated or colliding heading anchors receive `-2`, `-3`, … suffixes. Page UI
+ids and layer ids are reserved too, so a section named `main` cannot replace
+the main element's anchor. Unambiguous existing anchors stay unchanged.
+Renaming a source heading changes its anchor; an upgrade with unmatched saved
+diagrams fails without replacing the old page (see operations.md).
+
 Expected 对谈三层 subsections: `核心洞察` / `深度解析` / `对谈实录`.
 **`对谈实录` is optional** — omit the whole block when there is no dialogue
 worth quoting; the converter skips a missing layer and does not invent an
@@ -60,6 +66,14 @@ Block-level Markdown inside 深度解析 / 语境与释义 / 未决问题 is sup
 paragraphs, tables, `-` and `1.` lists, `>` blockquotes, fenced code, and
 `*italics*`. Content under an unexpected `### `, or with no `### ` at all, is
 rendered under its own heading rather than dropped.
+
+Backtick and tilde code fences protect `#` / `##` / `###` lines from heading
+parsing. A closer must use the opening character, be at least as long, and
+have no trailing prose. Inline code protects its literal emphasis/link syntax;
+normal link URLs are attribute-escaped, and executable URL schemes are not
+turned into links. This converter implements this limited note format rather
+than a full CommonMark parser (nested lists, images and footnotes are not
+promised). Keep such material as prose or use an appropriate converter.
 
 ## 争辩型访谈 layers
 

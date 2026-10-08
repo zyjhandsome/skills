@@ -8,9 +8,11 @@ The script performs the deterministic structural transform only. It does NOT
 invent Mermaid diagrams — add those by hand after running (see SKILL.md).
 """
 import html
+import json
 import os
 import re
 import sys
+from urllib.parse import urlsplit
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE = os.path.join(HERE, "..", "assets", "template.html")
@@ -19,14 +21,47 @@ TEMPLATE = os.path.join(HERE, "..", "assets", "template.html")
 # --------------------------------------------------------------------------
 # Inline + helpers
 # --------------------------------------------------------------------------
+def safe_href(url):
+    """Keep ordinary links; reject executable schemes and control characters."""
+    url = url.strip()
+    checked = html.unescape(url)
+    if not checked or re.search(r"[\x00-\x20\x7f]", checked):
+        return ""
+    try:
+        parsed = urlsplit(checked)
+    except ValueError:
+        return ""
+    if parsed.scheme.lower() not in ("", "http", "https", "mailto"):
+        return ""
+    return url
+
+
+CODE_SPAN_RE = re.compile(r"(?<!`)(`+)(?!`)(.+?)(?<!`)\1(?!`)", re.DOTALL)
+
+
 def inline(s):
-    """Render markdown inline syntax to HTML (bold / italic / code / links)."""
-    out = html.escape(s, quote=False)
-    out = re.sub(r"`([^`]+?)`", lambda m: "<code>%s</code>" % m.group(1), out)
-    out = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", out)
-    out = re.sub(r"(?<!\*)\*(?=\S)([^*\n]+?)(?<=\S)\*(?!\*)", r"<em>\1</em>", out)
-    out = re.sub(r"\[([^\]]+?)\]\(([^)]+?)\)", r'<a href="\2">\1</a>', out)
-    return out.strip()
+    """Protect code before rendering emphasis and links; escape URL attributes."""
+    code = []
+
+    def protect(m):
+        code.append("<code>%s</code>" % html.escape(m.group(2), quote=False))
+        return "\x00%d\x00" % (len(code) - 1)
+
+    def emphasis(text):
+        out = html.escape(text, quote=False)
+        out = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", out)
+        return re.sub(r"(?<!\*)\*(?=\S)([^*\n]+?)(?<=\S)\*(?!\*)", r"<em>\1</em>", out)
+
+    text = CODE_SPAN_RE.sub(protect, s)
+    out, start = [], 0
+    for m in re.finditer(r"\[([^\]]+?)\]\(([^)]+?)\)", text):
+        out.append(emphasis(text[start:m.start()]))
+        label, href = emphasis(m.group(1)), safe_href(m.group(2))
+        out.append('<a href="%s">%s</a>' % (html.escape(href, quote=True), label) if href else label)
+        start = m.end()
+    out.append(emphasis(text[start:]))
+    rendered = "".join(out)
+    return re.sub(r"\x00(\d+)\x00", lambda m: code[int(m.group(1))], rendered).strip()
 
 
 def strip_md(s):
@@ -52,6 +87,17 @@ def slugify(title):
     return s
 
 
+def unique_id(base, used):
+    """Keep existing anchors when possible and disambiguate collisions."""
+    base = base or "section"
+    sid, n = base, 2
+    while sid in used:
+        sid = "%s-%d" % (base, n)
+        n += 1
+    used.add(sid)
+    return sid
+
+
 def split_row(row):
     """Split a markdown table row on unescaped pipes."""
     cells = re.split(r"(?<!\\)\|", row.strip())
@@ -65,7 +111,7 @@ def split_row(row):
 def render_cell(cell):
     if re.match(r"^https?://\S+$", cell):
         text = "YouTube 原视频" if "youtu" in cell else "原文链接"
-        return '<a href="%s">%s</a>' % (cell, text)
+        return '<a href="%s">%s</a>' % (html.escape(safe_href(cell), quote=True), text)
     return inline(cell)
 
 
@@ -90,6 +136,17 @@ def _is_table_separator(line):
 
 
 LIST_ITEM_RE = re.compile(r"^\s*(?:\d+[.)]|[-*])\s+\S")
+
+
+def fence_transition(line, fence):
+    """Return (inside_code, next_fence), respecting fence character and length."""
+    if fence is not None:
+        closer = r"^\s*%s{%d,}\s*$" % (re.escape(fence[0]), len(fence))
+        return True, None if re.match(closer, line) else fence
+    m = re.match(r"^\s*(`{3,}|~{3,})(.*)$", line)
+    if m and not (m.group(1)[0] == "`" and "`" in m.group(2)):
+        return True, m.group(1)
+    return False, None
 
 
 def render_blocks(lines):
@@ -146,17 +203,17 @@ def render_blocks(lines):
 
     for l in lines:
         s = l.strip()
+        _, next_fence = fence_transition(l, fence)
         if fence is not None:
-            if s.startswith(fence):
+            if next_fence is None:
                 emit_code()
                 fence = None
             else:
                 code.append(l)
             continue
-        m = re.match(r"^\s*(`{3,}|~{3,})", l)
-        if m:
+        if next_fence is not None:
             flush()
-            fence = m.group(1)
+            fence = next_fence
         elif s == "" or re.fullmatch(r"-{3,}|\*{3,}|_{3,}", s):
             flush()
         else:
@@ -216,11 +273,13 @@ def split_sections(md):
     title = ""
     sections = []
     cur_title, cur_body = None, []
+    fence = None
     for l in lines:
-        if l.startswith("# ") and not l.startswith("## "):
+        in_code, fence = fence_transition(l, fence)
+        if not in_code and l.startswith("# "):
             title = strip_md(l[2:])
             continue
-        if l.startswith("## "):
+        if not in_code and l.startswith("## "):
             if cur_title is not None:
                 sections.append((cur_title, cur_body))
             cur_title, cur_body = l[3:].strip(), []
@@ -239,8 +298,10 @@ def split_subsections(body):
     emit unexpected headings and heading-less prose instead of dropping them.
     """
     pre, subs, cur = [], [], None
+    fence = None
     for l in body:
-        if l.startswith("### "):
+        in_code, fence = fence_transition(l, fence)
+        if not in_code and l.startswith("### "):
             cur = (l[4:].strip(), [])
             subs.append(cur)
         elif cur is not None:
@@ -373,8 +434,14 @@ def extract_md_tables(body):
 LAYER_ORDER = ("核心洞察", "深度解析", "对谈实录", "原声交锋", "语境与释义", "未决问题")
 
 
-def render_content_section(title, body, roles=None):
-    sid = slugify(title)
+def render_content_section(title, body, roles=None, used_ids=None):
+    used_ids = set() if used_ids is None else used_ids
+    sid = unique_id(slugify(title), used_ids)
+    escaped_sid = html.escape(sid, quote=True)
+
+    def layer_id(suffix):
+        return html.escape(unique_id(sid + "-" + suffix, used_ids), quote=True)
+
     pre, subs_list = split_subsections(body)
 
     # Claim each known layer once; whatever is left over is rendered as-is below.
@@ -386,7 +453,7 @@ def render_content_section(title, body, roles=None):
 
     # Anchor stays on the original heading so existing links and saved diagrams
     # still match. Only the visible words lose a leading "N. ".
-    out = ['<h2 id="%s" class="sec">%s</h2>\n' % (sid, inline(display_section_title(title)))]
+    out = ['<h2 id="%s" class="sec">%s</h2>\n' % (escaped_sid, inline(display_section_title(title)))]
     if any(l.strip() for l in pre):
         out.append("\n".join(render_blocks(pre)))
 
@@ -401,9 +468,9 @@ def render_content_section(title, body, roles=None):
             body.append("\n".join(render_blocks(extra)))
         out.append(
             '<details class="dialogue-fold">\n'
-            '<summary><h3 id="%s-%s" class="layer-heading %s">%s</h3>'
+            '<summary><h3 id="%s" class="layer-heading %s">%s</h3>'
             '<span class="fold-count">%d 轮发言</span></summary>\n%s\n</details>'
-            % (sid, anchor, css, heading, n, "\n".join(body))
+            % (layer_id(anchor), css, heading, n, "\n".join(body))
         )
 
     if "核心洞察" in layers:
@@ -414,15 +481,15 @@ def render_content_section(title, body, roles=None):
             else "\n".join(render_blocks(layers["核心洞察"]))
         )
         out.append(
-            '<h3 id="%s-insight" class="layer-heading layer-insight">核心洞察</h3>\n'
+            '<h3 id="%s" class="layer-heading layer-insight">核心洞察</h3>\n'
             '<div class="callout callout-tip section-insight">\n'
             '  <svg class="callout-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-tip"/></svg>\n'
             '  <div class="callout-body">%s</div>\n'
-            "</div>" % (sid, insight_html)
+            "</div>" % (layer_id("insight"), insight_html)
         )
     if "深度解析" in layers:
         out.append(
-            '<h3 id="%s-analysis" class="layer-heading layer-analysis">深度解析</h3>' % sid
+            '<h3 id="%s" class="layer-heading layer-analysis">深度解析</h3>' % layer_id("analysis")
         )
         out.append("\n".join(render_blocks(layers["深度解析"])))
     if "对谈实录" in layers:
@@ -433,23 +500,23 @@ def render_content_section(title, body, roles=None):
         timeline("原声交锋", "clash", "layer-clash", "原声交锋")
     if "语境与释义" in layers:
         out.append(
-            '<h3 id="%s-context" class="layer-heading layer-context">语境与释义</h3>' % sid
+            '<h3 id="%s" class="layer-heading layer-context">语境与释义</h3>' % layer_id("context")
         )
         out.append("\n".join(render_blocks(layers["语境与释义"])))
     if "未决问题" in layers:
         out.append(
-            '<h3 id="%s-open" class="layer-heading layer-open">未决问题</h3>\n'
+            '<h3 id="%s" class="layer-heading layer-open">未决问题</h3>\n'
             '<div class="callout callout-warn section-open">\n'
             '  <svg class="callout-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-warn"/></svg>\n'
             '  <div class="callout-body">\n%s\n  </div>\n'
-            "</div>" % (sid, "\n".join(render_blocks(layers["未决问题"])))
+            "</div>" % (layer_id("open"), "\n".join(render_blocks(layers["未决问题"])))
         )
 
     # Unexpected '### ' headings keep their heading and body instead of vanishing.
     for i, (name, lines) in enumerate(subs_list):
         if i in claimed:
             continue
-        out.append('<h3 id="%s-%s">%s</h3>' % (sid, slugify(name), inline(name)))
+        out.append('<h3 id="%s">%s</h3>' % (layer_id(slugify(name)), inline(name)))
         if any(l.strip() for l in lines):
             out.append("\n".join(render_blocks(lines)))
 
@@ -535,11 +602,21 @@ _LEAKED_QUOTE = re.compile(r"^\*\*[^*]+\*\*[：:]\s*「\s*[\]］]")
 def source_warnings(sections, people):
     """Upstream (content-structuring) issues the converter can see but not fix."""
     warns = []
+    titles = {title for title, _ in sections}
+    for required in ("文章元数据", "核心导读"):
+        if required not in titles:
+            warns.append("missing required section「%s」" % required)
     if len(people) >= 2 and not any(h for _, h, _ in people):
         warns.append("对谈人物 has %d people but none is marked「主持」— no host color" % len(people))
     for title, body in sections:
         if title in ("文章元数据", "自检报告", "延伸术语表"):
             continue
+        # Code examples may legitimately contain bracket syntax and notes.
+        prose, fence = [], None
+        for line in body:
+            in_code, fence = fence_transition(line, fence)
+            prose.append("" if in_code else line)
+        body = prose
         blocks, cur = [], []
         for l in body + [""]:
             if l.strip():
@@ -586,6 +663,11 @@ def render_selfcheck(body):
 def build(md_path, out_path):
     md = open(md_path, encoding="utf-8").read()
     doc_title, sections = split_sections(md)
+    if not doc_title:
+        raise ValueError("missing # document title")
+    tpl = open(TEMPLATE, encoding="utf-8").read()
+    used_ids = set(re.findall(r'\bid="([^"]+)"', tpl))
+    used_ids.update(("人物背景", "核心导读", "延伸术语表", "文章元数据", "自检报告"))
 
     meta = {}            # metadata table key -> raw value
     bio_label = ""       # 人物背景 / 讲者背景 (from blockquote label)
@@ -608,10 +690,10 @@ def build(md_path, out_path):
             for r in [split_row(l) for l in tbl_lines][2:]:
                 if len(r) >= 2:
                     meta[strip_md(r[0])] = r[1]
-            for v in meta.values():
+            for v in [meta.get("内容链接", "")] + list(meta.values()):
                 m = URL_RE.search(v)
                 if m and not source_url:
-                    source_url = m.group(0)
+                    source_url = safe_href(m.group(0))
             paras = quote_paragraphs(body)
             if paras:
                 lm = re.match(r"^\*\*([^*]+)\*\*[：:]\s*", paras[0])
@@ -657,7 +739,7 @@ def build(md_path, out_path):
         # regular content section (文章元数据 precedes these, so roles see 对谈人物)
         if roles is None:
             roles = SpeakerRoles([(n, h) for n, h, _ in parse_people(meta)])
-        sec_html, sid, n = render_content_section(title, body, roles)
+        sec_html, sid, n = render_content_section(title, body, roles, used_ids)
         content_sections.append((sec_html, sid, title))
         cjk_total += n
 
@@ -725,11 +807,12 @@ def build(md_path, out_path):
         toc.append(
             '        <a href="#人物背景" class="lvl-2">%s</a>' % inline(bio_label or "人物背景")
         )
-    toc.append('        <a href="#核心导读" class="lvl-2">核心导读</a>')
+    if intro_html:
+        toc.append('        <a href="#核心导读" class="lvl-2">核心导读</a>')
     for _, sid, t in content_sections:
         toc.append(
             '        <a href="#%s" class="lvl-2 toc-sec">%s</a>'
-            % (sid, inline(display_section_title(t)))
+            % (html.escape(sid, quote=True), inline(display_section_title(t)))
         )
     if glossary_html:
         toc.append('        <a href="#延伸术语表" class="lvl-2">延伸术语表</a>')
@@ -773,7 +856,6 @@ def build(md_path, out_path):
     eyebrow = "对谈笔记" if ("对谈" in struct or "访谈" in struct or len(people) >= 2) else "整理笔记"
 
     # ---- render template ----
-    tpl = open(TEMPLATE, encoding="utf-8").read()
     repl = {
         "{{TITLE}}": html.escape(doc_title, quote=False),
         "{{EYEBROW}}": html.escape(eyebrow, quote=False),
@@ -783,11 +865,20 @@ def build(md_path, out_path):
         "{{META_READTIME}}": html.escape(read_time, quote=False),
         "{{TOC}}": toc_html,
         "{{CONTENT}}": content,
-        "{{SOURCE_URL}}": source_url or "#",
+        "{{SOURCE_URL}}": html.escape(source_url or "#", quote=True),
         "{{SOURCE_FILE}}": html.escape(os.path.basename(md_path), quote=False),
     }
-    for k, v in repl.items():
-        tpl = tpl.replace(k, v)
+    defaults = {
+        "title": repl["{{TITLE}}"],
+        "doc-title": repl["{{TITLE}}"],
+        "doc-eyebrow": repl["{{EYEBROW}}"],
+        "doc-subtitle": repl["{{SUBTITLE}}"],
+        "meta-source": repl["{{META_SOURCE}}"],
+        "meta-date": repl["{{META_DATE}}"],
+    }
+    repl["{{HEADER_DEFAULTS}}"] = json.dumps(defaults, ensure_ascii=False).replace("<", "\\u003c")
+    # One substitution pass keeps template-looking literals in the article intact.
+    tpl = re.sub(r"\{\{[A-Z_]+\}\}", lambda m: repl.get(m.group(0), m.group(0)), tpl)
 
     open(out_path, "w", encoding="utf-8").write(tpl)
     print("Wrote %s" % out_path)
