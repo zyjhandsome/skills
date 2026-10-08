@@ -37,6 +37,44 @@ class OverlayCoverTests(unittest.TestCase):
         errors = validate_cover(out, expected_title="反馈循环越短，判断越可靠")
         self.assertEqual(errors, [])
 
+    def test_title_font_falls_back_to_sans_with_warning(self):
+        import io
+        import contextlib
+        import overlay_cover_text as oct_mod
+
+        sans = oct_mod._first_existing(oct_mod._SANS_CANDIDATES)
+        if sans is None:
+            self.skipTest("no sans CJK font on this machine")
+        saved = oct_mod._SERIF_CANDIDATES[:]
+        oct_mod._SERIF_CANDIDATES[:] = []
+        try:
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                spec = oct_mod._title_font_spec()
+            self.assertEqual(spec, sans)
+            self.assertIn("WARN", err.getvalue())
+        finally:
+            oct_mod._SERIF_CANDIDATES[:] = saved
+
+    def test_exits_when_no_cjk_font_at_all(self):
+        import os
+        import overlay_cover_text as oct_mod
+
+        saved_serif = oct_mod._SERIF_CANDIDATES[:]
+        saved_sans = oct_mod._SANS_CANDIDATES[:]
+        saved_env = os.environ.pop("PILLOW_CJK_FONT", None)
+        oct_mod._SERIF_CANDIDATES[:] = []
+        oct_mod._SANS_CANDIDATES[:] = []
+        try:
+            with self.assertRaises(SystemExit) as cm:
+                oct_mod._title_font_spec()
+            self.assertIn("PILLOW_CJK_FONT", str(cm.exception))
+        finally:
+            oct_mod._SERIF_CANDIDATES[:] = saved_serif
+            oct_mod._SANS_CANDIDATES[:] = saved_sans
+            if saved_env is not None:
+                os.environ["PILLOW_CJK_FONT"] = saved_env
+
     def test_refuses_second_overlay(self):
         src = self._blank()
         overlay(src, "标题一次", "甲")

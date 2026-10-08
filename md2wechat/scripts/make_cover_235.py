@@ -7,6 +7,10 @@ import argparse
 import sys
 from pathlib import Path
 
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8")
+
 RATIO = 2.35
 DEFAULT_SIZE = (1175, 500)
 

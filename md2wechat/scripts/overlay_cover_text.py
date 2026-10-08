@@ -12,6 +12,10 @@ import argparse
 import sys
 from pathlib import Path
 
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8")
+
 # Title = accent-strong; people = muted terracotta (not near-black YaHei).
 TITLE_FILL = (168, 85, 51)       # #A85533
 PEOPLE_FILL = (176, 148, 128)    # #B09480
@@ -45,31 +49,79 @@ def _first_existing(candidates: list[tuple[str, int]]) -> tuple[str, int] | None
     return None
 
 
+# Preferred serif (title) and sans (people line) faces, by platform. Any CJK
+# face is better than Pillow's built-in bitmap font, which has no Han glyphs
+# and would print tofu; so the lists end with broad fallbacks and the two
+# roles may borrow from each other before giving up.
+_SERIF_CANDIDATES: list[tuple[str, int]] = [
+    (r"C:\Windows\Fonts\STZHONGS.TTF", 0),      # 华文中宋
+    (r"C:\Windows\Fonts\NotoSerifSC-VF.ttf", 0),
+    (r"C:\Windows\Fonts\STSONG.TTF", 0),
+    (r"C:\Windows\Fonts\simsun.ttc", 0),
+    (r"C:\Windows\Fonts\simkai.ttf", 0),
+    ("/System/Library/Fonts/Supplemental/Songti.ttc", 0),
+    ("/System/Library/Fonts/STHeiti Medium.ttc", 0),
+    ("/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc", 0),
+    ("/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc", 2),
+    ("/usr/share/fonts/truetype/noto/NotoSerifCJK-Regular.ttc", 0),
+    ("/usr/share/fonts/opentype/source-han-serif/SourceHanSerifSC-Regular.otf", 0),
+    ("/usr/share/fonts/truetype/arphic/uming.ttc", 0),
+]
+_SANS_CANDIDATES: list[tuple[str, int]] = [
+    (r"C:\Windows\Fonts\HarmonyOS_Sans_SC_Regular.ttf", 0),
+    (r"C:\Windows\Fonts\Deng.ttf", 0),
+    (r"C:\Windows\Fonts\msyh.ttc", 0),
+    (r"C:\Windows\Fonts\simhei.ttf", 0),
+    ("/System/Library/Fonts/PingFang.ttc", 0),
+    ("/System/Library/Fonts/Hiragino Sans GB.ttc", 0),
+    ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 0),
+    ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 2),
+    ("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc", 0),
+    ("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc", 0),
+    ("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc", 0),
+    ("/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf", 0),
+]
+_FONT_HELP = (
+    "Install any CJK font and re-run, e.g. "
+    "Debian/Ubuntu: apt install fonts-noto-cjk; "
+    "Fedora: dnf install google-noto-serif-cjk-fonts; "
+    "or point PILLOW_CJK_FONT at a .ttf/.ttc/.otf file."
+)
+
+
+def _env_font() -> tuple[str, int] | None:
+    import os
+
+    path = os.environ.get("PILLOW_CJK_FONT", "").strip()
+    return (path, 0) if path and Path(path).is_file() else None
+
+
 def _title_font_spec() -> tuple[str, int]:
-    found = _first_existing([
-        (r"C:\Windows\Fonts\STZHONGS.TTF", 0),      # 华文中宋
-        (r"C:\Windows\Fonts\NotoSerifSC-VF.ttf", 0),
-        (r"C:\Windows\Fonts\STSONG.TTF", 0),
-        (r"C:\Windows\Fonts\simsun.ttc", 0),
-        ("/System/Library/Fonts/Supplemental/Songti.ttc", 0),
-        ("/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc", 0),
-    ])
+    found = _env_font() or _first_existing(_SERIF_CANDIDATES)
     if found:
         return found
-    raise SystemExit("No Chinese serif font found (tried 华文中宋 / Noto Serif SC / 宋体).")
+    found = _first_existing(_SANS_CANDIDATES)
+    if found:
+        print(
+            f"WARN: no Chinese serif font found; title falls back to sans {found[0]}",
+            file=sys.stderr,
+        )
+        return found
+    raise SystemExit("No Chinese font found for the cover title. " + _FONT_HELP)
 
 
 def _people_font_spec() -> tuple[str, int]:
-    found = _first_existing([
-        (r"C:\Windows\Fonts\HarmonyOS_Sans_SC_Regular.ttf", 0),
-        (r"C:\Windows\Fonts\Deng.ttf", 0),
-        (r"C:\Windows\Fonts\msyh.ttc", 0),
-        ("/System/Library/Fonts/PingFang.ttc", 0),
-        ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 0),
-    ])
+    found = _env_font() or _first_existing(_SANS_CANDIDATES)
     if found:
         return found
-    raise SystemExit("No people-line sans font found.")
+    found = _first_existing(_SERIF_CANDIDATES)
+    if found:
+        print(
+            f"WARN: no Chinese sans font found; people line falls back to serif {found[0]}",
+            file=sys.stderr,
+        )
+        return found
+    raise SystemExit("No Chinese font found for the cover people line. " + _FONT_HELP)
 
 
 def _split_title(title: str) -> list[str]:

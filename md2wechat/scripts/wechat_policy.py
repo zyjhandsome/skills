@@ -20,10 +20,15 @@ POLICY_OFFICIAL_URL = (
     "?t=business/faq_operation_tmpl&type=info&lang=zh_CN&token="
 )
 
+# A speaker *mentioning* a closed-door meeting in a public talk is not a leak.
+# 闭门 only stops when the same passage frames the closed-door material as the
+# thing being reprinted (全文 / 转写 / 纪要 / 流出 …) or as confidential.
+_LEAK_CONTEXT = r"(?:全文|完整|逐字|转写|实录|记录|纪要|流出|外传|录屏|保密|内部资料)"
 _LEAK_PATTERNS = (
     r"外泄",
     r"泄密",
-    r"闭门.{0,12}(会|交流|投资)",
+    rf"闭门.{{0,12}}(?:会|交流|投资).{{0,40}}{_LEAK_CONTEXT}",
+    rf"{_LEAK_CONTEXT}.{{0,40}}闭门.{{0,12}}(?:会|交流|投资)",
     r"不要外传",
     r"勿外传",
     r"不要录屏",

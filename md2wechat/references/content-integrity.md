@@ -32,32 +32,47 @@ Both modes keep the source H1 and reader-facing H2 titles unless the user explic
 
 ## Required audit format
 
+The validator reads this file mechanically. Copy the skeleton below as-is and fill the `…`; it passes `validate_wechat_bundle.py` without further edits.
+
 ```markdown
 # 公众号内容审计
 
 ## 文件与模式
 - 模式：editorial
-- 源稿：...
-- 成稿：...
+- 源稿：…
+- 成稿：…
 
 ## 覆盖矩阵
 | 源稿主题 | 处理 | 成稿位置 | 核心保留与删减理由 |
 |---|---|---|---|
-| Exact source H2 | 保留 | Exact source H2 | 节内去掉三层标签；结论与机制仍在 |
+| 源稿 H2 原文 | 保留 | 源稿 H2 原文 | 节内去掉三层标签；结论与机制仍在 |
 
 ## 闭环检查
-- 标题承诺：...；正文如何兑现：...
-- 显式问题：问题 → 回答位置；不得写“均已回答”而不列问题。
+- 标题承诺：…；正文如何兑现：…
+- 显式问题：问题 → 回答位置；没有则写「无」。不得写「均已回答」而不列问题。
 - 事实与观点：列出需要归因的口述数字、观察和编辑推论。
-- 来源披露：说明公开来源、编辑压缩和是否为逐字稿。
-- 重要删除：逐项列出；没有则写“无”。
+- 来源披露：公开来源 …；编辑压缩 …；非逐字稿
+- 重要删除：逐项列出；没有则写「无」。
 
 ## 运营规范
 - 官方页：微信公众平台运营规范（发送内容规范 + 当地法律监管）
 - 扫描：风险码或「无」
-- 处理：改写 / 删除 / 停交付
+- 处理：改写 / 删除 / 停交付 / 误报说明
 - 发布结论：可发布 | 改写后可发布 | 不可发布
 ```
+
+### What the validator checks literally
+
+| Check | Requirement |
+|---|---|
+| Section words | The text must contain all of `标题承诺`、`显式问题`、`事实与观点`、`来源披露`、`重要删除`、`运营规范`、`发布结论` |
+| `模式：` line | `editorial` or `full`; must equal the profile the validator detects from the HTML |
+| 覆盖矩阵 rows | Column 1 must equal a reader-facing source H2 **character for character** (only surrounding spaces and backticks are stripped; the `##` prefix is not part of it). Every reader-facing H2 appears exactly once; no extra rows |
+| 处理 | One of `保留` / `合并` / `删减` / `删除`. `editorial` rejects `合并`; `full` rejects `删减` / `删除` unless column 4 contains `运营规范` |
+| `非逐字稿` | Required verbatim when `模式：editorial` and the source mentions `对谈人物` or `演讲`. Put it on the 来源披露 line as shown |
+| `发布结论` | Exactly one of the three values. `可发布` is rejected while the source still carries a mechanical stop signal; `不可发布` is rejected once an HTML exists |
+
+Noise headings (`目录`、`延伸术语表`、`自检报告`、`关键语录与交锋时刻`、`编者注`、`编辑说明`、`免责声明`, with or without a `（可选）` suffix) and `文章元数据` / `核心导读` are not reader-facing H2s: do not list them in the matrix.
 
 Do not put the audit inside the pasted WeChat article, and do not leave it next to the source as a deliverable.
 
@@ -71,7 +86,8 @@ Do not put the audit inside the pasted WeChat article, and do not leave it next 
 
 ### Attribution
 
-- Attribute oral statistics, market observations, predictions and contested causal claims to the speaker.
+- Attribute oral statistics, market observations, predictions and contested causal claims to the speaker. Unverified material stays marked as such; compression must not promote it to fact.
+- Questions posed in the show notes or 简介 are questions, not things the guest said. Do not turn 「他是否认为…？」 into 「他认为…」.
 - Keep the names the speaker names. When the source quotes or argues with a public figure (Dario Amodei, Elon Musk, Sam Altman …), the WeChat copy keeps the name; 「某人」「一个说法」「有人预测」 is an information loss, not a safety measure. Anonymise only when the 运营规范 gate requires it, and then say so in the audit.
 - When two people in the source own two numbers, keep both owners. 「Dario 说 25%，主持人推到 75%」 must not collapse into 「有人说 25%、75%」 or into one speaker owning both.
 - Keep the speaker's hedges and concessions (「他也赞赏说话的勇气」「有真正的挑战」). Dropping the hedge sharpens the claim; so does adding a judgment the speaker never made (「更神圣」「对不上这笔钱」). Compression may shorten a sentence, never re-grade it.

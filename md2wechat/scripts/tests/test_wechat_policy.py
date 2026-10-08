@@ -52,6 +52,15 @@ class ScanSourceTests(unittest.TestCase):
     def test_keeps_ordinary_public_talk_publishable(self):
         self.assertEqual(scan_source_risks(PUBLIC_TALK_SOURCE), [])
 
+    def test_mentioning_a_closed_door_meeting_is_not_a_leak(self):
+        """A public talk that *recalls* a closed-door meeting is not reprinting one."""
+        text = "# 公开演讲\n\n他回忆当年一次闭门会上的讨论，说那是他第一次意识到定价的难度。\n"
+        self.assertEqual(scan_source_risks(text), [])
+
+    def test_closed_door_transcript_still_stops(self):
+        text = "# 纪要\n\n本文是上周闭门投资交流的完整转写。\n"
+        self.assertIn("leak_closed_door", {f.code for f in scan_source_risks(text)})
+
     def test_does_not_flag_careful_uncertainty_without_finance(self):
         text = (
             "# 短循环不是快，而是可验证\n\n"

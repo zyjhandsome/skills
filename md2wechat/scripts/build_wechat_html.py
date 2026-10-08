@@ -14,8 +14,12 @@ _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8")
+
 from paths import article_html_name
-from sections import BUILDER_OMIT_H2, STRUCTURAL_H2, TRUNCATE_H2
+from sections import BUILDER_OMIT_H2, STRUCTURAL_H2, TRUNCATE_H2, normalize_h2
 
 C = {
     "bg": "#FAFAF7",
@@ -194,7 +198,7 @@ def number_sections(parts: list[str]) -> list[str]:
     out, n = [], 0
     for part in parts:
         m = re.match(r"<h2\b[^>]*>(.*?)</h2>", part, flags=re.S)
-        if m and re.sub(r"<[^>]+>", "", m.group(1)).strip() not in STRUCTURAL_H2:
+        if m and normalize_h2(m.group(1)) not in STRUCTURAL_H2:
             n += 1
             out.append(section_kicker(n))
             part = part.replace("margin:28px 0 14px", "margin:6px 0 14px", 1)
@@ -557,15 +561,16 @@ def parse_md(md: str, mode: str = "auto") -> tuple[str, list[str], str]:
 
         if line.startswith("## "):
             heading = line[3:].strip()
+            key = normalize_h2(heading)
             i += 1
             skip_blank()
 
-            if heading == TRUNCATE_H2:
+            if key == TRUNCATE_H2:
                 while i < n:
                     i += 1
                 break
 
-            if heading == "文章元数据":
+            if key == "文章元数据":
                 meta, i = parse_meta_table(lines, i)
                 skip_blank()
                 if i < n and lines[i].startswith(">"):
@@ -579,7 +584,7 @@ def parse_md(md: str, mode: str = "auto") -> tuple[str, list[str], str]:
                 skip_blank()
                 continue
 
-            if heading in OMIT_H2:
+            if key in OMIT_H2:
                 while i < n and not lines[i].startswith("## "):
                     i += 1
                 skip_blank()
@@ -587,7 +592,7 @@ def parse_md(md: str, mode: str = "auto") -> tuple[str, list[str], str]:
 
             out.append(h2(heading))
 
-            if heading == "核心导读":
+            if key == "核心导读":
                 if i < n and lines[i].startswith(">"):
                     q = []
                     while i < n and lines[i].startswith(">"):
@@ -816,6 +821,14 @@ def _self_test() -> None:
     _, noisy_parts, _ = parse_md(noisy, mode="editorial")
     noisy_html = "".join(noisy_parts)
     assert "编辑说明" not in noisy_html and "免责声明" not in noisy_html
+    # upstream content-structuring spells the glossary with a suffix
+    suffixed = (
+        "# T\n\n## 开场\n\n正文。\n\n## 延伸术语表（可选）\n\n| 术语 | 解释 |\n|---|---|\n"
+        "| Skill | 不该出现 |\n\n## 自检报告\n\n| a | b |\n"
+    )
+    _, suffixed_parts, _ = parse_md(suffixed, mode="editorial")
+    suffixed_html = "".join(suffixed_parts)
+    assert "延伸术语表" not in suffixed_html and "不该出现" not in suffixed_html, suffixed_html
     sample = wrap(
         "标题",
         [

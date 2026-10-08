@@ -13,8 +13,17 @@ _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8")
+
 from paths import pair_stem, source_stem
-from sections import ALLOWED_EXTRA_H2, SOURCE_OMIT_H2, forbidden_article_h2_patterns
+from sections import (
+    ALLOWED_EXTRA_H2,
+    forbidden_article_h2_patterns,
+    is_source_omitted_h2,
+    normalize_h2,
+)
 from wechat_policy import (
     parse_policy_ack,
     title_policy_errors,
@@ -191,10 +200,18 @@ def validate_source_fingerprint(html_text: str, source: Path) -> list[str]:
 
 
 def source_sections(path: Path) -> list[str]:
+    """Reader-facing source H2s. Noise / meta / structural headings are skipped
+    by normalized name, so `## 延伸术语表（可选）` is not demanded of the article."""
     sections: list[str] = []
+    in_fence = False
     for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
         m = re.match(r"^##\s+(.+?)\s*$", line)
-        if m and m.group(1) not in SOURCE_OMIT_H2:
+        if m and not is_source_omitted_h2(m.group(1)):
             sections.append(m.group(1))
     return sections
 
@@ -301,7 +318,7 @@ def extract_html_h2s(article: str) -> list[str]:
 
 
 def norm_heading(text: str) -> str:
-    return re.sub(r"\s+", "", (text or "").strip())
+    return normalize_h2(text)
 
 
 def validate_heading_fidelity(
@@ -381,15 +398,16 @@ def validate_cover(
     except ImportError:
         errors.append("Pillow not installed; cannot validate cover ratio")
         return errors
-    im = Image.open(path)
-    w, h = im.size
+    with Image.open(path) as im:
+        w, h = im.size
+        info = dict(im.info)
     if h == 0:
         errors.append("cover height is 0")
         return errors
     r = w / h
     if abs(r - RATIO) > RATIO_TOL:
         errors.append(f"cover ratio {r:.3f} != 2.35 (±{RATIO_TOL})")
-    stored_title = (im.info.get(COVER_TITLE_KEY) or "").strip()
+    stored_title = (info.get(COVER_TITLE_KEY) or "").strip()
     if expected_title:
         if not stored_title:
             errors.append(
@@ -398,7 +416,7 @@ def validate_cover(
         elif stored_title != expected_title:
             errors.append(f"cover title {stored_title!r} != H1 {expected_title!r}")
     if expected_people is not None:
-        stored_people = (im.info.get(COVER_PEOPLE_KEY) or "").strip()
+        stored_people = (info.get(COVER_PEOPLE_KEY) or "").strip()
         if stored_people != expected_people.strip():
             errors.append(
                 f"cover people {stored_people!r} != expected {expected_people!r}"
