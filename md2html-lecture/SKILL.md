@@ -10,7 +10,7 @@ description: >-
 
 # md2html-lecture
 
-将完成的 `content-structuring` 整理稿转换为单文件讲义 HTML：浅色/深色主题、
+将完成的 `content-structuring` 整理稿转换为单文件讲义 HTML：护眼/阅读/深色主题、字号调节、「Aa」排版（字体/行距/首行缩进/整屏翻页）、续读与本节剩余时间、沉浸阅读、
 目录、洞察与解析层级、可折叠实录、人物背景和来源面板。转换由脚本完成；
 图示由 Agent 根据内容判断后添加。CSS/JS 内联，Mermaid 图形依赖 CDN，
 断网时支持的小流程图显示为文本关系。

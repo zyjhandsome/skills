@@ -3,7 +3,89 @@
 Read this only when changing the global design. The converter injects content
 into the template; do not re-encode these rules in `build_html.py`.
 
-- One unified reading measure (`--measure: 44rem`, ~44 CJK chars at 16px) for
+- Eye comfort (long reads): body text targets ~13:1 contrast in light and dark
+  (`#2B2A27` on `#F7F5EF`, `#E3DCD0` on `#1A1714`), not 16:1+ — pure-black
+  on white glares and near-white on dark halates. `--surface` sits barely
+  above `--bg` so cards are not brighter patches. Dark semantic hues are
+  desaturated. Check new colors: text ≥10:1, muted/subtle/links ≥4.5:1.
+- Three themes in a menu: sepia (护眼, warm paper `#F4ECD8`, the default and
+  the `data-theme` the page ships with), reader (阅读, paper on a screen),
+  dark (also the default when the OS prefers dark). 浅色 and 墨水屏 were
+  dropped by the owner; the head script maps a stored `light` → sepia and
+  `eink` → reader so returning readers keep a close look. `:root` still holds
+  the light tokens as the base every theme overrides. The button icon shows
+  the current theme; the menu is a `menuitemradio` list with arrow/Escape
+  keys. Mermaid colors come from `MERMAID_PALETTES[theme]`, so a new theme
+  needs a palette entry there too.
+- Book setting for `.content p, li`: `text-align: justify`,
+  `line-break: strict` (no 。，」 at line start), `text-autospace: normal`.
+- Reading module (`setupReading`) builds one ordered list of leaf blocks
+  (h2/h3/p/li/pre/figure/tr) and drives three things:
+  - Status pill「本节剩余约 N 分钟 · 全文 X%」: CJK chars at 300/min, the
+    same pace as the header estimate; counts only visible blocks, so closed
+    folds and 只看嘉宾 change it. Text is only rewritten when it changes.
+    Centered below 1280px, in the right margin above it.
+  - Position memory per note (`md2html-pos:` + pathname, block index +
+    24-char snippet + section id, so it survives upgrades that shift
+    blocks). Saving starts only after the reader scrolls, or the first paint
+    at the top would erase it. On load a toast offers「继续阅读」 unless the
+    URL has a hash or the browser already restored the spot; resuming opens
+    the fold that holds the block. No automatic jump.
+  - Immersive chrome: topbar slides away scrolling down past 240px and
+    returns on any upward scroll, near the top, or pointer within 64px of
+    the top. The TOC never dims (a faded TOC reads as disabled). Stays put while the TOC
+    drawer or settings panel is open, or the topbar has keyboard
+    (`:focus-visible`) focus — not plain focus, since a clicked button
+    keeps focus and would pin the bar.
+- Topbar: 「A− / 100% / A+」, a theme button (icon follows the theme) with a
+  one-column dropdown (swatch + name + one-line hint; a pick closes it), and
+  「Aa」 for typesetting only. One combined panel with theme + size + five rows
+  of segments was tried and read as too busy; keep theme and size one click
+  away and the panel short. No 每行 option — the measure is a design
+  decision, not a reader knob.
+- 「Aa」 holds 字体 (默认/黑体/宋体/楷体), 行距, 段落 (段间空行/首行缩进), 翻页
+  (滚动/整屏翻页); ≤600px it also takes A−/A+, which leave the topbar. Selected
+  segments use the soft accent, not a solid fill, to keep the panel quiet. Each
+  non-default choice is a `data-font|lh|para|flip` attribute on
+  `html`, stored together in `md2html-read-settings` and whitelisted by the
+  head script before first paint; the empty value is the default and removes
+  the attribute. Font choice applies to `.content` only — headings stay sans,
+  code mono. Changing a setting keeps the current block under the reading
+  line. Both popovers sit after `</header>`, not inside the topbar: the
+  topbar's `backdrop-filter` makes it the containing block of any
+  `position: fixed` child. JS pins them under their button on open; only one
+  is open at a time. ≤600px 「Aa」 becomes a bottom sheet.
+- 整屏翻页 is off by default (scroll). Opting in turns pages with Space /
+  PageDown / → and Shift+Space / PageUp / ← only. A click never turns a page —
+  readers click the text to focus or select, and that was jumping them ahead.
+  Turns align to lines: a line cut by the bottom edge opens the next page at
+  the 12px top margin; a fully visible last line scrolls fully off (no sliver
+  of half-glyphs at the top). The topbar stays hidden past 240px while paging
+  and returns when the pointer is within 64px of the top.
+- 阅读 (reader) imitates e-ink paper: grayscale only (every semantic hue
+  maps to ink, soft fills go transparent), no shadows/gradients/transitions/
+  smooth scroll/backdrop blur (e-ink ghosts on repaint), body `strong` is
+  weight only. Body text uses `--font-serif` (Georgia for Latin, then
+  Noto Serif SC → Source Han Serif → Songti SC → STSong → SimSun); headings,
+  summaries, speaker names and tags stay sans, code stays mono. Speakers
+  lose their colors, so the host badge is solid ink to stay distinct.
+- Body 17px, dialogue 16.5px, callouts 15.5px, tables 15px; no reading text
+  below 12px. All reading type is rem so 「A− / A+」 (`--fs-scale` on `html`,
+  0.9–1.3, stored globally in `md2html-font-scale`) scales everything,
+  including the measure. The middle button shows the current scale ("120%")
+  and resets to 100% (disabled at 100%). Only topbar chrome (brand, toggles,
+  A−/100%/A+) keeps px so the controls do not grow. Print resets the scale.
+  ≤600px hides the print button and brand label to fit.
+- Body `strong` is borderless and faint (40+ marks per note would otherwise
+  be a field of outlined orange chips); the thesis and section-insight keep
+  bordered chips, so the hierarchy holds.
+- `-webkit-font-smoothing: antialiased` only in dark (it washes out dark text
+  on light paper on macOS).
+- `.layout` is capped at TOC + gap + measure and centered, so on wide screens
+  the spare width splits evenly on both sides instead of a blank band right of
+  the text. The grid column therefore equals the measure.
+- One unified reading measure (`--measure: 44rem`, ~41 CJK chars at 17px;
+  每行 窄 38rem / 宽 50rem) for
   all blocks (headings, text, callouts, thesis, diagrams, timeline, tables,
   footer) so every outer edge aligns. Keep it a fixed length — `ch` resolves
   per element font-size and makes smaller-type boxes narrower. Inner text
@@ -14,13 +96,13 @@ into the template; do not re-encode these rules in `build_html.py`.
   that rule matches `.content > *` in specificity and comes later, so the
   template restates `.content > .table-wrap, .content > table { max-width: var(--measure); }`
   immediately after it. Dropping that restatement stretches body tables to the
-  grid column (~900px) while prose stays at 44rem. Do not widen the default
+  grid column on narrower windows while prose stays at the measure. Do not widen the default
   column to split the difference, and do not shrink tables to their content.
 - TOC shows section titles only (no repeated 洞察/解析/实录 links); the bio
   label is the first TOC entry when present.
 - No per-section jump-pill row (`injectSectionJumps` is intentionally not
   called).
-- Dialogue inside a turn uses 15.5px / line-height 1.8, with 16px between
+- Dialogue inside a turn uses 16.5px / line-height 1.8, with 16px between
   paragraphs and 12px between turns, so a long monologue is not one slab.
   Quotes use body color — they are evidence, not captions. Speaker names are
   `<p class="step-speaker">`, never headings (keeps the h3 outline to the

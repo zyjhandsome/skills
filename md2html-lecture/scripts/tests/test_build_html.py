@@ -357,6 +357,33 @@ def test_layer_heading_pill_outranks_content_h3(tmp_path):
     assert "--measure: 44rem;" in html        # font-size-independent column
 
 
+def test_eye_comfort_theme_and_scalable_type(tmp_path):
+    import re
+    html = _build(tmp_path)
+    css = html.split("<style>")[1].split("</style>")[0]
+    assert '[data-theme="sepia"]' in css
+    assert '[data-theme="reader"]' in css
+    assert "--font-serif:" in css                        # 阅读 theme sets body in serif
+    assert "--text: #2B2A27;" in css                     # light body ~13:1, not 16:1
+    assert "--text: #E3DCD0;" in css                     # dark body ~13:1, no halation
+    assert "var(--fs-scale, 1)" in css
+    # Only UI chrome (topbar, theme menu, status pill, resume toast) may use px
+    # type; reading text must follow A−/A+.
+    px_rules = re.findall(r"([^{}]+)\{[^}]*font(?:-size)?:[^;]*?\d+(?:\.\d+)?px", css)
+    chrome = (".brand", ".text-btn", ".font-btn", ".font-reset", ".popover", ".settings-", ".theme-menu", ".swatch", ".seg", ".set-", ".read-status", ".resume-toast")
+    assert px_rules and all(any(c in sel for c in chrome) for sel in px_rules), px_rules
+    assert 'id="font-down"' in html and 'id="font-up"' in html and 'id="font-reset"' in html
+    assert '"md2html-font-scale"' in html
+    for theme in ("sepia", "reader", "dark"):
+        assert f'data-theme-choice="{theme}"' in html
+    for retired in ("light", "eink"):                    # 浅色 / 墨水屏 were dropped from the menu
+        assert f'data-theme-choice="{retired}"' not in html
+    assert '<html lang="zh-CN" data-theme="sepia"' in html
+    assert "text-align: justify; line-break: strict;" in css
+    for el in ('id="read-status"', 'id="resume-toast"', '"md2html-pos:"', "chrome-hidden"):
+        assert el in html
+
+
 def test_meta_and_selfcheck_panels(tmp_path):
     html = _build(tmp_path)
     assert 'id="文章元数据"' in html
