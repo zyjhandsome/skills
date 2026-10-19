@@ -88,6 +88,30 @@ class ExtractDraftTests(unittest.TestCase):
         a2 = extract_article(build(draft2))
         self.assertEqual(a1, a2)
 
+    def test_section_lede_round_trips(self):
+        from build_wechat_html import h1, h2, number_sections, p, section_lede
+
+        parts = number_sections(
+            [
+                h1("标题"),
+                h2("核心导读"),
+                p("论点。", size="16px", mb="20px"),
+                h2("第一件事"),
+                section_lede("这一节先看场面。"),
+                p("正文还在。", size="16px", mb="20px"),
+            ]
+        )
+        page = wrap("标题", parts, mode="editorial")
+        path = self.tmp / "lede.html"
+        path.write_text(page, encoding="utf-8")
+        draft, warnings = build_draft(path, None)
+        self.assertIn("> **本节**：这一节先看场面。", draft)
+        self.assertEqual([w for w in warnings if "dropped" in w], [])
+        rebuilt = extract_article(build(draft))
+        self.assertEqual(rebuilt.count("data-wechat-lede="), 1)
+        self.assertIn("这一节先看场面。", rebuilt)
+        self.assertIn("正文还在。", rebuilt)
+
     def test_rejects_foreign_html(self):
         foreign = self.tmp / "other.html"
         foreign.write_text("<html><body><h1>x</h1></body></html>", encoding="utf-8")

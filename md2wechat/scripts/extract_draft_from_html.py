@@ -122,7 +122,9 @@ def inline_md(node: Node) -> str:
             parts.append(f"`{c.text()}`")
         elif c.tag == "a":
             parts.append(f"[{inline_md(c)}]({c.attrs.get('href', '')})")
-        elif c.tag == "span" and f"background:{C['accent_soft']}" in c.style and "padding:0 4px" in c.style:
+        elif c.tag == "span" and "padding:0 4px" in c.style and (
+            f"background:{C['mark']}" in c.style or f"background:{C['accent_soft']}" in c.style
+        ):
             parts.append(f"=={inline_md(c)}==")
         elif c.tag == "br":
             parts.append("\n")
@@ -211,6 +213,10 @@ def article_to_md(article: Node) -> tuple[str, list[str], str, str, list[str], l
         if tag == "p":
             txt = para_md(node)
             if not txt:
+                continue
+            if node.attrs.get("data-wechat-lede") == "1":
+                body.append(f"> **本节**：{txt}")
+                body.append("")
                 continue
             if KICKER_RE.match(node.text().strip()):
                 continue  # builder re-adds「第 N 节」

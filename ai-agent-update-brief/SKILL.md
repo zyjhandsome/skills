@@ -32,9 +32,9 @@ loaded, not a guess.
 - [ ] 2. Research by vendor in parallel; honor tool tiers and the fetch budget
 - [ ] 3. Backfill sources.md in this turn if any URL is dead, renamed, or superseded
 - [ ] 4. Copy report-skeleton.html → reports/ai-agent-update-brief-YYYY-MM-DD.html
-- [ ] 5. Fill content; keep data-section / data-tool / data-window-* attributes
-- [ ] 6. Localization pass (Chinese default); delete data-placeholder="1"
-- [ ] 7. node <skill-dir>/scripts/verify-brief.mjs <report.html>
+- [ ] 5. Fill content; keep data-section / data-tool / data-window-* / data-tools / data-custom-scope
+- [ ] 6. Localization pass (Chinese default); delete the html data-placeholder flag and every 占位
+- [ ] 7. node <skill-dir>/scripts/verify-brief.mjs --strict <report.html>
 - [ ] 8. Optional: verify-theme.mjs; Chinese chat summary + local file link
 ```
 
@@ -50,8 +50,11 @@ on an explicit English request (`in English`, `English report`, `英文`, `用�
 
 - Chinese report: `lang="zh-CN"`. Translate visible prose, labels, notes, and the
   footer. Keep product names, commands, APIs, versions, URLs, and official feature
-  names in English. Ban leftover work-notes such as `checked`, `latest`,
-  `No qualifying update found`, `official releases`.
+  names in English. The verifier rejects these leftover phrases, and only these:
+  `No qualifying update found`, `No qualifying official update found`,
+  `official releases`, `release page checked`, `billed to organization`,
+  `Beginner glossary`, `小白术语表`. Do not ban the substrings `latest` or
+  `checked`; pool rows must keep `data-latest`.
 - English report: `lang="en"` and pass `--en` to the verifier. Same structure and
   `data-*` attributes.
 
@@ -60,8 +63,16 @@ Chinese section titles: 核心结论、建议动作、工程自动化、多 Agen
 
 ## Tool tiers
 
-Baseline, not a frozen contract. Follow successors in `sources.md`. The user may
-narrow or expand the list.
+Baseline, not a frozen contract. Follow successors in `sources.md`. Narrow or
+expand only through an observable scope:
+
+- Default scan: omit `data-tools`. Every id in `TOOL_TIERS` (`verify-brief.mjs`)
+  needs a pool row. Deleting rows without the attributes below is an ERROR.
+- Custom scan: on `.rule.scope` set `data-tools="cursor,claude-code"` and
+  `data-custom-scope="1"`. The pool contains those ids only. Repeat each id in
+  the visible scope sentence. Core tools left off the list are out of scope.
+  A skipped row inside the scan still needs `data-degrade="1"` on `.rule.degrade`
+  itself. Instruction text that merely mentions the attribute does not count.
 
 | Tier | `data-tool` | Report as | If research fails |
 | --- | --- | --- | --- |
@@ -69,15 +80,16 @@ narrow or expand the list.
 | Secondary (best effort) | `cowork`, `claude-tag`, `jetbrains`, `devin`, `amp`, `factory` | Cowork; Claude Tag; JetBrains / Junie; Devin / Windsurf; Amp; Factory Droid | May use `data-status="skipped"` + 「本轮未深挖」 |
 | Tail (if found) | `aider`, `continue`, `replit`, `copilot-workspace` | Aider; Continue; Replit Agent; Copilot Workspace | Same as secondary; keep empty tail off the first screen |
 
-**Degrade rule:** A brief is deliverable once every **core** row is filled
-(`update` or `none`). If any secondary/tail row is `skipped`, set
-`data-degrade="1"` on `.rule.degrade` and list what was skipped. Do not present a
-partial run as a full default scan.
+**Degrade rule:** Inside the scan, every core id is `update` or `none`, never
+`skipped`. A secondary or tail `skipped` row sets `data-degrade="1"` on
+`.rule.degrade` and names what was skipped. Leaving a core tool out of a default
+scan is an ERROR; leaving it off `data-tools` is a custom scan, not a skip.
 
-Budget: 2–4 fetches per researched tool. After that, write 「未找到合格官方更新」
-(`data-status="none"`) and stop. Group by vendor (Anthropic, OpenAI, Google,
-GitHub/Microsoft, Cognition, JetBrains, independents) and research groups in
-parallel when possible.
+Budget: 2–4 fetches per researched tool, and the capability-surface sweep counts
+toward that budget. After that, write 「未找到合格官方更新」
+(`data-status="none"`) or `skipped` and stop. Do not open another page to finish
+the sweep. Group by vendor (Anthropic, OpenAI, Google, GitHub/Microsoft,
+Cognition, JetBrains, independents) and research groups in parallel when possible.
 
 ## Research
 
@@ -104,15 +116,26 @@ No semver → latest official notes/docs; label 「官方文档更新」 or 「�
 Copy the skeleton. Keep `data-section` values, `nav.toc` / `.rule` / `.chip.*` /
 `.theme-switch`, and pool-row attributes:
 
-- `data-window-start` / `data-window-end` on `.rule.scope` (`YYYY-MM-DD`)
+- `data-window-start` / `data-window-end` on `.rule.scope` (`YYYY-MM-DD`).
+  Inclusive span is 7 calendar dates (`end - start = 6 days`). `data-window-end`
+  is the as-of date, and both dates appear in the visible scope sentence.
 - each pool `tr`: `data-tool`, `data-status` = `update|none|skipped`
-- if `update`: `data-date`; if that date is outside the 7-day window, also
-  `data-latest="1|2|3"`
+- if `update`: `data-date`. Several qualifying updates for one tool are several
+  rows. The verifier reads every row; a later row does not replace an earlier one.
+- Out-of-window updates are their own rows, at most 3 per tool, with unique
+  `data-latest="1|2|3"`. Three is a cap, not a quota. In-window rows omit it.
 
-Table headers: 工具、日期、官方更新、实际影响 / 示例.
+Themed tables (`automation`, `multi-agent`, `security`, `quota`, `choose-tool`):
+headers 工具、日期、官方更新、实际影响 / 示例. The impact cell answers 谁该关心、
+工作流怎么变、风险或机会、一个具体用法, and the cell text includes `示例`
+(English reports: `Example`, at least 20 characters). Keep that cell to two or
+three sentences plus the example. A longer explanation goes in the section
+prose under the table, not into a wider page. A section with nothing to
+report uses one row whose text includes 无相关更新. The example lives in the
+tool row, not as a scenario-level blurb.
 
-Impact cell answers: 谁该关心、工作流怎么变、风险或机会、一个具体用法. The
-example lives in the tool row, not as a scenario-level blurb.
+Pool table headers: 工具、日期、官方更新、状态. `glossary` is a required
+`data-section`.
 
 Filename: `reports/ai-agent-update-brief-YYYY-MM-DD.html`.
 
@@ -138,13 +161,16 @@ and the sticky nav flip.
 Required:
 
 ```bash
-node <skill-dir>/scripts/verify-brief.mjs reports/ai-agent-update-brief-YYYY-MM-DD.html
+node <skill-dir>/scripts/verify-brief.mjs --strict reports/ai-agent-update-brief-YYYY-MM-DD.html
 ```
 
-English report: add `--en`. Optional link HEAD: `--check-links`. Delivered reports
-must not keep `data-placeholder="1"` (`--strict` fails on it).
+English report: add `--en`. Optional link HEAD: `--check-links`. The html
+`data-placeholder="1"` flag and any leftover 「占位」 are always ERRORS, with or
+without `--strict`. `--strict` stays on the command so the delivery bar is visible.
+Copy that mentions the attribute in prose is not the flag.
 
-Fix every ERROR before delivering. Then optional theme screenshots:
+Fix every ERROR before delivering. When you change this gate, run
+`node --test <skill-dir>/scripts/tests/test_verify_brief.mjs`. Then optional theme screenshots:
 
 ```bash
 node <skill-dir>/scripts/verify-theme.mjs reports/ai-agent-update-brief-YYYY-MM-DD.html
@@ -155,3 +181,15 @@ If it cannot run, spot-check both modes on the first screen, one table with chip
 the sticky nav, and the footer.
 
 The chat summary matches the report language and includes a clickable local file link.
+
+## Rationalizations
+
+| Excuse | What the gate does |
+| --- | --- |
+| "The index date is recent enough to paste" | Dated lines in `sources.md` are clues. Open the URL this turn. |
+| "I'll note the dead link in the report only" | Patch `sources.md` in the same turn. |
+| "A quick look means chat is enough" | Write the HTML unless they said no file, no HTML, or a quick summary. |
+| "Narrowing means delete the other rows" | Set `data-tools` and `data-custom-scope="1"`. A default scan with holes is an ERROR. |
+| "The skeleton already validates" | The raw skeleton fails. `data-placeholder` and 「占位」 are ERRORS on the delivered file. |
+| "One pool row can stand in for older updates" | Each out-of-window update is its own row, at most 3, each with its own `data-latest`. |
+| "The sweep needs a few more pages" | The sweep spends the 2–4 fetch budget. Then stop and record the page you opened. |

@@ -19,7 +19,13 @@ for _stream in (sys.stdout, sys.stderr):
         _stream.reconfigure(encoding="utf-8")
 
 from paths import article_html_name
-from sections import BUILDER_OMIT_H2, STRUCTURAL_H2, TRUNCATE_H2, normalize_h2
+from sections import (
+    BUILDER_OMIT_H2,
+    STRUCTURAL_H2,
+    TRUNCATE_H2,
+    is_source_omitted_h2,
+    normalize_h2,
+)
 
 C = {
     "bg": "#FAFAF7",
@@ -28,6 +34,7 @@ C = {
     "subtle": "#6B6B66",
     "accent": "#D97757",
     "accent_soft": "#FBEEE6",
+    "mark": "#F0D5C4",
     "accent_border": "#F0D5C4",
     "accent_strong": "#A85533",
     "surface": "#FFFFFF",
@@ -39,6 +46,13 @@ FONT = (
     "-apple-system,BlinkMacSystemFont,'PingFang SC','Hiragino Sans GB',"
     "'Microsoft YaHei','Noto Sans CJK SC',sans-serif"
 )
+
+# Phone reading: body blocks need a gap larger than a tight 12px, or the
+# column turns into one gray texture. Cards and labels stay tighter.
+BODY_MB = "20px"
+SECTION_GAP = "48px"
+# A long interview needs a one-line rest under each H2. Shorter pieces do not.
+LEDE_MIN_H2 = 12
 
 OMIT_H2 = BUILDER_OMIT_H2
 
@@ -109,7 +123,7 @@ def _inline_no_link(text: str) -> str:
     def highlight(m: re.Match) -> str:
         inner = re.sub(r"\*\*(.+?)\*\*", bold, m.group(1))
         return (
-            f'<span style="background:{C["accent_soft"]};color:{C["text"]};'
+            f'<span style="background:{C["mark"]};color:{C["text"]};'
             f'text-align:left;padding:0 4px;border-radius:3px;">'
             f"{inner}</span>"
         )
@@ -186,7 +200,7 @@ def section_kicker(n: int) -> str:
     """
     color = C["accent_strong"]
     return (
-        f'<p style="margin:32px 0 0;padding:0;font-size:13px;font-weight:700;'
+        f'<p style="margin:{SECTION_GAP} 0 0;padding:0;font-size:13px;font-weight:700;'
         f'line-height:{lh("13px", 1.6)};color:{color};letter-spacing:0.08em;text-align:left;">'
         f'{shield(esc("第 %d 节" % n), color)}</p>'
     )
@@ -202,6 +216,74 @@ def number_sections(parts: list[str]) -> list[str]:
             out.append(section_kicker(n))
             part = part.replace("margin:28px 0 14px", "margin:6px 0 14px", 1)
         out.append(part)
+    return out
+
+
+def reader_h2_titles(md: str) -> list[str]:
+    titles: list[str] = []
+    for line in md.splitlines():
+        if line.startswith("## "):
+            title = line[3:].strip()
+            if not is_source_omitted_h2(title):
+                titles.append(title)
+    return titles
+
+
+def insight_ledes(md: str) -> dict[str, str]:
+    """First sentence of each reader H2's 核心洞察, keyed by normalize_h2."""
+    lines = md.splitlines()
+    found: dict[str, str] = {}
+    heading = ""
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if line.startswith("## "):
+            heading = line[3:].strip()
+            i += 1
+            continue
+        if heading and not is_source_omitted_h2(heading) and line.strip() == "### 核心洞察":
+            i += 1
+            while i < len(lines) and lines[i].strip() == "":
+                i += 1
+            quote: list[str] = []
+            while i < len(lines) and lines[i].startswith(">"):
+                quote.append(strip_bq(lines[i]))
+                i += 1
+            text = "".join(quote)
+            text = re.split(r"\*\*事实边界\*\*", text)[0]
+            text = re.sub(r"\*\*(.+?)\*\*", r"\1", text).strip()
+            end = re.search(r"[。！？]", text)
+            sentence = text[: end.end()].strip() if end else text
+            if sentence:
+                found[normalize_h2(heading)] = sentence
+            continue
+        i += 1
+    return found
+
+
+def inject_section_ledes(parts: list[str], ledes: dict[str, str]) -> list[str]:
+    """Put the source insight's first sentence under each reader H2.
+
+    Skip when the draft already has a 本节 line, or the next paragraph
+    already opens with that same sentence.
+    """
+    out: list[str] = []
+    for i, part in enumerate(parts):
+        out.append(part)
+        m = re.match(r"<h2\b[^>]*>(.*?)</h2>", part, flags=re.S)
+        if not m:
+            continue
+        key = normalize_h2(html.unescape(m.group(1)))
+        sentence = ledes.get(key)
+        if not sentence:
+            continue
+        nxt = parts[i + 1] if i + 1 < len(parts) else ""
+        if "data-wechat-lede=" in nxt:
+            continue
+        nxt_plain = re.sub(r"<[^>]+>", "", html.unescape(nxt))
+        if sentence in nxt_plain:
+            continue
+        out.append(section_lede(sentence))
     return out
 
 
@@ -298,14 +380,34 @@ _SPEAKER_QUOTE = re.compile(
 )
 
 
-def render_body_line(line: str, *, size: str = "15px", color: str | None = None) -> str:
+_SECTION_LEDE = re.compile(r"^\*\*本节\*\*[：:]\s*(.+)$")
+
+
+def section_lede(text: str) -> str:
+    """One gray sentence under an H2. Not a heading and not a highlight."""
+    color = C["muted"]
+    size = "14px"
+    return (
+        f'<p data-wechat-lede="1" style="margin:0 0 18px;padding:0;font-size:{size};'
+        f'line-height:{lh(size, 1.75)};color:{color};text-align:left;">'
+        f"{shield(inline_md_raw(text), color)}</p>"
+    )
+
+
+def render_body_line(
+    line: str, *, size: str = "15px", color: str | None = None, mb: str = BODY_MB
+) -> str:
     if line.strip().startswith(">"):
-        return insight_card(strip_bq(line.strip()))
+        raw = strip_bq(line.strip())
+        lede = _SECTION_LEDE.match(raw)
+        if lede:
+            return section_lede(lede.group(1).strip())
+        return insight_card(raw)
     raw = line.strip()
     m = _SPEAKER_QUOTE.match(raw)
     if m:
         return dialogue_card(m.group(1), m.group(2))
-    return p(raw, size=size, color=color)
+    return p(raw, size=size, color=color, mb=mb)
 
 
 def bare(s: str) -> str:
@@ -633,7 +735,7 @@ def parse_md(md: str, mode: str = "auto") -> tuple[str, list[str], str]:
                         out.append(tbl)
                         i = ni
                         continue
-                    out.append(p(lines[i].strip(), size=body_size))
+                    out.append(p(lines[i].strip(), size=body_size, mb=BODY_MB))
                     i += 1
                 skip_blank()
                 continue
@@ -699,7 +801,7 @@ def parse_md(md: str, mode: str = "auto") -> tuple[str, list[str], str]:
                                 out.append(p(f"{mnum.group(1)}. {mnum.group(2)}", size=body_size, mb="8px"))
                                 i += 1
                                 continue
-                            out.append(p(lines[i].strip(), size=body_size))
+                            out.append(p(lines[i].strip(), size=body_size, mb=BODY_MB))
                             i += 1
                         skip_blank()
                         continue
@@ -847,8 +949,26 @@ def _self_test() -> None:
     assert detected == "editorial"
     assert any("border:1px solid" in part for part in editorial_parts)
     marked = _inline_no_link("差异化来自==该让什么存在==。")
-    assert C["accent_soft"] in marked and "该让什么存在" in marked
+    assert C["mark"] in marked and "该让什么存在" in marked
+    assert C["accent_soft"] not in marked
     assert "==" not in marked
+    assert "margin:48px 0 0" in section_kicker(1)
+    _, spaced, _ = parse_md("# T\n\n## 开场\n\n一段正文。\n", mode="editorial")
+    assert any("margin:0 0 20px" in part for part in spaced), spaced
+    lede_src = "\n".join(
+        ["# T", "## 文章元数据"]
+        + [f"## 第{n}节\n\n### 核心洞察\n\n> 第{n}节的判断。还有第二句。\n" for n in range(LEDE_MIN_H2)]
+    )
+    assert len(reader_h2_titles(lede_src)) == LEDE_MIN_H2
+    lede_map = insight_ledes(lede_src)
+    assert lede_map[normalize_h2("第0节")] == "第0节的判断。"
+    drafted = """# T\n\n## 开场\n\n> **本节**：成稿自己的一句。\n\n正文。\n"""
+    _, drafted_parts, _ = parse_md(drafted, mode="editorial")
+    assert any("data-wechat-lede=" in part for part in drafted_parts)
+    injected = inject_section_ledes(drafted_parts, {normalize_h2("开场"): "不该再注入。"})
+    assert sum("data-wechat-lede=" in part for part in injected) == 1
+    bare = inject_section_ledes([h2("第0节"), p("另一句。")], lede_map)
+    assert any("第0节的判断。" in part and "data-wechat-lede=" in part for part in bare)
     noisy = (
         "# T\n\n## 开场\n\n正文。\n\n## 编辑说明\n\n不要出现。\n\n"
         "## 免责声明\n\n也不要。\n"
@@ -938,6 +1058,10 @@ def main(argv: list[str] | None = None) -> int:
     if not origin.is_file():
         print(f"ERROR: --source not found: {origin}", file=sys.stderr)
         return 2
+    if mode == "editorial":
+        source_text = origin.read_text(encoding="utf-8")
+        if len(reader_h2_titles(source_text)) >= LEDE_MIN_H2:
+            parts = inject_section_ledes(parts, insight_ledes(source_text))
     html_out = wrap(title, parts, mode=mode, fingerprint=source_fingerprint(origin))
     out = args.out or default_out_path(src)
     out.write_text(html_out, encoding="utf-8")

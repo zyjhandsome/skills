@@ -39,8 +39,12 @@ If the knowledge base already extracted a section as its own note, that judgment
 ### 1. Mobile readability
 
 - One paragraph should carry one move in the argument.
-- Use short paragraphs and visible section breaks; do not split every sentence into a paragraph.
-- Keep a paragraph to about 150 汉字. A phone line holds ~20 characters, so 150 is ~7 lines; the validator warns above 200 (~10 lines of unbroken text). Split at the next move in the argument, not mid-sentence. Judge length with the preview page's「按手机宽度预览」, not the desktop width.
+- Use short paragraphs and visible section breaks; do not split every sentence into a paragraph. A one-line question followed by a one-line answer is harder to read than to hear: when the question is about 40 汉字 or less, put it in the same paragraph as the answer. Keep both turns.
+- Write the full name when the speaker changes. Do not start the next paragraph with that same full name. If the next sentence already says 他 or 她, drop the repeated name. Do not replace a name with 他 when the sentence has no pronoun — the listener still needs to know who is talking.
+- On first mention write 中文（English）. The next time that English term appears in parentheses, keep only the shorter of the two. Do not stack the gloss again in the same article.
+- In 核心导读, put one concrete scene before the acronym stack. The opening should give the eye a person or an image before RLHF, KV cache, and the rest.
+- When the source has at least 12 reader-facing H2s, the builder places one gray sentence under each H2: the first sentence of that section's 核心洞察, color `#4A4A45`, not a new claim and not a new heading. If the section already opens with that sentence, the builder does not repeat it. A draft line `> **本节**：...` wins over the source sentence. Pieces shorter than 12 H2s do not get this line.
+- Split a paragraph at about 150 汉字, on the next move in the argument, not mid-sentence. A phone line holds ~20 characters, so 150 is ~7 lines. The validator warns above 200 汉字 (~10 lines) and does not fail the build. Neither number is a ceiling, and neither is a reason to drop a turn. Judge length with the preview page's「按手机宽度预览」, not the desktop width.
 - Keep the source H2 wording. Do not replace it with a punchier claim. If a source heading is generic (“背景”), keep it; do not invent a new label.
 - Keep the numbers and names the speaker used to make the point, including a host's book or episode count and a number the guest refused to tighten. Drop a figure only when it is pipeline metadata (crawl time, player chrome) or a repeat of a figure already given in this section with the same owner.
 - Terms the audience already knows in English stay recognizable: on first mention write 中文（English）— 「未来股权简单协议（SAFE）」「氛围式编程（vibe coding）」 — then use whichever is shorter. Never coin a Chinese rendering that replaces the English term outright; product and company names stay in English.
@@ -117,6 +121,9 @@ The builder accepts ordinary Markdown. Keep the metadata section because it supp
 > **全文论点**：source thesis, not a rewrite.
 
 ## {源稿第一节 H2 原文}
+
+> **本节**：only when you need to override the source 核心洞察 sentence. Otherwise leave this out; 12 or more reader H2s get that sentence from `--source`.
+
 Narrative that keeps that section's claim, mechanism, boundary.
 
 ## {源稿第二节 H2 原文}

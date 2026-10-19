@@ -5,7 +5,7 @@ Scans both layer orders: 对谈三层 (解析 → 实录) and 争辩型 (交锋 
 
 Checks that humans reliably miss:
   4e-1 解析/实录重合度  — the analysis layer retelling the dialogue
-  4e-2 解析篇幅        — analysis longer than half of its section's dialogue
+  4e-2 解析篇幅        — longer than max(450, half the section's dialogue)
   4e-3 单节总长        — grab-bag sections
   4e-4 长段落          — paragraphs over the mobile-readable limit
   4e-5 事实边界密度    — a boundary block in nearly every section
@@ -20,6 +20,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import math
 import re
 import sys
 from dataclasses import dataclass, field
@@ -102,8 +103,15 @@ def check(text: str) -> tuple[list[Section], list[str]]:
                 overlap = len(_grams(sec.analysis) & gd) / len(gd)
                 if overlap > OVERLAP_WARN:
                     sec.issues.append(f"4e-1 解析与实录重合 {overlap:.0%}")
-            if a_len > max(ANALYSIS_FLOOR, d_len * ANALYSIS_RATIO_WARN):
-                sec.issues.append(f"4e-2 解析 {a_len} 字，超过实录 {d_len} 字的一半")
+            half_i = math.floor(d_len * ANALYSIS_RATIO_WARN)
+            ceiling_i = max(ANALYSIS_FLOOR, half_i)
+            # 与旧的「> max(450, 字数×0.5)」在整数篇幅上同一刀：奇数实录的一半
+            # 先向下取整，再和保底上限取较大值。警告必须写出这个上限。
+            if a_len > ceiling_i:
+                sec.issues.append(
+                    f"4e-2 解析 {a_len} 字，超过上限 {ceiling_i} 字"
+                    f"（实录一半 {half_i} 字，保底 {ANALYSIS_FLOOR} 字）"
+                )
         total = _chars(sec.text)
         if total > SECTION_WARN:
             sec.issues.append(f"4e-3 单节 {total} 字")

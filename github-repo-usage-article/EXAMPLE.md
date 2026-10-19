@@ -4,7 +4,7 @@
 不要照抄工具名 / 命令 / 数字(它们是 codebase-memory-mcp 专属)。
 -->
 
-# Codebase Memory MCP 使用示例：单二进制本地知识图谱让代理结构查询省 99% Token
+# Codebase Memory MCP 使用示例：单二进制本地知识图谱让代理用结构查询代替翻文件
 
 > 以「在 Cursor 里接手一个多语言 monorepo：先 10 秒看清架构与路由，再查 `ProcessOrder` 调用链、用 Cypher 筛死代码，合入前看未提交 diff 的 blast radius」为案例，说明 [DeusData/codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) 的核心价值：**Tree-sitter + Hybrid LSP 预索引 → 持久 SQLite 知识图谱 → 14 个 MCP 工具**，让编码代理用 `trace_path` / `get_architecture` / `query_graph` 等直接答结构题，而不是反复 grep/Read——**100% 本地，索引阶段不调用 LLM**。
 

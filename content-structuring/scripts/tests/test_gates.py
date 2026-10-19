@@ -424,6 +424,69 @@ def test_readability_adversarial_order_does_not_self_overlap() -> None:
         assert not any(i.startswith("4e-1") for i in sec.issues), (sec.title, sec.issues)
 
 
+def _layered(analysis: str, dialogue: str) -> str:
+    return f"# T\n\n## 节\n\n### 深度解析\n\n{analysis}\n\n### 对谈实录\n\n{dialogue}\n"
+
+
+def test_4e2_reports_floor_when_it_binds() -> None:
+    """Short dialogue must not be described as a half-length cap below the 450 floor."""
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import check_readability  # noqa: WPS433
+
+    over, _ = check_readability.check(_layered("乙" * 460, "丙" * 200))
+    issues = [i for sec in over for i in sec.issues if i.startswith("4e-2")]
+    assert len(issues) == 1, issues
+    assert "上限 450" in issues[0] and "保底 450" in issues[0], issues[0]
+    under, _ = check_readability.check(_layered("乙" * 450, "丙" * 200))
+    assert not any(i.startswith("4e-2") for sec in under for i in sec.issues)
+
+
+def test_4e2_reports_half_when_dialogue_is_long() -> None:
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import check_readability  # noqa: WPS433
+
+    over, _ = check_readability.check(_layered("乙" * 1001, "丙" * 2000))
+    issues = [i for sec in over for i in sec.issues if i.startswith("4e-2")]
+    assert len(issues) == 1 and "上限 1000" in issues[0], issues
+    under, _ = check_readability.check(_layered("乙" * 1000, "丙" * 2000))
+    assert not any(i.startswith("4e-2") for sec in under for i in sec.issues)
+
+
+def test_adversarial_judgment_evidence_passes() -> None:
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import check_judgment  # noqa: WPS433
+
+    found = check_judgment.issues((FIX / "adversarial-interview.md").read_text(encoding="utf-8"))
+    assert found == [], found
+
+
+def test_quoted_consensus_is_not_a_false_consensus() -> None:
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import check_judgment  # noqa: WPS433
+
+    text = "# T\n\n**林青**：「你们这是达成共识吗？」\n\n双方没有达成共识。\n"
+    assert check_judgment.issues(text) == [], check_judgment.issues(text)
+
+
+def test_rubber_stamp_fixture_fails_judgment_only() -> None:
+    """Machine 4c/4d stay green; empty ✅ and a consensus sentence still exit 1."""
+    selfcheck = ROOT / "scripts" / "selfcheck.py"
+    cp = run([sys.executable, str(selfcheck), str(FIX / "judgment-rubber-stamp.md")])
+    out = (cp.stdout or b"").decode("utf-8", errors="replace")
+    err = (cp.stderr or b"").decode("utf-8", errors="replace")
+    assert cp.returncode == 1, out + err
+    assert "4c-1 actionable=0" in out, out
+    assert "| 纯净排版 | ✅ |" in out, out
+    assert "假共识" in out and "人物声纹" in out and "锚点" in out, out
+
+
+def test_skill_entry_does_not_keep_a_second_length_threshold() -> None:
+    skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+    gates = (ROOT / "references" / "language-and-gates.md").read_text(encoding="utf-8")
+    assert "200–400" not in skill and "200-400" not in skill
+    assert "max(450, floor(同节实录字数的一半))" in gates
+
+
 def test_fixture_adversarial_readability_ok() -> None:
     """The adversarial fixture is a golden sample: it must pass its own 4e row."""
     sys.path.insert(0, str(ROOT / "scripts"))
@@ -439,6 +502,12 @@ def test_fixture_adversarial_readability_ok() -> None:
 def main() -> int:
     tests = [
         test_readability_adversarial_order_does_not_self_overlap,
+        test_4e2_reports_floor_when_it_binds,
+        test_4e2_reports_half_when_dialogue_is_long,
+        test_adversarial_judgment_evidence_passes,
+        test_quoted_consensus_is_not_a_false_consensus,
+        test_rubber_stamp_fixture_fails_judgment_only,
+        test_skill_entry_does_not_keep_a_second_length_threshold,
         test_fixture_adversarial_readability_ok,
         test_4d_detects_hr_with_blank_line,
         test_fixture_dialogue_4d_ok,

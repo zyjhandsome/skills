@@ -62,9 +62,10 @@ no purple neon.
 
 Why so strict: the 2.35:1 crop keeps the full width, so a two-line title plus
 people line spans well over half of it. Image models drift objects toward the
-centre; "keep the centre empty" alone produced covers whose title overlapped
-the artwork and had to be regenerated. If the cropped image has anything
-inside the middle 70%, regenerate before overlaying.
+centre; "keep the centre empty" or "about half the width" produced covers whose
+title overlapped the artwork and had to be regenerated. The prompt must say the
+middle 70% is empty, with the subject only in the outer 15% strips. If the
+cropped image has anything inside the middle 70%, regenerate before overlaying.
 
 After crop, overlay the **source H1** (the same string as the HTML H1; never a punchier rewrite):
 

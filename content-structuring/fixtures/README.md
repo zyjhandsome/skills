@@ -9,6 +9,7 @@
 | `longform-generic.md` | 通用模板，三个读者向 H2（含篇末关键语录节及其前置结构 `---`） |
 | `multisource-conflict.md` | 多源口径冲突 + 编者注 |
 | `stock-english-mix.md` | 存量夹写（应被 4c-1 扫出裸词） |
+| `judgment-rubber-stamp.md` | 声纹/覆盖抽样空 ✅ + 正文假共识（应被判断行证据拦截） |
 
 ```bash
 python scripts/selfcheck.py fixtures/dialogue-three-layer.md
@@ -19,7 +20,7 @@ python scripts/tests/test_gates.py
 python scripts/tests/test_bracket_integrity.py
 ```
 
-每个 fixture 都必须通过 `selfcheck.py` 的全部机检行（含 4e）；`stock-english-mix.md` 例外，它的用途就是被 4c-1 扫出裸词。
+每个 fixture 都必须通过 `selfcheck.py` 的全部机检行（含 4e 与判断行证据）。两份例外：`stock-english-mix.md` 应被 4c-1 扫出裸词；`judgment-rubber-stamp.md` 应被判断行证据拦截并退出 1。
 
 下游技能 `md2wechat` 的 `scripts/tests/test_upstream_contract.py` 会直接读取本目录做转换回归（噪音节不漏进正文、HTML lint、运营规范扫描、全链路校验）。改动 fixture 的 H2 结构后，也跑一下那边的测试；`longform-generic.md` 需保持 ≥3 个读者向 H2，否则下游 editorial 结构 lint 会报 `WEAK`。
 

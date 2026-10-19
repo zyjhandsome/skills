@@ -7,10 +7,10 @@
     python validate.py <文章.md> --type cli      # 显式指定仓库类型,加严反污染检查
     python validate.py <文章.md> --quiet         # 只输出 ERROR
 
-退出码: 0 = 无 ERROR(可能有 WARN);1 = 有 ERROR;2 = 用法错误。
+退出码: 0 = 无 ERROR 且无 WARN;1 = 有 ERROR;2 = 用法错误;3 = 仅 WARN(先修再交)。
 
-只判「机械可判」的规则。风格、覆盖度典型性、角色是否雷同等需人工判断的项,
-见 SKILL.md 的「人工判断清单」。
+只判「机械可判」的规则。风格、覆盖度典型性、角色是否换说法等需人工判断的项,
+见 SKILL.md 的「人工判断清单」。退出码 0 只说明形状在,不等于可以交付。
 """
 
 from __future__ import annotations
@@ -20,6 +20,12 @@ import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+
+from heading_slug import heading_to_slug  # noqa: E402
 
 # ---------------------------------------------------------------- 基础设施
 
@@ -77,17 +83,6 @@ def parse_lines(text: str) -> list[Line]:
             continue
         out.append(Line(i, raw, in_fence, lang if in_fence else ""))
     return out
-
-
-def heading_to_slug(title: str) -> str:
-    """与 fix-wikilink-anchors.py 保持一致的 slug 规则。"""
-    slug = title.strip().lower()
-    slug = slug.replace(" · ", "--").replace(" + ", "--").replace("&", "--")
-    for ch in "（）()·:：,，":
-        slug = slug.replace(ch, "")
-    slug = re.sub(r"\s+", "-", slug)
-    slug = re.sub(r"-{3,}", "--", slug)
-    return slug.strip("-")
 
 
 # ---------------------------------------------------------------- 规则定义
@@ -254,16 +249,17 @@ def check_contamination(lines: list[Line], repo_type: str | None, rep: Report) -
     if not hits:
         return
     if repo_type is None:
-        # 未声明类型:若通篇没有 MCP 仓的其它证据,视为模板污染
+        # 未声明类型:通篇已像 MCP 仓则放过;否则按 ERROR,不降成 WARN。
         looks_mcp = any(k in text for k in ("MCP Server", "mcpServers", "MCP 工具清单", "tools 数量"))
         if looks_mcp:
             return
-        rep.warn(f"出现 MCP 专属表述 {hits};若本仓不是 MCP Server 即为模板污染(可用 --type 确认)")
-        return
+        declared = "未声明"
+    else:
+        declared = repo_type
     for ln in lines:
         for phrase in hits:
             if phrase in ln.text:
-                rep.error(f"非 MCP 仓({repo_type})出现 MCP 专属表述:{phrase}", ln.no)
+                rep.error(f"非 MCP 仓({declared})出现 MCP 专属表述:{phrase}", ln.no)
                 break
 
 
@@ -316,6 +312,15 @@ def check_badges(lines: list[Line], rep: Report) -> None:
 # ---------------------------------------------------------------- 入口
 
 
+def exit_code(rep: Report) -> int:
+    """0 形状通过;1 有 ERROR;3 只有 WARN。用法错误由 main 返回 2。"""
+    if rep.errors:
+        return 1
+    if rep.warns:
+        return 3
+    return 0
+
+
 def validate(path: Path, repo_type: str | None) -> Report:
     rep = Report(path)
     lines = parse_lines(path.read_text(encoding="utf-8"))
@@ -363,19 +368,30 @@ def main() -> int:
         return 2
 
     total_err = 0
+    total_warn = 0
     for path in files:
         rep = validate(path, args.type)
         total_err += len(rep.errors)
+        total_warn += len(rep.warns)
         for msg in rep.errors:
             print(msg)
         if not args.quiet:
             for msg in rep.warns:
                 print(msg)
-        status = "FAIL" if rep.errors else "PASS"
+        status = "FAIL" if exit_code(rep) else "PASS"
         print(f"{status}  {path.name}  ({len(rep.errors)} error, {len(rep.warns)} warn)\n")
 
-    print(f"共 {len(files)} 篇,{total_err} 个 ERROR。" + ("" if total_err else " 机械项全部通过。"))
-    return 1 if total_err else 0
+    if total_err:
+        tail = "机械项未通过。"
+        code = 1
+    elif total_warn:
+        tail = "有 WARN,先修再交。"
+        code = 3
+    else:
+        tail = "机械项全部通过。退出码 0 只说明形状在。"
+        code = 0
+    print(f"共 {len(files)} 篇,{total_err} 个 ERROR,{total_warn} 个 WARN。{tail}")
+    return code
 
 
 if __name__ == "__main__":

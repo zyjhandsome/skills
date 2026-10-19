@@ -2,10 +2,11 @@
 name: md2html-lecture
 description: >-
   Use when converting a finished content-structuring note (usually
-  "_整理文档.md") into a single-file lecture HTML, or upgrading existing lecture
-  HTML after the template or converter changed. Not for arbitrary Markdown,
-  WeChat Official Account HTML (md2wechat), trend briefs (last30days), or
-  AI-tool update briefs (ai-agent-update-brief).
+  "_整理文档.md") into a single-file lecture HTML — 讲义, 整理稿转 HTML,
+  护眼阅读页 — or upgrading existing lecture HTML after the template or
+  converter changed. Not for arbitrary Markdown, WeChat Official Account
+  HTML (md2wechat), trend briefs (last30days), or AI-tool update briefs
+  (ai-agent-update-brief).
 ---
 
 # md2html-lecture
@@ -23,7 +24,8 @@ description: >-
 - 转换前读取 [references/source-shape.md](references/source-shape.md)，核对结构映射。
   上游写作要求由 `content-structuring` 维护，此处不重写。
 - 默认输出为源稿同目录、同文件名的 `.html`；也可指定输出路径。
-  已有讲义需要重建时使用升级脚本，避免直接覆盖人工添加的图示。
+  已有讲义需要重建时使用升级脚本。目标页若已有人工图示，转换器拒绝覆盖、
+  返回退出码 2，并保留原页。
 - 为一篇稿件修正明确的格式问题即可；涉及事实、引语或缺失来源的修订应核实，
   不为清除 WARN 编造内容。需要内容重写时回到上游任务。
 - 单篇转换不要临时改脚本或全局模板。用户要求维护 Skill 或全局设计时才修改它们。

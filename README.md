@@ -229,7 +229,7 @@ candidate：<升级后 URL>
 
 ### md2html-lecture：把整理稿渲染成网页
 
-`md2html-lecture` **基于 [content-structuring](./content-structuring/SKILL.md) 的成稿**做确定性转换（对谈三层或争辩型访谈），生成自包含的单文件 HTML 阅读页：Claude 橙色主题、亮/暗双色、侧边目录、层级标签、对谈时间线、callout、Mermaid 支持，术语表与元数据默认折叠。不是通用 Markdown→HTML（那用别的技能；公众号粘贴走 [md2wechat](./md2wechat/SKILL.md)）。
+`md2html-lecture` **基于 [content-structuring](./content-structuring/SKILL.md) 的成稿**做确定性转换（对谈三层或争辩型访谈），生成自包含的单文件 HTML 讲义：护眼 / 阅读 / 深色主题、字号与「Aa」排版、目录、层级标签、可折叠实录、人物背景和来源面板，以及可选的 Mermaid 图示。适用请求里常出现「讲义」「整理稿转 HTML」「护眼阅读页」。不是通用 Markdown→HTML（公众号粘贴走 [md2wechat](./md2wechat/SKILL.md)）。
 
 用法：
 
@@ -237,7 +237,13 @@ candidate：<升级后 URL>
 python md2html-lecture/scripts/build_html.py "path/to/<整理文档>.md"
 ```
 
-结构转换是确定性的、由脚本完成；Mermaid 流程图不在源 Markdown 中，需转换后按小节手动补充（详见 `md2html-lecture/SKILL.md`）。
+已有讲义要升级时使用升级脚本。目标页若已有人工图示，上面的转换命令会拒绝覆盖并返回退出码 2：
+
+```bash
+python md2html-lecture/scripts/batch_upgrade_dir.py "path/to/目录" --glob "<name>.html"
+```
+
+结构转换由脚本完成；Mermaid 图示不在源 Markdown 中，转换后按小节补在核心洞察之后（详见 `md2html-lecture/SKILL.md`）。
 
 ### md2wechat：整理文档 → 公众号粘贴稿 + 封面
 
@@ -424,11 +430,14 @@ md2wechat/
     └── tests/
 
 md2html-lecture/
-├── SKILL.md              # 技能加载器（工作流、MD 格式约定、验收清单）
+├── SKILL.md              # 技能加载器（工作流、边界、验收）
+├── references/           # 结构映射、升级与告警、验收、模板设计决策
 ├── assets/
-│   └── template.html     # 单文件 HTML 模板（CSS/JS + 占位符）
+│   └── template.html     # 单文件 HTML 模板（护眼/阅读/深色、CSS/JS + 占位符）
 └── scripts/
-    └── build_html.py     # 确定性的 MD → HTML 转换脚本（仅依赖标准库）
+    ├── build_html.py     # 确定性转换；带人工图示的已有讲义拒绝覆盖
+    ├── batch_upgrade_dir.py
+    └── tests/
 
 eli5/
 ├── SKILL.md              # 听众校准讲解（上游 DreambigOu/ELI5）

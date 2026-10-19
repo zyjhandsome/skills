@@ -9,8 +9,9 @@ Usage:
   python selfcheck.py path/to/doc.md
   python selfcheck.py path/to/doc.md --json
 
-Exit 1 if 4c-1 actionable hits remain or 4d fails. 4c-2 consecutive hits and
-4e readability warnings are listed for review and do not fail the process.
+Exit 1 if 4c-1 actionable hits remain, 4d fails, a bracket is unclosed, or
+「判断行证据」finds a rubber-stamped ✅ / false consensus. 4c-2 consecutive
+hits and 4e readability warnings are listed for review and do not fail.
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 import check_4c  # noqa: E402
+import check_judgment  # noqa: E402
 import check_readability  # noqa: E402
 import check_revision_loss  # noqa: E402
 import normalize_spacing  # noqa: E402
@@ -108,6 +110,7 @@ def main() -> int:
     args = parser.parse_args()
     text = args.path.read_text(encoding="utf-8")
     report = collect(text)
+    judgment = check_judgment.issues(text)
     revision = None
     if args.before:
         revision = check_revision_loss.compare(
@@ -122,7 +125,8 @@ def main() -> int:
                     "contextual_count": report["contextual_count"],
                     "over_translation_count": report["over_translation_count"],
                     "spacing": report["spacing"],
-                    "rows": format_rows(report),
+                    "judgment": judgment,
+                    "rows": format_rows(report) + "\n" + check_judgment.format_row(judgment),
                 },
                 ensure_ascii=False,
                 indent=2,
@@ -130,6 +134,9 @@ def main() -> int:
         )
     else:
         print(format_rows(report))
+        print(check_judgment.format_row(judgment))
+        for item in judgment:
+            print(f"  - {item}")
         if report["actionable"]:
             print("\n4c-1 ACTIONABLE_HITS:")
             for hit in report["actionable"][:8]:
@@ -170,7 +177,12 @@ def main() -> int:
                 print(f"  - {s[:100]}")
             for s in lifted[:40]:
                 print(f"  NOTE_AS_SPEECH: {s[:100]}")
-    if report["actionable_count"] or report["spacing_count"] or check_revision_loss.bracket_issues(text):
+    if (
+        report["actionable_count"]
+        or report["spacing_count"]
+        or check_revision_loss.bracket_issues(text)
+        or judgment
+    ):
         return 1
     return 0
 

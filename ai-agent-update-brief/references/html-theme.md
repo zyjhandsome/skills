@@ -15,6 +15,7 @@ Every standalone brief must ship **both** modes in one file.
 - Set `color-scheme` so scrollbars and native controls match the mode.
 - After writing the HTML, verify **both** modes: first screen (header + 核心结论 cards), one table with chips, sticky nav, and footer.
 - Keep the header as a dark masthead in both modes. The paper, cards, tables, chips, and sticky nav are what flip. Do not turn the header into a light bar unless the user asks.
+- Body type stays `16px` with line-height `1.7`, already set on `body` in the skeleton. Do not put it back to `1.55`. This is the Chinese reading rhythm; it is not a palette change.
 
 ## Head script (before CSS, prevents flash)
 

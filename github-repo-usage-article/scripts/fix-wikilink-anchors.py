@@ -5,24 +5,17 @@ from __future__ import annotations
 
 import argparse
 import re
+import sys
 from pathlib import Path
+
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+
+from heading_slug import heading_to_slug  # noqa: E402
 
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$", re.MULTILINE)
 WIKILINK_RE = re.compile(r"\[\[#([^\]|]+)(?:\|([^\]]+))?\]\]")
-
-
-def heading_to_slug(title: str) -> str:
-    """GitHub/Obsidian-style slug used by this article series."""
-    slug = title.strip()
-    slug = slug.lower()
-    slug = slug.replace(" · ", "--")
-    slug = slug.replace(" + ", "--")
-    slug = slug.replace("&", "--")
-    for ch in "（）()·:：,，":
-        slug = slug.replace(ch, "")
-    slug = re.sub(r"\s+", "-", slug)
-    slug = re.sub(r"-{3,}", "--", slug)
-    return slug.strip("-")
 
 
 def build_slug_map(text: str) -> dict[str, str]:

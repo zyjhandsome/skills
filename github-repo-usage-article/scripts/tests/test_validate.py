@@ -130,6 +130,8 @@ class ValidateCliTests(unittest.TestCase):
     def test_minimal_article_passes(self) -> None:
         rep = _report(MINIMAL)
         self.assertFalse(rep.errors, _joined(rep))
+        self.assertFalse(rep.warns, _joined(rep))
+        self.assertEqual(validate_mod.exit_code(rep), 0)
 
     def test_flags_missing_required_block(self) -> None:
         rep = _report(MINIMAL.replace("## 常见坑\n", "## 已改名的坑\n"))
@@ -162,6 +164,39 @@ class ValidateCliTests(unittest.TestCase):
     def test_flags_mcp_contamination_when_type_cli(self) -> None:
         rep = _report(MINIMAL.replace("刷新 PATH", "刷新 PATH。请索引这个项目"), repo_type="cli")
         self.assertTrue(any("MCP 专属表述" in e for e in rep.errors), _joined(rep))
+        self.assertEqual(validate_mod.exit_code(rep), 1)
+
+    def test_flags_mcp_contamination_when_type_omitted(self) -> None:
+        rep = _report(MINIMAL.replace("刷新 PATH", "刷新 PATH。请索引这个项目"))
+        self.assertTrue(any("未声明" in e and "MCP 专属表述" in e for e in rep.errors), _joined(rep))
+        self.assertFalse(any("MCP 专属" in w for w in rep.warns), _joined(rep))
+        self.assertEqual(validate_mod.exit_code(rep), 1)
+
+    def test_skips_contamination_when_type_omitted_but_doc_is_mcp(self) -> None:
+        text = MINIMAL.replace("本地 CLI,不经 LLM。", "本地 MCP Server,不经 LLM。")
+        text = text.replace("刷新 PATH", "刷新 PATH。请索引这个项目")
+        rep = _report(text)
+        self.assertFalse(any("MCP 专属表述" in e for e in rep.errors), _joined(rep))
+
+    def test_warn_only_is_not_deliverable(self) -> None:
+        text = MINIMAL.replace(
+            "[![GitHub stars](https://img.shields.io/github/stars/acme/demo?style=social)](https://github.com/acme/demo)\n\n",
+            "",
+        )
+        rep = _report(text)
+        self.assertFalse(rep.errors, _joined(rep))
+        self.assertTrue(any("徽章" in w for w in rep.warns), _joined(rep))
+        self.assertEqual(validate_mod.exit_code(rep), 3)
+
+    def test_heading_slug_single_implementation(self) -> None:
+        title = "案例 A · 安装（Windows）"
+        self.assertEqual(validate_mod.heading_to_slug(title), "案例-a--安装windows")
+        fix_path = Path(__file__).resolve().parent.parent / "fix-wikilink-anchors.py"
+        spec = importlib.util.spec_from_file_location("gru_fix_anchors", fix_path)
+        assert spec and spec.loader
+        fix_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(fix_mod)
+        self.assertEqual(fix_mod.heading_to_slug(title), validate_mod.heading_to_slug(title))
 
     def test_flags_handwritten_stars(self) -> None:
         rep = _report(MINIMAL.replace("机制 → 价值。", "机制 → 价值。已有 79k+ Stars。"))
@@ -175,6 +210,8 @@ class ValidateCliTests(unittest.TestCase):
         self.assertTrue(EXAMPLE.exists(), "EXAMPLE.md missing")
         rep = validate_mod.validate(EXAMPLE, "mcp")
         self.assertFalse(rep.errors, _joined(rep))
+        self.assertFalse(rep.warns, _joined(rep))
+        self.assertEqual(validate_mod.exit_code(rep), 0)
 
 
 if __name__ == "__main__":

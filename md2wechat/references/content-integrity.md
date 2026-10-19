@@ -21,8 +21,8 @@ The coverage table must contain every source H2 exactly once.
 
 Allowed decisions:
 
-- `保留`: default. The source H2 title stays, and the core claim, necessary support and material boundary remain recognizable under that title.
-- `合并`: only for layers **inside** one H2 (洞察/解析/实录). Do not merge two reader-facing H2s under a new heading.
+- `保留`: default. The source H2 title stays, and the core claim, necessary support and material boundary remain recognizable under that title. Editorial layer flattening (核心洞察 / 深度解析 / 对谈实录 into one narration) is recorded on this row.
+- `合并`: this row joined two reader-facing H2s. Editorial rejects it — the validator error is `EDITORIAL CANNOT 合并 ACROSS H2`, and the fix is `保留` plus flattening inside the section. Never use `合并` as the name for that layer flattening. `full` still accepts the token mechanically; do not use it to retitle or combine sections.
 - `删减`: the source H2 title stays; secondary evidence or branches are removed; record what and why.
 - `删除`: the core claim is absent; allowed for 运营规范. 「关键语录与交锋时刻」is omitted like 术语表 / 自检, not listed in the coverage matrix.
 
@@ -68,7 +68,7 @@ The validator reads this file mechanically. Copy the skeleton below as-is and fi
 | Section words | The text must contain all of `标题承诺`、`显式问题`、`事实与观点`、`来源披露`、`重要删除`、`运营规范`、`发布结论` |
 | `模式：` line | `editorial` or `full`; must equal the profile the validator detects from the HTML |
 | 覆盖矩阵 rows | Column 1 must equal a reader-facing source H2 **character for character** (only surrounding spaces and backticks are stripped; the `##` prefix is not part of it). Every reader-facing H2 appears exactly once; no extra rows |
-| 处理 | One of `保留` / `合并` / `删减` / `删除`. `editorial` rejects `合并`; `full` rejects `删减` / `删除` unless column 4 contains `运营规范` |
+| 处理 | `保留` / `删减` / `删除`, and the token `合并`, which `editorial` rejects. Layer flattening stays `保留`. `full` rejects `删减` / `删除` unless column 4 contains `运营规范` |
 | `非逐字稿` | Required verbatim when `模式：editorial` and the source mentions `对谈人物` or `演讲`. Put it on the 来源披露 line as shown |
 | `发布结论` | Exactly one of the three values. `可发布` is rejected while the source still carries a mechanical stop signal; `不可发布` is rejected once an HTML exists |
 

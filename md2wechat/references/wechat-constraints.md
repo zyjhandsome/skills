@@ -40,10 +40,13 @@ The editor flags two things this builder must not emit inside `#wechat-article`:
 | subtle | `#6B6B66` |
 | accent | `#D97757` |
 | accent-soft | `#FBEEE6` |
+| mark | `#F0D5C4` |
 | accent-border | `#F0D5C4` |
 | accent-strong | `#A85533` |
 | surface | `#FFFFFF` |
 | border | `#E5E4DC` |
+
+Body paragraphs use `margin:0 0 20px` with `font-size:16px` and `line-height:28px`. The「第 N 节」line uses `margin:48px 0 0`. Inline `==荧光笔==` uses `mark`, not `accent-soft`. Thesis cards, insight cards, and table headers stay on `accent-soft`, so a long article does not become a stack of dark blocks. A section lede is a 14px `#4A4A45` paragraph with `data-wechat-lede="1"` directly under the H2.
 
 ## Cover ratio and type
 

@@ -126,7 +126,7 @@ html { background: var(--paper); }
 body {
   margin: 0;
   color: var(--ink);
-  font: 16px/1.55 "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif;
+  font: 16px/1.7 "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif;
   background: var(--paper);
 }
 header { background: var(--header-bg); color: var(--header-fg); padding: 2rem 1.25rem 1.5rem; }
@@ -226,8 +226,8 @@ a { color: var(--accent); }
   <div class="wrap">
     <h1>AI Agent 更新简报 YYYY-MM-DD</h1>
     <p class="meta">纳入规则：过去 7 天 ∪ 各工具最近 3 条官方更新。下列日期与条目均为骨架占位，生成时必须替换。</p>
-    <p class="rule scope" data-window-start="2026-09-11" data-window-end="2026-09-18">
-      覆盖窗口：2026-09-11 至 2026-09-18。生成时改这两个 <code>data-window-*</code> 属性，并同步可见日期。
+    <p class="rule scope" data-window-start="2026-09-12" data-window-end="2026-09-18">
+      覆盖窗口：2026-09-12 至 2026-09-18（含首尾 7 天，终点为生成日）。生成时改这两个 <code>data-window-*</code> 属性，并同步可见日期。收窄或追加工具时，在本标签写 <code>data-tools="cursor,claude-code"</code> 与 <code>data-custom-scope="1"</code>，池中只保留这些 id，并在这句话里逐个写出 id。
     </p>
     <aside class="rule degrade">若有次级/长尾 <code>data-status="skipped"</code>，在此元素加上 <code>data-degrade="1"</code> 并列出未深挖项。不要把半成品写成全量扫描。</aside>
   </div>
@@ -369,7 +369,7 @@ a { color: var(--accent); }
 
   <section id="pool" data-section="pool">
     <h2>联合更新池</h2>
-    <p class="meta" style="color:var(--muted)">每个默认工具一行。状态：<code>update</code> / <code>none</code> / <code>skipped</code>。窗口外的最新 3 条请加 <code>data-latest="1|2|3"</code>。</p>
+    <p class="meta" style="color:var(--muted)">默认扫描每个工具至少一行，多条合格更新各占一行。状态：<code>update</code> / <code>none</code> / <code>skipped</code>。窗口外的更新单独成行，同一工具最多 3 行，并分别标 <code>data-latest="1"</code>、<code>2</code>、<code>3</code>。这是上限，不是必须凑满 3 条。</p>
     <table>
       <thead>
         <tr><th>工具</th><th>日期</th><th>官方更新</th><th>状态</th></tr>
@@ -422,7 +422,7 @@ a { color: var(--accent); }
 
 <footer>
   <div class="wrap">
-    本页为技能骨架，占位内容不可当作真实更新。成稿请删除 <code>data-placeholder="1"</code>，并跑 <code>scripts/verify-brief.mjs</code>。日期与版本以当时打开的官方页面为准。
+    本页为技能骨架，占位内容不可当作真实更新。成稿须去掉 <code>&lt;html&gt;</code> 上的 <code>data-placeholder="1"</code>，并替换全部占位文案，再跑 <code>scripts/verify-brief.mjs --strict</code>。日期与版本以当时打开的官方页面为准。
   </div>
 </footer>
 
