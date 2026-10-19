@@ -6,15 +6,31 @@ Use this reference only for `editorial` mode.
 
 The article should behave as one argument, not a transcript archive. Keep the source H1, each reader-facing H2, **and that section's claim**. WeChat work happens inside the section: flatten 核心洞察 / 深度解析 / 对谈实录 into narration, drop process noise, make it listenable. Do not keep the old heading and swap in a different argument.
 
-Do not invent a shorter heading outline. Section count follows the source, minus 元数据 / 目录 / 术语表 / 自检 / 关键语录与交锋时刻. Completeness means every remaining source H2 still has a recognizable claim, one mechanism or example, and its material boundary — under the same heading. Short quotes already in those sections stay; do not reprint the anthology.
+Do not invent a shorter heading outline. Section count follows the source, minus 元数据 / 目录 / 术语表 / 自检 / 关键语录与交锋时刻. Completeness means every remaining source H2 still carries that section's distinct turns from 对谈实录 — not one surviving mechanism under the same heading. Short quotes already in those sections stay; do not reprint the anthology.
 
-Length is a function of source density, not a badge of editorial quality:
+Paragraphs may be short. Content may not be cut to fit a character budget. Split a long turn into the next paragraph; do not replace a stack of images with the last image, and do not skip a follow-up because the conclusion is already stated.
 
-| Source | Default editorial length | Why |
+## What survives compression
+
+Merge only a sentence that 核心洞察, 深度解析, and 对谈实录 already say the same way. Keep a turn when deleting it would lose an image, a question, an answer, a verb someone changed, or which person owns a number.
+
+| Keep in the narration | Drop |
+|---|---|
+| The whole metaphor stack, in order. 「弗兰肯斯坦 / 克罗南伯格式拼接 / 产品经理地狱 / 一杯果昔」 is one argument, not four repeats of 「缝在一起」 | The same claim printed again from the insight line and the analysis line |
+| The host's question and the guest's answer, including a refusal to give a tighter number and the host stretching that口径 | 「是。是。」, thanks, and sponsor reads |
+| Who changed a word. If the guest says 抽走 and the host says 被打掉, both verbs stay, each with its speaker | A 深度解析 sentence that assigns the line to the other person. 对谈实录 wins |
+| Names, books, and episode counts the speaker uses to land the point | 目录, 术语表, 自检, the quote anthology, ASR / 听成 / 没有核对 |
+| Hedges that limit a figure, and a second figure that belongs to the other speaker | Process notes about how the transcript was checked |
+
+When 深度解析 and 对谈实录 disagree on the speaker, follow 对谈实录. The analysis layer is a compression and can mis-assign a host line to the guest.
+
+Length follows how many distinct turns the section has. The bands below are what a thin section often needs after the three layers are merged. They are not a ceiling. A 70-minute interview with a dozen H2s will run well past 8,000 汉字 once each turn is kept; that is the expected size, not a failure to edit.
+
+| Source | After merging repeated layers | Do not |
 |---|---|---|
-| Talk or essay under 30 minutes | about 2,000–4,000 汉字 | One argument, few branches |
-| 30–90 minutes, or 5–8 H2s | about 4,000–6,000 汉字 | Merge repeated layers, keep reusable judgments |
-| Over 90 minutes, or ≥8 H2s | about 5,000–8,000 汉字 | Do not collapse independently reusable insights into slogans |
+| Talk or essay under 30 minutes | often 2,000–4,000 汉字 | Drop a branch to look short |
+| 30–90 minutes, or 5–8 H2s | as long as the distinct turns | Keep only the insight sentence |
+| Over 70 minutes, or ≥8 H2s | often well above 8,000 汉字 | Treat 8,000 as a max and cut the实录 |
 
 If the knowledge base already extracted a section as its own note, that judgment is not “secondary color.” Keep it, with its mechanism, even after merging the insight/analysis/dialogue layers.
 
@@ -26,7 +42,7 @@ If the knowledge base already extracted a section as its own note, that judgment
 - Use short paragraphs and visible section breaks; do not split every sentence into a paragraph.
 - Keep a paragraph to about 150 汉字. A phone line holds ~20 characters, so 150 is ~7 lines; the validator warns above 200 (~10 lines of unbroken text). Split at the next move in the argument, not mid-sentence. Judge length with the preview page's「按手机宽度预览」, not the desktop width.
 - Keep the source H2 wording. Do not replace it with a punchier claim. If a source heading is generic (“背景”), keep it; do not invent a new label.
-- Keep only the numbers and names that change the conclusion.
+- Keep the numbers and names the speaker used to make the point, including a host's book or episode count and a number the guest refused to tighten. Drop a figure only when it is pipeline metadata (crawl time, player chrome) or a repeat of a figure already given in this section with the same owner.
 - Terms the audience already knows in English stay recognizable: on first mention write 中文（English）— 「未来股权简单协议（SAFE）」「氛围式编程（vibe coding）」 — then use whichever is shorter. Never coin a Chinese rendering that replaces the English term outright; product and company names stay in English.
 - When the 整理文档 already marks a judgment (`**加粗**` / 核心洞察 / 术语表词条), carry that same phrase into the WeChat draft as `==荧光笔==`. One to three marks per section. Do not highlight speaker names, metadata, or every oral number.
 
@@ -43,9 +59,9 @@ If the knowledge base already extracted a section as its own note, that judgment
 
 - Keep the source title promise. Advance it in source order.
 - Merge repeated insight/analysis/dialogue **inside** a section. Do not merge two source H2s under a new title.
-- Keep an example when it explains a mechanism, makes the conclusion memorable, or is already a reusable insight in the source. Cutting the only mechanism turns a claim into a slogan.
+- Keep an example when it explains a mechanism, makes the conclusion memorable, or is already a reusable insight in the source. Cutting the only mechanism turns a claim into a slogan. Cutting the earlier images in a stack and keeping the last one does the same thing.
 - Preserve useful tension; do not flatten a nuanced discussion into motivational slogans.
-- After the draft, check whether a careful reader could reconstruct each source H2’s core claim. If not, the article is incomplete even if it “reads well.”
+- After the draft, check two things. A careful reader can reconstruct each source H2’s core claim. A careful reader of that section’s 对谈实录 can still find its metaphor stack, its question and answer, and the person who owns each number. If the second check fails, the article is incomplete even if it “reads well” and sits inside an old length band.
 
 ### 4. Credibility
 
@@ -56,7 +72,7 @@ If the knowledge base already extracted a section as its own note, that judgment
 - Named third parties stay named. If the guest answers Dario Amodei or Elon Musk by name, the article says so; 「某人」「一个流行说法」 is a cut, not a paraphrase. Where two speakers own two figures (a 25 % from the guest's opponent, a 75 % extrapolated by the host), keep each number with its owner.
 - Do not re-grade the claim while shortening it. Keep the guest's concessions (「他也赞赏说话的勇气」), keep the hedge words that limit a number, and do not add intensifiers or verdicts the guest never said. Reading the WeChat sentence next to the 整理文档 sentence, the force should match.
 - Do not promote a question from a video description into a claim made during the talk.
-- Prefer precise paraphrase to long quotation.
+- Prefer precise paraphrase to long quotation. The paraphrase has to keep the speaker's images and the force of the line. 「很多人的观点缝在一起，最后拌成一杯果昔」 is not a paraphrase of a stack that also named 弗兰肯斯坦, 克罗南伯格, and 产品经理地狱.
 - Attribution does not make a leak or unverified financing rumor publishable. Run the 运营规范 gate in `wechat-operation-policy.md` before writing.
 
 ### 5. Shareability
@@ -81,7 +97,7 @@ If the knowledge base already extracted a section as its own note, that judgment
 
 ## Suggested editorial draft shape
 
-The builder accepts ordinary Markdown. Keep the metadata section because it supplies the subtitle and source footer; it is removed from the pasted article.
+The builder accepts ordinary Markdown. Keep the metadata section because it supplies the subtitle and source footer; it is removed from the pasted article. The footer is `原文：{原标题}` plus `发布：{YYYY-MM-DD}` taken from the committed dates in 「发布时间」. Parenthetical notes in that cell are not copied. A cell with no `YYYY-MM-DD` omits the 发布 line.
 
 ```markdown
 # {源稿 H1 原文}

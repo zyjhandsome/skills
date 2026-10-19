@@ -7,7 +7,7 @@ block that `build_wechat_html.py --mode editorial` emitted and writes the
 Markdown that would regenerate the same article:
 
     # H1
-    ## 文章元数据          (copied from --source if given; else 原标题 from the footer)
+    ## 文章元数据          (copied from --source if given; else 原标题 and 发布 from the footer)
     | 原标题 | … |
     > **人物背景**：…
     ## 核心导读
@@ -145,11 +145,15 @@ def classify_section(sec: Node) -> tuple[str, list[str]]:
     first_plain = ps[0].text().strip() if ps else ""
     if first_plain == FOOTER_LABEL:
         title = ""
+        published = ""
         for t in texts[1:]:
             m = re.match(r"原文：(.*)$", t)
             if m:
                 title = m.group(1).strip()
-        return "footer", [title]
+            d = re.match(r"发布：(.*)$", t)
+            if d:
+                published = d.group(1).strip()
+        return "footer", [title, published]
     if first_plain == BIO_LABEL:
         return "bio", texts[1:]
     if first_plain == THESIS_LABEL:
@@ -180,12 +184,13 @@ def table_md(tbl: Node) -> list[str]:
     return out
 
 
-def article_to_md(article: Node) -> tuple[str, list[str], str, list[str], list[str]]:
-    """→ (h1, body_lines, 原标题, bio_paragraphs, warnings)."""
+def article_to_md(article: Node) -> tuple[str, list[str], str, str, list[str], list[str]]:
+    """→ (h1, body_lines, 原标题, 发布日, bio_paragraphs, warnings)."""
     h1 = ""
     body: list[str] = []
     bio: list[str] = []
     source_title = ""
+    source_date = ""
     warnings: list[str] = []
     seen_h1 = False
 
@@ -217,7 +222,8 @@ def article_to_md(article: Node) -> tuple[str, list[str], str, list[str], list[s
         if tag == "section":
             kind, payload = classify_section(node)
             if kind == "footer":
-                source_title = payload[0]
+                source_title = payload[0] if payload else ""
+                source_date = payload[1] if len(payload) > 1 else ""
                 break
             if kind == "bio":
                 bio = payload
@@ -243,7 +249,7 @@ def article_to_md(article: Node) -> tuple[str, list[str], str, list[str], list[s
         if line == "" and out and out[-1] == "":
             continue
         out.append(line)
-    return h1, out, source_title, bio, warnings
+    return h1, out, source_title, source_date, bio, warnings
 
 
 def meta_table_from_source(source: Path) -> list[str]:
@@ -263,7 +269,7 @@ def meta_table_from_source(source: Path) -> list[str]:
 
 def build_draft(html_path: Path, source: Path | None) -> tuple[str, list[str]]:
     article = find_article(parse(html_path.read_text(encoding="utf-8")))
-    h1, body, source_title, bio, warnings = article_to_md(article)
+    h1, body, source_title, source_date, bio, warnings = article_to_md(article)
 
     meta: list[str]
     if source is not None:
@@ -275,6 +281,8 @@ def build_draft(html_path: Path, source: Path | None) -> tuple[str, list[str]]:
     if not meta:
         esc_title = source_title.replace("|", "\\|")
         meta = ["| 项目 | 内容 |", "|---|---|", f"| 原标题 | {esc_title} |"]
+        if source_date:
+            meta.append(f"| 发布时间 | {source_date} |")
         warnings.append(
             "metadata table rebuilt from the footer only (no 讲者/内容来源 → no byline); "
             "pass --source <整理文档.md> to copy the real table"

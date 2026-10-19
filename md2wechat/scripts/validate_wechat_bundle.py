@@ -117,7 +117,7 @@ def validate_html(path: Path, profile: str = "auto") -> list[str]:
     if article.count("元数据抓取时间") or article.count(">文章元数据<"):
         errors.append("FORBIDDEN: 文章元数据 table/section leaked")
 
-    # 来源与说明只保留原文
+    # 来源与说明：原文标题，可选一行已认定的发布日
     footer = ""
     fm = re.search(r">来源与说明<.*$", article, flags=re.S)
     if fm:
@@ -127,9 +127,9 @@ def validate_html(path: Path, profile: str = "auto") -> list[str]:
         if not re.search(r"原文：", footer):
             errors.append("MISSING: 原文 in 来源与说明")
         if re.search(r"视频：|查看原视频|非逐字稿|href=", footer, flags=re.I):
-            errors.append("FORBIDDEN: 来源与说明 must contain only 原文")
+            errors.append("FORBIDDEN: 来源与说明 must not contain a video link or disclaimer")
         # a GFM `\|` in 原标题 that was split naively leaves `… Work \` or a bare `\|`
-        footer_text = re.sub(r"<[^>]+>", "", footer)
+        footer_text = re.sub(r"<[^>]+>", "\n", footer)
         m_title = re.search(r"原文：([^\n]*)", footer_text)
         if m_title:
             title_text = m_title.group(1).strip()
@@ -138,6 +138,12 @@ def validate_html(path: Path, profile: str = "auto") -> list[str]:
                     f"TRUNCATED 原文 title in 来源与说明: 「{title_text[-30:]}」 "
                     "(escaped pipe in 原标题 was not restored; rebuild with the current build script)"
                 )
+        m_date = re.search(r"发布：([^\n]*)", footer_text)
+        if m_date and not re.fullmatch(
+            r"\d{4}-\d{2}-\d{2}(、\d{4}-\d{2}-\d{2})*", m_date.group(1).strip()
+        ):
+            got = m_date.group(1).strip()
+            errors.append(f"FORBIDDEN: 发布 line must be ISO dates only, got 「{got[:80]}」")
 
     if resolved_profile == "full":
         # Full mode keeps 核心洞察 / 深度解析. 对谈实录 is optional (keynotes).
@@ -319,6 +325,40 @@ def extract_html_h2s(article: str) -> list[str]:
 
 def norm_heading(text: str) -> str:
     return normalize_h2(text)
+
+
+def committed_publish_date(source_text: str) -> str:
+    """YYYY-MM-DD list the footer should show, or '' when the cell has none."""
+    from build_wechat_html import parse_meta_table, public_date
+
+    lines = source_text.splitlines()
+    for i, line in enumerate(lines):
+        if line.startswith("|"):
+            meta, _ = parse_meta_table(lines, i)
+            return public_date(meta.get("发布时间", ""))
+    return ""
+
+
+def footer_publish_date(article: str) -> str | None:
+    """发布 value, '' when the line is absent, None when the footer is missing."""
+    fm = re.search(r">来源与说明<.*$", article, flags=re.S)
+    if not fm:
+        return None
+    footer_text = re.sub(r"<[^>]+>", "\n", fm.group(0))
+    m = re.search(r"发布：([^\n]*)", footer_text)
+    if not m:
+        return ""
+    return m.group(1).strip()
+
+
+def validate_footer_date(article: str, source_text: str) -> list[str]:
+    expected = committed_publish_date(source_text)
+    actual = footer_publish_date(article)
+    if actual is None or actual == expected:
+        return []
+    shown = actual or "（无）"
+    want = expected or "（无）"
+    return [f"FOOTER DATE: 发布：{shown} != 发布时间 {want}"]
 
 
 def validate_heading_fidelity(
@@ -512,6 +552,7 @@ def main(argv: list[str] | None = None) -> int:
                     allow_rewrite=args.allow_heading_rewrite,
                 )
             )
+            errors.extend(validate_footer_date(article, source_text))
 
     if args.cover:
         if not args.cover.is_file():

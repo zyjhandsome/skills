@@ -27,6 +27,7 @@ DRAFT = r"""# 诺奖经济学家：AI 改变工作时如何保持价值
 | 项目 | 内容 |
 |---|---|
 | 原标题 | Nobel Economist: How to Stay Valuable \| Daron Acemoglu |
+| 发布时间 | 2026-10-07（用户所记；2026-10-08 打开页面时显示为发布后 1 天） |
 | 对谈人物 | **Marina Mogilko**（主持人） × **Daron Acemoglu**（经济学家） |
 | 内容来源 | Silicon Valley Girl Podcast |
 
@@ -67,6 +68,8 @@ class ExtractDraftTests(unittest.TestCase):
         draft2, warnings = build_draft(self.html, None)
         self.assertIn("# 诺奖经济学家：AI 改变工作时如何保持价值", draft2)
         self.assertIn(r"| 原标题 | Nobel Economist: How to Stay Valuable \| Daron Acemoglu |", draft2)
+        self.assertIn("| 发布时间 | 2026-10-07 |", draft2)
+        self.assertNotIn("用户所记", draft2)
         self.assertIn("> **全文论点**：AI 被用于自动化", draft2)
         self.assertIn("**Daron Acemoglu**：「AI 像一头大象。每个人摸到的是不同的部位。」", draft2)
         self.assertIn("==荧光笔==", draft2)

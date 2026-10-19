@@ -23,7 +23,7 @@ A leaked closed-door talk plus unverified financing news is **not** a WeChat del
 
 ## Editorial-mode omit / keep
 
-**Keep:** source H1, 人物背景, 核心导读, every reader-facing body H2 **verbatim**, 来源与说明 with 原文 only.
+**Keep:** source H1, 人物背景, 核心导读, every reader-facing body H2 **verbatim**, 来源与说明 with 原文 and the committed 发布 date.
 
 **Inside each H2:** flatten 核心洞察 / 深度解析 / 对谈实录 into narration. Do not retitle the section after its insight line.
 
@@ -33,13 +33,13 @@ Do not write new headings such as 「最好的产品，从一件没法继续做�
 
 ## Full-mode omit / keep (from production trial)
 
-**Keep:** H1, 人物背景, 核心导读, all body sections with 核心洞察 / 深度解析 / 对谈实录 labels, 来源与说明 with 原文 only.
+**Keep:** H1, 人物背景, 核心导读, all body sections with 核心洞察 / 深度解析 / 对谈实录 labels, 来源与说明 with 原文 and the committed 发布 date.
 
 **Omit:** 元数据表 rows, 目录, 延伸术语表, 自检报告, **关键语录与交锋时刻**, 「完整整理版｜微信排版」eyebrow, long legal footer, 视频链接, 编辑说明, **过程流水账**. 副标题不要直接截断「内容来源」格.
 
 **Subtitle:** `讲者 · 公开场次`，例如 `Garry Tan · Y Combinator · Startup School 2026`.
 
-**Source footer:** `原文：{原标题}` only.
+**Source footer:** `原文：{原标题}` and, on the next line, `发布：{YYYY-MM-DD}` when 「发布时间」has a committed date. Parenthetical notes in that cell are not copied.
 
 **Body tables:** GFM `| col |` in 深度解析 etc. → inline-styled `<table>` (≤4 cols) or stacked cards (≥5 cols). Do not paste raw pipes.
 

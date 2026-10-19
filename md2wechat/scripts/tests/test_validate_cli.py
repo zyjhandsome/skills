@@ -11,7 +11,7 @@ import sys
 SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
 
-from validate_wechat_bundle import main, validate_html  # noqa: E402
+from validate_wechat_bundle import main, validate_footer_date, validate_html  # noqa: E402
 
 
 HTML = """<!DOCTYPE html>
@@ -69,6 +69,38 @@ class ValidateCliTests(unittest.TestCase):
         self.html.write_text(intact, encoding="utf-8")
         errors = validate_html(self.html)
         self.assertFalse(any("TRUNCATED 原文" in e for e in errors), errors)
+
+    def test_iso_publish_line_passes(self):
+        dated = HTML.replace(
+            "<p>原文：Short Loops</p>",
+            "<p>原文：Short Loops</p><p>发布：2026-10-07</p>",
+        )
+        self.html.write_text(dated, encoding="utf-8")
+        errors = validate_html(self.html)
+        self.assertFalse(any("发布" in e for e in errors), errors)
+
+    def test_annotated_publish_line_fails(self):
+        dated = HTML.replace(
+            "<p>原文：Short Loops</p>",
+            "<p>原文：Short Loops</p><p>发布：2026-10-07（用户所记）</p>",
+        )
+        self.html.write_text(dated, encoding="utf-8")
+        errors = validate_html(self.html)
+        self.assertTrue(any("ISO dates only" in e for e in errors), errors)
+
+    def test_footer_date_must_match_source(self):
+        article = HTML.replace(
+            "<p>原文：Short Loops</p>",
+            "<p>原文：Short Loops</p><p>发布：2026-10-02</p>",
+        )
+        source = SOURCE.replace(
+            "| 原标题 | Short Loops |",
+            "| 原标题 | Short Loops |\n| 发布时间 | 2026-10-07（用户所记；页面显示为 1 天前） |",
+        )
+        errors = validate_footer_date(article, source)
+        self.assertTrue(any("FOOTER DATE" in e and "2026-10-07" in e for e in errors), errors)
+        matched = article.replace("发布：2026-10-02", "发布：2026-10-07")
+        self.assertEqual(validate_footer_date(matched, source), [])
 
 
 if __name__ == "__main__":

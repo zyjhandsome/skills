@@ -212,10 +212,28 @@ class UpstreamFixtureTests(unittest.TestCase):
         src.write_text(fx.read_text(encoding="utf-8"), encoding="utf-8")
         headings = source_sections(src)
         self.assertGreaterEqual(len(headings), 3, "fixture must carry ≥3 reader H2s")
-        h1 = next(l for l in src.read_text(encoding="utf-8").splitlines() if l.startswith("# "))
-        draft = h1 + "\n\n" + "\n\n".join(
-            f"## {h}\n\n这一节保留源稿的结论与机制，去掉三层标签后改成可播报叙述。" for h in headings
-        ) + "\n"
+        src_text = src.read_text(encoding="utf-8")
+        h1 = next(l for l in src_text.splitlines() if l.startswith("# "))
+        meta_block: list[str] = []
+        grab = False
+        for line in src_text.splitlines():
+            if line.startswith("## "):
+                if grab:
+                    break
+                grab = line[3:].strip() == "文章元数据"
+            if grab:
+                meta_block.append(line)
+        draft = (
+            h1
+            + "\n\n"
+            + "\n".join(meta_block).rstrip()
+            + "\n\n"
+            + "\n\n".join(
+                f"## {h}\n\n这一节保留源稿的结论与机制，去掉三层标签后改成可播报叙述。"
+                for h in headings
+            )
+            + "\n"
+        )
         title, parts, mode = parse_md(draft, mode="editorial")
         self.assertEqual(mode, "editorial")
         html = tmp / "20260522 测试_整理文档_公众号文章.html"

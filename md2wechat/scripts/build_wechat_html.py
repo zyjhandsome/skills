@@ -64,9 +64,8 @@ _PROCESS_MARKERS = (
     "核对：",
 )
 
-_PROCESS_PAREN = re.compile(
-    r"[（(][^）)]*(?:口径|标注|抓取|用户提供|推算|WebFetch|MCP|次要|字幕|快照)[^）)]*[）)]"
-)
+_PAREN = re.compile(r"（[^（）]*）|\([^()]*\)")
+_ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 _EDITOR_NOTE = re.compile(r"\[编者注：[^\]]*\]|（编者注：[^）]*）")
 
 
@@ -472,12 +471,26 @@ def public_source_line(src: str) -> str:
 
 
 def public_date(date: str) -> str:
-    """ISO/public date only; drop 页面口径 vs 文稿标注 parentheticals."""
+    """Committed publish dates only, joined with 、.
+
+    A segment counts when it starts with YYYY-MM-DD after parenthetical
+    notes are removed. Event days, crawl days, and a conflicting upload
+    day written inside parentheses stay in the 整理文档.
+    """
     if not date:
         return ""
-    s = _PROCESS_PAREN.sub("", date)
-    s = re.sub(r"\s+", " ", s).strip(" ；;、")
-    return s
+    s = date
+    while True:
+        nxt = _PAREN.sub("", s)
+        if nxt == s:
+            break
+        s = nxt
+    found: list[str] = []
+    for part in re.split(r"[；;、。]", s):
+        m = _ISO_DATE.match(part.strip())
+        if m and m.group(0) not in found:
+            found.append(m.group(0))
+    return "、".join(found)
 
 
 def strip_editor_notes(text: str) -> str:
@@ -486,9 +499,17 @@ def strip_editor_notes(text: str) -> str:
 
 
 def source_footer(meta: dict[str, str]) -> str:
-    """来源与说明 only keeps 原文. No date, video, URL, or editorial note."""
+    """来源与说明 keeps 原文 and, when a committed date exists, one 发布 line."""
     title = bare(meta.get("原标题", "") or meta.get("标题", ""))
     line1 = "原文：" + (title if title else "（见正文来源）")
+    date = public_date(bare(meta.get("发布时间", "")))
+    date_html = ""
+    if date:
+        date_html = (
+            f'<p style="margin:6px 0 0;padding:0;font-size:13px;line-height:{lh("13px", 1.65)};'
+            f'color:{C["subtle"]};text-align:left;">'
+            f'{shield(esc("发布：" + date), C["subtle"])}</p>'
+        )
     return (
         f'<section style="margin:28px 0 0;padding:16px 0 0;border-top:1px solid {C["border"]};'
         f'text-align:left;">'
@@ -498,6 +519,7 @@ def source_footer(meta: dict[str, str]) -> str:
         f'<p style="margin:0;padding:0;font-size:13px;line-height:{lh("13px", 1.65)};'
         f'color:{C["subtle"]};text-align:left;">'
         f'{shield(esc(line1), C["subtle"])}</p>'
+        f"{date_html}"
         f"</section>"
     )
 
@@ -770,6 +792,17 @@ def _self_test() -> None:
     )
     assert public_source_line(dirty) == "Y Combinator · Startup School 2026", public_source_line(dirty)
     assert public_date("2026-08-07（YouTube 页面口径；YC Root Access 文稿页标注 Aug 06, 2026）") == "2026-08-07"
+    assert public_date(
+        "2026-09-20（CBS）、2026-09-23（The Ezra Klein Show）、2026-09-29（CNBC）。文件名取最晚一场"
+    ) == "2026-09-20、2026-09-23、2026-09-29"
+    assert public_date(
+        "2026-07-08（用户页面口径）；YouTube 页面元数据为 2026-07-07 10:28 PDT；"
+        "Axios 精编首发 2026-06-25；录制 2026-06-23"
+    ) == "2026-07-08"
+    assert public_date(
+        "2026-09-25（现场为 2026-09-10，旧金山）。文件名取这一天"
+    ) == "2026-09-25"
+    assert public_date("") == ""
     sub = subtitle_from_meta(
         {
             "讲者": "**Garry Tan**（Y Combinator 总裁兼 CEO）",
@@ -787,8 +820,10 @@ def _self_test() -> None:
         }
     )
     assert "原文：Garry Tan: Own Your Intelligence" in foot
+    assert "发布：2026-08-07" in foot
     assert "视频" not in foot and "非逐字稿" not in foot
-    assert "http" not in foot and "2026-08-07" not in foot
+    assert "http" not in foot and "页面口径" not in foot
+    assert "发布：" not in source_footer({"原标题": "Only Title"})
     # escaped pipe inside a metadata cell (原标题 with a `|` separator)
     assert split_cells(r"| 原标题 | How to Stay Valuable \| Daron Acemoglu |") == [
         "原标题",
