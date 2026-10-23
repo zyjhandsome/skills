@@ -71,9 +71,11 @@ Backtick and tilde code fences protect `#` / `##` / `###` lines from heading
 parsing. A closer must use the opening character, be at least as long, and
 have no trailing prose. Inline code protects its literal emphasis/link syntax;
 normal link URLs are attribute-escaped, and executable URL schemes are not
-turned into links. This converter implements this limited note format rather
-than a full CommonMark parser (nested lists, images and footnotes are not
-promised). Keep such material as prose or use an appropriate converter.
+turned into links. A standalone image line becomes `<figure class="source-figure">`,
+and the italic line in the next block becomes its caption. A standalone
+`<video src="…">` line becomes the same figure, with only the source address
+kept. Nested lists, inline images, and footnotes are not promised. Keep that
+material as prose or use an appropriate converter.
 
 ## 争辩型访谈 layers
 

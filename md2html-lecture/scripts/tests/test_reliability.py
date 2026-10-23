@@ -144,6 +144,33 @@ def test_rebuild_overwrites_unrelated_html_even_with_a_diagram(tmp_path):
     assert "<title>测试标题</title>" in text
 
 
+def test_source_mermaid_upgrade_keeps_one_diagram(tmp_path):
+    md, target, output = prepare_upgrade(tmp_path)
+    saved = (
+        '<figure class="diagram"><pre class="mermaid">flowchart LR\n'
+        '  A --> B</pre><figcaption class="diagram-caption">同一条链。</figcaption></figure>'
+    )
+    target.write_text(insert_figure(output, saved), encoding="utf-8")
+    md.write_text(
+        SAMPLE_MD.replace(
+            "### 深度解析\n\n解析段落",
+            "### 深度解析\n\n```mermaid\nflowchart LR\n  A --> B\n```\n\n解析段落",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    result = batch.process_one(md, tmp_path, SCRIPTS / "build_html.py")
+    assert result["ok"], result
+    upgraded = target.read_text(encoding="utf-8")
+    assert result["diagrams_restored"] == result["diagrams_saved"] == 1
+    assert upgraded.count('<figure class="diagram">') == 1
+    assert "同一条链。" in upgraded
+    assert "<pre><code>flowchart" not in upgraded
+    again = batch.process_one(md, tmp_path, SCRIPTS / "build_html.py")
+    assert again["ok"], again
+    assert target.read_text(encoding="utf-8").count('<figure class="diagram">') == 1
+
+
 def test_successful_upgrade_preserves_diagram_and_only_edited_header(tmp_path):
     md, target, output = prepare_upgrade(tmp_path)
     output = insert_figure(output).replace('<h1 class="doc-title">测试标题</h1>', '<h1 class="doc-title">手工标题</h1>')

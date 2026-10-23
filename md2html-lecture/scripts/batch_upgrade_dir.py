@@ -141,10 +141,25 @@ def count_figures(diagrams: dict[str, list[str] | str]) -> int:
     return sum(1 if isinstance(v, str) else len(v) for v in diagrams.values())
 
 
+def _mermaid_key(figure: str) -> str:
+    """Identity of a diagram: the mermaid source, ignoring indent and a caption."""
+    match = re.search(r'<pre class="mermaid">(.*?)</pre>', figure, re.DOTALL | re.IGNORECASE)
+    text = match.group(1) if match else figure
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def inject_diagrams(html: str, diagrams: dict[str, list[str] | str]) -> tuple[int, str]:
     """Re-insert saved diagrams after each section's 核心洞察 callout (or its h2
-    when the section has no insight). Returns (added, html)."""
+    when the section has no insight). A diagram the converter already emitted
+    from a source fence counts as restored. The saved copy wins when the graph
+    matches, so a hand-written caption is not dropped or duplicated.
+    Returns (added, html)."""
     added = 0
+    insight_re = re.compile(
+        r'<h3\b[^>]*class="layer-heading layer-insight"[^>]*>.*?</h3>\s*'
+        r'<div class="callout callout-tip section-insight">.*?</div>\s*</div>\s*',
+        re.DOTALL,
+    )
     for hid, figs in diagrams.items():
         if isinstance(figs, str):
             figs = [figs]
@@ -157,18 +172,25 @@ def inject_diagrams(html: str, diagrams: dict[str, list[str] | str]) -> tuple[in
             continue
         end = _section_end(html, m.end())
         section = html[m.end() : end]
-        if FIGURE_RE.search(section):
-            continue
-        start = m.end()
-        im = re.compile(
-            r'<h3\b[^>]*class="layer-heading layer-insight"[^>]*>.*?</h3>\s*'
-            r'<div class="callout callout-tip section-insight">.*?</div>\s*</div>\s*',
-            re.DOTALL,
-        ).search(section)
-        if im:
-            start = m.end() + im.end()
-        html = html[:start] + "\n\n".join(figs) + "\n\n" + html[start:]
-        added += len(figs)
+        unused: dict[str, list[str]] = {}
+        for current in FIGURE_RE.findall(section):
+            unused.setdefault(_mermaid_key(current), []).append(current)
+        pending = []
+        for fig in figs:
+            bucket = unused.get(_mermaid_key(fig)) or []
+            if bucket:
+                current = bucket.pop(0)
+                added += 1
+                if current.strip() != fig.strip():
+                    section = section.replace(current, fig.strip(), 1)
+            else:
+                pending.append(fig.strip())
+        if pending:
+            im = insight_re.search(section)
+            start = im.end() if im else 0
+            section = section[:start] + "\n\n".join(pending) + "\n\n" + section[start:]
+            added += len(pending)
+        html = html[: m.end()] + section + html[end:]
     return added, html
 
 

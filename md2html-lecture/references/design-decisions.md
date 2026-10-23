@@ -83,13 +83,18 @@ into the template; do not re-encode these rules in `build_html.py`.
   on light paper on macOS).
 - `.layout` is capped at TOC + gap + measure and centered, so on wide screens
   the spare width splits evenly on both sides instead of a blank band right of
-  the text. The grid column therefore equals the measure.
-- One unified reading measure (`--measure: 44rem`, ~41 CJK chars at 17px;
-  每行 窄 38rem / 宽 50rem) for
-  all blocks (headings, text, callouts, thesis, diagrams, timeline, tables,
-  footer) so every outer edge aligns. Keep it a fixed length — `ch` resolves
-  per element font-size and makes smaller-type boxes narrower. Inner text
-  may be narrower (padding, avatar indent); outer edges may not differ.
+  the text. The grid column therefore equals the measure. The TOC track is
+  `clamp(200px, 100vw - 36rem - gap - padding, 220px)` with a 32px gap: it
+  stays 220px while the article can hold about 34 CJK characters, then
+  narrows only to 200px so titles still wrap to two lines. The off-canvas
+  drawer starts at 760px (`isMobileToc`
+  uses the same query) so a snapped window still shows titled sections.
+- One unified reading measure (`--measure: 50rem`, ~47 CJK chars at 17px)
+  for all blocks (headings, text, callouts, thesis, diagrams, timeline, tables,
+  footer) so every outer edge aligns. There is no 每行 control. Keep the
+  length in rem, not `ch` — `ch` resolves per element font-size and makes
+  smaller-type boxes narrower. Inner text may be narrower (padding, avatar
+  indent); outer edges may not differ.
   Use `.full-bleed` for a deliberately column-wide table or diagram.
   `.table-wrap { max-width: 100% }` only fills a parent that is already on
   the measure (glossary, metadata). A body table is also `.content > .table-wrap`;
@@ -156,6 +161,10 @@ into the template; do not re-encode these rules in `build_html.py`.
 - System font stack only (no Google Fonts): CJK always came from system fonts;
   the web font was slow/blocked in mainland China and failed offline.
 - Mermaid diagrams sit after 核心洞察 (conclusion first, then the picture).
+  Source charts are different: a standalone Markdown image or video line
+  becomes `figure.source-figure` where the note placed it. The image link
+  has no underline. Video is width-capped, with a dark letterbox before play.
+  These figures are not hand diagrams and are not moved on upgrade.
 - Key-info hierarchy: body `strong` uses a soft accent chip; thesis
   `.highlight` is stronger (border/shadow + CSS `全文论点` pill);
   `.section-insight` tip callouts get a left accent bar + slightly larger

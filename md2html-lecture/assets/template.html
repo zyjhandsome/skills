@@ -76,9 +76,15 @@
       --radius-lg: 16px;
       /* Fixed length, not ch: ch resolves per element font-size, so callouts
          (15.5px) shrank and the thesis box (18px) overflowed the column.
-         rem, so A−/A+ scales the column with the type: ~36 CJK chars per
+         rem, so A−/A+ scales the column with the type: ~47 CJK chars per
          line at the 17px body size, at every scale. */
-      --measure: 44rem;
+      --measure: 50rem;
+      /* Sidebar stays 220px while the article can hold ~34 CJK chars (36rem),
+         then narrows only to 200px so a section title still wraps to two lines.
+         The 760px drawer matches isMobileToc(). */
+      --layout-gap: 32px;
+      --layout-pad-x: 24px;
+      --toc-width: clamp(200px, calc(100vw - 36rem - var(--layout-gap) - var(--layout-pad-x) * 2), 220px);
       /* System fonts only: web fonts are slow/blocked in mainland China and
          useless offline; CJK glyphs always came from the system anyway. */
       --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Source Han Sans SC', sans-serif;
@@ -249,7 +255,7 @@
     /* ---- 「Aa」reader settings: attributes on <html>, set before first paint ---- */
     html[data-lh="tight"] { --lh: 1.6; }
     html[data-lh="loose"] { --lh: 2; }
-    /* Chars per line at the 17px body: 32 / 36 (default 38rem) / 42 */
+    /* Line length follows --measure (~47 CJK chars at 17px), at every A−/A+ scale. */
     /* Beats the reader theme's own serif (0,2,0); headings stay sans, code mono. */
     html[data-font="sans"] .content { font-family: var(--font-sans); }
     html[data-font="serif"] .content { font-family: var(--font-serif); }
@@ -308,9 +314,9 @@
       border-bottom: 1px solid var(--border);
     }
     .topbar-inner {
-      max-width: 1280px;
+      max-width: calc(var(--toc-width) + var(--layout-gap) + var(--measure) + var(--layout-pad-x) * 2);
       margin: 0 auto;
-      padding: 10px 20px;
+      padding: 10px var(--layout-pad-x);
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -377,12 +383,13 @@
        LAYOUT
        ============================================================ */
     .layout {
-      max-width: calc(260px + 48px + var(--measure) + 48px);
+      max-width: calc(var(--toc-width) + var(--layout-gap) + var(--measure) + var(--layout-pad-x) * 2);
       margin: 0 auto;
       display: grid;
-      grid-template-columns: 260px 1fr;
-      gap: 48px;
-      padding: 32px 24px 96px;
+      grid-template-columns: var(--toc-width) minmax(0, var(--measure));
+      justify-content: center;
+      gap: var(--layout-gap);
+      padding: 32px var(--layout-pad-x) 96px;
     }
     .content { min-width: 0; }
     /* Unified reading measure: every top-level block shares one width so
@@ -663,6 +670,15 @@
       margin-top: 8px;
       text-align: center;
     }
+    .content video {
+      max-width: 100%;
+      height: auto;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      display: block;
+      background: #111;
+    }
+    .content figure.source-figure a { border-bottom: none; }
 
     /* Task lists (- [ ] / - [x]) */
     .content .task-list-item { list-style: none; margin-left: -22px; }
@@ -1158,9 +1174,10 @@
     }
 
     /* ============================================================
-       MOBILE (≤900px) — TOC becomes off-canvas drawer
+       NARROW (≤760px) — TOC becomes off-canvas drawer.
+       Keep this breakpoint in sync with isMobileToc().
        ============================================================ */
-    @media (max-width: 900px) {
+    @media (max-width: 760px) {
       .layout {
         grid-template-columns: 1fr;
         gap: 16px;
@@ -1218,7 +1235,7 @@
       .font-btn { width: 30px; }
       .font-reset { width: 42px; font-size: 11.5px; }
     }
-    @media (min-width: 901px) {
+    @media (min-width: 761px) {
       .toc-mobile-trigger { display: none !important; }
       /* Desktop: pointer targets can be tighter than the touch drawer's 36px,
          which lets a 15–20 entry TOC fit without its own scroll. */
@@ -2010,7 +2027,7 @@
     // ---------- TOC drawer (mobile) ----------
     const tocEl = () => document.getElementById("toc");
     const tocToggle = () => document.getElementById("toc-toggle");
-    const isMobileToc = () => window.matchMedia("(max-width: 900px)").matches;
+    const isMobileToc = () => window.matchMedia("(max-width: 760px)").matches;
 
     function syncTocA11y(open) {
       const toc = tocEl();

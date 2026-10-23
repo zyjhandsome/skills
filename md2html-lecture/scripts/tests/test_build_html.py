@@ -225,6 +225,33 @@ def test_fenced_code(tmp_path):
     assert "<pre><code>print(&quot;hello&quot;)</code></pre>" in html
 
 
+MERMAID_MD = SAMPLE_MD.replace(
+    "### 深度解析\n\n解析段落",
+    "### 深度解析\n\n```mermaid\nflowchart LR\n"
+    '  A["看不懂的小步进展"] --> B["恐惧被拱高"]\n'
+    "```\n\n解析段落",
+    1,
+)
+
+
+def test_mermaid_fence_renders_before_analysis(tmp_path):
+    html = _build(tmp_path, MERMAID_MD, "mermaid_整理文档")
+    assert '<figure class="diagram">' in html
+    assert '<pre class="mermaid">' in html
+    assert 'A["看不懂的小步进展"] --> B["恐惧被拱高"]' in html
+    assert "<pre><code>flowchart" not in html
+    assert html.index("一句话洞察") < html.index('class="mermaid"') < html.index("深度解析")
+    assert html.index('class="mermaid"') < html.index("解析段落")
+    assert '<pre><code>print(&quot;hello&quot;)</code></pre>' in html
+
+
+def test_tilde_mermaid_fence_renders_as_diagram(tmp_path):
+    source = MERMAID_MD.replace("```mermaid", "~~~Mermaid", 1).replace("\n```\n\n解析段落", "\n~~~\n\n解析段落", 1)
+    html = _build(tmp_path, source, "tilde_mermaid_整理文档")
+    assert '<pre class="mermaid">' in html
+    assert "<pre><code>flowchart" not in html
+
+
 def test_italics(tmp_path):
     html = _build(tmp_path)
     assert "<em>斜体</em>" in html
@@ -354,7 +381,7 @@ def test_layer_heading_pill_outranks_content_h3(tmp_path):
     assert ".content h3.layer-heading { font-size: 0; }" in html
     assert "font-style: italic" not in html   # no faux-italic CJK blockquotes
     assert 'lang="zh-CN"' in html
-    assert "--measure: 44rem;" in html        # font-size-independent column
+    assert "--measure: 50rem;" in html        # font-size-independent column, ~47 CJK chars
 
 
 def test_eye_comfort_theme_and_scalable_type(tmp_path):
@@ -389,6 +416,53 @@ def test_meta_and_selfcheck_panels(tmp_path):
     assert 'id="文章元数据"' in html
     assert 'id="自检报告" hidden' in html
     assert 'id="延伸术语表"' in html
+
+
+def test_source_figures_image_caption_and_video():
+    lines = [
+        "前面一句。",
+        "",
+        "![原文图 1：下降](https://cdn.example/a.png)",
+        "",
+        "*原文图 1。[原图地址](https://cdn.example/a.png)*",
+        "",
+        '<video src="https://cdn.example/b.mp4" controls playsinline preload="metadata"></video>',
+        "",
+        "*原文图 8。[原视频地址](https://cdn.example/b.mp4)*",
+        "",
+        "![坏图](javascript:alert(1))",
+        "",
+        "*这句斜体留在段里。*",
+    ]
+    html = "\n".join(build_html.render_blocks(lines))
+    assert html.count('class="source-figure"') == 2
+    assert html.count("<figcaption>") == 2
+    assert 'src="https://cdn.example/a.png"' in html
+    assert 'target="_blank"' in html
+    assert 'preload="metadata"' in html
+    assert "javascript:" not in html
+    assert "<p><em>这句斜体留在段里。</em></p>" in html
+    assert html.index("原文图 1") < html.index("<video")
+
+
+def test_source_figure_does_not_block_diagram_restore():
+    diagrams = batch.extract_diagrams('<h2 id="sec-a">A</h2>\n%s' % FIG)
+    rebuilt = (
+        '<h2 id="sec-a">A</h2>\n'
+        '<figure class="source-figure"><img src="https://cdn.example/a.png" alt="x"></figure>\n'
+        "<p>解析</p>"
+    )
+    added, out = batch.inject_diagrams(rebuilt, diagrams)
+    assert added == 1
+    assert out.count("source-figure") == 1
+    assert "flowchart LR" in out
+    assert out.index("flowchart LR") < out.index("source-figure") < out.index("<p>解析</p>")
+
+
+def test_template_styles_source_figures(tmp_path):
+    html = _build(tmp_path)
+    assert ".content video" in html
+    assert ".content figure.source-figure a { border-bottom: none; }" in html
 
 
 # ---- batch upgrade: diagram preservation ------------------------------------
@@ -585,8 +659,25 @@ def test_inject_skips_when_diagram_already_present():
     diagrams = {"sec-a": FIG}
     html_with_fig = '<h2 id="sec-a">A</h2>\n%s\n<p>x</p>' % FIG
     added, out = batch.inject_diagrams(html_with_fig, diagrams)
-    assert added == 0
+    assert added == 1
     assert out.count('<figure class="diagram">') == 1
+
+
+def test_inject_keeps_saved_caption_for_same_graph():
+    source_fig = (
+        '<figure class="diagram">\n  <pre class="mermaid">\n'
+        'flowchart LR\n  A --> B\n  </pre>\n</figure>'
+    )
+    saved = (
+        '<figure class="diagram"><pre class="mermaid">flowchart LR\n'
+        'A --> B</pre><figcaption class="diagram-caption">审核后的去向。</figcaption></figure>'
+    )
+    html_with_fig = '<h2 id="sec-a">A</h2>\n%s%s\n<p>x</p>' % (INSIGHT, source_fig)
+    added, out = batch.inject_diagrams(html_with_fig, {"sec-a": [saved]})
+    assert added == 1
+    assert out.count('<figure class="diagram">') == 1
+    assert "审核后的去向。" in out
+    assert out.index("洞察句") < out.index("审核后的去向。") < out.index("<p>x</p>")
 
 
 # ---- debate variant / optional layers / extra meta tables -------------------
