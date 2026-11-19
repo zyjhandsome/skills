@@ -2,40 +2,38 @@
 # ============================================================
 # 本文件是 4c-1 词库 grep 的唯一模式来源：
 #   - `scripts/check_4c.py` 启动时全量加载本文件；
-#   - agent 手工执行 4c-1 时也应对本文件的 [blocking] + [contextual] 全量 grep；
-#   - `references/language-and-gates.md`（4c 规则与译法指导所在分册）与
-#     `references/over-translation-guard.md` 只保留判定原则，不再另行维护词表副本。
-#     新词只加在这里。
+#   - agent 手工执行 4c-1 时也应对本文件的 [blocking] + [contextual] + [contextual-case-sensitive] 检索；
+#   - 词库准入原则：仅收录高频中英夹写词根、行业黑话与必纠品牌误写，不收录单篇原句切片与单篇演讲标题；
+#     连续多词普通英文残留由 `check_4c.py` 的 4c-2 开集扫描兜底。
 #
-# 格式：INI 风格分节；每行一个正则片段（区分大小写仅限 [allow-case-sensitive]）；
-# 以 # 开头为注释。加载器自动为词首/词尾是字母数字的模式补 \b 边界。
+# 格式：INI 风格分节；每行一个正则片段；以 # 开头为注释。
+# 加载器自动为词首/词尾是字母数字的模式补 \b 边界。
 #
 # 分节语义：
-#   [blocking]              裸露即判 4c-1 失败的普通叙述夹写词（脚本 ACTIONABLE_HITS）
-#   [contextual]            多义/按语境判定词：可能是残留夹写，也可能是合法术语标签、
-#                           命令名或「首现注全称后合法复现」的缩写（脚本非阻断，人工复核）
-#   [allow]                 专名白名单（大小写不敏感）：命中区域整体豁免
-#   [allow-case-sensitive]  大小写敏感的专名白名单（如 Harness 产品名 vs harness 普通词）
-#
-# 非字面译法写在对应行的 # 注释里；判定见 language-and-gates.md「易错译法」。
+#   [blocking]                   裸露即判 4c-1 失败的普通叙述夹写词或必纠品牌误识（ACTIONABLE_HITS）
+#   [contextual]                 多义/按语境判定词（大小写不敏感，非阻断，人工复核）
+#   [contextual-case-sensitive]  大小写敏感的首现须注全称行业缩写（非阻断，人工复核）
+#   [allow]                      专名白名单（大小写不敏感）：命中区域整体豁免
+#   [allow-case-sensitive]       大小写敏感的专名/概念标签白名单（如 Harness vs harness）
 
 [blocking]
+# —— 必纠品牌与 ASR 高频误写（editorial-standards.md 术语校准） ——
+grock             # 误写 → Grok
+open ai           # 误写 → OpenAI
+chat gpt          # 误写 → ChatGPT
+cloudcode         # 误写 → Claude Code（云代码语境写中文）
 # —— 口语与状态词 ——
 okay
-vibes forecasting
 grokked
-meta 问
 sidebar
 wind back
 pontificate
-temporary
 compressed
 adamant
 steer
 transformed
 comforting
 no alternative
-fake
 tangible
 largely
 for sure
@@ -60,13 +58,11 @@ upstack
 incumbent
 distribution matters
 flywheel
-rappers
 steady state
 equilibrium
 main street
 econometric
 meaningful usage
-fireman stage
 billion dollar
 long term
 early adopters?
@@ -86,16 +82,12 @@ outbound          # 外呼线索
 inbound           # 入站线索
 containment       # 隔离边界
 horse race
-priority
 # —— 表达与写作类 ——
 proofreading
 struggle to find
 blank screen
 jagged edge
-white space gone
-breakout yet
 perplexing
-still charges
 converge
 unsubscribe
 push on
@@ -106,7 +98,6 @@ right company
 platonic ideal
 spray everywhere
 default power
-everything yesterday
 storytelling
 boil down
 punchline
@@ -115,8 +106,6 @@ back-calculate
 human writing
 good excuse
 not fundamentally
-day looks similar
-hands in it
 speed up
 closed loop
 massive shift
@@ -129,13 +118,7 @@ stick head in sand
 dive in
 submerge
 draw distinction
-presume today
 look crazy
-old thing but more
-evil AI
-happy for you
-not going to help
-too comforting
 # —— 产品/工程叙述词（非专名用法） ——
 thin wrapper
 hot.?swap
@@ -155,13 +138,11 @@ tech-led
 gut feeling
 informed gut
 gut
-aware
 unaware
 orchestrate
 micromanagement
 stepchild
 centerpiece
-genius
 sublime
 backwards
 frictionless
@@ -183,12 +164,10 @@ cosmetic
 live demo
 prompt caching
 grading criteria
-setup 脚本
 graph-based
 
 [contextual]
-# 多义/按语境：可能是残留，也可能是术语标签、命令名或已注全称的缩写。
-# 判定见 over-translation-guard.md 与 language-and-gates.md「易错译法」。
+# 多义/按语境：可能是残留，也可能是术语标签或命令名。
 dogfooding?   # 内部试用
 dogfood       # 内部试用
 one[ -]?shot  # 一次成功 / 单次提示词
@@ -214,7 +193,6 @@ craft
 rollout       # 发布/灰度；训练采样才写采样轨迹；禁止一律「推广」
 pitch         # 推销陈述（非体育）
 rep           # 销售代表
-miss
 operator
 conservative
 ration        # 限额/配给
@@ -232,21 +210,21 @@ allow.?list
 block.?list
 secret sauce  # 独门秘方
 source available  # 源码可见
-learning
-hit
-die
-jump
-# —— 首现须注中文全称、其后可裸用的缩写 ——
+
+[contextual-case-sensitive]
+# 首现须注「中文全称（英文缩写）」、其后可裸用的行业缩写（大小写敏感，防误伤普通小写片段）
 TAM           # 可寻址市场
 COGS          # 销货成本
 PIP           # 绩效改进计划
 T&E           # 差旅与招待报销
 RAG           # 检索增强生成
+IC            # 独立贡献者（Individual Contributor）
+ASL           # 自主安全等级（AI Safety Level）
+MTS           # 技术人员（Member of Technical Staff）
+GTM           # 市场进入策略（Go-To-Market）
 
 [allow]
 # 专名/产品/固定搭配白名单（大小写不敏感豁免）。
-# 泛称标签（Skill / Builder / Agent / Loop / Graph / Workflow）见下方大小写敏感节，
-# 避免小写普通义（skill gap、builder mindset）被整段抹掉。
 Skill Creator
 Agent Skills?
 Claude Code
@@ -273,8 +251,6 @@ Harness
 Craft Conference
 Behind the Craft
 Craft Ventures
-Beyond Vibe Coding
-How to build your own harness
 (?:Uber|OpenAI) Agent Builder
 Skills?
 Builders?

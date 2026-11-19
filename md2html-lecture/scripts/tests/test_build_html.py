@@ -438,6 +438,8 @@ def test_source_figures_image_caption_and_video():
     assert html.count('class="source-figure"') == 2
     assert html.count("<figcaption>") == 2
     assert 'src="https://cdn.example/a.png"' in html
+    assert 'referrerpolicy="no-referrer"' in html
+    assert 'loading="lazy"' in html
     assert 'target="_blank"' in html
     assert 'preload="metadata"' in html
     assert "javascript:" not in html
@@ -710,10 +712,37 @@ def test_missing_dialogue_does_not_invent_timeline(tmp_path):
 
 
 def test_extra_metadata_table_keeps_heading(tmp_path):
-    html = _build(tmp_path, DEBATE_MD, "debate_整理文档")
+    md = DEBATE_MD.replace(
+        "| 00:12 | 开场 |",
+        "| 00:12 | 开场 |\n\n### 核心引用与资源\n\n| 资源 | 链接 |\n|------|------|\n| 论文 | https://example.com/paper |",
+    )
+    html = _build(tmp_path, md, "debate_整理文档")
     assert "官方章节索引" in html
     assert "00:12" in html
     assert "开场" in html
+    assert "核心引用与资源" in html
+    assert 'href="https://example.com/paper"' in html
+
+
+def test_speaker_timestamp_and_role_notes_keep_roles_and_render_tags(tmp_path):
+    md = THREE_MD.replace(
+        "**Guest A**：「嘉宾甲先开口。」\n\n**Guest A**：「嘉宾甲接着说。」\n\n**Host Person**：「主持人追问。」",
+        "**Guest A**（14:20）：「嘉宾甲先开口。」\n\n"
+        "**Guest A**：「同一时间段继续说。」\n\n"
+        "**Guest A**（58:10 合并）：「跳到后半场补充。」\n\n"
+        "**Host Person** (15:02)：「主持人追问。」",
+    )
+    html = _build(tmp_path, md, "three_timed_整理文档")
+    assert '<article class="step speaker-guest-1">' in html
+    assert '<article class="step speaker-host">' in html
+    assert 'Guest A <span class="tag">14:20</span>' in html
+    assert 'Guest A <span class="tag">58:10 合并</span>' in html
+    assert 'Host Person <span class="tag">15:02</span>' in html
+    # First two Guest A turns merge; the 58:10 jump opens a new step.
+    first_step = html.split('<article class="step speaker-guest-1">')[1].split("</article>")[0]
+    assert "嘉宾甲先开口" in first_step and "同一时间段继续说" in first_step
+    assert "跳到后半场补充" not in first_step
+    assert '<div class="step-num" aria-hidden="true">HP</div>' in html
 
 
 def test_speaker_bio_opens_before_thesis(tmp_path):

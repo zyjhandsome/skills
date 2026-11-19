@@ -118,6 +118,37 @@ class ExtractDraftTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             build_draft(foreign, None)
 
+    def test_figure_and_code_round_trip_and_editorial_strips_timecodes(self):
+        rich = (
+            DRAFT
+            + "\n![原文图 1：任务份额曲线](https://pbs.twimg.com/media/demo?format=jpg&name=large)\n\n"
+            "*原文图 1：任务份额曲线（[原图地址](https://pbs.twimg.com/media/demo?format=jpg&name=large)）*\n\n"
+            "<video src=\"https://cdn.example/clip.mp4\" controls></video>\n\n"
+            "*原文图 8，是视频不是静图。[原视频地址](https://cdn.example/clip.mp4)*\n\n"
+            "```mermaid\nflowchart LR\n  A[旧流程] --> B[新流程]\n```\n\n"
+            "```python\nx = [1, 2]\n```\n\n"
+            "**Marina Mogilko**（14:20）：「那接下来会发生什么？」\n"
+        )
+        page = build(rich)
+        self.assertIn('data-wechat-figure="1"', page)
+        self.assertIn('referrerpolicy="no-referrer"', page)
+        self.assertNotIn("!<a", page)
+        self.assertNotIn("原图地址", page)
+        self.assertNotIn("<video", page)
+        self.assertNotIn("&lt;video", page)
+        self.assertNotIn("flowchart LR", page)
+        self.assertNotIn("14:20", page)
+        path = self.tmp / "rich_整理文档_公众号文章.html"
+        path.write_text(page, encoding="utf-8")
+        src = self.tmp / "rich_整理文档.md"
+        src.write_text(rich, encoding="utf-8")
+        rebuilt_md, warnings = build_draft(path, src)
+        self.assertEqual([w for w in warnings if "dropped" in w], [])
+        self.assertIn("![原文图 1：任务份额曲线](https://pbs.twimg.com/media/demo?format=jpg&name=large)", rebuilt_md)
+        self.assertIn("*原文图 1：任务份额曲线*", rebuilt_md)
+        self.assertIn("**Marina Mogilko**：「那接下来会发生什么？」", rebuilt_md)
+        self.assertEqual(extract_article(page), extract_article(build(rebuilt_md)))
+
 
 if __name__ == "__main__":
     unittest.main()

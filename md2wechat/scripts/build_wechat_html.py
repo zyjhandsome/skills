@@ -9,6 +9,7 @@ import html
 import re
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
@@ -81,6 +82,49 @@ _PROCESS_MARKERS = (
 _PAREN = re.compile(r"（[^（）]*）|\([^()]*\)")
 _ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 _EDITOR_NOTE = re.compile(r"\[编者注：[^\]]*\]|（编者注：[^）]*）")
+_IMAGE_LINE = re.compile(r"^!\[([^\]]*)\]\(([^)\s]+)\)\s*$")
+_VIDEO_LINE = re.compile(
+    r"""^<video\b[^>]*\bsrc=(["'])([^"']+)\1[^>]*>.*?(?:</video>)?\s*$""",
+    re.I,
+)
+_ITALIC_LINE = re.compile(r"^\*(?!\*)(.+?)(?<!\*)\*\s*$")
+_TIMESTAMP_PAREN = re.compile(
+    r"\s*[（(]\s*\d{1,2}:\d{2}(?::\d{2})?"
+    r"(?:\s*[,，、–—-]\s*\d{1,2}:\d{2}(?::\d{2})?)*"
+    r"(?:\s*合并)?\s*[）)]"
+)
+_POINTER_LINK = re.compile(
+    r"\[(?:原图地址|原图链接|原视频地址|原视频链接|查看原图|查看原视频|直达原片[^\]]*)\]\([^)]+\)"
+)
+
+
+def _fence_open(line: str) -> tuple[str, str] | None:
+    m = re.match(r"^\s*(`{3,}|~{3,})([^\n]*)$", line)
+    if not m:
+        return None
+    marker, rest = m.group(1), m.group(2).strip()
+    if marker[0] == "`" and "`" in rest:
+        return None
+    lang = rest.split()[0].lower() if rest else ""
+    return marker, lang
+
+
+def _is_fence_close(line: str, marker: str) -> bool:
+    return bool(re.match(rf"^\s*{re.escape(marker[0])}{{{len(marker)},}}\s*$", line))
+
+
+def _safe_media_url(url: str) -> str:
+    url = url.strip()
+    checked = html.unescape(url)
+    if not checked or re.search(r"[\x00-\x20\x7f]", checked):
+        return ""
+    try:
+        parsed = urlsplit(checked)
+    except ValueError:
+        return ""
+    if parsed.scheme.lower() not in ("", "http", "https"):
+        return ""
+    return url
 
 
 def esc(s: str) -> str:
@@ -140,13 +184,22 @@ def _inline_no_link(text: str) -> str:
             f"{m.group(1)}</code>"
         )
 
-    return re.sub(r"`([^`]+)`", code, s)
+    s = re.sub(r"`([^`]+)`", code, s)
+    return re.sub(r"(?<!\*)\*(?=\S)([^*\n]+?)(?<=\S)\*(?!\*)", r"\1", s)
 
 
 def inline_md_raw(text: str) -> str:
+    # Inline images inside a sentence cannot use <img> without triggering the
+    # WeChat paste line-overlap detector; render them as readable bracketed alt
+    # text and never let them fall through as `!<a href=...>`.
+    text = re.sub(
+        r"!\[([^\]]*)\]\(([^)]+)\)",
+        lambda m: f"（图：{m.group(1).strip()}）" if m.group(1).strip() else "",
+        text,
+    )
     parts: list[str] = []
     pos = 0
-    for m in re.finditer(r"\[([^\]]+)\]\(([^)]+)\)", text):
+    for m in re.finditer(r"(?<!!)\[([^\]]+)\]\(([^)]+)\)", text):
         parts.append(_inline_no_link(text[pos : m.start()]))
         label = _inline_no_link(m.group(1))
         url = esc(m.group(2))
@@ -159,9 +212,18 @@ def inline_md_raw(text: str) -> str:
     return "".join(parts)
 
 
-def p(text: str, size: str = "15px", color: str | None = None, mb: str = "12px") -> str:
+def p(
+    text: str,
+    size: str = "15px",
+    color: str | None = None,
+    mb: str = "12px",
+    *,
+    strip_timestamps: bool = False,
+) -> str:
     color = color or C["text"]
     text = strip_editor_notes(text)
+    if strip_timestamps:
+        text = _TIMESTAMP_PAREN.sub("", text).strip()
     if text.startswith(">"):
         text = strip_bq(text)
     if not text:
@@ -221,7 +283,16 @@ def number_sections(parts: list[str]) -> list[str]:
 
 def reader_h2_titles(md: str) -> list[str]:
     titles: list[str] = []
+    fence: str | None = None
     for line in md.splitlines():
+        if fence is not None:
+            if _is_fence_close(line, fence):
+                fence = None
+            continue
+        opened = _fence_open(line)
+        if opened is not None:
+            fence = opened[0]
+            continue
         if line.startswith("## "):
             title = line[3:].strip()
             if not is_source_omitted_h2(title):
@@ -234,9 +305,20 @@ def insight_ledes(md: str) -> dict[str, str]:
     lines = md.splitlines()
     found: dict[str, str] = {}
     heading = ""
+    fence: str | None = None
     i = 0
     while i < len(lines):
         line = lines[i]
+        if fence is not None:
+            if _is_fence_close(line, fence):
+                fence = None
+            i += 1
+            continue
+        opened = _fence_open(line)
+        if opened is not None:
+            fence = opened[0]
+            i += 1
+            continue
         if line.startswith("## "):
             heading = line[3:].strip()
             i += 1
@@ -376,11 +458,162 @@ def strip_bq(line: str) -> str:
 
 
 _SPEAKER_QUOTE = re.compile(
-    r"^\*\*([^*]+)\*\*[：:]\s*[「\"](.+)[」\"]\s*$"
+    r"^\*\*([^*]+)\*\*(?:\s*([（(][^）)\n]*[）)]))?\s*[：:]\s*[「\"](.+)[」\"]\s*$"
 )
 
 
 _SECTION_LEDE = re.compile(r"^\*\*本节\*\*[：:]\s*(.+)$")
+
+
+def _clean_wechat_caption(raw: str, *, mode: str = "full") -> str:
+    """Strip external URLs and source-pointer links from figure captions."""
+    s = strip_editor_notes(raw)
+    s = _POINTER_LINK.sub("", s)
+    s = re.sub(r"(?<!!)\[([^\]]+)\]\(([^)]+)\)", r"\1", s)
+    s = re.sub(r"https?://\S+", "", s)
+    if mode == "editorial":
+        s = re.sub(r"[（(]\s*原片定位[：:][^）)]*[）)]", "", s)
+        s = re.sub(r"[·；;，,]\s*原片定位[：:][^）)\n]*", "", s)
+        s = _TIMESTAMP_PAREN.sub("", s)
+    s = re.sub(r"([（(])\s*[·；;，,。]+\s*", r"\1", s)
+    s = re.sub(r"\s*[·；;，,]+\s*([）)])", r"\1", s)
+    s = re.sub(r"[（(]\s*[）)]", "", s)
+    s = re.sub(r"\s*[·]\s*$", "", s)
+    s = re.sub(r"[ \t]{2,}", " ", s).strip()
+    if s in ("。", "·", "；", ";"):
+        return ""
+    return s
+
+
+def image_figure(alt: str, url: str, caption: str = "", *, mode: str = "full") -> str:
+    safe = _safe_media_url(url)
+    if not safe:
+        return ""
+    esc_url = html.escape(safe, quote=True)
+    esc_alt = html.escape(strip_editor_notes(alt), quote=True)
+    clean_cap = _clean_wechat_caption(caption, mode=mode) if caption else ""
+    cap_html = ""
+    if clean_cap:
+        cap_color = C["subtle"]
+        cap_html = (
+            f'<p style="margin:8px 0 0;padding:0;font-size:13px;'
+            f'line-height:{lh("13px", 1.65)};color:{cap_color};text-align:center;">'
+            f'{shield(_inline_no_link(clean_cap), cap_color, "center")}</p>'
+        )
+    return (
+        f'<section data-wechat-figure="1" style="margin:0 0 {BODY_MB};padding:0;text-align:left;">'
+        f'<img src="{esc_url}" alt="{esc_alt}" referrerpolicy="no-referrer" '
+        f'style="max-width:100%;height:auto;border-radius:6px;'
+        f'border:1px solid {C["border"]};display:block;margin:0 auto;" />'
+        f"{cap_html}</section>"
+    )
+
+
+def video_fallback_card(caption: str = "") -> str:
+    clean_cap = _clean_wechat_caption(caption, mode="full") if caption else ""
+    text = f"【原片动态画面：{clean_cap}】" if clean_cap else "【原片动态画面：详见原文视频演示】"
+    color = C["subtle"]
+    return (
+        f'<section data-wechat-video="1" style="margin:0 0 16px;padding:10px 14px;'
+        f'background:{C["code_bg"]};border:1px solid {C["border"]};border-radius:8px;text-align:left;">'
+        f'<p style="margin:0;padding:0;font-size:13px;line-height:{lh("13px", 1.65)};'
+        f'color:{color};text-align:left;">{shield(_inline_no_link(text), color)}</p></section>'
+    )
+
+
+def _parse_mermaid_steps(code_lines: list[str]) -> list[str]:
+    node_re = re.compile(r'([A-Za-z0-9_]+)\s*(?:\[\s*"?([^\]"]+)"?\s*\]|\(\s*"?([^)"]+)"?\s*\)|\{\s*"?([^}"]+)"?\s*\})')
+    labels: dict[str, str] = {}
+    for raw in code_lines:
+        for m in node_re.finditer(raw):
+            nid = m.group(1)
+            lbl = (m.group(2) or m.group(3) or m.group(4) or "").replace("<br/>", " ").replace("<br>", " ").strip()
+            if lbl:
+                labels[nid] = lbl
+    edge_re = re.compile(
+        r"([A-Za-z0-9_]+)(?:\s*[\[\(\{][^\]\)\}]*[\]\)\}])?\s*"
+        r"(?:--\s*([^-.\n>]+?)\s*-->|-->\s*(?:\|([^|]+)\|)?|-\.\s*([^.\n>]*?)\s*\.->|-\.->)\s*"
+        r"([A-Za-z0-9_]+)"
+    )
+    steps: list[str] = []
+    for raw in code_lines:
+        s = raw.strip()
+        if not s or s.startswith(("%%", "flowchart", "graph", "subgraph", "end", "style", "classDef", "class ")):
+            continue
+        for m in edge_re.finditer(s):
+            src, l1, l2, dotted_lbl, dst = m.groups()
+            a = labels.get(src, src)
+            b = labels.get(dst, dst)
+            is_dotted = "-." in m.group(0)
+            note = (l1 or l2 or dotted_lbl or "").strip().strip('"')
+            arrow = "⇢" if is_dotted else "→"
+            step = f"{a} {arrow}（{note}）{b}" if note else f"{a} {arrow} {b}"
+            if step not in steps:
+                steps.append(step)
+    return steps
+
+
+def mermaid_fallback_card(code_lines: list[str], caption: str = "") -> str:
+    steps = _parse_mermaid_steps(code_lines)
+    clean_cap = _clean_wechat_caption(caption, mode="full") if caption else ""
+    label_color = C["accent_strong"]
+    body_color = C["muted"]
+    inner = [
+        f'<p style="margin:0 0 6px;padding:0;font-size:12px;font-weight:600;'
+        f'line-height:{lh("12px", 1.6)};color:{label_color};text-align:left;">'
+        f'{shield("流程示意", label_color)}</p>'
+    ]
+    if steps:
+        for idx, chunk in enumerate(steps[:8]):
+            mb = "0" if idx == min(len(steps), 8) - 1 and not clean_cap else "4px"
+            inner.append(
+                f'<p style="margin:0 0 {mb};padding:0;font-size:14px;'
+                f'line-height:{lh("14px", 1.7)};color:{body_color};text-align:left;">'
+                f"{shield(esc(chunk), body_color)}</p>"
+            )
+    else:
+        mb = "0" if not clean_cap else "4px"
+        inner.append(
+            f'<p style="margin:0 0 {mb};padding:0;font-size:14px;'
+            f'line-height:{lh("14px", 1.7)};color:{body_color};text-align:left;">'
+            f'{shield("详见原文结构示意图", body_color)}</p>'
+        )
+    if clean_cap:
+        inner.append(
+            f'<p style="margin:4px 0 0;padding:0;font-size:12px;'
+            f'line-height:{lh("12px", 1.6)};color:{C["subtle"]};text-align:left;">'
+            f'{shield(_inline_no_link(clean_cap), C["subtle"])}</p>'
+        )
+    return (
+        f'<section data-wechat-diagram="1" style="margin:0 0 16px;padding:12px 14px;'
+        f'background:{C["code_bg"]};border:1px solid {C["border"]};border-radius:8px;text-align:left;">'
+        f'{"".join(inner)}</section>'
+    )
+
+
+def code_block_card(code_lines: list[str]) -> str:
+    trimmed = list(code_lines)
+    while trimmed and trimmed[0].strip() == "":
+        trimmed.pop(0)
+    while trimmed and trimmed[-1].strip() == "":
+        trimmed.pop()
+    if not trimmed:
+        return ""
+    rows: list[str] = []
+    for idx, raw in enumerate(trimmed):
+        mb = "0" if idx == len(trimmed) - 1 else "4px"
+        content = esc(raw) if raw else "&nbsp;"
+        rows.append(
+            f'<p style="margin:0 0 {mb};padding:0;font-family:Consolas,Menlo,monospace;'
+            f'font-size:13px;line-height:{lh("13px", 1.6)};color:#2A2A2A;'
+            f'text-align:left;white-space:pre-wrap;word-break:break-all;">'
+            f'{shield(content, "#2A2A2A")}</p>'
+        )
+    return (
+        f'<section data-wechat-code="1" style="margin:0 0 16px;padding:12px 14px;'
+        f'background:{C["code_bg"]};border:1px solid {C["border"]};border-radius:8px;text-align:left;">'
+        f'{"".join(rows)}</section>'
+    )
 
 
 def section_lede(text: str) -> str:
@@ -394,20 +627,37 @@ def section_lede(text: str) -> str:
     )
 
 
+def _format_speaker(name: str, note: str | None, mode: str) -> str:
+    base = _TIMESTAMP_PAREN.sub("", name).strip() if mode == "editorial" else name.strip()
+    extra = (note or "").strip()
+    if mode == "editorial" or not extra:
+        return base
+    return f"{base}{extra}"
+
+
 def render_body_line(
-    line: str, *, size: str = "15px", color: str | None = None, mb: str = BODY_MB
+    line: str,
+    *,
+    size: str = "15px",
+    color: str | None = None,
+    mb: str = BODY_MB,
+    mode: str = "full",
 ) -> str:
     if line.strip().startswith(">"):
         raw = strip_bq(line.strip())
         lede = _SECTION_LEDE.match(raw)
         if lede:
             return section_lede(lede.group(1).strip())
+        if mode == "editorial":
+            raw = _TIMESTAMP_PAREN.sub("", raw).strip()
         return insight_card(raw)
     raw = line.strip()
     m = _SPEAKER_QUOTE.match(raw)
     if m:
-        return dialogue_card(m.group(1), m.group(2))
-    return p(raw, size=size, color=color, mb=mb)
+        speaker = _format_speaker(m.group(1), m.group(2), mode)
+        quote = _TIMESTAMP_PAREN.sub("", m.group(3)).strip() if mode == "editorial" else m.group(3)
+        return dialogue_card(speaker, quote)
+    return p(raw, size=size, color=color, mb=mb, strip_timestamps=(mode == "editorial"))
 
 
 def bare(s: str) -> str:
@@ -647,6 +897,77 @@ def subtitle_from_meta(meta: dict[str, str]) -> str:
     return venue
 
 
+def _peek_adjacent_caption(lines: list[str], next_idx: int) -> tuple[str, int]:
+    """Consume a standalone `*caption*` block immediately following media/diagram."""
+    n = len(lines)
+    j = next_idx
+    while j < n and lines[j].strip() == "":
+        j += 1
+    if j < n:
+        m = _ITALIC_LINE.match(lines[j].strip())
+        if m:
+            return m.group(1).strip(), j + 1
+    return "", next_idx
+
+
+def try_consume_special_block(
+    lines: list[str], start: int, mode: str
+) -> tuple[str | None, int]:
+    """Consume fenced code / mermaid, standalone image, video, or italic trace line."""
+    n = len(lines)
+    if start >= n:
+        return None, start
+    raw_line = lines[start]
+    stripped = raw_line.strip()
+
+    opened = _fence_open(raw_line)
+    if opened is not None:
+        marker, lang = opened
+        i = start + 1
+        code_lines: list[str] = []
+        while i < n and not _is_fence_close(lines[i], marker):
+            code_lines.append(lines[i])
+            i += 1
+        if i < n:
+            i += 1
+        if lang == "mermaid":
+            cap, after_cap = _peek_adjacent_caption(lines, i)
+            if cap and re.search(r"原片|示意图|流程图|口播整理|画面", cap):
+                i = after_cap
+            else:
+                cap = ""
+            if mode == "editorial":
+                return "", i
+            return mermaid_fallback_card(code_lines, cap), i
+        return code_block_card(code_lines), i
+
+    img_m = _IMAGE_LINE.match(stripped)
+    if img_m:
+        cap, next_i = _peek_adjacent_caption(lines, start + 1)
+        return image_figure(img_m.group(1), img_m.group(2), cap, mode=mode), next_i
+
+    vid_m = _VIDEO_LINE.match(stripped)
+    if vid_m:
+        cap, next_i = _peek_adjacent_caption(lines, start + 1)
+        if mode == "editorial":
+            return "", next_i
+        return video_fallback_card(cap), next_i
+
+    it_m = _ITALIC_LINE.match(stripped)
+    if it_m and not stripped.startswith("*文档生成时间"):
+        inner = it_m.group(1).strip()
+        if mode == "editorial" and re.search(
+            r"据原片.*(?:画面|口播)整理|原图地址|原图链接|原视频地址", inner
+        ):
+            return "", start + 1
+        cleaned = _clean_wechat_caption(inner, mode=mode)
+        if not cleaned:
+            return "", start + 1
+        return p(cleaned, size="13px", color=C["subtle"], mb="14px", strip_timestamps=(mode == "editorial")), start + 1
+
+    return None, start
+
+
 def parse_md(md: str, mode: str = "auto") -> tuple[str, list[str], str]:
     if mode == "auto":
         mode = "full" if re.search(r"^### 核心洞察\s*$", md, flags=re.M) else "editorial"
@@ -659,7 +980,20 @@ def parse_md(md: str, mode: str = "auto") -> tuple[str, list[str], str]:
     i = 0
     n = len(lines)
 
-    while i < n and not lines[i].startswith("# "):
+    fence: str | None = None
+    while i < n:
+        if fence is not None:
+            if _is_fence_close(lines[i], fence):
+                fence = None
+            i += 1
+            continue
+        opened = _fence_open(lines[i])
+        if opened is not None:
+            fence = opened[0]
+            i += 1
+            continue
+        if lines[i].startswith("# "):
+            break
         i += 1
     if i >= n:
         raise ValueError("No H1 title found")
@@ -696,20 +1030,64 @@ def parse_md(md: str, mode: str = "auto") -> tuple[str, list[str], str]:
 
             if key == "文章元数据":
                 meta, i = parse_meta_table(lines, i)
-                skip_blank()
-                if i < n and lines[i].startswith(">"):
-                    bio_lines = []
-                    while i < n and lines[i].startswith(">"):
-                        bio_lines.append(strip_bq(lines[i]))
+                bio_paragraphs: list[str] = []
+                cur_bio: list[str] = []
+                meta_fence: str | None = None
+                while i < n and not (meta_fence is None and lines[i].startswith("## ")):
+                    cur_line = lines[i]
+                    if meta_fence is not None:
+                        if _is_fence_close(cur_line, meta_fence):
+                            meta_fence = None
                         i += 1
-                    bio = " ".join(bio_lines)
-                    bio = re.sub(r"^\*\*人物背景\*\*[：:]\s*", "", bio)
-                    out.append(bio_card(bio))
+                        continue
+                    op = _fence_open(cur_line)
+                    if op is not None:
+                        meta_fence = op[0]
+                        i += 1
+                        continue
+                    if cur_line.strip() == "---":
+                        i += 1
+                        break
+                    if cur_line.startswith(">"):
+                        stripped_bq = strip_bq(cur_line)
+                        if stripped_bq:
+                            cur_bio.append(stripped_bq)
+                        elif cur_bio:
+                            bio_paragraphs.append(" ".join(cur_bio))
+                            cur_bio = []
+                    elif cur_bio:
+                        bio_paragraphs.append(" ".join(cur_bio))
+                        cur_bio = []
+                    i += 1
+                if cur_bio:
+                    bio_paragraphs.append(" ".join(cur_bio))
+                if bio_paragraphs:
+                    bio = " ".join(bio_paragraphs)
+                    bio = re.sub(
+                        r"^\*\*(?:人物背景|讲者背景)(?:（[^）]*）)?\*\*[：:]\s*",
+                        "",
+                        bio,
+                    )
+                    if bio:
+                        out.append(bio_card(bio))
                 skip_blank()
                 continue
 
             if key in OMIT_H2:
-                while i < n and not lines[i].startswith("## "):
+                omit_fence: str | None = None
+                while i < n:
+                    if omit_fence is not None:
+                        if _is_fence_close(lines[i], omit_fence):
+                            omit_fence = None
+                        i += 1
+                        continue
+                    op = _fence_open(lines[i])
+                    if op is not None:
+                        omit_fence = op[0]
+                        i += 1
+                        continue
+                    if lines[i].startswith("## "):
+                        break
                     i += 1
                 skip_blank()
                 continue
@@ -722,20 +1100,31 @@ def parse_md(md: str, mode: str = "auto") -> tuple[str, list[str], str]:
                     while i < n and lines[i].startswith(">"):
                         q.append(strip_bq(lines[i]))
                         i += 1
-                    thesis = " ".join(q)
-                    thesis = re.sub(r"^\*\*全文论点\*\*[：:]\s*", "", thesis)
-                    out.append(thesis_card("全文论点", thesis))
+                    raw_thesis = " ".join(q)
+                    card_label = (
+                        "核心冲突"
+                        if re.match(r"^\*\*核心冲突\*\*[：:]", raw_thesis)
+                        else "全文论点"
+                    )
+                    thesis = re.sub(r"^\*\*(?:全文论点|核心冲突)\*\*[：:]\s*", "", raw_thesis)
+                    out.append(thesis_card(card_label, thesis))
                 skip_blank()
                 while i < n and not lines[i].startswith("## ") and lines[i].strip() != "---":
                     if lines[i].strip() == "":
                         i += 1
+                        continue
+                    special, ni = try_consume_special_block(lines, i, mode)
+                    if special is not None:
+                        if special:
+                            out.append(special)
+                        i = ni
                         continue
                     tbl, ni = try_parse_gfm_table(lines, i)
                     if tbl is not None:
                         out.append(tbl)
                         i = ni
                         continue
-                    out.append(p(lines[i].strip(), size=body_size, mb=BODY_MB))
+                    out.append(p(lines[i].strip(), size=body_size, mb=BODY_MB, strip_timestamps=(mode == "editorial")))
                     i += 1
                 skip_blank()
                 continue
@@ -766,12 +1155,21 @@ def parse_md(md: str, mode: str = "auto") -> tuple[str, list[str], str]:
                                     break
                                 i += 1
                                 continue
-                            m = re.match(
-                                r"^\*\*([^*]+)\*\*[：:]\s*[「\"](.+)[」\"]\s*$",
-                                lines[i].strip(),
-                            )
+                            special, ni = try_consume_special_block(lines, i, mode)
+                            if special is not None:
+                                if special:
+                                    out.append(special)
+                                i = ni
+                                continue
+                            m = _SPEAKER_QUOTE.match(lines[i].strip())
                             if m:
-                                out.append(dialogue_card(m.group(1), m.group(2)))
+                                speaker = _format_speaker(m.group(1), m.group(2), mode)
+                                quote = (
+                                    _TIMESTAMP_PAREN.sub("", m.group(3)).strip()
+                                    if mode == "editorial"
+                                    else m.group(3)
+                                )
+                                out.append(dialogue_card(speaker, quote))
                                 i += 1
                                 continue
                             tbl, ni = try_parse_gfm_table(lines, i)
@@ -779,7 +1177,7 @@ def parse_md(md: str, mode: str = "auto") -> tuple[str, list[str], str]:
                                 out.append(tbl)
                                 i = ni
                                 continue
-                            out.append(p(lines[i].strip(), size="14px", color=C["muted"]))
+                            out.append(p(lines[i].strip(), size="14px", color=C["muted"], strip_timestamps=(mode == "editorial")))
                             i += 1
                         skip_blank()
                         continue
@@ -791,6 +1189,12 @@ def parse_md(md: str, mode: str = "auto") -> tuple[str, list[str], str]:
                                     break
                                 i += 1
                                 continue
+                            special, ni = try_consume_special_block(lines, i, mode)
+                            if special is not None:
+                                if special:
+                                    out.append(special)
+                                i = ni
+                                continue
                             tbl, ni = try_parse_gfm_table(lines, i)
                             if tbl is not None:
                                 out.append(tbl)
@@ -798,10 +1202,10 @@ def parse_md(md: str, mode: str = "auto") -> tuple[str, list[str], str]:
                                 continue
                             mnum = re.match(r"^(\d+)\.\s+(.+)$", lines[i].strip())
                             if mnum:
-                                out.append(p(f"{mnum.group(1)}. {mnum.group(2)}", size=body_size, mb="8px"))
+                                out.append(p(f"{mnum.group(1)}. {mnum.group(2)}", size=body_size, mb="8px", strip_timestamps=(mode == "editorial")))
                                 i += 1
                                 continue
-                            out.append(p(lines[i].strip(), size=body_size, mb=BODY_MB))
+                            out.append(p(lines[i].strip(), size=body_size, mb=BODY_MB, strip_timestamps=(mode == "editorial")))
                             i += 1
                         skip_blank()
                         continue
@@ -810,24 +1214,38 @@ def parse_md(md: str, mode: str = "auto") -> tuple[str, list[str], str]:
                         if lines[i].strip() == "":
                             i += 1
                             continue
+                        if lines[i].strip() == "---":
+                            break
+                        special, ni = try_consume_special_block(lines, i, mode)
+                        if special is not None:
+                            if special:
+                                out.append(special)
+                            i = ni
+                            continue
                         tbl, ni = try_parse_gfm_table(lines, i)
                         if tbl is not None:
                             out.append(tbl)
                             i = ni
                             continue
-                        out.append(render_body_line(lines[i], size=body_size))
+                        out.append(render_body_line(lines[i], size=body_size, mode=mode))
                         i += 1
                     continue
 
                 if lines[i].strip() == "":
                     i += 1
                     continue
+                special, ni = try_consume_special_block(lines, i, mode)
+                if special is not None:
+                    if special:
+                        out.append(special)
+                    i = ni
+                    continue
                 tbl, ni = try_parse_gfm_table(lines, i)
                 if tbl is not None:
                     out.append(tbl)
                     i = ni
                     continue
-                out.append(render_body_line(lines[i], size=body_size))
+                out.append(render_body_line(lines[i], size=body_size, mode=mode))
                 i += 1
             continue
 
@@ -1014,6 +1432,92 @@ def _self_test() -> None:
     assert "第 1 节" in joined and "第 2 节" in joined and "第 3 节" not in joined
     assert joined.index("第 1 节") < joined.index("第一个话题")
     assert not re.search(r"<(?:p|h1|h2|h3|td)\b[^>]*>[^<\s]", joined)
+    media_md = """# 图文测试
+
+## 文章元数据
+
+| 项目 | 内容 |
+|---|---|
+| 原标题 | Media Test |
+| 对谈人物 | **甲**（主持人） × **乙**（嘉宾） |
+
+### 官方章节索引
+
+| 时间 | 章节 |
+|---|---|
+| 00:10 | 开场 |
+
+> **讲者背景**：乙展示架构与曲线。
+
+## 核心导读
+
+> **全文论点**：保留关键视觉信息。
+
+## 第一节
+
+### 核心洞察
+
+> 成本陡降。
+
+### 深度解析
+
+```mermaid
+flowchart LR
+  A["提示词"] --> B["执行闭环"]
+  B -. 待补 .-> C["回归评测"]
+```
+
+如图 1 所示，单次成本下降 90%。内联 ![小图](https://cdn.example/inline.png) 与 [普通链接](https://cdn.example/doc)。
+
+![原文图 1：推理成本下降曲线](https://pbs.twimg.com/media/abc?format=jpg&name=large)
+
+*原文图 1：推理成本下降曲线（[原图地址](https://pbs.twimg.com/media/abc?format=jpg&name=large) · 原片定位：[14:20](https://youtu.be/x?t=860)）*
+
+<video src="https://cdn.example/demo.mp4" controls playsinline preload="metadata"></video>
+
+*原文图 8，是视频不是静图。[原视频地址](https://cdn.example/demo.mp4)*
+
+```python
+## 代码里的井号不是章节标题
+x = [1, 2]
+```
+
+### 对谈实录
+
+**甲**（14:20）：「这张图说明什么？」
+
+**乙**（14:25, 58:10 合并）：「说明趋势已经成立。」
+"""
+    _, full_parts, full_mode = parse_md(media_md, mode="auto")
+    assert full_mode == "full"
+    full_article = "\n".join(full_parts)
+    assert 'data-wechat-figure="1"' in full_article
+    assert '<img src="https://pbs.twimg.com/media/abc?format=jpg&amp;name=large"' in full_article
+    assert 'referrerpolicy="no-referrer"' in full_article
+    assert "!<a " not in full_article
+    assert "原图地址" not in full_article
+    assert "原片定位：14:20" in full_article
+    assert "data-wechat-diagram=\"1\"" in full_article
+    assert "提示词 → 执行闭环" in full_article
+    assert "flowchart LR" not in full_article
+    assert "data-wechat-video=\"1\"" in full_article
+    assert "&lt;video" not in full_article and "<video" not in full_article
+    assert "代码里的井号不是章节标题" in full_article
+    assert "<h2><span" not in full_article.split("代码里的井号不是章节标题")[0][-80:]
+    assert "甲（14:20）" in full_article
+    assert "乙（14:25, 58:10 合并）" in full_article
+    assert "乙展示架构与曲线" in full_article
+    assert not re.search(r"line-height:\d+(?:\.\d+)?(?!\d)(?!px)", full_article), full_article
+    assert not re.search(r"<(?:p|h1|h2|h3|td)\b[^>]*>[^<\s]", full_article), full_article
+
+    _, ed_parts, ed_mode = parse_md(media_md, mode="editorial")
+    assert ed_mode == "editorial"
+    ed_article = "\n".join(ed_parts)
+    assert 'data-wechat-figure="1"' in ed_article
+    assert "data-wechat-diagram=" not in ed_article
+    assert "data-wechat-video=" not in ed_article
+    assert "是视频不是静图" not in ed_article
+    assert "14:20" not in ed_article and "58:10" not in ed_article
     print("self-test OK")
 
 

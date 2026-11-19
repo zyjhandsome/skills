@@ -168,6 +168,42 @@ class InlineSuffixedSourceTests(unittest.TestCase):
         code = validate_main([str(html), "--source", str(self.src), "--audit", str(audit)])
         self.assertEqual(code, 0)
 
+    def test_visual_media_mermaid_video_and_timed_turns_pass_full_pipeline(self):
+        visual_src = INLINE_SOURCE.replace(
+            "### 深度解析\n\n解析。",
+            "### 深度解析\n\n"
+            "```mermaid\nflowchart LR\n  A[\"输入\"] --> B[\"结构化重构\"]\n```\n\n"
+            "如图 1 所示，推理成本持续下降。\n\n"
+            "![原文图 1：推理成本下降](https://cdn.example/chart.png)\n\n"
+            "*原文图 1：推理成本下降（[原图地址](https://cdn.example/chart.png) · 原片定位：[14:20](https://youtu.be/demo?t=860)）*\n\n"
+            "<video src=\"https://cdn.example/clip.mp4\" controls playsinline preload=\"metadata\"></video>\n\n"
+            "*原文图 2，动态演示。[原视频地址](https://cdn.example/clip.mp4)*\n\n"
+            "```markdown\n## 代码示例中的标题不计入章节\n```\n",
+        ).replace(
+            "**甲**：「问？」",
+            "**甲**（14:20）：「这张图怎么读？」",
+        )
+        src = self.tmp / "visual_整理文档.md"
+        src.write_text(visual_src, encoding="utf-8")
+        self.assertEqual(source_sections(src), ["第一节", "第二节"])
+        title, parts, mode = parse_md(visual_src, mode="auto")
+        self.assertEqual(mode, "full")
+        html = self.tmp / "visual_整理文档_公众号文章.html"
+        html.write_text(
+            wrap(title, parts, mode=mode, fingerprint=source_fingerprint(src)),
+            encoding="utf-8",
+        )
+        article = extract_article(html.read_text(encoding="utf-8"))
+        self.assertIn('<img src="https://cdn.example/chart.png"', article)
+        self.assertNotIn("!<a", article)
+        self.assertNotIn("&lt;video", article)
+        self.assertNotIn("flowchart LR", article)
+        self.assertIn("甲（14:20）", article)
+        audit = self.tmp / "visual_audit.md"
+        audit.write_text(_audit_for(src, mode), encoding="utf-8")
+        code = validate_main([str(html), "--source", str(src), "--audit", str(audit)])
+        self.assertEqual(code, 0)
+
 
 @unittest.skipUnless(UPSTREAM_FIXTURES.is_dir(), "content-structuring fixtures not installed")
 class UpstreamFixtureTests(unittest.TestCase):

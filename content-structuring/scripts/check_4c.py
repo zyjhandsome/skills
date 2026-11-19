@@ -2,23 +2,18 @@
 """4c lexicon + consecutive-English scan for content-structuring outputs.
 
 - Loads the FULL unified lexicon from references/lexicon.txt (single source);
-  the spec reference set (see references/language-and-gates.md) keeps no word-list copy
+  the spec reference set keeps no word-list copy
 - 4c-1: greps blocking / contextual patterns against narrative-ish Markdown
 - 4c-2: open-set scan for ≥2 consecutive lowercase-bearing English words inside
   Chinese sentences (catches code-switching that no word list can enumerate)
-- Ignores metadata「原标题」cells, glossary proper-noun column heuristically
+- Ignores metadata「原标题」cells, glossary + self-check sections, code fences,
+  inline code, ordinary Markdown links, bilingual「原文：…」notes, ASR markers,
+  and HTML media tag attributes (<img/video/source/figure/figcaption>)
+- Masks image destination URLs (including one level of balanced parentheses)
+  while keeping Chinese image alt descriptions inside ![alt](url) in scope
 - Ignores first-occurrence parentheticals: 中文（English） / （English）
 - Ignores allowlisted proper-noun phrases (Skill Creator, Claude Code, ...)
 - Reports likely Chinese over-translation of AI/DevTools labels for human review
-
-Usage:
-  python check_4c.py path/to/doc.md
-  python check_4c.py path/to/doc.md --json
-  python check_4c.py path/to/doc.md --fail-on-consecutive   # 4c-2 blocks too
-
-Exit 0 if no *actionable* hits; 1 if bare lexicon hits remain (and, with
---fail-on-consecutive, if 4c-2 candidates remain). Title-Case spans are treated as
-proper nouns, so 4c-2 still needs a human pass for term intent and over-translation.
 """
 
 from __future__ import annotations
@@ -67,19 +62,22 @@ _SECTIONS = _load_lexicon()
 # Bare narrative English: actionable 4c-1 failures.
 LEXICON = [_wrap_word_boundaries(p) for p in _SECTIONS.get("blocking", [])]
 
-# Ambiguous community terms: they may be unwanted English residue or intentional
-# technical labels. Report them for source-aware review; never auto-fail on the word.
+# Ambiguous community terms (case-insensitive) + case-sensitive industry acronyms.
 CONTEXTUAL_ENGLISH_REVIEW = [
     _wrap_word_boundaries(p) for p in _SECTIONS.get("contextual", [])
 ]
+CONTEXTUAL_CS_REVIEW = [
+    _wrap_word_boundaries(p)
+    for p in _SECTIONS.get("contextual-case-sensitive", [])
+]
 
 # Likely cases where an English AI/DevTools label may have been translated away.
-# These are review hints, not automatic failures: Chinese wording can be correct in
-# ordinary prose, while the source may instead be naming a taxonomy or identity.
+# Avoid matching ordinary Chinese figure references such as「如上图，图 2」or「架构图、工作流」.
 OVER_TRANSLATION_REVIEW = [
     r"(?:代理|智能体)\s*(?:循环|图)",
     r"先是\s*(?:代理|智能体).{0,24}?循环.{0,24}?图",
-    r"(?:循环|图)[、，,]\s*(?:图|工作流)",
+    r"循环[、，,]\s*(?:图(?!\s*[0-9一二三四五六七八九十])|工作流)",
+    r"(?<![\u4e00-\u9fff])图[、，,]\s*工作流",
     r"(?:技能创建者|电脑使用|计算机使用|子代理)",
     r"爱的是\s*(?:\*\*)?(?:建造|构建)(?:\*\*)?",
     r"(?:认同|身份).{0,12}?(?:建造者|构建者)",
@@ -93,58 +91,71 @@ CASE_SENSITIVE_ALLOW_PHRASES = [
     _wrap_word_boundaries(p) for p in _SECTIONS.get("allow-case-sensitive", [])
 ]
 
+_BALANCED_PARENS = r"\((?:[^()\n]|\([^()\n]*\))*\)"
 # Strip parenthetical Latin/ASCII terms: （dogfooding） or (dogfooding)
 PAREN_EN = re.compile(
     r"[（(]\s*[A-Za-z][A-Za-z0-9_./+#&-]*(?:\s+[A-Za-z][A-Za-z0-9_./+#&-]*)*\s*[）)]"
 )
-MARKDOWN_LINK_DEST = re.compile(r"(?<=\])\([^\n)]*\)")
+# Destination part of ![alt](url) or [label](url), supporting balanced parentheses.
+MARKDOWN_LINK_DEST = re.compile(rf"(?<=\]){_BALANCED_PARENS}")
 RAW_URL = re.compile(r"https?://\S+")
-# Whole markdown links: English article titles in 延伸阅读/引用 are archive layer.
-MARKDOWN_LINK = re.compile(r"\[[^\]\n]*\]\([^\n)]*\)")
-INLINE_CODE = re.compile(r"`[^`\n]+`")
-# Archive layer inside a body line: bilingual 原文 side rows and ASR audio markers.
-BILINGUAL_SIDE = re.compile(r"[（(]\s*原文[：:][^）)]*[）)]")
-ASR_MARKER = re.compile(r"\[\s*ASR[^\]]*\]")
+# Whole ordinary markdown links (NOT images): English article titles in 引用/图注原链 are archive layer.
+MARKDOWN_LINK = re.compile(rf"(?<!!)\[[^\]\n]*\]{_BALANCED_PARENS}")
+INLINE_CODE = re.compile(r"`+[^`\n]+`+")
+# Archive layer inside a body line: bilingual 原文/原片标题 side notes, ASR/blind-spot markers, HTML media tags.
+BILINGUAL_SIDE = re.compile(r"[（(]\s*(?:原文|原片标题)[：:][^）)\n]*[）)]")
+ASR_MARKER = re.compile(r"[\[［]\s*(?:ASR|说话人待核|视觉盲区)[^\]］\n]*[\]］]")
+HTML_MEDIA_TAG = re.compile(
+    r"</?(?:img|video|source|figure|figcaption)\b[^>]*>",
+    flags=re.IGNORECASE,
+)
+
+
+def _blank_preserve_newlines(match: re.Match[str]) -> str:
+    return re.sub(r"[^\n]", " ", match.group(0))
+
+
+def _mask_archive_spans(text: str) -> str:
+    """Blank spans that legitimately keep English BEFORE link-dest masking."""
+    out = text
+    for pat in (INLINE_CODE, BILINGUAL_SIDE, ASR_MARKER, HTML_MEDIA_TAG, MARKDOWN_LINK):
+        out = pat.sub(_blank_preserve_newlines, out)
+    return out
 
 
 def _mask_allowed(text: str) -> str:
     out = text
-    out = MARKDOWN_LINK_DEST.sub(lambda m: " " * len(m.group(0)), out)
-    out = RAW_URL.sub(lambda m: " " * len(m.group(0)), out)
+    out = MARKDOWN_LINK_DEST.sub(_blank_preserve_newlines, out)
+    out = RAW_URL.sub(_blank_preserve_newlines, out)
     for pat in CASE_SENSITIVE_ALLOW_PHRASES:
-        out = re.sub(pat, lambda m: " " * len(m.group(0)), out)
+        out = re.sub(pat, _blank_preserve_newlines, out)
     for pat in ALLOW_PHRASES:
-        out = re.sub(pat, lambda m: " " * len(m.group(0)), out, flags=re.IGNORECASE)
-    out = PAREN_EN.sub(lambda m: " " * len(m.group(0)), out)
-    return out
-
-
-def _mask_archive_spans(text: str) -> str:
-    """Blank spans that legitimately keep English (spec「4c 检索范围」exclusions)."""
-    out = text
-    for pat in (MARKDOWN_LINK, INLINE_CODE, BILINGUAL_SIDE, ASR_MARKER):
-        out = pat.sub(lambda m: " " * len(m.group(0)), out)
+        out = re.sub(pat, _blank_preserve_newlines, out, flags=re.IGNORECASE)
+    out = PAREN_EN.sub(_blank_preserve_newlines, out)
     return out
 
 
 def _strip_excluded_regions(text: str) -> str:
-    """Drop archive/meta regions outside 4c scope (language-and-gates.md「4c 检索范围」)."""
+    """Drop archive/meta regions outside 4c scope while keeping 1-based line numbers."""
     lines = text.splitlines()
     kept: list[str] = []
     skipping = False
-    in_fence = False
+    fence: str | None = None
     for line in lines:
-        if re.match(r"^\s*```", line):
-            in_fence = not in_fence
+        if fence is not None:
+            closer = rf"^\s*{re.escape(fence[0])}{{{len(fence)},}}\s*$"
+            if re.match(closer, line):
+                fence = None
             kept.append("")
             continue
-        if in_fence:
+        m_fence = re.match(r"^\s*(`{3,}|~{3,})(.*)$", line)
+        if m_fence and not (m_fence.group(1)[0] == "`" and "`" in m_fence.group(2)):
+            fence = m_fence.group(1)
             kept.append("")
             continue
         title_m = re.match(r"^##\s+(.+)$", line)
         if title_m:
             title = title_m.group(1).strip()
-            # 原标题 row handled below; skip whole glossary + self-check (备注常提及词库词)
             skipping = title.startswith("延伸术语表") or title.startswith("自检报告")
             kept.append("" if skipping else line)
             continue
@@ -162,12 +173,15 @@ def _strip_excluded_regions(text: str) -> str:
     return "\n".join(kept)
 
 
+def _prepare_body(text: str) -> str:
+    return _mask_allowed(_mask_archive_spans(_strip_excluded_regions(text)))
+
+
 def scan(text: str) -> list[dict]:
-    body = _mask_allowed(_strip_excluded_regions(text))
+    body = _prepare_body(text)
     hits: list[dict] = []
     for pat in LEXICON:
         for m in re.finditer(pat, body, flags=re.IGNORECASE):
-            # line number in original is approximate after masks; report span text
             line_no = body.count("\n", 0, m.start()) + 1
             hits.append(
                 {
@@ -181,10 +195,19 @@ def scan(text: str) -> list[dict]:
 
 def scan_contextual_english(text: str) -> list[dict]:
     """Return non-blocking English terms whose treatment depends on source intent."""
-    body = _mask_allowed(_strip_excluded_regions(text))
+    body = _prepare_body(text)
     hints: list[dict] = []
     for pat in CONTEXTUAL_ENGLISH_REVIEW:
         for m in re.finditer(pat, body, flags=re.IGNORECASE):
+            hints.append(
+                {
+                    "pattern": pat,
+                    "match": m.group(0),
+                    "line": body.count("\n", 0, m.start()) + 1,
+                }
+            )
+    for pat in CONTEXTUAL_CS_REVIEW:
+        for m in re.finditer(pat, body):
             hints.append(
                 {
                     "pattern": pat,
@@ -206,18 +229,17 @@ def scan_consecutive_english(text: str) -> list[dict]:
     Title-Case / ALL-CAPS spans are skipped as proper-noun chains (person names,
     programme names, product names). A span is reported only when at least one word
     is lowercase — that is the shape ordinary code-switching takes (`go to market
-    motion`, `still hesitant`). Reported for review, not auto-failed: the fix may be
-    translation *or* promoting the span into the proper-noun layer.
+    motion`, `still hesitant`). Reported for review, not auto-failed.
     """
-    body = _mask_archive_spans(_mask_allowed(_strip_excluded_regions(text)))
+    body = _prepare_body(text)
     hits: list[dict] = []
     for line_no, line in enumerate(body.splitlines(), start=1):
         if not CJK.search(line):
-            continue  # pure-English or structural line: not a 中文句
+            continue
         for m in CONSECUTIVE_EN.finditer(line):
             words = m.group(0).split()
             if all(w[:1].isupper() for w in words):
-                continue  # proper-noun chain
+                continue
             hits.append({"match": m.group(0), "line": line_no, "words": len(words)})
     return hits
 
@@ -238,7 +260,6 @@ def scan_over_translation(text: str) -> list[dict]:
             if line_end < 0:
                 line_end = len(body)
             line = body[line_start:line_end]
-            # A same-line English label means the Chinese is probably an explanation.
             if english_label.search(line):
                 continue
             hints.append(

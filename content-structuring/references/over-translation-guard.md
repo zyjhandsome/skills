@@ -1,89 +1,55 @@
-# 过译护栏：专名与 AI/DevTools 概念标签勿误译
+# 过译护栏：专名、AI/DevTools 概念标签与多义词辨析（参考分册）
 
-配合 `language-and-gates.md` 的 4c 闸门。目标：叙述层中文，但**不要把官方产品名、平台对象名、命令名，或讲者刻意使用的 AI/DevTools 概念标签，译成「看起来很中文」却失去行业指向的近义词**。
+> 配合 `language-and-gates.md` 4c 闸门与单源词库 `lexicon.txt` 使用。核心目标：叙述层保持流畅中文，但**严禁将官方产品对象、命令符号，或讲者刻意用来命名角色、范式、架构层与对照组的社区原生概念标签，强译成失去行业指向与可检索性的字面中文**。
 
-## 判定口诀（先于词库）
+---
 
-1. **精确标识符 → 保留英文**：官方文档/UI/命令行、产品对象、API、文件名和代码符号不可翻掉。
-2. **概念标签 → 保留英文或首现中英并写**：讲者用某词命名角色、身份、范式、工作流原语、架构层或对照组时，英文词本身承载可检索性与圈内含义。
-3. **成组 taxonomy → 整组保留**：原文若并列 `Agent → Loop → Graph`、`Plan → Tool Call → Observe` 等术语链，不得逐词抹平成普通中文名词。
-4. **普通叙述 → 译中文**：仅表达动作、状态、形容、比喻的普通英语写中文。**同形词看指称，禁止按单词一刀切。**
+## 一、四条判定准则（优先级高于词库字面匹配）
 
-## AI/DevTools 社区原生标签（不是只有产品名才保留）
+1. **精确标识符保留英文**：官方产品名、功能模块名、CLI 命令与参数、API、配置文件键名、代码符号与文件名原样保留。
+2. **社区原生概念标签保留英文（首现可短释义）**：当讲者用某个词命名身份角色、技术范式、工作流原语或架构层级时，首次出现可写 `Builder（产品构建者）`、`Agent Loop（代理执行闭环）`，后文作为标签持续出现时直接沿用英文。
+3. **成组 Taxonomy 整链保留**：当原文将一组概念并列为演化链或对比框架（如 `Agent → Loop → Graph`、`Plan → Tool Call → Observe`）时，整组保留英文标签，严禁拆散抹平为「先是代理，然后循环，然后图」。
+4. **同形普通词译为自然中文**：同一单词仅表达日常动作、状态、形容或泛指时（如 *build a page* → 构建页面，人类「沟通技能」→ 技能而非 `Skill`），正常译为中文，禁止按单词一刀切。
 
-| 原文用法 | 推荐写法 | 何时仍译中文 |
+---
+
+## 二、高频过译黑名单（禁止强译）
+
+| 原文专名 / 概念标签 | ❌ 典型过译错误 | ✅ 标准保真写法 |
 | :--- | :--- | :--- |
-| **Builder**（身份、角色、群体标签） | **Builder**；首现可「Builder（把产品做出来的人）」 | 普通动词 *build a page* → 构建页面；泛指施工者时按原义翻译 |
-| **Agent**（AI 系统类别/术语链） | **Agent**；需要照顾通识读者时首现「AI Agent」 | 泛指代理商、法律代理人等非 AI 语境 |
-| **Agent Loop / agentic loop** | **Agent Loop** / **agentic loop**；可补「代理执行闭环」解释 | 普通代码循环、重复动作可写「循环」 |
-| **Loop / Graph / Workflow**（并列范式或工作流原语） | **Loop / Graph / Workflow**；尤其保留原文并列关系 | 普通「循环三次」「关系图」「办事流程」按中文写 |
-| **Harness / Evals / Prompt / Context Window / Tool Call**（技术对象或层名） | 英文保留，或首次「中文说明（English）」后沿用英文标签 | 仅作为普通动作/非技术名词时中文化 |
-
-**最小双语原则**：保留术语不等于每句堆英文。首次用 `Builder（产品构建者）`、`Agent Loop（代理执行闭环）` 之类说明一次；后文若它持续作为标签，直接沿用英文。已有稳定中文且英文不承担标签作用时，正文只写中文。
-
-**来源优先**：能看到逐字稿时，以讲者是否把该词当作命名、对照或自我身份为准；看不到原文时，先保留可逆的中英并写，不凭中文词库武断删掉英文。
-
-## 高频过译黑名单（禁止这样译）
-
-| 原文指称（保留） | ❌ 过译 | ✅ 写法 |
-| :--- | :--- | :--- |
-| **Skill / Skills**（Cursor / Claude **Agent Skill** 包、`SKILL.md`） | 技能、技能包（单独当产品名时） | **Skill** / **Agent Skill**；说明可用「Skill（代理技能包）」**仅首现** |
-| **Skill Creator** | 技能创建者 | **Skill Creator** |
-| **Agent Skills**（产品/目录名） | 智能体技能、代理技能（作正式名时） | **Agent Skills** |
-| **Hooks**（Cursor Hooks 产品能力） | 钩子（作产品名时） | **Hooks**；通用编程 hook → 钩子（hook） |
-| **Rules**（Cursor Project Rules / `.mdc`） | 规则（作产品名时） | **Rules**；说明「项目规则（Rules）」 |
-| **Subagent / sub-agent**（产品对象） | 子代理（作正式名时可括注） | **Subagent**；首现可「Subagent（子代理）」 |
-| **Claude Code** | 克劳德代码、Claude 代码工具（替换专名） | **Claude Code** |
+| **Skill / Agent Skill / Agent Skills**（`SKILL.md` 包） | 技能、智能体技能（替代专名时） | **Skill** / **Agent Skill** / **Agent Skills**（首现可括注「代理技能包」） |
+| **Skill Creator** | 技能创建者（易误读为岗位头衔） | **Skill Creator**（指人时按语境写「该 Skill 的作者/维护者」） |
+| **Claude Code** | 克劳德代码、Claude 代码工具 | **Claude Code** |
 | **Computer Use** | 电脑使用、计算机使用 | **Computer Use** |
-| **Composer** / **Canvas**（Cursor 产品面） | 作曲家、画布（作产品名时） | **Composer** / **Canvas** |
-| **MCP** / **Model Context Protocol** | 模型上下文协议（可作释义，不可删英文专名） | **MCP**；首现可「模型上下文协议（MCP）」 |
-| **PR** / **CI** / **CD** | 拉取请求/持续集成（作对象名时可括注） | **PR** / **CI**；首现可「拉取请求（PR）」 |
-| **worktree** / **`/loop`** / **tmux** / **bash** | 工作树/循环命令（替换命令名） | 保留英文命令/对象名 |
-| **Artifacts**（Claude 产品） | 神器、工件（作产品名时） | **Artifacts** |
-| **Custom GPT / GPTs** | 自定义 GPT 机器人（可描述，专名保留） | **Custom GPT** / **GPTs** |
-| **Creator**（平台角色/产品名，如 Skill Creator） | 创建者（作该专名时） | 按官方英文；通用「创作者经济」可中文 |
+| **Hooks / Rules / Composer / Canvas / Artifacts** | 钩子/规则/作曲家/画布/神器（作产品能力名时） | 保留首字母大写官方专名；普通编程概念才写「钩子（hook）」「规则」 |
+| **Subagent / Custom GPT / GPTs** | 子代理 / 自定义机器人（替代正式对象名） | **Subagent**（首现可注「子代理」）、**Custom GPT** / **GPTs** |
+| **MCP / Model Context Protocol** | 仅写「模型上下文协议」删掉英文缩写 | **MCP**（首现可写「模型上下文协议（MCP）」） |
+| **Builder**（自我认同/角色标签） | 施工者、建造者心态 | **Builder**（例：`他真正认同的是 Builder 身份，编程只是手段`） |
+| **Agent / Agent Loop / Loop / Graph / Workflow** | 代理、代理循环图（混淆单术语与演化链） | 作范式或原语标签时保留 **Agent / Agent Loop / Loop / Graph / Workflow** |
+| **Harness / Evals / Context Window / Tool Call** | 马具/评测集（抹掉架构层专名） | 作评测框架或系统层名时保留英文（首现可补中文说明） |
+| **worktree / `/loop` / tmux / bash / `git checkout`** | 工作树、循环命令（替换命令字面量） | 原样保留命令与对象名 |
 
-## 词库误伤白名单（4c 不得因这些标 ❌）
+---
 
-下列在**专名/命令/官方缩写**用法下，**即使出现在统一词库**，也不算夹写失败：
+## 三、语境多义词辨析表（配合 `lexicon.txt` 人工复核）
 
-- `hook` → Cursor **Hooks**；git/CLI hook 作对象名
-- `checkout` → `git checkout` / 命令名
-- `spawn` / `subprocess` → API/系统调用名讨论
-- `RAG` / `MCP` / `CI` / `PR` → 缩写专名（RAG/行业缩写仍要**首现中文全称**）
-- `sandbox` / `harness` → 产品或评测框架专名；通用义再译
-- `context` → **context window** / MCP 相关专名短语；口语 *lose context* → 失去上下文
-- `onboarding` → 产品模块正式名时可保留；口语 → 新用户引导
-- `roadmap` → 文件/栏目名可保留；叙述「路线图」亦可
-- `demo` → **Demo Day** / 产品名；口语 → 演示
-- `builder` → 产品套餐、角色名或身份标签时保留 **Builder**；普通动作按语境写「构建 / 做产品」，不要机械写「建造者心态」
-- `feature` → **feature flag** 等固定搭配可保留英文术语；口语 → 功能
-- `ship` → 动词口语 → 上线/发布；不是专名时不要留英文
+`lexicon.txt` 中的 `[contextual]` 与 `[contextual-case-sensitive]` 命中仅作人工复核提示，按以下语境裁决，严禁为追求 0 提示而盲目替换：
 
-## Skill / Creator 专项（用户高频踩坑）
-
-整理 **AI 编码 Agent / Cursor / Claude** 类素材时：
-
-| 口播/原文 | ❌ | ✅ |
+| 多义词 / 缩写 | 普通叙述译法 | 保留英文或特殊译法的语境 |
 | :--- | :--- | :--- |
-| "install this skill" | 安装这个技能 | 安装这个 **Skill** |
-| "skill creator flow" | 技能创建者流程 | **Skill Creator** 流程 |
-| "creator of the skill" | 该技能的创建者 | 视语境：人 → 「作者/维护者」；产品 → **Skill Creator** |
-| "agent skills directory" | 智能体技能目录 | **Agent Skills** 目录 |
+| **rollout** | 发布 / 灰度推进（禁一律译「推广」） | 强化学习/训练采样语境译为「采样轨迹（rollout）」 |
+| **onboarding** | 新用户引导 / 入职引导 | 官方产品模块正式名称可保留 `Onboarding` |
+| **demo** | 演示 / 实操演示 | **Demo Day** 或产品固定命名保留英文 |
+| **pitch** | 推销陈述 / 路演陈述 | 勿误译为体育场地或音高 |
+| **hook / sandbox / harness** | 钩子 / 沙箱 / 管控框架 | 指特定产品特性或评测套件专名（如 Cursor **Hooks**、**Harness**）时保留首字母大写英文 |
+| **spawn / subprocess / checkout** | 拉起 / 子进程 / 检出 | 讨论具体系统调用、API 名或 `git checkout` 命令时保留英文 |
+| **feature / context / ship** | 功能 / 上下文 / 发布上线 | **feature flag**、**context window / context engineering** 等固定技术搭配可保留或首现括注；动词 *ship it* 译中文 |
+| **IC / ASL / MTS / RAG / GTM / TAM / COGS / PIP / T&E** | 行业缩写 | **首次出现必须注中文全称**（如 `独立贡献者（IC）`、`自主安全等级（ASL）`、`检索增强生成（RAG）`），后文可直接使用英文缩写 |
 
-**例外**：讲者在谈「沟通技能 / 领导力技能」等**人类软技能**时，用中文「技能」，不要写成 Skill。
+---
 
-## 典型过译回归
+## 四、与 4c 机检脚本的协同约定
 
-| ❌ 过译 | ✅ 保真写法 | 原因 |
-| :--- | :--- | :--- |
-| `先是代理，然后循环，然后图` | `先是 Agent，接着是 Loop，再到 Graph` | 原文在列举一组行业范式，英文标签本身是信息 |
-| `他爱的是建造，编程只是手段`（原文强调身份） | `他真正认同的是 Builder 身份；编程只是实现手段` | **Builder** 是自我定位，不是施工意义的「建造者」 |
-| `代理循环图` | `Agent Loop / Agent Graph`（按原文） | 中文压缩会混淆一个术语、两个术语或一条演化链 |
-
-## 与 4c 的关系
-
-- 首现 `中文（English）` 括注中的英文**不计入** 4c-1 裸词失败（见 `language-and-gates.md`「4c / 4d 验收闸门」）。
-- 过译（把专名或概念标签译没）与漏译（叙述层堆普通英文）是**两类缺陷**；自检可在「正文中文叙事」备注中写「过译护栏已核」。
-- 4c 词库只是**候选检索器**，不是翻译裁决器。命中 `builder`、`loop`、`graph`、`harness` 等多义词时必须先判断指称；不得为追求脚本 0 命中而牺牲术语保真。`Skill` / `Builder` / `Agent` / `Loop` / `Graph` / `Workflow` 在 `lexicon.txt` 里是**大小写敏感**豁免：小写普通义仍受 4c-2 约束。
-- 扩展例子以本文件为准。
+- **括注豁免**：首次出现采用 `中文全称或释义（English）` 格式时，括号内的英文不计入 4c-1 阻断命中；图片中文 `alt` 若需保留投屏原英文标题，同样写入 `（原片标题：English Title）` 括注。
+- **大小写区分**：`Skill / Builder / Agent / Loop / Graph / Workflow / Harness` 在 `lexicon.txt` `[allow-case-sensitive]` 中仅豁免首字母大写的专名/标签形态；小写普通用法（如 *skill gap*、*vibe code*）仍受 4c-1/4c-2 约束。
+- **双向核查**：成稿自检「正文中文叙事」行须同时确认「无普通英文漏译（4c-1=0）」与「无核心概念过译（`over-translation` 提示已核查）」。

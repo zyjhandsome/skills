@@ -193,7 +193,8 @@ def _image_figure(alt, url):
     alt_esc = html.escape(alt, quote=True)
     media = (
         '<a href="%s" target="_blank" rel="noopener noreferrer">'
-        '<img src="%s" alt="%s"></a>' % (esc, esc, alt_esc)
+        '<img src="%s" alt="%s" referrerpolicy="no-referrer" loading="lazy"></a>'
+        % (esc, esc, alt_esc)
     )
     return _source_figure(media)
 
@@ -476,22 +477,37 @@ class SpeakerRoles:
                 self.role(name)
 
     def role(self, name):
-        if name not in self.roles:
-            if "主持" in name:
-                self.roles[name] = "speaker-host"
-            else:
-                self.guests += 1
-                self.roles[name] = "speaker-guest-%d" % ((self.guests - 1) % self.GUEST_SLOTS + 1)
+        if name in self.roles:
+            return self.roles[name]
+        bare_name = re.split(r"[（(]", strip_md(name))[0].strip()
+        if bare_name and bare_name in self.roles:
+            return self.roles[bare_name]
+        if "主持" in name:
+            self.roles[name] = "speaker-host"
+        else:
+            self.guests += 1
+            self.roles[name] = "speaker-guest-%d" % ((self.guests - 1) % self.GUEST_SLOTS + 1)
         return self.roles[name]
 
 
+SPEAKER_TURN_RE = re.compile(
+    r"^\*\*(.+?)\*\*(?:\s*[（(]([^）)\n]+)[）)])?\s*[：:]\s*(.*)$"
+)
+
+
+def _speaker_heading(name, note):
+    if not note:
+        return inline(name)
+    return '%s <span class="tag">%s</span>' % (inline(name), inline(note))
+
+
 def render_steps(lines, roles=None):
-    """Return (step_html, leftover_lines) for a '**讲者**：「台词」' block.
+    """Return (step_html, leftover_lines) for a '**讲者**（可选角注）：「台词」' block.
 
     A line that does not open a new step continues the previous quote (quotes
     wrap across lines in the source); consecutive turns by the same speaker
-    share one step. Anything else is handed back so the caller can render it
-    as prose rather than discard it.
+    share one step unless a new timestamp/role note is attached. Anything else
+    is handed back so the caller can render it as prose rather than discard it.
     """
     roles = roles or SpeakerRoles()
     steps, leftover, cont = [], [], False
@@ -500,16 +516,18 @@ def render_steps(lines, roles=None):
         if s == "":
             cont = False
             continue
-        m = re.match(r"^\*\*(.+?)\*\*[：:]\s*(.*)$", s)
+        m = SPEAKER_TURN_RE.match(s)
         if m:
-            name, quote = m.group(1).strip(), m.group(2).strip()
-            if steps and steps[-1][0] == name:
-                steps[-1][1].append(quote)
+            name = m.group(1).strip()
+            note = (m.group(2) or "").strip()
+            quote = m.group(3).strip()
+            if steps and steps[-1][0] == name and (not note or note == steps[-1][1]):
+                steps[-1][2].append(quote)
             else:
-                steps.append([name, [quote]])
+                steps.append([name, note, [quote]])
             cont = True
         elif cont and steps:
-            steps[-1][1][-1] = ("%s %s" % (steps[-1][1][-1], s)).strip()
+            steps[-1][2][-1] = ("%s %s" % (steps[-1][2][-1], s)).strip()
         else:
             leftover.append(l)
     out = [
@@ -523,10 +541,10 @@ def render_steps(lines, roles=None):
         % (
             roles.role(name),
             html.escape(speaker_initials(name), quote=False),
-            inline(name),
+            _speaker_heading(name, note),
             "\n".join("      <p>%s</p>" % inline(q) for q in quotes),
         )
-        for name, quotes in steps
+        for name, note, quotes in steps
     ]
     return out, leftover
 
@@ -742,7 +760,9 @@ EDITOR_NOTE_RE = re.compile(r"ASR|字幕|转写|逐字稿|核对|编者注|待�
 _NOTE_OPEN = re.compile(
     r"[\[［]\s*(?:逐字稿|编者注|待核|字幕|转写|核对|机检|ASR)"
 )
-_LEAKED_QUOTE = re.compile(r"^\*\*[^*]+\*\*[：:]\s*「\s*[\]］]")
+_LEAKED_QUOTE = re.compile(
+    r"^\*\*[^*]+\*\*(?:\s*[（(][^）)\n]*[）)])?\s*[：:]\s*「\s*[\]］]"
+)
 
 
 def source_warnings(sections, people):

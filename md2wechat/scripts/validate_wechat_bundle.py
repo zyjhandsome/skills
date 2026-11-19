@@ -43,6 +43,13 @@ FORBIDDEN_IN_ARTICLE = [
     (r"<link\b", "link tag inside article"),
     (r"fonts\.googleapis", "Google Fonts in article"),
     (r"class=\"mermaid\"", "raw Mermaid block"),
+    (r"&lt;video\b|<video\b", "raw <video> tag leaked into article"),
+    (r"!\s*<a\s+href=", "unparsed Markdown image rendered as !<a href>"),
+    (r"<p[^>]*>(?:<span[^>]*>)?\s*(?:`{3,}|~{3,})", "unparsed code fence leaked into paragraph"),
+    (
+        r"<p[^>]*>(?:<span[^>]*>)?\s*(?:flowchart\s+(?:LR|TD|TB|RL)|sequenceDiagram|stateDiagram(?:-v2)?)\b",
+        "raw Mermaid source leaked into paragraph",
+    ),
     *forbidden_article_h2_patterns(),
     (r"完整整理版｜微信排版", "redundant subtitle"),
     (r"用户提供完整字幕", "pipeline note leaked (字幕来源)"),
@@ -209,12 +216,15 @@ def source_sections(path: Path) -> list[str]:
     """Reader-facing source H2s. Noise / meta / structural headings are skipped
     by normalized name, so `## 延伸术语表（可选）` is not demanded of the article."""
     sections: list[str] = []
-    in_fence = False
+    fence: str | None = None
     for line in path.read_text(encoding="utf-8").splitlines():
-        if line.startswith("```"):
-            in_fence = not in_fence
+        if fence is not None:
+            if re.match(rf"^\s*{re.escape(fence[0])}{{{len(fence)},}}\s*$", line):
+                fence = None
             continue
-        if in_fence:
+        m_fence = re.match(r"^\s*(`{3,}|~{3,})(.*)$", line)
+        if m_fence and not (m_fence.group(1)[0] == "`" and "`" in m_fence.group(2)):
+            fence = m_fence.group(1)
             continue
         m = re.match(r"^##\s+(.+?)\s*$", line)
         if m and not is_source_omitted_h2(m.group(1)):

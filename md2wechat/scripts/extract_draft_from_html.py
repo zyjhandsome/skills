@@ -160,6 +160,8 @@ def classify_section(sec: Node) -> tuple[str, list[str]]:
         return "bio", texts[1:]
     if first_plain == THESIS_LABEL:
         return "thesis", texts[1:]
+    if first_plain == "核心冲突":
+        return "conflict", texts[1:]
     if len(ps) == 2 and any(
         isinstance(s, Node) and "padding:0 8px" in s.style for s in ps[0].find_all("span")
     ):
@@ -226,6 +228,29 @@ def article_to_md(article: Node) -> tuple[str, list[str], str, str, list[str], l
             body.append("")
             continue
         if tag == "section":
+            if node.attrs.get("data-wechat-figure") == "1" or node.find_all("img"):
+                imgs = node.find_all("img")
+                ps = [c for c in node.children if isinstance(c, Node) and c.tag == "p"]
+                if imgs:
+                    alt = imgs[0].attrs.get("alt", "")
+                    src = imgs[0].attrs.get("src", "")
+                    body += [f"![{alt}]({src})", ""]
+                if ps:
+                    cap = para_md(ps[0])
+                    if cap:
+                        body += [f"*{cap}*", ""]
+                continue
+            if node.attrs.get("data-wechat-code") == "1":
+                ps = [c for c in node.children if isinstance(c, Node) and c.tag == "p"]
+                code_lines = [p.text().replace("\xa0", "") for p in ps]
+                body += ["```", *code_lines, "```", ""]
+                continue
+            if node.attrs.get("data-wechat-video") == "1" or node.attrs.get("data-wechat-diagram") == "1":
+                ps = [c for c in node.children if isinstance(c, Node) and c.tag == "p"]
+                texts = [para_md(p) for p in ps if para_md(p)]
+                if texts:
+                    body += [" / ".join(texts), ""]
+                continue
             kind, payload = classify_section(node)
             if kind == "footer":
                 source_title = payload[0] if payload else ""
@@ -235,12 +260,22 @@ def article_to_md(article: Node) -> tuple[str, list[str], str, str, list[str], l
                 bio = payload
             elif kind == "thesis":
                 body += [f"> **{THESIS_LABEL}**：{' '.join(payload)}", ""]
+            elif kind == "conflict":
+                body += [f"> **核心冲突**：{' '.join(payload)}", ""]
             elif kind == "insight":
                 body += [f"> {payload[0]}", ""]
             elif kind == "dialogue":
-                body += [f"**{payload[0]}**：「{payload[1]}」", ""]
+                m_note = re.match(r"^(.+?)(\s*[（(][^）)]+[）)])\s*$", payload[0])
+                if m_note:
+                    speaker_md = f"**{m_note.group(1).strip()}**{m_note.group(2).strip()}"
+                else:
+                    speaker_md = f"**{payload[0]}**"
+                body += [f"{speaker_md}：「{payload[1]}」", ""]
             else:
                 warnings.append(f"unrecognised card dropped: {' / '.join(payload)[:60]}")
+            continue
+        if tag == "img":
+            body += [f"![{node.attrs.get('alt', '')}]({node.attrs.get('src', '')})", ""]
             continue
         if tag == "table":
             body += table_md(node) + [""]

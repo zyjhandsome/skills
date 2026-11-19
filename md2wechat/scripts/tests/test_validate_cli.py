@@ -102,6 +102,23 @@ class ValidateCliTests(unittest.TestCase):
         matched = article.replace("发布：2026-10-02", "发布：2026-10-07")
         self.assertEqual(validate_footer_date(matched, source), [])
 
+    def test_leaked_media_or_fence_syntax_fails(self):
+        for bad_snippet, expected in (
+            ('<p style="color:#111"><span>!&lt;</span><a href="https://x/a.png">图</a></p>', None),
+            ('<p style="color:#111">!<a href="https://x/a.png">图</a></p>', "!<a href>"),
+            ('<p style="color:#111"><span>&lt;video src="https://x/b.mp4"&gt;&lt;/video&gt;</span></p>', "raw <video>"),
+            ('<p style="color:#111"><span>```mermaid</span></p>', "unparsed code fence"),
+            ('<p style="color:#111"><span>flowchart LR</span></p>', "raw Mermaid source"),
+        ):
+            if expected is None:
+                continue
+            self.html.write_text(
+                HTML.replace('<p style="color:#111">公开分享里的判断。</p>', bad_snippet),
+                encoding="utf-8",
+            )
+            errors = validate_html(self.html)
+            self.assertTrue(any(expected in e for e in errors), (bad_snippet, errors))
+
 
 if __name__ == "__main__":
     unittest.main()

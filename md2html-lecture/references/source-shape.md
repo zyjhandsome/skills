@@ -42,6 +42,8 @@ Generic-template notes may use `## 关键语录与交锋时刻` instead of per-s
 | ...
 ### 官方章节索引           ← optional extra tables keep their own heading
 | 时间 | 章节 |
+### 核心引用与资源         ← optional source/resource summary table under 文章元数据
+| 资源 | 说明 |
 > **人物背景**：...        ← or **讲者背景**；lifted to article opening
 ## 核心导读
 > **全文论点**：...        ← highlight box (label stripped)
@@ -53,7 +55,7 @@ Generic-template notes may use `## 关键语录与交锋时刻` instead of per-s
 ### 深度解析
 段落…
 ### 对谈实录
-**讲者**：「台词」          ← timeline step
+**讲者**：「台词」          ← timeline step (`**讲者**（14:20）：「台词」` renders optional timestamp/role tag)
 ### 原声交锋               ← 争辩型: clash timeline
 **讲者**：「台词」
 ### 语境与释义             ← 争辩型: prose
@@ -71,11 +73,18 @@ Backtick and tilde code fences protect `#` / `##` / `###` lines from heading
 parsing. A closer must use the opening character, be at least as long, and
 have no trailing prose. Inline code protects its literal emphasis/link syntax;
 normal link URLs are attribute-escaped, and executable URL schemes are not
-turned into links. A standalone image line becomes `<figure class="source-figure">`,
+turned into links. A standalone image line becomes `<figure class="source-figure">`
+(with `referrerpolicy="no-referrer" loading="lazy"` on `<img>`),
 and the italic line in the next block becomes its caption. A standalone
 `<video src="…">` line becomes the same figure, with only the source address
 kept. Nested lists, inline images, and footnotes are not promised. Keep that
 material as prose or use an appropriate converter.
+
+Dialogue turns in `对谈实录` and `原声交锋` accept an optional parenthetical note
+between the bold speaker name and the colon, such as `**全名**（14:20）：「…」` or
+`**全名**（14:20, 58:10 合并）：「…」`. Speaker role coloring and avatar initials
+stay keyed to the base speaker name; the parenthetical renders as a `.tag` pill
+beside `.step-speaker`.
 
 ## 争辩型访谈 layers
 
@@ -97,8 +106,8 @@ The highlight box then carries a 核心冲突 pill.
 ## 文章元数据 with more than one table
 
 The first table is the source table: it feeds the header fields and the
-collapsible panel. Any further table under its own `### ` heading (chapter
-index, release timeline) is kept below the source table with that heading
+collapsible panel. Any further table under its own `### ` heading (`官方章节索引`,
+`核心引用与资源`, release timeline) is kept below the source table with that heading
 intact, not merged into one flat table.
 
 ## Placement of 人物背景 / 讲者背景
