@@ -199,6 +199,17 @@ SOURCE_PATTERNS = {
         r"(?m)\bmodule\.exports\b|^\s*exports\.[A-Za-z_$][\w$]*\s*="
     ),
     "webpack_require_context": re.compile(r"\brequire\.context\s*\("),
+    # Vue 2 `@vue/composition-api` setup context. Vue 3's setup context has
+    # attrs/slots/emit/expose only; these fields fail at runtime, not at build.
+    "composition_context_removed": re.compile(
+        r"\b(?:ctx|context)\s*\.\s*(?:root|parent|listeners|refs)\b"
+    ),
+    # UMD library output and qiankun loaders are builder-selection evidence.
+    # They do not add a build_axis value; they argue for keeping a webpack-class
+    # build (`cli5-webpack5`) instead of assuming Vite.
+    "umd_library_export": re.compile(
+        r"libraryTarget\s*:\s*['\"]umd['\"]|\bvite-plugin-qiankun\b|\bqiankun\b"
+    ),
 }
 # Signals whose Vue3 breakage is invisible to build and lint: every hit needs an
 # interaction-level or runtime-level assertion of its own, so counts and five
@@ -526,7 +537,7 @@ def build_entry_evidence(root: Path, source_roots: list[Path]) -> dict:
             entry_files.extend(
                 path.relative_to(root).as_posix()
                 for path in source_root.rglob(pattern)
-                if not any(part in SKIP_DIRS for part in path.parts)
+                if not _path_is_skipped(path, root)
             )
     return {
         "vue_config_pages_detected": pages_configured,
@@ -599,22 +610,85 @@ def count_composition_setup(text: str, relative: str) -> int:
     return count
 
 
+def _path_is_skipped(path: Path, root: Path) -> bool:
+    """Skip generated directories by their path relative to the project root.
+
+    ``path.parts`` includes the absolute prefix, so a checkout under a parent
+    named ``build`` or ``dist`` would otherwise hide every source file.
+    """
+    try:
+        relative = path.resolve().relative_to(root.resolve())
+    except ValueError:
+        return True
+    return any(part in SKIP_DIRS for part in relative.parts)
+
+
 def find_lockfiles(root: Path) -> list[str]:
-    """Find workspace and nearest parent lockfiles without leaving the project drive."""
+    """Find lockfiles from the project root up to and including its git root.
+
+    Nearest lockfiles come first. Stop at ``.git`` and climb at most four
+    parents, so a checkout under a deep temp or home directory does not adopt
+    an unrelated ``package-lock.json``. A lockfile outside the git repository
+    is not this workspace's lock.
+    """
     found: list[str] = []
-    current = root
+    current = root.resolve()
     for _ in range(4):
         for name in LOCK_NAMES:
             candidate = current / name
             if candidate.is_file():
                 found.append(str(candidate.resolve()))
-        if current.parent == current or current.parent.drive != root.drive:
+        if (current / ".git").exists():
             break
-        current = current.parent
-    return sorted(set(found))
+        parent = current.parent
+        if parent == current or parent.drive != root.resolve().drive:
+            break
+        current = parent
+
+    def distance(item: str) -> tuple[int, str]:
+        parent = Path(item).parent
+        try:
+            return (len(parent.relative_to(root.resolve()).parts), item)
+        except ValueError:
+            return (10_000, item)
+
+    return sorted(set(found), key=distance)
 
 
-def package_lock_versions(lockfiles: list[str], package_names: set[str]) -> dict[str, str]:
+def _npm_lock_version(
+    packages: dict, name: str, project_root: Path, lock_root: Path
+) -> str | None:
+    """Prefer the importer-local ``node_modules/<name>`` over the workspace root."""
+    suffix = f"node_modules/{name}"
+    try:
+        relative = project_root.resolve().relative_to(lock_root.resolve()).as_posix()
+    except ValueError:
+        relative = ""
+    if relative == ".":
+        relative = ""
+    ranked: list[tuple[int, int, str]] = []
+    for key, meta in packages.items():
+        if not isinstance(meta, dict) or not meta.get("version"):
+            continue
+        normalized = str(key).replace("\\", "/").lstrip("./")
+        if normalized != suffix and not normalized.endswith("/" + suffix):
+            continue
+        inside_project = bool(relative) and (
+            normalized == f"{relative}/{suffix}" or normalized.startswith(relative + "/")
+        )
+        if inside_project:
+            ranked.append((0, -len(normalized), str(meta["version"])))
+        elif normalized == suffix:
+            ranked.append((1, -len(normalized), str(meta["version"])))
+    if not ranked:
+        return None
+    ranked.sort()
+    return ranked[0][2]
+
+
+def package_lock_versions(
+    lockfiles: list[str], package_names: set[str], project_root: Path
+) -> dict[str, str]:
     lock = next((Path(item) for item in lockfiles if Path(item).name == "package-lock.json"), None)
     if not lock:
         return {}
@@ -626,9 +700,9 @@ def package_lock_versions(lockfiles: list[str], package_names: set[str]) -> dict
     packages = data.get("packages") if isinstance(data, dict) else None
     if isinstance(packages, dict):
         for name in package_names:
-            meta = packages.get(f"node_modules/{name}")
-            if isinstance(meta, dict) and meta.get("version"):
-                versions[name] = str(meta["version"])
+            version = _npm_lock_version(packages, name, project_root, lock.parent)
+            if version:
+                versions[name] = version
     dependencies = data.get("dependencies") if isinstance(data, dict) else None
     if isinstance(dependencies, dict):
         for name in package_names:
@@ -636,6 +710,31 @@ def package_lock_versions(lockfiles: list[str], package_names: set[str]) -> dict
             if name not in versions and isinstance(meta, dict) and meta.get("version"):
                 versions[name] = str(meta["version"])
     return versions
+
+
+def reconcile_resolved_versions(
+    resolved: dict[str, str], declared: dict[str, str]
+) -> tuple[dict[str, str], list[str]]:
+    """Drop lock records whose major disagrees with package.json.
+
+    A root lock can legally contain another workspace's Vue. Using that record
+    as this package's resolved version relabels a Vue 2 workspace as Vue 3.
+    """
+    kept: dict[str, str] = {}
+    errors: list[str] = []
+    for name, version in resolved.items():
+        spec = declared.get(name, "")
+        declared_major = major_from_spec(spec) if spec else None
+        resolved_major = major_from_spec(version)
+        if (
+            declared_major is not None
+            and resolved_major is not None
+            and declared_major != resolved_major
+        ):
+            errors.append(f"major-mismatch:{name}")
+            continue
+        kept[name] = version
+    return kept, errors
 
 
 def lockfile_digests(lockfiles: list[str]) -> dict[str, str]:
@@ -787,7 +886,7 @@ def scan_source(
                 }}
     paths = (path for source_root in roots for path in source_root.rglob("*"))
     for path in paths:
-        if any(part in SKIP_DIRS for part in path.parts) or not path.is_file() or path.suffix.lower() not in SOURCE_SUFFIXES:
+        if _path_is_skipped(path, root) or not path.is_file() or path.suffix.lower() not in SOURCE_SUFFIXES:
             continue
         if scanned_files >= max_files:
             truncated = True
@@ -925,7 +1024,7 @@ def profile(root: Path) -> dict:
     deps = deps_map(pkg)
     lockfiles = find_lockfiles(root)
     lockfile_state = assess_lockfiles(lockfiles)
-    resolved = package_lock_versions(lockfiles, set(deps))
+    resolved = package_lock_versions(lockfiles, set(deps), root)
     resolved_source = "package-lock.json" if resolved else None
     if not resolved:
         resolved = pnpm_lock_versions(lockfiles, set(deps))
@@ -933,6 +1032,14 @@ def profile(root: Path) -> dict:
     if not resolved:
         resolved = yarn_lock_versions(lockfiles, set(deps))
         resolved_source = "yarn.lock" if resolved else None
+    resolved, mismatch_errors = reconcile_resolved_versions(resolved, deps)
+    if mismatch_errors:
+        lockfile_state = {
+            "status": "unparsed" if lockfile_state["status"] == "present" else lockfile_state["status"],
+            "errors": list(lockfile_state["errors"]) + mismatch_errors,
+        }
+        if not resolved:
+            resolved_source = None
     peer_vue_specs = package_peer_vue_specs(root, lockfiles, set(deps))
     source_roots = discover_source_roots(root)
     scan_roots = list(source_roots)

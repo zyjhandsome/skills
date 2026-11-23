@@ -111,9 +111,11 @@ D19 是唯一的**三段式** token：`confirm:blocker:<pkg>:<action>` —— �
 unknown 包把 token 写在该 owner 行与 DR；没有专属 owner 的残留包进入 `blockers`。
 不得用 `i18n_mode`、UI staging 或一个泛化 `proceed` 替逐包行动作答。
 
-`build` 的分叉（Vite vs cli5-webpack5）不在这里：它是路径三轴之一（`build_axis`），
-由 D13 的 path preset 决定；要非默认组合只能在 D13 回 `other`，否则校验器会拒绝
-preset 与轴互相矛盾的报告。同理，`core-vue` 没有独立分叉——它的取舍就是 D13 的
+`build` 的分叉（Vite vs cli5-webpack5）不在这里：它是路径三轴之一（`build_axis`）。
+`compat-big-bang` 与 `direct-vue3` 的 preset 只约束 `runtime_axis` 与 `topology_axis`；
+`build_axis` 按构建耦合证据写成 `vite` 或 `cli5-webpack5`（校验器允许这两种，也允许
+`existing-vite`），并写进路径 Decision Record。要改 runtime 或 topology、离开 preset，
+才在 D13 回 `other`。同理，`core-vue` 没有独立分叉——它的取舍就是 D13 的
 `runtime_axis`（compat 还是 direct），不要再单独问一遍。
 
 未答复的分叉写成 `<分叉项>: undecided`，该子系统行不得 `decided`。一个 `proceed`

@@ -16,8 +16,14 @@
    `Vue.observable` / `propsData`, `<transition>` usage, AMD-style async
    component factories, same-element `v-for`+`v-if`, `$options.filters` object
    access, bare `<template>` wrappers, CSS that suppresses target-kit overlay
-   chrome, and the runtime-lane family (`module.exports` / `exports.x` inside
-   source, `require.context`). Also complete §10 `人工补搜检查` for residual gaps
+   chrome, the runtime-lane family (`module.exports` / `exports.x` inside
+   source, `require.context`), `composition_context_removed`
+   (`ctx.root` / `ctx.parent` / `ctx.listeners` / `ctx.refs`), and
+   `umd_library_export`. `source_cjs_export`, `webpack_require_context` and
+   `umd_library_export` are builder-selection evidence for the existing
+   `build_axis` values (`subsystem-inventory.md`); they do not add an axis.
+   Also complete §10
+   `人工补搜检查` for residual gaps
    and non-`vue-*` blockers (`tui-editor`, internal plugins, editors, etc.).
 
    **Interaction assertion candidates:** counts plus five samples per signal are

@@ -182,6 +182,20 @@
 | router 导航静默变抛错（旧 `push/replace` 吞错覆写；按 name 跳转缺必填参数） | 待逐调用点扫描；吞错覆写掩盖的失败与必填参数缺失均在 Router 4 下暴露 |
 | 外部全局脚本运行期契约 | 待关联 HTML/动态 loader 与 `globalThis.X` ready/instance polling，并绑定真实挂载断言 |
 | 目标依赖弃用告警面（迁移后落在目标大版本已弃用 API；样式/构建工具自身弃用告警） | 待按目标 UI 库与样式编译器的弃用清单核对，命中项走 console 处置协议 |
+| `<template v-for>` 的 key | 待按官方 key-attribute 页核对 `<template v-for>` 与非 v-for 节点上的 key |
+| `transition-group` 默认根节点 | 待核对默认不再渲染包裹根元素后的选择器与布局 |
+| 作为根元素的 `<transition>`（transition-as-root） | 待核对根节点是 transition 的组件 |
+| props default 工厂里的 `this` | 待核对 `default()` 内对 `this` 的访问（含 `this.$t`） |
+| `inline-template` 属性 | 待全仓搜索 `inline-template`，Vue 3 已移除该属性 |
+| custom element 的保留标签 `is` | 待核对 `<tr is="...">` 一类写法，Vue 3 不再按组件渲染 |
+| `@vue/composition-api` setup context（`ctx.root` / `ctx.parent` / `ctx.listeners`） | 待核对 setup 第二个参数上的 `ctx.root`、`ctx.parent`、`ctx.listeners`、`ctx.refs` |
+| `<template v-for>` 的 key | 待按官方 key-attribute 页核对 `<template v-for>` 与非 v-for 节点上的 key |
+| `transition-group` 默认根节点 | 待核对默认不再渲染包裹根元素后的选择器与布局 |
+| 作为根元素的 `<transition>`（transition-as-root） | 待核对根节点是 transition 的组件 |
+| props default 工厂里的 `this` | 待核对 `default()` 内对 `this` 的访问（含 `this.$t`） |
+| `inline-template` 属性 | 待全仓搜索 `inline-template`，Vue 3 已移除该属性 |
+| custom element 的保留标签 `is` | 待核对 `<tr is="...">` 一类写法，Vue 3 不再按组件渲染 |
+| `@vue/composition-api` setup context（`ctx.root` / `ctx.parent` / `ctx.listeners`） | 待核对 setup 第二个参数上的 `ctx.root`、`ctx.parent`、`ctx.listeners`、`ctx.refs` |
 
 - 过滤器与 `$listeners` 的静态命中数待补精确扫描
 - Element Plus 视觉回归范围待产品确认

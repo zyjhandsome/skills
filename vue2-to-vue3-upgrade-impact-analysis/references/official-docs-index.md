@@ -66,6 +66,7 @@ the Vue 3 runtime. Compile/runtime **warnings drive the remaining edit backlog**
 | `router` (4→5 note) | https://router.vuejs.org/guide/migration/v4-to-v5 | v5 is a **major**, not a minor line; most 3→4 work stays on v4 docs, but the installed major must be pinned (see note below) |
 | `store` (Vuex bridge) | https://vuex.vuejs.org/guide/migrating-to-4-0-from-3-x.html | Vuex 3→4 |
 | `store` (Pinia target) | https://pinia.vuejs.org/cookbook/migration-vuex.html | Vuex→Pinia |
+| `i18n-plugins` | https://vue-i18n.intlify.dev/guide/migration/breaking.html | vue-i18n v8→v9 breaking notes; the installed major is still resolved from registry metadata |
 | `ui` (Element) | https://element-plus.org/en-US/guide/migration.html | Element UI→Plus |
 | `test` | https://test-utils.vuejs.org/migration/ | `@vue/test-utils` v1→v2 |
 | `build` (Vite) | https://vite.dev/guide/ | Prefer with recommendations (`vitejs.dev` redirects here) |
@@ -124,8 +125,16 @@ acceptable omission. This closes the "index knows, nobody checks" gap.
 | Watch on arrays（需 `deep` 才触发变更） | — | https://v3-migration.vuejs.org/breaking-changes/watch |
 | Attribute coercion（枚举属性 / `false` 不再移除） | — | https://v3-migration.vuejs.org/breaking-changes/attribute-coercion |
 | Mixin data merge is shallow | — | https://v3-migration.vuejs.org/breaking-changes/data-option |
-| `Vue.extend` / `Vue.observable` / `propsData` removed | `vue_extend`, `vue_observable`, `props_data_option` | https://v3-migration.vuejs.org/breaking-changes/global-api |
-| Lifecycle / vnode hook renames (`beforeDestroy`→`beforeUnmount`, …) | `destroy_lifecycle` | https://v3-migration.vuejs.org/breaking-changes/vnode-lifecycle-events |
+| `Vue.extend` / `Vue.observable` removed | `vue_extend`, `vue_observable` | https://v3-migration.vuejs.org/breaking-changes/global-api |
+| `propsData` option removed | `props_data_option` | https://v3-migration.vuejs.org/breaking-changes/props-data |
+| Lifecycle option renames (`beforeDestroy`→`beforeUnmount`) and template `@hook:` → `@vue:` | `destroy_lifecycle` | https://v3-migration.vuejs.org/breaking-changes/vnode-lifecycle-events |
+| `<template v-for>` / non-`v-for` `key` placement | — | https://v3-migration.vuejs.org/breaking-changes/key-attribute |
+| `<transition-group>` no longer renders a wrapper element by default | — | https://v3-migration.vuejs.org/breaking-changes/transition-group |
+| `<transition>` as the component root | — | https://v3-migration.vuejs.org/breaking-changes/transition-as-root |
+| Props `default` factory has no `this` | — | https://v3-migration.vuejs.org/breaking-changes/props-default-this |
+| `inline-template` attribute removed | — | https://v3-migration.vuejs.org/breaking-changes/inline-template-attribute |
+| Custom element `is` restricted to the reserved component tag | — | https://v3-migration.vuejs.org/breaking-changes/custom-elements-interop |
+| `@vue/composition-api` setup context (`ctx.root` / `ctx.parent` / `ctx.listeners` / `ctx.refs`) | `composition_context_removed` | https://v3-migration.vuejs.org/breaking-changes/listeners-removed |
 | `$set` / `$delete` / `Vue.set` removed | `set_delete_removed` | https://v3-migration.vuejs.org/breaking-changes/ (Removed APIs) |
 | Mount no longer replaces host el（容器 DOM 结构变化，`#app > *` 选择器受影响） | — | https://v3-migration.vuejs.org/breaking-changes/mount-changes |
 | Router `addRoutes` / `path: '*'` | `router_add_routes`, `router_wildcard` | https://router.vuejs.org/guide/migration/ |

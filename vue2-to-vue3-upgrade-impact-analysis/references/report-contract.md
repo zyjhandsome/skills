@@ -62,7 +62,9 @@
 `batch_implementation_gate=ready` 额外要求：§1 的结构化字段必须为
 `lockfile_status: present`；`absent` / `unparsed` 一律保持 `frozen`。每个
 High/blocker 与每个 `required_for_path=yes` 均为 `decided`（`deferred` 只允许
-`complete`+`frozen`）。
+`complete`+`frozen`）。只做摸底、不交接实施时，`analysis_status=partial` 且
+`batch_implementation_gate=frozen` 是合法终态：未确认行保持 `ready`/`pending`，未决分叉写
+`undecided`。不要为此新增 `confirm:` 主题。`complete` 仍要求队列清空。
 
 `upgrade-summary.json` 额外必填（仍 ≤12 KiB；不得出现 `required_skill` /
 `consumer_skill` / `handoff_skill`）：
@@ -339,6 +341,16 @@ summary 的 `ui_behavior_contract.required_assertions` 必须同时给出（3..2
 - 目标依赖弃用告警面（迁移后落在目标大版本**已弃用**的 API 上；样式/构建工具
   自身的弃用告警）：构建与截图都看不见，只在控制台按 mount / 按编译刷量，
   处置口径见 `impact-and-validation.md` 的控制台分类
+- `<template v-for>` 的 `key`（官方 `key-attribute`：`<template v-for>` 上的 key
+  与非 `v-for` 节点上的 key 不再按 Vue 2 的规则放置）
+- `transition-group` 默认根节点（默认不再渲染包裹用的根元素）
+- 作为根元素的 `<transition>`（`transition-as-root`）
+- props `default` 工厂里的 `this`（`default()` 内访问 `this` 失效，例如 `this.$t`）
+- `inline-template` 属性（已移除）
+- custom element 的保留标签 `is`（`<tr is="my-row">` 这类写法不再按组件渲染）
+- `@vue/composition-api` 的 setup context（`ctx.root` / `ctx.parent` /
+  `ctx.listeners` / `ctx.refs` 在 Vue 3 的 setup context 中不存在；与全仓
+  Composition 重写不是同一件事）
 
 上述每一项必须有**独立行**与非空实质结果；禁止一行打包全部项，禁止仅写
 `已声明` / `已检查` / `已核对` / `ok` 等空泛词。

@@ -33,7 +33,7 @@ Before analysis (including manifest-only reads), run
 project Node mismatch is recorded, not a hard block. Node is two-plane: the
 project's effective contract, separate from the selected target toolchain's
 `engines.node` intersection. Unknown target range or unresolved conflict keeps
-the handoff frozen; `upgrade-required` also needs `confirm:node-strategy:…`.
+the handoff frozen; `upgrade-required` needs `confirm:node-target:<exact version recomputed at evidence_as_of>` and `confirm:node-strategy:…` (do not pin a version).
 Network probe same wave; dual registry+docs failure → offline confirm gate.
 
 ## Boundaries
@@ -107,12 +107,10 @@ build variant × scope** (A→B: workspace=A; scope often `page-closure`).
    `references/official-docs-index.md`. Fact vs inference. Composition rewrite
    out of scope. Complete §10 人工补搜检查. Register every `Vue.prototype.$*`
    and `globalProperties` / `provide/inject` target. UI/CSS triggers → full
-   `ui_visual_risk` block; a UI-kit `replace`/`needs-major` additionally needs
-   `### ui_behavior_contract` + `ui_cutover_staging:` — mount timing, prop/enum
-   renames, class-string icon identity and trigger-slot shape evade build/visual diff; correlated external-script loaders + bare-global polling require a post-mount round-trip.
-   A bare `<template>` (Vue3 emits a real, UA-hidden element), a mount-container id/class shared with the root component's root element (Vue3 renders into the container, so one global rule matches twice), and CSS hiding kit overlay chrome the target kit teleports away each blank or duplicate what the user sees while every gate stays green.
-   Dev and build are **two runtime lanes**: one named validation each. Any capture also needs a `console-baseline`, whose disposal duty is keyed
-   by emitter (framework / target kit / toolchain), never by a remembered message list; and removing an error-swallowing shim makes latent defects fail on load.
+   `ui_visual_risk`; a UI-kit `replace`/`needs-major` also needs
+   `### ui_behavior_contract` and `ui_cutover_staging:` (details in
+   `references/impact-and-validation.md` and `references/report-contract.md`).
+   Dev and build are two runtime lanes: one named validation each, plus a `console-baseline`.
 7. Draft packet + Decision Records for path and every §7 subsystem. Keep scope
    `人工答复` separate from exact `分叉人工答复`; every §2 `unknown` package needs
    one owner/action token before `complete`.
@@ -158,7 +156,7 @@ Exit `0` pass / `3` errors / `4` missing. Pass = shape only. Fixtures:
 |---|---|
 | `analysis_status` | `partial` / `blocked` / `complete` |
 | `decision_status` | `needs_choice` / `not_needed` / `decided` |
-| `batch_implementation_gate` | `frozen` / `ready` (handoff only) |
+| `batch_implementation_gate` | `frozen` / `ready` (handoff only). `partial` + `frozen` is a valid triage endpoint; do not add a mode token. `complete` still needs the queue clear |
 | `implementation_readiness` | always `not_assessed` |
 | also required | `behavior_parity_required`, `network_mode`, `report_path`, `evidence_as_of` |
 

@@ -35,8 +35,11 @@
 - target_node_sources:（package@version → engines.node / no engines.node + 官方或 registry 证据）
 - node_compatibility_status: compatible / upgrade-required / conflict / unknown
 - node_transition_strategy: same-node / upgrade-before-vue / temporary-dual-node / blocked / undecided
+- selected_node_version:（`upgrade-required` 必填；一个精确版本，在 `evidence_as_of` 当天重算，不要写区间）
 - lockfile：`<path>` / 无 lockfile（无 lock 时 handoff gate 保持 frozen）
 - lockfile_status: present / absent / unparsed
+- source_lockfile_status: present / absent / unparsed（host-port 必填，只读画像 A）
+- host_lockfile_status: present / absent / unparsed（host-port 必填；`lockfile_status` 与它相同）
 - repo_revision:（git HEAD commit 或无 git 时的关键文件 digest；分析包绑定此仓库状态，下游须核对漂移）
 - browser_support_floor:（browserslist / .browserslistrc 原文，或「无配置 + Vite 默认 modern target 需决策」；Vue3 不支持 IE11）
 - evidence_as_of: YYYY-MM-DD（可与状态表一致复述）
@@ -130,7 +133,6 @@ Decision Record 的 `分叉人工答复`；`proceed:subsystem:<id>` 只写入 `�
 
 | 命名配方 | 实施期命令 | 失败证明什么 | 证据状态 |
 |---|---|---|---|
-| | | | |
 
 ## 9. 回滚与责任人
 
@@ -168,6 +170,13 @@ Decision Record 的 `分叉人工答复`；`proceed:subsystem:<id>` 只写入 `�
 | router 导航静默变抛错（旧版 `push/replace` 吞错覆写与 `.catch` 吞错；按 name 跳转缺必填参数） | |
 | 外部全局脚本运行期契约（loader、ready/instance polling、真实挂载后 round-trip） | |
 | 目标依赖弃用告警面（迁移后落在目标大版本已弃用的 API 上；样式/构建工具自身的弃用告警） | |
+| `<template v-for>` 的 key | |
+| `transition-group` 默认根节点 | |
+| 作为根元素的 `<transition>`（transition-as-root） | |
+| props default 工厂里的 `this` | |
+| `inline-template` 属性 | |
+| custom element 的保留标签 `is` | |
+| `@vue/composition-api` setup context（`ctx.root` / `ctx.parent` / `ctx.listeners`） | |
 
 其他未决：
 -

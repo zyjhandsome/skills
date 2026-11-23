@@ -730,6 +730,138 @@ class ProfileInventoryTests(unittest.TestCase):
             self.assertEqual(json.loads(output.read_text(encoding="utf-8"))["package_name"], "output-case")
             self.assertEqual(json.loads(result.stdout)["package_name"], "output-case")
 
+    def test_parent_directory_named_build_does_not_hide_sources(self) -> None:
+        pkg = {"name": "under-build", "dependencies": {"vue": "^2.6.14"}}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "build" / "app"
+            src = root / "src"
+            src.mkdir(parents=True)
+            (root / "package.json").write_text(json.dumps(pkg), encoding="utf-8")
+            (src / "main.js").write_text(
+                "import Vue from 'vue'\nnew Vue({})\n", encoding="utf-8"
+            )
+            data = self._run_profile(root)
+            signals = data["source_impact_signals"]
+            self.assertGreaterEqual(signals["scanned_files"], 1)
+            self.assertGreaterEqual(signals["signals"].get("new_vue", 0), 1)
+
+    def test_lock_major_mismatch_does_not_relabel_vue2_as_vue3(self) -> None:
+        pkg = {"name": "legacy", "dependencies": {"vue": "^2.7.16"}}
+        lock = {
+            "name": "other",
+            "lockfileVersion": 3,
+            "packages": {
+                "": {"name": "other"},
+                "node_modules/vue": {"version": "3.4.21"},
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            parent = Path(tmp) / "work"
+            root = parent / "app"
+            root.mkdir(parents=True)
+            (root / "package.json").write_text(json.dumps(pkg), encoding="utf-8")
+            (parent / "package-lock.json").write_text(
+                json.dumps(lock), encoding="utf-8"
+            )
+            data = self._run_profile(root)
+            self.assertEqual(data["vue_major"], "2")
+            vue = data["related_packages"]["vue"]
+            self.assertNotEqual(vue["resolved_version"], "3.4.21")
+            self.assertEqual(data["lockfile_status"], "unparsed")
+            self.assertTrue(
+                any("major-mismatch:vue" in item for item in data["lockfile_errors"])
+            )
+
+    def test_nested_workspace_lock_wins_over_root_vue3(self) -> None:
+        root_pkg = {
+            "name": "mono",
+            "private": True,
+            "workspaces": ["packages/*"],
+            "dependencies": {"vue": "^3.4.0"},
+        }
+        legacy_pkg = {"name": "legacy", "dependencies": {"vue": "^2.7.16"}}
+        lock = {
+            "name": "mono",
+            "lockfileVersion": 3,
+            "packages": {
+                "": {"name": "mono"},
+                "node_modules/vue": {"version": "3.4.21"},
+                "packages/legacy": {"name": "legacy"},
+                "packages/legacy/node_modules/vue": {"version": "2.7.16"},
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "mono"
+            legacy = root / "packages" / "legacy"
+            (legacy / "src").mkdir(parents=True)
+            (root / ".git").mkdir()
+            (root / "package.json").write_text(json.dumps(root_pkg), encoding="utf-8")
+            (legacy / "package.json").write_text(
+                json.dumps(legacy_pkg), encoding="utf-8"
+            )
+            (root / "package-lock.json").write_text(json.dumps(lock), encoding="utf-8")
+            data = self._run_profile(legacy)
+            self.assertEqual(data["vue_major"], "2")
+            self.assertEqual(
+                data["related_packages"]["vue"]["resolved_version"], "2.7.16"
+            )
+            self.assertEqual(data["lockfile_status"], "present")
+            self.assertTrue(
+                all("package-lock.json" in item and "mono" in item for item in data["lockfiles"])
+            )
+
+    def test_lockfile_walk_stops_at_git_root(self) -> None:
+        stray = {
+            "name": "stray",
+            "lockfileVersion": 3,
+            "packages": {"node_modules/vue": {"version": "3.5.0"}},
+        }
+        own = {
+            "name": "app",
+            "lockfileVersion": 3,
+            "packages": {"node_modules/vue": {"version": "2.6.14"}},
+        }
+        pkg = {"name": "app", "dependencies": {"vue": "^2.6.14"}}
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            repo = base / "repo"
+            (repo / ".git").mkdir(parents=True)
+            (repo / "package.json").write_text(json.dumps(pkg), encoding="utf-8")
+            (repo / "package-lock.json").write_text(json.dumps(own), encoding="utf-8")
+            (base / "package-lock.json").write_text(json.dumps(stray), encoding="utf-8")
+            data = self._run_profile(repo)
+            self.assertEqual(data["vue_major"], "2")
+            self.assertEqual(
+                data["related_packages"]["vue"]["resolved_version"], "2.6.14"
+            )
+            self.assertTrue(
+                all(Path(item).parent == repo.resolve() for item in data["lockfiles"])
+            )
+
+    def test_composition_context_and_umd_export_are_signals(self) -> None:
+        pkg = {"name": "signals", "dependencies": {"vue": "^2.6.14"}}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            src = root / "src"
+            src.mkdir()
+            (root / "package.json").write_text(json.dumps(pkg), encoding="utf-8")
+            (src / "legacy.js").write_text(
+                "export default {\n"
+                "  setup(props, ctx) {\n"
+                "    return { router: ctx.root.$router, parent: ctx.parent }\n"
+                "  }\n"
+                "}\n",
+                encoding="utf-8",
+            )
+            (src / "vue.config.js").write_text(
+                "module.exports = { configureWebpack: { output: { libraryTarget: 'umd' } } }\n",
+                encoding="utf-8",
+            )
+            data = self._run_profile(root)
+            signals = data["source_impact_signals"]["signals"]
+            self.assertGreaterEqual(signals.get("composition_context_removed", 0), 1)
+            self.assertGreaterEqual(signals.get("umd_library_export", 0), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

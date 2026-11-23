@@ -169,5 +169,19 @@
 | router 导航静默变抛错（旧 `push/replace` 吞错覆写；按 name 跳转缺必填参数） | 已扫描：`prototype` 吞错覆写残留 1 处（在 Router 4 下已不生效，属死代码）；按 name 跳转 4 处参数齐备 |
 | 外部全局脚本运行期契约 | 未发现 HTML/动态 loader 与 `globalThis.X` ready/instance polling 的关联命中 |
 | 目标依赖弃用告警面（迁移后落在目标大版本已弃用 API；样式/构建工具自身弃用告警） | 已核对：上次迁移遗留 6 处已弃用 UI 库 API 与样式编译器 `@import` 前置注入，构成本次审计的 console 噪声清单 |
+| `<template v-for>` 的 key | 已核对残留：2 处 `<template v-for>` 的 key 仍在子节点上 |
+| `transition-group` 默认根节点 | 已核对残留：1 处样式仍依赖已不再渲染的 transition-group 包裹根 |
+| 作为根元素的 `<transition>`（transition-as-root） | 已核对：无以 transition 为根的残留组件 |
+| props default 工厂里的 `this` | 已核对残留：2 处 `default()` 仍读取 `this.$t` |
+| `inline-template` 属性 | 已搜索，无 `inline-template` 残留 |
+| custom element 的保留标签 `is` | 已核对：无 `<tr is="...">` 残留 |
+| `@vue/composition-api` setup context（`ctx.root` / `ctx.parent` / `ctx.listeners`） | 已核对残留：3 处 `ctx.root` 仍在，Vue 3 setup context 没有该字段 |
+| `<template v-for>` 的 key | 已核对残留：2 处 `<template v-for>` 的 key 仍在子节点上 |
+| `transition-group` 默认根节点 | 已核对残留：1 处样式仍依赖已不再渲染的 transition-group 包裹根 |
+| 作为根元素的 `<transition>`（transition-as-root） | 已核对：无以 transition 为根的残留组件 |
+| props default 工厂里的 `this` | 已核对残留：2 处 `default()` 仍读取 `this.$t` |
+| `inline-template` 属性 | 已搜索，无 `inline-template` 残留 |
+| custom element 的保留标签 `is` | 已核对：无 `<tr is="...">` 残留 |
+| `@vue/composition-api` setup context（`ctx.root` / `ctx.parent` / `ctx.listeners`） | 已核对残留：3 处 `ctx.root` 仍在，Vue 3 setup context 没有该字段 |
 
 - 无阻塞缺口；清理实施需另授权

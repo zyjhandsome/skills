@@ -12,14 +12,24 @@ the **installed target major** (resolved from registry metadata at
 |---|---|---|---|
 | `core-vue` | `vue` major/version, SFC compiler | Vue 2→3 breaking index | `vue` 3.x + `@vue/compiler-sfc` at the **same exact version** |
 | `router` | `vue-router` | v3→v4 guide (primary cutover for a Vue2 workspace) | `vue-router` — `latest` has moved past v4; resolve and pin the major, and record v4-vs-v5 as a decision |
-| `build` | Vue CLI / Webpack / Vite; multi-entry evidence (`build_entries`: `pages`, entry globs, `public/*.html`); browser floor (browserslist → Vite target / `@vitejs/plugin-legacy`) | Vite migration page **for the selected major** | Vite (`vite` + `@vitejs/plugin-vue`) — **must upgrade with Vue**; every entry maps to a Vite input |
-| `store` | Vuex / Pinia / both | Vuex 3→4, or Vuex→Pinia cookbook | Pinia preferred (resolve its current major) ; Vuex 4 acceptable bridge |
+| `build` | Vue CLI / Webpack / Vite; multi-entry evidence (`build_entries`: `pages`, entry globs, `public/*.html`); browser floor (browserslist → Vite target / `@vitejs/plugin-legacy`); builder-selection signals `source_cjs_export`, `webpack_require_context`, `umd_library_export` | Vite migration page **for the selected major**, or Vue CLI 5 / webpack 5 docs when `build_axis` stays `cli5-webpack5` | The builder named by `build_axis`. Vue CLI 5 + `vue-loader` 17 and a kept webpack 5 config are valid Vue 3 targets; do not treat Vite as mandatory |
+| `store` | Vuex / Pinia / both | Vuex 3→4, or Vuex→Pinia cookbook | In-place default is Vuex 4. Pinia only when the A→B host already uses it, or the user replies `confirm:store-target:pinia` |
 | `ui` | Element UI / Ant Design Vue 1.x / Vuetify 2 / other | that library's own migration page | Matching Vue3 library (e.g. Element Plus), major resolved from registry |
 | `test` | `@vue/test-utils`, Jest/Vitest, E2E | test-utils v1→v2 | `@vue/test-utils` v2 line + Vitest/Jest Vue3 config |
 | `lint-ide` | eslint-plugin-vue, Vetur/Volar | eslint-plugin-vue Vue3 rule set | Vue3 eslint rules + Volar / `vue-tsc` |
 | `i18n-plugins` | vue-i18n; peer metadata; non-`vue-*` packages proven imported then registered via `Vue.use`; plugin/editor/grid name candidates are provisional only | `vue-i18n` v8→v9 guide | Resolve the installed major; later `vue-i18n` majors raise `engines.node` and must enter the Node matrix |
-| `composition-existing` | `@vue/composition-api`, Vue 2.7 `setup` usage | — | Remove bridge plugin on Vue3; no full rewrite |
+| `composition-existing` | `@vue/composition-api` on Vue ≤2.6, and Vue 2.7 native `setup`. `ctx.root` / `ctx.parent` / `ctx.listeners` / `ctx.refs` are absent from the Vue 3 setup context | listeners-removed page; inventory key `composition_context_removed` | Remove the bridge plugin on Vue 3. Removed context fields are compatibility work, not a full Composition rewrite |
 | `blockers` | Packages with no Vue3 line, opaque/internal packages, unresolved plugin candidates | — | replace / fork / remove / defer decision |
+
+## Builder-selection evidence
+
+`source_cjs_export`, `webpack_require_context` and `umd_library_export` (including
+`libraryTarget: 'umd'` and `qiankun`) are evidence for the existing `build_axis`
+values. Heavy CJS, `require.context`, or UMD library output is a reason to keep
+`cli5-webpack5` instead of assuming `vite`. They do **not** add a `build_axis`
+value. Rsbuild/Rspack is not an axis; if a human still wants it, that is Wave 1
+`other`, and the packet must keep `build_axis` inside `vite` / `cli5-webpack5` /
+`existing-vite`.
 
 ## Installed target major
 

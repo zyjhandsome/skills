@@ -100,6 +100,9 @@ condition. Never silently change only the analyst's local Node.
 2. On exit `5`: list missing probes in Chinese; set mental `analysis_status=blocked`; stop.
 3. On exit `0`: proceed to inventory / analysis. Collect every triggered Wave 0
    confirm — output dir, workspace, package manager, network mode, browser
-   floor, scope, target versions, Node strategy — and ask them in **one**
-   message with recommendations attached, rather than interrupting once per
-   probe.
+   floor, scope, target versions, and when `upgrade-required` both
+   `confirm:node-target:<exact version recomputed at evidence_as_of>` and
+   `confirm:node-strategy:…` — and ask them in **one** message with
+   recommendations attached, rather than interrupting once per probe. If the
+   chosen target versions change, recompute the exact Node version and re-ask
+   `confirm:node-target`. Do not pin a version number in the menu.

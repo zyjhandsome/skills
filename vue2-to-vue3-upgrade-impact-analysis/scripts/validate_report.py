@@ -282,6 +282,21 @@ MANUAL_GAP_ITEMS = (
     # scale of the call sites a codemod touched. Style/build tooling has the same
     # clock (a working `@import` that is already deprecated).
     ("target dependency deprecation surface", ("弃用告警面", "目标依赖弃用面")),
+    # Official breaking-changes rows with no machine scanner. Closure rule:
+    # each one needs its own §10 line.
+    ("template v-for key placement", ("<template v-for>", "template v-for 的 key")),
+    ("transition-group wrapper element", ("transition-group",)),
+    (
+        "transition as root",
+        ("transition-as-root", "作为根元素的 `<transition>`", "作为根元素的 <transition>"),
+    ),
+    ("props default this access", ("props default", "default 工厂")),
+    ("inline-template attribute", ("inline-template",)),
+    ("custom element is attribute", ("custom element", "保留标签 is")),
+    (
+        "composition setup context removed",
+        ("ctx.root", "ctx.parent", "ctx.listeners"),
+    ),
 )
 MARKER_PLACEHOLDERS = {"", "-", "—", "tbd", "todo", "待补", "待填", "待填写"}
 # A UI kit that is replaced or majored shifts behavior contracts (mount timing,
@@ -340,8 +355,28 @@ RESIDUAL_FINDING_MARKERS = (
 NON_CUTOVER_PATH_IDS = {"deferred-inventory-only", RESIDUAL_AUDIT_PATH_ID}
 CHECKLIST_PLACEHOLDERS = {"", "-", "—", "todo", "待填", "待填写"}
 VALIDATION_PLACEHOLDERS = CHECKLIST_PLACEHOLDERS | {"tbd", "待补", "n/a", "na"}
-RECIPE_SKIP = {"name", "never", "run"}
+RECIPE_SKIP = {
+    "name",
+    "never",
+    "run",
+    "none",
+    "n",
+    "a",
+    "na",
+    "not_applicable",
+    "after",
+    "before",
+    "runtime",
+    "http",
+    "https",
+    "and",
+    "or",
+    "the",
+    "with",
+}
 RECIPE_ID_RE = re.compile(r"[A-Za-z][A-Za-z0-9_-]*")
+PAREN_NOTE_RE = re.compile(r"\([^)]*\)")
+BACKTICK_RE = re.compile(r"`([^`]+)`")
 UNIT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 FENCE = re.compile(r"(?ms)^[ \t]*(```|~~~).*?^[ \t]*\1[ \t]*$")
 HTML_COMMENT = re.compile(r"(?s)<!--.*?-->")
@@ -410,6 +445,39 @@ def clean_cell(value: str) -> str:
     return value
 
 
+def split_markdown_cells(line: str) -> list[str]:
+    """Split a Markdown table row. Pipes inside backticks or escaped stay in the cell."""
+    text = line.strip()
+    if text.startswith("|"):
+        text = text[1:]
+    if text.endswith("|") and not text.endswith("\\|"):
+        text = text[:-1]
+    cells: list[str] = []
+    buf: list[str] = []
+    in_code = False
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if char == "\\" and index + 1 < len(text) and text[index + 1] == "|" and not in_code:
+            buf.append("|")
+            index += 2
+            continue
+        if char == "`":
+            in_code = not in_code
+            buf.append(char)
+            index += 1
+            continue
+        if char == "|" and not in_code:
+            cells.append("".join(buf))
+            buf = []
+            index += 1
+            continue
+        buf.append(char)
+        index += 1
+    cells.append("".join(buf))
+    return cells
+
+
 def parse_table(block: str, expected_headers: tuple[str, ...]) -> tuple[list[list[str]], list[str]]:
     """Parse the first Markdown table and require its exact header contract."""
     lines = block.splitlines()
@@ -417,10 +485,10 @@ def parse_table(block: str, expected_headers: tuple[str, ...]) -> tuple[list[lis
     for index, line in enumerate(lines):
         if not line.strip().startswith("|"):
             continue
-        headers = tuple(clean_cell(cell) for cell in line.strip().strip("|").split("|"))
+        headers = tuple(clean_cell(cell) for cell in split_markdown_cells(line))
         if index + 1 >= len(lines) or not lines[index + 1].strip().startswith("|"):
             continue
-        separator = [cell.strip() for cell in lines[index + 1].strip().strip("|").split("|")]
+        separator = [cell.strip() for cell in split_markdown_cells(lines[index + 1])]
         if not separator or not all(re.fullmatch(r":?-{3,}:?", cell) for cell in separator):
             continue
         if headers != expected_headers:
@@ -432,7 +500,7 @@ def parse_table(block: str, expected_headers: tuple[str, ...]) -> tuple[list[lis
         for row_line in lines[index + 2 :]:
             if not row_line.strip().startswith("|"):
                 break
-            cells = [clean_cell(cell) for cell in row_line.strip().strip("|").split("|")]
+            cells = [clean_cell(cell) for cell in split_markdown_cells(row_line)]
             if len(cells) != len(expected_headers):
                 errors.append(
                     f"table row has {len(cells)} cells; expected {len(expected_headers)}: {row_line.strip()}"
@@ -992,7 +1060,7 @@ def parse_named_lockfile_status(baseline: str, name: str) -> str | None:
 def _checklist_answer(line: str) -> str:
     stripped = line.strip()
     if stripped.startswith("|"):
-        cells = [clean_cell(cell) for cell in stripped.strip("|").split("|")]
+        cells = [clean_cell(cell) for cell in split_markdown_cells(stripped)]
         return cells[-1].strip() if len(cells) >= 2 else ""
     match = re.search(r"[:：]\s*(.+?)\s*$", stripped)
     return match.group(1).strip() if match else ""
@@ -1117,12 +1185,26 @@ def validate_host_port_baseline(
 
 
 def extract_recipe_ids(text: str) -> set[str]:
+    """Keep recipe ids, not prose in the same cell.
+
+    A recipe id is backtick-wrapped or contains ``-`` / ``_``. Parenthetical
+    remarks (``(none after runtime)``) and tokens such as ``n/a`` are notes.
+    """
+    raw = text or ""
     ids: set[str] = set()
-    for token in RECIPE_ID_RE.findall(text or ""):
+
+    def accept(token: str) -> None:
         lowered = token.lower()
-        if lowered in RECIPE_SKIP or lowered in {"http", "https"}:
-            continue
-        ids.add(token)
+        if lowered in RECIPE_SKIP or ("-" not in token and "_" not in token):
+            return
+        if RECIPE_ID_RE.fullmatch(token):
+            ids.add(token)
+
+    for token in BACKTICK_RE.findall(raw):
+        accept(token.strip())
+    without_notes = PAREN_NOTE_RE.sub(" ", raw).replace("`", " ")
+    for token in RECIPE_ID_RE.findall(without_notes):
+        accept(token)
     return ids
 
 

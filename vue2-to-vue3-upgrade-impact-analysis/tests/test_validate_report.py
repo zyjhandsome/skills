@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import re
 import subprocess
 import sys
@@ -12,6 +13,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 VALIDATE = ROOT / "scripts" / "validate_report.py"
 FIXTURES = ROOT / "fixtures"
+
+
+def _load_validator():
+    spec = importlib.util.spec_from_file_location("validate_report_under_test", VALIDATE)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
 
 DEFAULT_SUBSYSTEM_ROWS = """| 子系统 | scope_status | 风险 | 就绪度 | required_for_path | 命名配方 | 说明 |
 |---|---|---|---|---|---|---|
@@ -1149,6 +1158,34 @@ class ValidateReportTests(unittest.TestCase):
             self.assertIn(
                 "UI kit icon prop class identity", result.stdout + result.stderr
             )
+
+    def test_backtick_pipes_do_not_change_table_width(self) -> None:
+        module = _load_validator()
+        line = "| build | subsystem | ready | Node `^20.19.0 || >=22.12.0` | a |"
+        cells = module.split_markdown_cells(line)
+        self.assertEqual(len(cells), 5)
+        self.assertIn("||", cells[3])
+        filtered = "| ui | subsystem | ready | `{{ a | currency }}` | b |"
+        self.assertEqual(len(module.split_markdown_cells(filtered)), 5)
+
+    def test_recipe_notes_are_not_recipe_ids(self) -> None:
+        module = _load_validator()
+        self.assertEqual(
+            module.extract_recipe_ids("`vue-compat` (none after runtime); n/a"),
+            {"vue-compat"},
+        )
+        self.assertEqual(
+            module.extract_recipe_ids("`vue-compat`, `gogocode-vue`"),
+            {"vue-compat", "gogocode-vue"},
+        )
+
+    def test_rejects_missing_template_vfor_key_checklist_row(self) -> None:
+        body = (FIXTURES / "valid-report.md").read_text(encoding="utf-8")
+        body = re.sub(r"(?m)^\| `<template v-for>` 的 key.*\n", "", body)
+        with tempfile.TemporaryDirectory() as tmp:
+            result = self._probe_report(body, tmp)
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertIn("template v-for key placement", result.stdout + result.stderr)
 
     def test_rejects_missing_external_global_runtime_checklist_row(self) -> None:
         body = (FIXTURES / "valid-report.md").read_text(encoding="utf-8")
