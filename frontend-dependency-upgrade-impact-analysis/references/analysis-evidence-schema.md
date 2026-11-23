@@ -55,7 +55,7 @@
           "package": "replacement-client",
           "version": "1.8.0",
           "compliance_status": "eligible",
-          "criteria_checked": ["security", "license", "maintenance", "peer", "engines"],
+          "criteria_checked": ["node", "framework", "peer", "security", "license", "maintenance"],
           "disqualifiers": [],
           "compatibility": "需要适配拦截器",
           "compliance_and_maintenance": "维护中",
@@ -89,6 +89,9 @@
 - 仓库无权威 pin/engines 时：不得把本机 Node 当作项目运行时；可在本对象写入精确 `selected_project_node`（建议同时写 `selection_reason`）以建立项目运行时基线，否则项目命令保持硬阻断。
 - 本文件不能批准 lock 格式迁移；格式迁移须在实施授权中单独确认，并由 runner 的 `--allow-lockfile-format-migration` 执行。
 - 证据文件不能包含或授予 `runtime-switch`、`node-install`、依赖安装或项目脚本权限；审批只从当前任务的调用方生命周期取得。
+- `packages` 可省略。只提供 `node_runtime` 时按空包清单处理，不报错。
+- `research_conclusion` 只接受 `no-candidate`：表示已按调研清单核对，且没有可回填的替代包。写入后该包 `research_status` 为 `reviewed`，不必编造候选。
+- `reviewed_summary` 是给报告用的中文复核摘要；`breaking_notes` 是破坏性变更的中文要点；`mapped_flows` 是已核对的页面/流程。三者都写回本文件，再由生成器渲染。不要手改已生成的 Markdown，`--finalize-review` 会按结构化结果重写报告。
 - 候选必须提供精确 semver。
 - `compliance_status` 只能为 `eligible`、`ineligible` 或 `unknown`。
 - `eligible` 必须同时提供非空 `criteria_checked` 和 `evidence_urls`。

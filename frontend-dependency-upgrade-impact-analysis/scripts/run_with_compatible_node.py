@@ -29,14 +29,19 @@ LOCK_FILES = (
 )
 INSTALL_RE = re.compile(
     r"(?:^|&&|\|\||;)\s*(?:"
-    r"npm\s+(?:ci|i|install|add|update|uninstall|remove|rm|un)\b|"
+    r"npm\s+(?:ci|i|install|add|update|uninstall|remove|rm|un|dedupe)\b|"
+    r"npm\s+pkg\s+set\b|"
+    r"npm\s+audit\s+fix\b|"
     r"pnpm\s+(?:i|install|add|up|update|remove|rm|dlx)\b|"
     r"yarn\s*$|yarn\s+(?:install|add|up|upgrade|remove|dlx)\b|"
     r"bun\s+(?:i|install|add|update|remove)\b|bunx\b|npx\b)",
     re.I,
 )
 NPM_MUTATING_RE = re.compile(
-    r"(?:^|&&|\|\||;)\s*npm\s+(?:ci|i|install|add|update|uninstall|remove|rm|un)\b",
+    r"(?:^|&&|\|\||;)\s*(?:"
+    r"npm\s+(?:ci|i|install|add|update|uninstall|remove|rm|un|dedupe)\b|"
+    r"npm\s+pkg\s+set\b|"
+    r"npm\s+audit\s+fix\b)",
     re.I,
 )
 NODE_INSTALL_RE = re.compile(
@@ -97,7 +102,11 @@ def read_lockfile_format(path: Path) -> str:
     name = path.name
     try:
         if name in {"package-lock.json", "npm-shrinkwrap.json", "bun.lock"}:
-            data = json.loads(path.read_text(encoding="utf-8-sig"))
+            text = path.read_text(encoding="utf-8-sig")
+            if name == "bun.lock":
+                from upgrade_lockfiles import strip_jsonc
+                text = strip_jsonc(text)
+            data = json.loads(text)
             return str(data.get("lockfileVersion") or "")
         text = path.read_text(encoding="utf-8-sig", errors="replace")
     except (OSError, json.JSONDecodeError, UnicodeError):

@@ -158,7 +158,7 @@ class MigrationDemandDiffTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             summary = json.loads((out / "dependency-summary.json").read_text(encoding="utf-8"))
-            self.assertEqual(summary["decision_status"], "decided")
+            self.assertEqual(summary["decision_status"], "not_needed")
             self.assertEqual(summary["batch_implementation_gate"], "ready")
 
     def test_blanket_natural_language_does_not_clear_queue(self) -> None:

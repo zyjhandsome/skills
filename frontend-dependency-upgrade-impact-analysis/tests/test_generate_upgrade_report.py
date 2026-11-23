@@ -3385,6 +3385,7 @@ packages:
                 patch.object(MODULE, "ensure_network_reachability", return_value={"network_reachability": "ok"}),
                 patch.object(MODULE, "request_json", side_effect=fake_request_json),
                 patch.object(MODULE, "request_text", return_value=None),
+                patch.object(MODULE, "probe_http_reachable", return_value=True),
                 patch.object(MODULE, "current_host_node_runtime", return_value=("20.18.0", "C:/node/node.exe")),
                 patch.object(MODULE, "detect_node_managers", return_value=(["nvm-windows"], {"nvm-windows": ["20.18.0"]})),
             ):

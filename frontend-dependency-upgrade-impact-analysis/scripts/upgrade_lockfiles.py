@@ -42,6 +42,8 @@ class LockEdge:
     parent_version: str
     child: str
     requirement: str
+    # pnpm snapshot/package edges store the resolved version, not the parent's declared range.
+    resolved_only: bool = False
 
 
 @dataclass
@@ -131,20 +133,45 @@ def parse_npm_lock(path: Path, packages: list[str], importer: str) -> LockSnapsh
     snapshot = LockSnapshot("npm", str(path.resolve()), str(data.get("lockfileVersion") or ""), importer)
     package_set = set(packages)
     entries = data.get("packages") or {}
+    importer_key = "" if importer in {"", "."} else importer.strip("/")
     if isinstance(entries, dict) and entries:
+        importer_meta = entries.get(importer_key) if isinstance(entries.get(importer_key), dict) else None
+        declared: set[str] = set()
+        declaration_fields = ("dependencies", "devDependencies", "optionalDependencies", "peerDependencies")
+        if isinstance(importer_meta, dict):
+            for field_name in declaration_fields:
+                block = importer_meta.get(field_name) or {}
+                if isinstance(block, dict):
+                    declared.update(str(name) for name in block)
+        has_declared_fields = isinstance(importer_meta, dict) and any(
+            isinstance(importer_meta.get(field_name), dict) for field_name in declaration_fields
+        )
+        # 2 = the importer's own nested copy; 1 = a hoisted copy the importer declares.
+        chosen: dict[str, tuple[int, str, str]] = {}
         for key, info in entries.items():
-            if not isinstance(info, dict):
+            if not isinstance(info, dict) or not info.get("version"):
                 continue
-            for package in package_set:
-                marker = f"node_modules/{package}"
-                if key.replace("\\", "/").endswith(marker) and info.get("version"):
-                    add_version(snapshot.all_versions, package, str(info["version"]))
-                direct_key = f"node_modules/{package}" if importer in {"", "."} else f"{importer.strip('/')}/node_modules/{package}"
-                if key.replace("\\", "/") == direct_key and info.get("version"):
-                    snapshot.direct_versions[package] = clean_version(info["version"])
-                    requirement = str((info.get("engines") or {}).get("node") or "")
-                    if requirement:
-                        snapshot.declared_engines[package] = requirement
+            normalized = str(key).replace("\\", "/")
+            name = npm_entry_name(normalized)
+            if name not in package_set:
+                continue
+            version = clean_version(str(info["version"]))
+            add_version(snapshot.all_versions, name, version)
+            if has_declared_fields and name not in declared:
+                continue
+            engines = str((info.get("engines") or {}).get("node") or "")
+            nested_key = f"node_modules/{name}" if not importer_key else f"{importer_key}/node_modules/{name}"
+            if normalized == nested_key:
+                chosen[name] = (2, version, engines)
+                continue
+            if normalized == f"node_modules/{name}":
+                current = chosen.get(name)
+                if current is None or current[0] < 1:
+                    chosen[name] = (1, version, engines)
+        for name, (_priority, version, engines) in chosen.items():
+            snapshot.direct_versions[name] = version
+            if engines:
+                snapshot.declared_engines[name] = engines
     dependencies = data.get("dependencies") or {}
 
     def walk(node: dict[str, Any], depth: int = 0) -> None:
@@ -153,7 +180,9 @@ def parse_npm_lock(path: Path, packages: list[str], importer: str) -> LockSnapsh
                 continue
             if name in package_set and info.get("version"):
                 add_version(snapshot.all_versions, name, str(info["version"]))
-                if depth == 0:
+                # v2+ `packages` already recorded the importer copy. The legacy tree must not
+                # replace it with the root copy.
+                if depth == 0 and name not in snapshot.direct_versions:
                     snapshot.direct_versions[name] = clean_version(info["version"])
             walk(info.get("dependencies") or {}, depth + 1)
 
@@ -270,28 +299,63 @@ def parse_pnpm_lock(path: Path, packages: list[str], importer: str) -> LockSnaps
     return snapshot
 
 
-def parse_yarn_lock(path: Path, packages: list[str], importer: str) -> LockSnapshot:
+def yarn_selector_requests(package: str, selectors: str) -> list[str]:
+    """Ranges requested for `package` inside one Yarn descriptor block."""
+    requested: list[str] = []
+    prefix = package + "@"
+    for selector in selectors.split(","):
+        cleaned = selector.strip().strip("'\"")
+        if not cleaned.startswith(prefix):
+            continue
+        body = cleaned[len(prefix):]
+        if body.startswith("npm:"):
+            body = body[len("npm:"):]
+        if body:
+            requested.append(body)
+    return requested
+
+
+def parse_yarn_lock(
+    path: Path,
+    packages: list[str],
+    importer: str,
+    manifest_specs: dict[str, str] | None = None,
+) -> LockSnapshot:
     text = path.read_text(encoding="utf-8-sig", errors="replace")
     snapshot = LockSnapshot("yarn", str(path.resolve()), "", importer)
     current_selectors = ""
     observed: dict[str, list[str]] = {package: [] for package in packages}
+    matched: dict[str, list[tuple[str, str]]] = {package: [] for package in packages}
     for raw in text.splitlines():
         if raw and not raw[0].isspace() and raw.rstrip().endswith(":"):
             current_selectors = raw.rstrip()[:-1].strip("'\"")
             continue
-        version_match = re.match(r"^\s+version\s+['\"]?([^'\"\s]+)", raw)
+        version_match = re.match(r"^\s+version:?\s+['\"]?([^'\"\s]+)", raw)
         if not version_match:
             continue
         version = clean_version(version_match.group(1))
         for package in packages:
-            if re.search(rf"(?:^|[,\s'\"]){re.escape(package)}@", current_selectors):
+            if yarn_selector_requests(package, current_selectors):
                 add_version(observed, package, version)
+                matched[package].append((current_selectors, version))
     snapshot.all_versions = {key: value for key, value in observed.items() if value}
+    specs = manifest_specs or {}
     for package, versions in snapshot.all_versions.items():
-        if len(versions) == 1:
+        spec = str(specs.get(package) or "").strip()
+        picked = ""
+        if spec:
+            for selectors, version in matched[package]:
+                if spec in yarn_selector_requests(package, selectors):
+                    picked = version
+                    break
+        if picked:
+            snapshot.direct_versions[package] = picked
+        elif len(versions) == 1:
             snapshot.direct_versions[package] = versions[0]
         else:
-            snapshot.warnings.append(f"Yarn lock 包含多个 {package} 版本；缺少包管理器输出时无法唯一确定 workspace 直接解析版本。")
+            snapshot.warnings.append(
+                f"Yarn lock 包含多个 {package} 版本；manifest 声明未能对应到唯一 descriptor，直接解析版本无法确认。"
+            )
     return snapshot
 
 
@@ -354,7 +418,7 @@ def parse_bun_lock(path: Path, packages: list[str], importer: str) -> LockSnapsh
         version = clean_version(str(identifier).rsplit("@", 1)[-1]) if "@" in str(identifier) else ""
         if not version:
             continue
-        leaf = str(key).rsplit("/", 1)[-1]
+        leaf = bun_package_name(str(key))
         for package in packages:
             if leaf != package:
                 continue
@@ -363,6 +427,14 @@ def parse_bun_lock(path: Path, packages: list[str], importer: str) -> LockSnapsh
                 snapshot.direct_versions.setdefault(package, version)
     snapshot.all_versions = {key: value for key, value in observed.items() if value}
     return snapshot
+
+
+def bun_package_name(key: str) -> str:
+    """Package name from a Bun lock key, keeping `@scope/name` intact."""
+    parts = [part for part in str(key).replace("\\", "/").split("/") if part]
+    if len(parts) >= 2 and parts[-2].startswith("@"):
+        return "/".join(parts[-2:])
+    return parts[-1] if parts else ""
 
 
 def npm_entry_name(key: str) -> str:
@@ -436,6 +508,7 @@ def pnpm_graph(lines: list[str], graph: DependencyGraph) -> None:
                 graph.add(LockEdge(
                     current_name, current_version, unquote_yaml(match.group("name")),
                     unquote_yaml(match.group("requirement")),
+                    resolved_only=True,
                 ))
     graph.supported = bool(graph.dependents)
 
@@ -444,7 +517,7 @@ def yarn_graph(text: str, graph: DependencyGraph) -> None:
     current_names: list[str] = []
     current_version = ""
     in_dependencies = False
-    entry = re.compile(r"^\s{4}['\"]?(?P<name>@?[^\s'\"]+?)['\"]?\s+['\"]?(?P<requirement>[^'\"]+)['\"]?\s*$")
+    entry = re.compile(r"^\s{4}['\"]?(?P<name>@?[^:\s'\"]+)['\"]?:?\s+['\"]?(?P<requirement>[^'\"]+?)['\"]?\s*$")
     for raw in text.splitlines():
         if raw and not raw[0].isspace() and raw.rstrip().endswith(":"):
             selectors = raw.rstrip()[:-1]
@@ -458,7 +531,7 @@ def yarn_graph(text: str, graph: DependencyGraph) -> None:
             in_dependencies = False
             continue
         stripped = raw.strip()
-        version_match = re.match(r"^\s+version\s+['\"]?([^'\"\s]+)", raw)
+        version_match = re.match(r"^\s+version:?\s+['\"]?([^'\"\s]+)", raw)
         if version_match:
             current_version = clean_version(version_match.group(1))
             continue
@@ -485,7 +558,7 @@ def bun_graph(data: Any, graph: DependencyGraph) -> None:
             continue
         identifier = str(value[0]) if value else ""
         version = clean_version(identifier.rsplit("@", 1)[-1]) if "@" in identifier else ""
-        name = str(key).rsplit("/", 1)[-1]
+        name = bun_package_name(str(key))
         info = next((item for item in value if isinstance(item, dict)), {})
         for group in DEPENDENCY_EDGE_FIELDS:
             for child, requirement in (info.get(group) or {}).items():
@@ -526,7 +599,13 @@ def build_dependency_graph(path: Path | None, root_packages: Iterable[str]) -> D
     return graph
 
 
-def parse_lock(path: Path | None, packages: list[str], importer: str = ".", role: str = "current") -> LockSnapshot:
+def parse_lock(
+    path: Path | None,
+    packages: list[str],
+    importer: str = ".",
+    role: str = "current",
+    manifest_specs: dict[str, str] | None = None,
+) -> LockSnapshot:
     label = LOCK_ROLE_LABELS.get(role, role)
     if path is None:
         # Missing before/after locks are the normal pre-upgrade state, not a finding.
@@ -541,7 +620,7 @@ def parse_lock(path: Path | None, packages: list[str], importer: str = ".", role
     if path.name == "pnpm-lock.yaml":
         return parse_pnpm_lock(path, packages, importer)
     if path.name == "yarn.lock":
-        return parse_yarn_lock(path, packages, importer)
+        return parse_yarn_lock(path, packages, importer, manifest_specs)
     if path.name in {"bun.lock", "bun.lockb"}:
         return parse_bun_lock(path, packages, importer)
     return LockSnapshot(

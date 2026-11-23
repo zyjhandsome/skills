@@ -435,6 +435,7 @@ class ParentEdge:
     fix_note: str = ""
     target_compatible_version: str = ""
     target_compatible_requirement: str = ""
+    resolved_only: bool = False
 
 
 @dataclass
@@ -618,6 +619,11 @@ class PackageReport:
     option_status: str = "not_applicable"
     # reviewed | curated-only | pending
     research_status: str = "not_applicable"
+    # no-candidate: the research checklist was completed and found no package.
+    research_conclusion: str = ""
+    reviewed_summary: str = ""
+    breaking_notes: list[str] = field(default_factory=list)
+    mapped_flows: list[str] = field(default_factory=list)
     removal: RemovalAssessment = field(default_factory=RemovalAssessment)
     decision_required: list[str] = field(default_factory=list)
     constraints: list[str] = field(default_factory=list)
@@ -2920,7 +2926,12 @@ def assess_provenance(
         point.package == package and point.category != DECLARATION_CATEGORY for point in points
     )
     for edge in graph.parents_of(package):
-        result.parents.append(ParentEdge(edge.parent, edge.parent_version, edge.requirement))
+        result.parents.append(ParentEdge(
+            edge.parent,
+            edge.parent_version,
+            edge.requirement,
+            resolved_only=edge.resolved_only,
+        ))
     if result.parents:
         # A single-node "chain" for a package the workspace declares itself says nothing.
         chains, total = graph.paths_to(package, limit=PARENT_CHAIN_LIMIT)
@@ -3437,19 +3448,41 @@ def load_decision_record(path: Path | None) -> tuple[list[HumanDecision], list[s
     return decisions, warnings
 
 
+def rendered_option_ids(report: PackageReport) -> set[str]:
+    """Option ids the confirmation queue actually showed for this package."""
+    questions = [report.confirmation, *report.alternate_questions, *report.parent_questions]
+    return {
+        option.option_id
+        for question in questions
+        if question is not None and question.status != "blocked"
+        for option in question.options
+    }
+
+
+def unrendered_choice_reason(report: PackageReport, decision: HumanDecision) -> str:
+    """Reject a choice the queue did not offer, after semantic checks found nothing else wrong."""
+    if decision.source == "other":
+        return ""
+    if report.confirmation is None and not report.alternate_questions and not report.parent_questions:
+        return ""
+    if decision.choice in rendered_option_ids(report):
+        return ""
+    return f"选项 `{decision.choice}` 不在本轮已渲染的确认队列中"
+
+
 def revalidate_decision(report: PackageReport, decision: HumanDecision) -> str:
     """Reason the recorded choice no longer holds, or "" when it still does."""
     choice = decision.choice
     if choice == "remove":
         if report.removal.status == "not_viable":
             return "删除结论已变为 not_viable，原“确认删除”不再成立"
-        return ""
+        return unrendered_choice_reason(report, decision)
     if choice == "native-refactor":
         if report.refactor_plan.status != "established":
             return "改造方向已不成立（缺少调用点证据），需重新确认"
-        return ""
+        return unrendered_choice_reason(report, decision)
     if choice in {"remove-usage", "switch-to-declared", "remove-feature", "defer"}:
-        return ""
+        return unrendered_choice_reason(report, decision)
     if choice == "proceed" or choice.startswith("proceed:"):
         if not is_exact_upgrade_target(report.upgrade):
             return "proceed 仅适用于精确升级目标"
@@ -3472,9 +3505,9 @@ def revalidate_decision(report: PackageReport, decision: HumanDecision) -> str:
         else:
             decision.selected_package = decision.selected_package or report.upgrade.package
             decision.selected_version = decision.selected_version or report.upgrade.to_version
-        return ""
+        return unrendered_choice_reason(report, decision)
     if choice.startswith("parent-upgrade:") or choice.startswith("parent-replace:") or choice.startswith("parent-remove:"):
-        return ""
+        return unrendered_choice_reason(report, decision)
     if choice.startswith("pin-override:"):
         pinned = choice.split(":", 1)[1]
         if "@" not in pinned:
@@ -3484,7 +3517,7 @@ def revalidate_decision(report: PackageReport, decision: HumanDecision) -> str:
             return f"pin-override 目标包 {name} 与分析包 {report.upgrade.package} 不一致"
         if semver_key(version) is None:
             return f"pin-override 版本 {version} 不是精确 semver"
-        return ""
+        return unrendered_choice_reason(report, decision)
     if choice.startswith("replace:"):
         body = choice.split(":", 1)[1]
         if "@" not in body:
@@ -3513,7 +3546,7 @@ def revalidate_decision(report: PackageReport, decision: HumanDecision) -> str:
         return f"{package} 与项目约束冲突：{'; '.join(match.disqualifiers) or '见候选表'}"
     if match.version and version != match.version and decision.source != "other":
         return f"{package} 的推荐版本已变为 {match.version}，原记录 {version} 需重新确认"
-    return ""
+    return unrendered_choice_reason(report, decision)
 
 
 def mark_disposition_selected(report: PackageReport, decision: HumanDecision) -> None:
@@ -4727,9 +4760,13 @@ def load_analysis_evidence(path: Path | None) -> dict[str, dict[str, Any]]:
     if path is None:
         return {}
     data = read_json(path)
-    packages = data.get("packages") if isinstance(data, dict) else None
+    if not isinstance(data, dict):
+        raise ValueError("analysis evidence JSON 必须是对象")
+    packages = data.get("packages", {})
+    if packages is None:
+        packages = {}
     if not isinstance(packages, dict):
-        raise ValueError("analysis evidence JSON 必须包含对象字段 packages")
+        raise ValueError("analysis evidence JSON 的 packages 必须是对象")
     result: dict[str, dict[str, Any]] = {}
     for package, row in packages.items():
         if not isinstance(row, dict):
@@ -4802,6 +4839,18 @@ def apply_analysis_evidence(reports: list[PackageReport], evidence: dict[str, di
             report.evidence_dimensions[dimension] = str(status)
         report.evidence_completeness = evidence_completeness(report.evidence_dimensions, True)
         report.constraints.extend(string_list(row.get("constraints")))
+        conclusion = str(row.get("research_conclusion") or "").strip()
+        if conclusion and conclusion != "no-candidate":
+            raise ValueError(f"{package}.research_conclusion 只接受 no-candidate，当前为：{conclusion}")
+        if conclusion:
+            report.research_conclusion = conclusion
+        summary = str(row.get("reviewed_summary") or "").strip()
+        if summary:
+            report.reviewed_summary = summary
+        if row.get("breaking_notes") is not None:
+            report.breaking_notes = string_list(row.get("breaking_notes"))
+        if row.get("mapped_flows") is not None:
+            report.mapped_flows = string_list(row.get("mapped_flows"))
 
 
 def append_unique(items: list[str], value: str) -> None:
@@ -4822,7 +4871,7 @@ def reconcile_open_target_report(report: PackageReport) -> None:
     ]
     eligible_alternatives = eligible_alternative_candidates(report)
     report.research_status = (
-        "reviewed" if reviewed_alternatives
+        "reviewed" if reviewed_alternatives or report.research_conclusion == "no-candidate"
         else "curated-only" if report.alternative_candidates
         else "pending"
     )
@@ -5443,14 +5492,36 @@ def is_code_scan_candidate(path: Path) -> bool:
     return path.suffix.lower() in TEXT_EXTENSIONS or any(path.name.lower().startswith(hint) for hint in CONFIG_FILE_HINTS)
 
 
-def iter_code_files(project_root: Path, max_files: int, max_file_bytes: int) -> tuple[list[Path], list[str]]:
+def iter_code_files(
+    project_root: Path,
+    max_files: int,
+    max_file_bytes: int,
+    skip_paths: Iterable[Path] | None = None,
+) -> tuple[list[Path], list[str]]:
     files: list[Path] = []
     warnings: list[str] = []
+    skipped: list[Path] = []
+    for item in skip_paths or []:
+        try:
+            skipped.append(Path(item).resolve())
+        except OSError:
+            continue
+
+    def is_skipped(path: Path) -> bool:
+        try:
+            resolved = path.resolve()
+        except OSError:
+            return False
+        return any(resolved == item or item in resolved.parents for item in skipped)
+
     for root, dirs, names in os.walk(project_root):
-        dirs[:] = sorted(name for name in dirs if name not in SKIP_DIRS)
+        dirs[:] = sorted(
+            name for name in dirs
+            if name not in SKIP_DIRS and not is_skipped(Path(root) / name)
+        )
         for name in sorted(names):
             path = Path(root) / name
-            if not is_code_scan_candidate(path):
+            if is_skipped(path) or not is_code_scan_candidate(path):
                 continue
             try:
                 if path.stat().st_size > max_file_bytes:
@@ -5555,8 +5626,15 @@ def declaration_recommendation(report: PackageReport) -> str:
     )
 
 
-def analyze_code_modification_points(project_root: Path, reports: list[PackageReport], max_points: int, max_scan_files: int, max_file_bytes: int) -> tuple[list[CodeModificationPoint], list[str], list[str]]:
-    files, warnings = iter_code_files(project_root, max_scan_files, max_file_bytes)
+def analyze_code_modification_points(
+    project_root: Path,
+    reports: list[PackageReport],
+    max_points: int,
+    max_scan_files: int,
+    max_file_bytes: int,
+    skip_paths: Iterable[Path] | None = None,
+) -> tuple[list[CodeModificationPoint], list[str], list[str]]:
+    files, warnings = iter_code_files(project_root, max_scan_files, max_file_bytes, skip_paths)
     test_files = [str(path.relative_to(project_root)).replace("\\", "/") for path in files if TEST_RE.search(str(path).replace("\\", "/"))]
     points: list[CodeModificationPoint] = []
     seen: set[tuple[str, str, int, str]] = set()
@@ -5806,16 +5884,30 @@ def finalize_exact_upgrade_report(
             report.implementation_blockers,
             f"依赖来源为 {report.provenance.kind}，无法形成安全的精确升级命令",
         )
-    incompatible_parents = [
-        f"{edge.package}@{edge.version} 要求 {edge.requirement or '未建立'}"
-        for edge in parents
-        if not edge.requirement or semver_satisfies(target, edge.requirement) is not True
-    ]
+    incompatible_parents = []
+    undetermined_parents = []
+    for edge in parents:
+        label = f"{edge.package}@{edge.version or '未解析'}"
+        if edge.resolved_only or not edge.requirement:
+            undetermined_parents.append(
+                f"{label} 的声明 range 未记录（解析版本 {edge.requirement or '未知'}）"
+            )
+            continue
+        satisfied = semver_satisfies(target, edge.requirement)
+        if satisfied is False:
+            incompatible_parents.append(f"{label} 要求 {edge.requirement}")
+        elif satisfied is None:
+            undetermined_parents.append(f"{label} 的范围 {edge.requirement} 无法自动判定")
     if incompatible_parents:
         append_unique(
             report.implementation_blockers,
             "目标版本不满足当前父依赖范围；必须先解析并升级/替换父依赖的精确兼容版本："
             + "；".join(incompatible_parents),
+        )
+    if undetermined_parents:
+        append_unique(
+            report.warnings,
+            "父包声明 range 未能自动判定，未据此阻断精确升级：" + "；".join(undetermined_parents),
         )
     if report.peer_compatibility_status != "compatible" and report.peer_compatibility_status != "not-applicable":
         append_unique(
@@ -5824,10 +5916,13 @@ def finalize_exact_upgrade_report(
                 "；".join(report.peer_compatibility_conflicts) or report.peer_compatibility_status
             ),
         )
-    if runtime.status != "compatible-current":
+    if (
+        runtime.execution_readiness == "blocked"
+        and runtime.status not in {"compatible-current", "runtime-switch-required"}
+    ):
         append_unique(
             report.implementation_blockers,
-            "当前运行环境不能直接执行该升级；先调整 Node/工具链或目标版本："
+            "当前运行环境未就绪，不能直接执行该升级；先补齐项目 Node/版本管理器或约束："
             + "；".join(runtime.blockers or [runtime.status]),
         )
 
@@ -6221,6 +6316,10 @@ def markdown_report(bundle: AnalysisBundle) -> str:
         )
         lines.append(f"- 证据维度：{format_mapping(report.evidence_dimensions)}")
         lines.append(f"- 本地证据回读：`{'yes' if report.used_local_upstream_evidence else 'no'}`")
+        if report.reviewed_summary:
+            lines.append(f"- 复核摘要：{report.reviewed_summary}")
+        if report.breaking_notes:
+            lines.append("- 破坏性变更复核：" + "；".join(report.breaking_notes))
         if report.repository_lineage:
             lines.append(f"- 版本仓库谱系：{format_mapping(report.repository_lineage)}")
         for warning in report.warnings:
@@ -6495,7 +6594,13 @@ def markdown_report(bundle: AnalysisBundle) -> str:
             else f"仅建立 {point.file} 引用证据；页面/流程映射完成后才可定级"
         )
         lines.append("| " + " | ".join(md_cell(value) for value in (point.package, module, flows, severity, basis)) + " |")
-    if not emitted:
+    for report in bundle.reports:
+        if report.mapped_flows:
+            lines.append("| " + " | ".join(md_cell(value) for value in (
+                report.upgrade.package, "已复核映射", "；".join(report.mapped_flows), report.risk.final_level,
+                "来自 --analysis-evidence-file 的 mapped_flows",
+            )) + " |")
+    if not emitted and not any(report.mapped_flows for report in bundle.reports):
         lines.append(f"| - | 未建立 | {UNMAPPED_FLOW} | {UNRATED} | 尚未建立直接代码引用证据 |")
 
     lines.extend(["", *report_section("Technical Risks"), "", "| 包 | 风险 | 严重度 | 证据 | 缓解措施 |", "|---|---|---|---|---|"])
@@ -6562,11 +6667,16 @@ def markdown_report(bundle: AnalysisBundle) -> str:
         f"- Node 阻塞项：{'; '.join(runtime.blockers) or '无'}",
         f"- 报告目录：`{bundle.report_output_dir}`",
         "- 最低可接受验证：确认准确 lock/peer/engine，执行受影响自动化检查，覆盖关键成功/失败/恢复流程，具备监控和已验证的回滚路径。",
-        "- 剩余工作：标记为 `complete` 前，解决所有“未建立”“需要 Agent 复核”、基线不一致、证据警告、未翻译上游摘要和间接调用方映射缺口；"
-        "若 `decision_status=needs_choice`，还必须完成人工确认队列"
-        "（exit `7`：下一动作=照队列提问或补证据，不是等待放行；所有当前 ready 同波问完）。"
-        "决策落盘并重跑后，Agent 须复核并将 `analysis_status` 升为 `complete` 才算本技能结束。"
-        "`batch_implementation_gate=frozen` 时不得开实施计划或执行变更（可不阻止分析定稿）。",
+        (
+            "- 剩余工作：复核已通过 `--finalize-review`，分析状态为 `complete`。"
+            "实施仍须 `batch_implementation_gate=ready` 且调用方另行授权。"
+            if bundle.analysis_status == "complete" else
+            "- 剩余工作：标记为 `complete` 前，解决所有“未建立”“需要 Agent 复核”、基线不一致、证据警告、未翻译上游摘要和间接调用方映射缺口；"
+            "若 `decision_status=needs_choice`，还必须完成人工确认队列"
+            "（exit `7`：下一动作=照队列提问或补证据，不是等待放行；所有当前 ready 同波问完）。"
+            "决策落盘并重跑后，Agent 须复核并将 `analysis_status` 升为 `complete` 才算本技能结束。"
+            "`batch_implementation_gate=frozen` 时不得开实施计划或执行变更（可不阻止分析定稿）。"
+        ),
     ])
     option_gaps = [report.upgrade.package for report in bundle.reports if report.option_status == "missing"]
     research_gaps = [report.upgrade.package for report in bundle.reports if report.research_status == "pending"]
@@ -6628,8 +6738,12 @@ def render_provenance(report: PackageReport) -> list[str]:
         ])
         for edge in provenance.parents[:PARENT_CHAIN_LIMIT]:
             lines.append("| " + " | ".join(md_cell(value) for value in (
-                edge.package, edge.version or "未解析", edge.requirement or "-",
-                edge.latest_stable or "未解析", edge.fix_available, edge.fix_note or "-",
+                edge.package,
+                edge.version or "未解析",
+                f"解析版本 {edge.requirement or '未知'}；声明 range 未记录" if edge.resolved_only else (edge.requirement or "-"),
+                edge.latest_stable or "未解析",
+                edge.fix_available,
+                edge.fix_note or "-",
             )) + " |")
         if len(provenance.parents) > PARENT_CHAIN_LIMIT:
             lines.append(f"| 其余 {len(provenance.parents) - PARENT_CHAIN_LIMIT} 个父包 | - | - | - | unknown | 超出展示上限，见 JSON 输出 |")
@@ -7168,18 +7282,21 @@ def build_bundle(
     if workspace.status == "confirmed" and workspace.manifest_path:
         manifest_path = Path(workspace.manifest_path)
     manifest = load_manifest(manifest_path if manifest_path.exists() else None, project_root)
+    lock_specs = {entry.package: entry.spec for entry in manifest.packages.values()}
     toolchain_names = sorted(set(manifest.packages) & TOOLCHAIN_PACKAGES)
     initial_analysis_packages = list(dict.fromkeys(package_names + toolchain_names))
     before_lock = parse_lock(
         Path(args.before_lock).resolve() if args.before_lock else None,
-        initial_analysis_packages, args.workspace_importer, role="before",
+        initial_analysis_packages, args.workspace_importer, role="before", manifest_specs=lock_specs,
     )
     after_lock = parse_lock(
         Path(args.after_lock).resolve() if args.after_lock else None,
-        initial_analysis_packages, args.workspace_importer, role="after",
+        initial_analysis_packages, args.workspace_importer, role="after", manifest_specs=lock_specs,
     )
     current_path = None if args.before_lock or args.after_lock else detect_lock(project_root)
-    current_lock = parse_lock(current_path, initial_analysis_packages, args.workspace_importer, role="current")
+    current_lock = parse_lock(
+        current_path, initial_analysis_packages, args.workspace_importer, role="current", manifest_specs=lock_specs,
+    )
     infer_current_versions(upgrades, before_lock, current_lock)
     args.skip_upstream_packages = packages_skipping_upstream(
         upgrades,
@@ -7200,17 +7317,30 @@ def build_bundle(
         analysis_packages = list(dict.fromkeys(initial_analysis_packages + peer_names))
         before_lock = parse_lock(
             Path(args.before_lock).resolve() if args.before_lock else None,
-            analysis_packages, args.workspace_importer, role="before",
+            analysis_packages, args.workspace_importer, role="before", manifest_specs=lock_specs,
         )
         after_lock = parse_lock(
             Path(args.after_lock).resolve() if args.after_lock else None,
-            analysis_packages, args.workspace_importer, role="after",
+            analysis_packages, args.workspace_importer, role="after", manifest_specs=lock_specs,
         )
-        current_lock = parse_lock(current_path, analysis_packages, args.workspace_importer, role="current")
+        current_lock = parse_lock(
+            current_path, analysis_packages, args.workspace_importer, role="current", manifest_specs=lock_specs,
+        )
     for report in reports:
         baseline_for(report, manifest, before_lock, current_lock, after_lock)
         assess_peer_compatibility(report, manifest, before_lock, current_lock, after_lock)
-    points, scan_warnings, test_files = analyze_code_modification_points(project_root, reports, args.max_code_points, args.max_scan_files, args.max_file_bytes)
+    scan_skips = [output_dir]
+    if args.analysis_evidence_file:
+        evidence_candidate = Path(args.analysis_evidence_file)
+        if not evidence_candidate.is_absolute():
+            evidence_candidate = project_root / evidence_candidate
+        scan_skips.append(evidence_candidate)
+    early_decision = resolve_decision_file(args, output_dir)
+    if early_decision is not None:
+        scan_skips.append(early_decision)
+    points, scan_warnings, test_files = analyze_code_modification_points(
+        project_root, reports, args.max_code_points, args.max_scan_files, args.max_file_bytes, scan_skips,
+    )
     for report in reports:
         assess_removal(report, points)
     evidence_path: Path | None = None
@@ -7250,6 +7380,12 @@ def build_bundle(
     rank_alternative_candidates(reports)
     decision_path = resolve_decision_file(args, output_dir)
     decisions, decision_warnings = load_decision_record(decision_path)
+    allowed_packages = getattr(args, "decision_packages", None)
+    if allowed_packages:
+        decisions = [
+            decision for decision in decisions
+            if decision.package.split(PARENT_DECISION_SEPARATOR, 1)[0] in allowed_packages
+        ]
     for report in reports:
         if report.upgrade.to_version or report.analysis_mode == "exact-upgrade":
             finalize_exact_upgrade_report(report, node_runtime)
@@ -7572,9 +7708,12 @@ def main(argv: list[str]) -> int:
             batch_note = output_note if not subdir else f"{output_note}；自动拆分 → {subdir}/（{label}）"
             if subdir == "open-target":
                 batch_args.no_upstream_evidence = True
-            # Split batches always use a per-directory decision file to avoid cross-talk.
-            if subdir:
+            # An explicit decision file is shared; each sub-batch only consumes its own packages.
+            # Without one, keep a separate file per directory so the two queues cannot cross.
+            if subdir and not args.decision_file:
                 batch_args.decision_file = str((batch_dir / DECISION_FILE_NAME).resolve())
+            elif subdir:
+                batch_args.decision_packages = {upgrade.package for upgrade in batch_upgrades}
             bundle = build_bundle(batch_args, batch_dir, batch_note, upgrades=batch_upgrades)
             markdown_path = write_bundle(bundle, batch_args, batch_dir)
             written.append((subdir, markdown_path, label))

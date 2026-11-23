@@ -211,7 +211,7 @@
 
 ### 4.6 选项完整性闸门
 
-未指定目标版本的包必须至少产出一个可执行选项：替代包、已成立的原生重构方案、已解析出父包的父包处置，或删除（删除结论为 `safe_removal_candidate`/`requires_migration` 时算一条可执行路径）。
+未指定目标版本的包必须至少产出一个可执行选项：替代包、已成立的原生重构方案、已解析出父包的父包处置，来源为 `phantom` 的消除用法，或删除（删除结论为 `safe_removal_candidate` 时算一条可执行路径）。
 
 一个都没有时 `option_status=missing`，报告在结论中列出该包并禁止标记 `complete`。该闸门只影响完整性判定，不改写 `recommended_action`——删除评估仍开放时，下一步依然是 `review-removal`。
 
