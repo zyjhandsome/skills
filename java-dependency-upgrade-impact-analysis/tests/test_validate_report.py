@@ -62,6 +62,48 @@ class ReportValidationTests(unittest.TestCase):
     def test_fixture_passes(self) -> None:
         self.assertEqual(validator.validate_report(FIXTURE).errors, [])
 
+    def test_unresolved_baseline_choice_keeps_packet_partial(self) -> None:
+        text = self.text.replace(
+            "| `com.fasterxml.jackson.core:jackson-databind` | ready | "
+            "是否按 Owner 属性（`upgrade-owner`）把 Jackson 家族升至 2.21.4？ | "
+            "`proceed:com.fasterxml.jackson.core:jackson-databind:2.21.4` / `defer` / `other` |",
+            "| `com.fasterxml.jackson.core:jackson-databind` | blocked | "
+            "声称 from=2.21.1 与解析 from=2.21.2 不一致，选定基线前不分析区间 | "
+            "`use-claimed` / `use-resolved` |",
+        )
+        self.assertEqual(self.errors_for(text), [])
+
+    def test_complete_rejects_unresolved_baseline_mismatch(self) -> None:
+        text = self.text.replace(
+            "| `com.fasterxml.jackson.core:jackson-databind` | ready | "
+            "是否按 Owner 属性（`upgrade-owner`）把 Jackson 家族升至 2.21.4？ | "
+            "`proceed:com.fasterxml.jackson.core:jackson-databind:2.21.4` / `defer` / `other` |",
+            "| `com.fasterxml.jackson.core:jackson-databind` | blocked | "
+            "声称 from=2.21.1 与解析 from=2.21.2 不一致，选定基线前不分析区间 | "
+            "`use-claimed` / `use-resolved` |",
+        )
+        text = text.replace("| analysis_status | partial |", "| analysis_status | complete |")
+        text = text.replace(
+            "| decision_status | needs_choice |", "| decision_status | decided |"
+        )
+        report = self.write(text)
+        shutil.copytree(
+            ROOT / "fixtures" / "partial" / "records", self.tmp / "records"
+        )
+        record = self.tmp / "records" / "com.fasterxml.jackson.core__jackson-databind.md"
+        record.write_text(
+            record.read_text(encoding="utf-8")
+            .replace(
+                "| introducer_upgrade_available | — |",
+                "| introducer_upgrade_available | — |\n"
+                "| baseline_evidence_status | mismatch |",
+            )
+            .replace("| 确认队列状态 | ready |", "| 确认队列状态 | blocked |"),
+            encoding="utf-8",
+        )
+        errors = validator.validate_report(report).errors
+        self.assertTrue(any("基线未选定" in message for message in errors), errors)
+
     def test_raw_template_is_rejected(self) -> None:
         errors = validator.validate_report(ROOT / "templates" / "decision-packet.md").errors
         self.assertTrue(any("模板" in message for message in errors))
@@ -936,6 +978,27 @@ class BatchLayoutTests(unittest.TestCase):
         self.assertTrue(
             any("analysis_status 与子报告不一致" in message for message in self.errors())
         )
+
+    def test_batch_index_reports_each_status_mismatch_once(self) -> None:
+        self.place("exact/boot-bom__3.2.x__default__json/report.md")
+        self.place("exact/app-library__no-boot__default__lucene/report.md")
+        (self.tmp / "BATCH-INDEX.md").write_text(
+            "\n".join(
+                [
+                    "| 目录 | 权威层 | Boot 线 | 构建变体 | 批次范围 | 决策域 | 成员 | analysis_status | decision_status | batch_implementation_gate |",
+                    "|---|---|---|---|---|---|---|---|---|---|",
+                    "| exact/boot-bom__3.2.x__default__json/ | boot-bom | 3.2.x | default | json | — | jackson | blocked | needs_choice | frozen |",
+                    "| exact/app-library__no-boot__default__lucene/ | app-library | no-boot | default | lucene | — | lucene | partial | needs_choice | frozen |",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        matches = [
+            message
+            for message in self.errors()
+            if "analysis_status 与子报告不一致" in message
+        ]
+        self.assertEqual(len(matches), 1, matches)
 
     def test_scope_all_is_a_warning(self) -> None:
         self.place(

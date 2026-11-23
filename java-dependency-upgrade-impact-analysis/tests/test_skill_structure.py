@@ -485,6 +485,42 @@ class SkillStructureTests(unittest.TestCase):
             skill,
         )
 
+    def test_boot_generation_routing_stops_at_boot_2(self) -> None:
+        front = (ROOT / "SKILL.md").read_text(encoding="utf-8").split("---", 2)[1]
+        self.assertIn("spring-boot-4-upgrade", front)
+        self.assertIn("Boot 2.x to 3.x is outside both skills", front)
+        self.assertIn("same-generation Boot BOM bump", front)
+        self.assertNotIn("2.x to 3.x or 3.x to 4.x", front)
+
+    def test_pending_baseline_does_not_restore_maven(self) -> None:
+        record = (ROOT / "templates" / "decision-record.md").read_text(encoding="utf-8")
+        menus = (ROOT / "references" / "next-action-choice-menus.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("恢复 mvn", record)
+        self.assertIn("退出码 5", record)
+        self.assertNotIn("走菜单 A（补证）", menus)
+        pressure = menus.split("「缺 Maven 所以把降级标 blocked」", 1)[1]
+        response = pressure.split("|", 2)[1]
+        self.assertNotIn("队列 `pending`", response)
+        self.assertIn("退出码 5", response)
+
+    def test_unresolved_baseline_mismatch_stays_partial(self) -> None:
+        skill = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+        gates = (ROOT / "references" / "human-confirmation-gates.md").read_text(
+            encoding="utf-8"
+        )
+        batching = (ROOT / "references" / "dual-entry-and-batching.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("use-claimed", skill)
+        self.assertIn("use-resolved", skill)
+        self.assertIn("use-claimed", gates)
+        self.assertIn("use-resolved", gates)
+        self.assertIn("only that row is queue-`blocked`", gates)
+        self.assertIn("analysis_status=complete", batching)
+        self.assertIn("baseline_evidence_status=mismatch", batching)
+
     def test_claimed_from_mismatch_blocks_only_the_row(self) -> None:
         batching = (ROOT / "references" / "dual-entry-and-batching.md").read_text(
             encoding="utf-8"

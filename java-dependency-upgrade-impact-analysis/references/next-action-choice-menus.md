@@ -96,8 +96,7 @@
    - 换列车内 introducer 版本使传递 `eureka-client` 收敛到目标
    - 换 discovery 栈（项目已有的 Nacos/Consul/K8s 服务发现 starter）
    - 去掉 Netflix Eureka、改用当前 Boot/Cloud 推荐的服务发现方式（原生改造）
-5. 显式 `2.0.6→2.0.5`：目标存在且路径可写时标 **可行**；若仅缺 Maven/tree，走菜单 A（补证），
-   **不要**写成存在性 `blocked`。
+5. 显式 `2.0.6→2.0.5`：目标存在且路径可写时标 **可行**。预检已通过但 tree/insight 未证实 `resolved_from` 时走 §A（队列 `pending`，选项仅 `defer` / `other`），不要写成存在性 `blocked`，也不要把路径菜单 A 当成补证。缺 Maven / JDK 是退出码 5，不写报告。
 
 ---
 
@@ -110,7 +109,7 @@
 
 | 合理化 | 回应 |
 |---|---|
-| 「缺 Maven 所以把降级标 blocked」 | 工具/基线用队列 `pending` + 补证清单；降级可达且方向明确时不否决降级 |
+| 「缺 Maven 所以把降级标 blocked」 | 缺 JDK 或构建工具是预检退出码 5，不写报告。预检已通过但探针没证实 `resolved_from` 时才用 §A |
 | 「传递降级就在叶子上钉版本」 | 先 A introducer；B force-align 须破例；并探 C/D/E |
 | 「替代栈我帮你定了」 | 只列已验证候选；人选 `replace:` / `other` |
 | 「补证和路径选择太慢，先 proceed」 | 无 `resolved_from` 保持 `pending`，不得 `proceed` |

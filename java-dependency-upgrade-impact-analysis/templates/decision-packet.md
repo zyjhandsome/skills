@@ -2,7 +2,7 @@
 
 > 填写后保存为 `report.md`。  
 > 状态枚举、GAV、版本号、路径、命令、URL 保持英文原文；表头与说明默认简体中文。  
-> 校验红线：`pending` 横幅写「待补基线证据」；入口可写 `cve` / `other`；六层表必须出现代码 / 配置 / 数据 / 接口 / 测试 / 部署（可写不适用）；`blocked` 的选项列不得把 `proceed` / `remove` / `exclude` / `replace` / `defer` 当作独立选项；非 GA 要进 `ready` 须写出字面量 `non-ga-allowed`。
+> 校验红线：`pending` 横幅写「待补基线证据」；入口可写 `cve` / `other`；六层表必须出现代码 / 配置 / 数据 / 接口 / 测试 / 部署（可写不适用）；`blocked` 的选项列不得把 `proceed` / `remove` / `exclude` / `replace` / `defer` 当作独立选项；基线冲突的 blocked 行只给 `use-claimed` / `use-resolved`，整包保持 `partial`；非 GA 要进 `ready` 须写出字面量 `non-ga-allowed`。
 
 ## 状态
 

@@ -17,7 +17,7 @@
 | introducer_gav | （传递依赖时） |
 | introducer_upgrade_available | yes / no / unknown / — |
 | baseline_evidence_status | confirmed / pending-tooling / pending-tree / mismatch / — |
-| 下一步补证 | （pending baseline 时：恢复 mvn → 分期 tree → 证实 from；见 next-action-choice-menus §A） |
+| 下一步补证 | （pending baseline 时：重跑已失败的有界 tree/insight，再证实 from。缺 JDK 或构建工具是预检退出码 5，不是本字段。见 next-action-choice-menus §A） |
 | 路径选项菜单 | （传递升降级：A introducer / B force-align / C 换 starter / D 换栈 / E 原生改造 + 证据摘要） |
 | 替代候选 | （choose-alternative / replace-* 时 1–3 个） |
 | scope | compile / runtime / provided / test / system |

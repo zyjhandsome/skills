@@ -6,7 +6,7 @@ description: >
   GAV from→to upgrades, Spring Boot–managed jars (Netty, Jackson, Lucene, Eureka),
   commons-lang migrations, CVE-driven version moves, unused-jar removal, transitive
   exclusion/force-align, or component replacement. Not a Spring Boot generation
-  migration (2.x to 3.x or 3.x to 4.x); use spring-boot-4-upgrade for that.
+  migration. Boot 3.x to 4.x (or a later 4.x minor) belongs to spring-boot-4-upgrade. Boot 2.x to 3.x is outside both skills: say so and stop. A same-generation Boot BOM bump stays here.
 ---
 
 # Java Dependency Upgrade Impact Analysis
@@ -171,10 +171,12 @@ during analysis.
 | `batch_implementation_gate` | `frozen` / `ready` (informational; this skill never implements) |
 | also required | `behavior_parity_required`, `network_mode`, `report_path` — see `references/report-contract.md` |
 
-Never set `analysis_status=complete` while `decision_status=needs_choice` or any
-queue `ready`/`pending`. Never set `analysis_status=blocked` while any queue
-`ready`/`pending`. Residual evidence-`blocked` may remain after complete (gate
-stays `frozen`). Uncleared `ready`/`pending` ⇒ **ask now**, not “继续/放行”.
+Never set `analysis_status=complete` while `decision_status=needs_choice`, any
+queue `ready`/`pending`, or a claimed-from mismatch still awaiting `use-claimed`
+/ `use-resolved` (`baseline_evidence_status=mismatch`). Never set `analysis_status=blocked`
+while any queue `ready`/`pending`. Existence-`blocked`
+rows may remain after complete (gate stays `frozen`). Uncleared `ready`/`pending`
+or an unresolved baseline ⇒ **ask now**, not “继续/放行”.
 
 ## Completion gate
 

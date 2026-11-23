@@ -91,7 +91,7 @@ python -B "<skill-dir>/scripts/validate_report.py" --evidence-dir <evidence-dir>
 
 | 字段 | 取值 |
 |---|---|
-| `analysis_status` | `partial` / `blocked` / `complete`（`blocked`=批级环境前置或离线闸。claimed `from` 与解析版本不一致只阻塞该行，见 confirmation gates） |
+| `analysis_status` | `partial` / `blocked` / `complete`（`blocked`=批级环境前置或离线闸。claimed `from` 与解析版本不一致只阻塞该行；`baseline_evidence_status=mismatch` 未选定 `use-claimed` / `use-resolved` 前不得 `complete`，见 confirmation gates） |
 | `decision_status` | `needs_choice` / `not_needed` / `decided` |
 | `batch_implementation_gate` | `frozen` / `ready` |
 | `behavior_parity_required` | `yes` / `no` |

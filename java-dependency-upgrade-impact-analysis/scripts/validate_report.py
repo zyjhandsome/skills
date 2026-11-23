@@ -583,7 +583,14 @@ def option_is_forbidden_on_pending(option: str) -> bool:
     return False
 
 
+def offers_baseline_choice(options: str) -> bool:
+    lowered = options.lower()
+    return "use-claimed" in lowered and "use-resolved" in lowered
+
+
 def blocked_options_allow_restate(options: str, option_tokens: list[str]) -> bool:
+    if offers_baseline_choice(options):
+        return True
     joined = options.lower()
     if any(marker.lower() in joined for marker in BLOCKED_RESTATE_MARKERS):
         return True
@@ -723,7 +730,7 @@ def check_queue(
     inventory: list[InventoryItem],
     statuses: dict[str, str],
     findings: Findings,
-) -> list[tuple[str, str]]:
+) -> list[tuple[str, str, str]]:
     """Validate confirmation queue; return [(component, status), ...] for cross-checks."""
     section = "确认队列"
     if section not in bounds:
@@ -885,10 +892,28 @@ def check_queue(
             f"确认队列仍有 ready/pending 时 decision_status 必须为 needs_choice："
             + "、".join(askable)
         )
-    if decision_status == "needs_choice" and not askable:
+    baseline_asks = [
+        component
+        for component, status, _, options, _ in queue
+        if status == "blocked" and offers_baseline_choice(options)
+    ]
+    if decision_status == "needs_choice" and not askable and not baseline_asks:
         findings.error(
             "decision_status=needs_choice 但确认队列没有 ready/pending 项"
         )
+    if baseline_asks:
+        joined = "、".join(baseline_asks)
+        if analysis_status != "partial":
+            findings.error(
+                "基线未选定（use-claimed / use-resolved）时 analysis_status 必须为 partial："
+                + joined
+            )
+        if decision_status != "needs_choice":
+            findings.error("基线未选定时 decision_status 必须为 needs_choice：" + joined)
+        if statuses.get("batch_implementation_gate") != "frozen":
+            findings.error(
+                "基线未选定时 batch_implementation_gate 必须为 frozen：" + joined
+            )
     if decision_status == "decided" and askable:
         findings.error("decision_status=decided 时不得残留 ready/pending")
     if decision_status == "not_needed" and (askable or cleared):
@@ -932,7 +957,7 @@ def check_queue(
                 "队列已全部 decided/deferred 且无 blocked/pending，"
                 "analysis_status=complete 时 batch_implementation_gate 必须为 ready"
             )
-    return [(component, status) for component, status, _, _, _ in queue]
+    return [(component, status, options) for component, status, _, options, _ in queue]
 
 
 def record_fields(text: str) -> dict[str, str] | None:
@@ -1105,7 +1130,8 @@ def check_decision_records(
     inventory: list[InventoryItem],
     analysis_status: str | None,
     findings: Findings,
-    queue_rows: list[tuple[str, str]] | None = None,
+    queue_rows: list[tuple[str, str, str]] | None = None,
+    statuses: dict[str, str] | None = None,
 ) -> None:
     if not inventory:
         return
@@ -1139,16 +1165,46 @@ def check_decision_records(
             )
             continue
         matched_path, matched_text = matched
-        report_statuses = [
-            status
-            for component, status in (queue_rows or [])
-            if same_component(item.component, component)
-        ]
+        report_statuses = []
+        baseline_offered = False
+        for component, status, options in queue_rows or []:
+            if not same_component(item.component, component):
+                continue
+            report_statuses.append(status)
+            baseline_offered = baseline_offered or offers_baseline_choice(options)
         report_is_pending = "pending" in report_statuses
         fields = record_fields(matched_text)
         if fields is None:
             findings.error(f"决策记录为空或缺少“字段/内容”表：{matched_path.name}")
             continue
+        baseline = _filled(fields.get("baseline_evidence_status", "")).lower()
+        if baseline == "mismatch":
+            if analysis_status != "partial":
+                findings.error(
+                    "基线未选定（baseline_evidence_status=mismatch）时 "
+                    f"analysis_status 必须为 partial：{matched_path.name}"
+                )
+            if statuses is not None and statuses.get("decision_status") != "needs_choice":
+                findings.error(
+                    f"基线未选定时 decision_status 必须为 needs_choice：{matched_path.name}"
+                )
+            if (
+                statuses is not None
+                and statuses.get("batch_implementation_gate") != "frozen"
+            ):
+                findings.error(
+                    "基线未选定时 batch_implementation_gate 必须为 frozen："
+                    f"{matched_path.name}"
+                )
+            if "blocked" not in report_statuses:
+                findings.error(
+                    f"基线未选定时确认队列必须为 blocked：{matched_path.name}"
+                )
+            if not baseline_offered:
+                findings.error(
+                    "基线未选定的 blocked 行必须提供 use-claimed 与 use-resolved："
+                    f"{matched_path.name}"
+                )
         if analysis_status != "complete":
             check_partial_record_consistency(
                 item, fields, report_statuses, matched_path.name, findings
@@ -1158,10 +1214,10 @@ def check_decision_records(
         queue_status = fields.get("确认队列状态", "").lower()
         if report_is_pending or queue_status == "pending":
             baseline = fields.get("baseline_evidence_status", "").lower()
-            if baseline not in {"pending-tooling", "pending-tree", "mismatch"}:
+            if baseline not in {"pending-tooling", "pending-tree"}:
                 findings.error(
                     f"pending 决策记录须填写 baseline_evidence_status="
-                    f"pending-tooling|pending-tree|mismatch：{matched_path.name}"
+                    f"pending-tooling|pending-tree：{matched_path.name}"
                 )
             next_steps = fields.get("下一步补证", "")
             if not next_steps or next_steps in {"-", "—", "TBD", "待填"}:
@@ -1261,6 +1317,7 @@ def validate_report(path: Path) -> Findings:
         statuses.get("analysis_status"),
         findings,
         queue_rows=queue_rows,
+        statuses=statuses,
     )
     return findings
 
@@ -1380,21 +1437,6 @@ def check_batch_index(directory: Path, reports: list[Path], findings: Findings) 
         expected_domain = decision_domain or "—"
         if row[indexes["domain"]].strip() != expected_domain:
             findings.error(f"{BATCH_INDEX_NAME} 决策域与目录不一致：{batch_key}")
-        report_status = {
-            key: values[0]
-            for key, values in collect_status_occurrences(
-                report.read_text(encoding="utf-8").splitlines()
-            ).items()
-            if values
-        }
-        for key in ("analysis_status", "decision_status", "batch_implementation_gate"):
-            actual = report_status.get(key, "")
-            declared = row[indexes[key]].strip()
-            if actual and actual != declared:
-                findings.error(
-                    f"{BATCH_INDEX_NAME} {key} 与子报告不一致：{batch_key} "
-                    f"索引={declared} 报告={actual}"
-                )
         report_status = {
             key: values[0]
             for key, values in collect_status_occurrences(
