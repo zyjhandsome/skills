@@ -17,7 +17,7 @@
 | 依赖类型 `dependency_type` | 见下方加权表 | 见下方加权表 | 见下方加权表 |
 | 使用范围 `usage_scope` | 无源码命中=0；单文件=1 | 2–5 文件或局部模块=3 | 公共包装器、共享配置或 >5 文件=5 |
 | 业务关键性 `business_criticality` | 无引用=1 | 有引用但关键路径未确认=2；管理后台主要流程=3 | 登录、权限、支付、订单、上传等核心路径=5 |
-| lockfile 变化 `lockfile_change` | 无变化=0；单一预期版本=1 | 未知、少量间接变化或多版本=3 | baseline mismatch、大范围漂移=5 |
+| lockfile 变化 `lockfile_change` | 单一预期版本=1 | 未知、少量间接变化或多版本=3 | baseline mismatch、大范围漂移=5 |
 | 测试覆盖缺口 `test_coverage_gap` | 关键路径有充分自动化=0 | 部分覆盖或无法关联=2 | 无相关测试/核心失败路径未覆盖=3 |
 | peer 兼容性 `peer_compatibility` | 已确认兼容或无 peer=0 | 目标 workspace 精确版本未知/范围无法判定=2 | 已确认不满足目标 peerDependencies=5 |
 

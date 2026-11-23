@@ -24,6 +24,11 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from upgrade_lockfiles import parse_lock  # noqa: E402
+
 
 ANALYSIS_MODE = "migration-demand-diff"
 DISPOSITIONS = (
@@ -51,51 +56,23 @@ def load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def read_deps(package_json: Path) -> dict[str, str]:
+def read_deps(package_json: Path) -> dict[str, tuple[str, str]]:
+    """Package name to (spec, manifest field). The first field wins."""
     data = load_json(package_json)
-    out: dict[str, str] = {}
+    out: dict[str, tuple[str, str]] = {}
     for field in ("dependencies", "devDependencies", "optionalDependencies", "peerDependencies"):
         block = data.get(field) or {}
         if isinstance(block, dict):
             for name, spec in block.items():
-                out.setdefault(str(name), str(spec))
+                out.setdefault(str(name), (str(spec), field))
     return out
 
 
-def lock_direct_versions(lock_path: Path | None) -> dict[str, str]:
+def host_direct_versions(lock_path: Path | None, packages: list[str]) -> dict[str, str]:
+    """Resolved direct versions only. Transitive copies are not a host reuse."""
     if lock_path is None or not lock_path.is_file():
         return {}
-    text = lock_path.read_text(encoding="utf-8")
-    if lock_path.name == "pnpm-lock.yaml":
-        versions: dict[str, str] = {}
-        for match in re.finditer(r"(?m)^\s{2}(?:/)?(@?[^@\s]+(?:/[^@\s]+)?)@([^:\s]+):", text):
-            versions.setdefault(match.group(1), match.group(2))
-        return versions
-    if lock_path.name.endswith("package-lock.json"):
-        data = json.loads(text)
-        versions: dict[str, str] = {}
-        packages = data.get("packages") or {}
-        if isinstance(packages, dict):
-            root_deps = (packages.get("") or {}).get("dependencies") or {}
-            if isinstance(root_deps, dict):
-                for name, ver in root_deps.items():
-                    versions[str(name)] = str(ver)
-            for key, meta in packages.items():
-                if not isinstance(meta, dict):
-                    continue
-                if key.startswith("node_modules/"):
-                    name = key[len("node_modules/") :]
-                    if "node_modules/" in name:
-                        continue
-                    if meta.get("version"):
-                        versions.setdefault(name, str(meta["version"]))
-        deps = data.get("dependencies") or {}
-        if isinstance(deps, dict):
-            for name, meta in deps.items():
-                if isinstance(meta, dict) and meta.get("version"):
-                    versions.setdefault(str(name), str(meta["version"]))
-        return versions
-    return {}
+    return parse_lock(lock_path, packages).direct_versions
 
 
 def major_of(versionish: str) -> int | None:
@@ -123,7 +100,7 @@ def classify(
             "a_spec": a_spec,
             "b_status": f"stack-map→{stack_map[name]}",
             "disposition": "replace-as-B-stack",
-            "note": f"A package maps to host stack package {stack_map[name]}",
+            "note": f"A 的包映射到宿主技术栈包 {stack_map[name]}",
             "queue": "yes",
         }
     if name in b_manifest or name in b_lock:
@@ -134,7 +111,7 @@ def classify(
                 "a_spec": a_spec,
                 "b_status": f"present@{b_ver}",
                 "disposition": "reuse-B",
-                "note": "Always use host Vue3 runtime; never add Vue2/@vue/compat to B",
+                "note": "始终使用宿主的 Vue 3 运行时，不要把 Vue 2 或 @vue/compat 加到 B",
                 "queue": "no",
             }
         if majors_differ(a_spec, b_ver):
@@ -143,7 +120,7 @@ def classify(
                 "a_spec": a_spec,
                 "b_status": f"present@{b_ver}",
                 "disposition": "reuse-B-major-review",
-                "note": f"Host has package but major differs ({a_spec} vs {b_ver}); confirm API parity",
+                "note": f"宿主已有该包，但主版本不同（{a_spec} vs {b_ver}），需确认 API 是否可复用",
                 "queue": "yes",
             }
         return {
@@ -151,7 +128,7 @@ def classify(
             "a_spec": a_spec,
             "b_status": f"present@{b_ver}",
             "disposition": "reuse-B",
-            "note": "Host already has compatible major; reuse",
+            "note": "宿主直接依赖已有兼容主版本，直接复用",
             "queue": "no",
         }
     host_ui = None
@@ -173,11 +150,11 @@ def classify(
     }
     if name in replacements:
         target = replacements[name]
-        note = f"Host-aware replace → {target}"
+        note = f"按宿主技术栈替换为 {target}"
         if name == "element-ui" and host_ui is None:
-            note += "; stack-map required when host UI is non-Element"
+            note += "；宿主 UI 不是 Element 时必须传 --stack-map"
         if name == "element-ui":
-            note += "; visual:strategy needs_choice (UI replace vs 对齐 A)"
+            note += "；视觉策略 needs_choice（替换 UI 还是对齐 A）"
         return {
             "package": name,
             "a_spec": a_spec,
@@ -186,38 +163,38 @@ def classify(
             "note": note,
             "queue": "yes",
         }
-    if name in {"vue"}:
+    if name == "vue":
         return {
             "package": name,
             "a_spec": a_spec,
-            "b_status": b_lock.get("vue") or b_manifest.get("vue") or "check-host",
-            "disposition": "reuse-B",
-            "note": "Always use host Vue3 runtime; never add Vue2 to B",
-            "queue": "no",
+            "b_status": "absent",
+            "disposition": "add-to-B",
+            "note": "宿主没有 vue；若要补齐，只能加入宿主的 Vue 3，不能加入 Vue 2 或 @vue/compat",
+            "queue": "yes",
         }
     return {
         "package": name,
         "a_spec": a_spec,
         "b_status": "absent",
         "disposition": "add-to-B",
-        "note": "Not in B manifest/lock; confirm before adding",
+        "note": "B 的 manifest 和直接 lock 都没有该包，加入前需确认",
         "queue": "yes",
     }
 
 
 def filter_demand(
-    a_deps: dict[str, str], closure_file: Path | None
-) -> dict[str, str]:
+    a_deps: dict[str, tuple[str, str]], closure_file: Path | None
+) -> dict[str, tuple[str, str]]:
     if closure_file is None:
         return a_deps
-    names = {
+    names = [
         line.strip()
         for line in closure_file.read_text(encoding="utf-8").splitlines()
         if line.strip() and not line.strip().startswith("#")
-    }
-    return {k: v for k, v in a_deps.items() if k in names} or {
-        n: a_deps.get(n, "*") for n in names
-    }
+    ]
+    # Keep every requested name. A name missing from A's manifest is still demand
+    # (phantom or local); dropping it hid the gap.
+    return {name: a_deps.get(name, ("*", "closure")) for name in sorted(set(names))}
 
 
 def load_decisions(path: Path | None) -> dict[str, str]:
@@ -240,6 +217,14 @@ def load_decisions(path: Path | None) -> dict[str, str]:
     return {}
 
 
+def accepted_demand_disposition(answer: str, package: str) -> str | None:
+    prefix = f"proceed:demand:{package}:"
+    if not answer.startswith(prefix):
+        return None
+    disposition = answer[len(prefix):]
+    return disposition if disposition in DISPOSITIONS else None
+
+
 def apply_decisions(rows: list[dict[str, str]], decisions: dict[str, str]) -> list[dict[str, str]]:
     updated: list[dict[str, str]] = []
     for row in rows:
@@ -247,18 +232,16 @@ def apply_decisions(rows: list[dict[str, str]], decisions: dict[str, str]) -> li
         answer = decisions.get(pkg, "")
         status = "ready" if row.get("queue") == "yes" else "decided"
         if answer:
-            if any(tok in answer for tok in BLANKET_REJECT) and not answer.startswith("proceed:"):
-                status = "ready"
-                row = {
-                    **row,
-                    "decision_note": "rejected blanket natural language; ask proceed token",
-                }
-            elif answer.startswith("proceed:demand:") or answer.startswith("proceed:"):
+            disposition = accepted_demand_disposition(answer, pkg)
+            if disposition:
                 status = "decided"
+                row = {**row, "disposition": disposition, "decision_note": answer}
+            elif answer == "defer":
+                status = "deferred"
                 row = {**row, "decision_note": answer}
-            elif answer in {"defer", "other"}:
-                status = "deferred" if answer == "defer" else "ready"
-                row = {**row, "decision_note": answer}
+            elif answer == "other" or any(tok in answer for tok in BLANKET_REJECT):
+                status = "ready"
+                row = {**row, "decision_note": "unrecognized or blanket answer; ask proceed:demand token"}
             else:
                 status = "ready"
                 row = {**row, "decision_note": f"unrecognized answer {answer!r}"}
@@ -272,6 +255,15 @@ def askable_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
         for r in rows
         if r.get("queue") == "yes" and r.get("queue_status", "ready") in {"ready", "pending"}
     ]
+
+
+def batch_outcome(rows: list[dict[str, str]], lockfile_status: str) -> tuple[list[dict[str, str]], str, str, str]:
+    queue_rows = askable_rows(rows)
+    deferred = any(row.get("queue_status") == "deferred" for row in rows)
+    decision = "needs_choice" if queue_rows else "not_needed"
+    analysis = "partial" if queue_rows else "complete"
+    gate = "frozen" if queue_rows or deferred or lockfile_status != "present" else "ready"
+    return queue_rows, decision, analysis, gate
 
 
 def visual_handoff(rows: list[dict[str, str]]) -> dict[str, Any]:
@@ -320,10 +312,7 @@ def render_report(
         f"`proceed:demand:{r['package']}:{r['disposition']}` / `defer` / `other` |"
         for r in queue_rows
     ) or "| _(none)_ | demand | decided | 无待确认缺口 | n/a |"
-    decision = "needs_choice" if queue_rows else "decided"
-    analysis = "partial" if queue_rows else "complete"
-    # Host-port: gate uses B lock (implementation target), not A
-    gate = "frozen" if queue_rows or lockfile_status != "present" else "ready"
+    queue_rows, decision, analysis, gate = batch_outcome(rows, lockfile_status)
     summary_path = output_dir / "dependency-summary.json"
     return f"""# 迁入依赖差分（migration-demand-diff）
 
@@ -445,7 +434,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--decision-file",
         help="JSON map/list of package → proceed:demand:<pkg>:<disposition>|defer|other",
     )
-    p.add_argument("--batch-scope", default="page-closure")
+    p.add_argument("--batch-scope", default=None, help="Defaults to page-closure when a closure file is passed, otherwise full-manifest.")
     p.add_argument("--source-package-json", help="Override A package.json path")
     p.add_argument("--host-package-json", help="Override B package.json path")
     return p.parse_args(argv)
@@ -467,10 +456,10 @@ def main(argv: list[str]) -> int:
     if not a_pkg.is_file() or not b_pkg.is_file():
         print("ERROR: package.json missing on A or B", file=sys.stderr)
         return 5
-    a_deps = read_deps(a_pkg)
+    a_records = read_deps(a_pkg)
     closure = Path(args.closure_packages) if args.closure_packages else None
-    demand = filter_demand(a_deps, closure)
-    b_manifest = read_deps(b_pkg)
+    demand = filter_demand(a_records, closure)
+    b_manifest = {name: spec for name, (spec, _field) in read_deps(b_pkg).items()}
     host_lock_candidates = [
         host_root / "pnpm-lock.yaml",
         host_root / "package-lock.json",
@@ -485,29 +474,28 @@ def main(argv: list[str]) -> int:
     source_lock = next((p for p in source_lock_candidates if p.is_file()), None)
     lockfile_status = "present" if lock_path else "absent"
     source_lockfile_status = "present" if source_lock else "absent"
-    b_lock = lock_direct_versions(lock_path)
+    b_lock = host_direct_versions(lock_path, list(demand))
     stack_map = load_json(Path(args.stack_map)) if args.stack_map else {}
     if not isinstance(stack_map, dict):
         print("ERROR: stack-map must be a JSON object", file=sys.stderr)
         return 3
-    rows = [
-        classify(name, spec, b_manifest, b_lock, {str(k): str(v) for k, v in stack_map.items()})
-        for name, spec in sorted(demand.items())
-    ]
+    rows = []
+    for name, (spec, field) in sorted(demand.items()):
+        row = classify(name, spec, b_manifest, b_lock, {str(k): str(v) for k, v in stack_map.items()})
+        row["a_field"] = field
+        rows.append(row)
     decisions = load_decisions(Path(args.decision_file) if args.decision_file else None)
     rows = apply_decisions(rows, decisions)
-    queue_rows = askable_rows(rows)
+    queue_rows, decision, analysis, gate = batch_outcome(rows, lockfile_status)
     handoff = visual_handoff(rows)
-    decision = "needs_choice" if queue_rows else "decided"
-    analysis = "partial" if queue_rows else "complete"
-    gate = "frozen" if queue_rows or lockfile_status != "present" else "ready"
+    batch_scope = args.batch_scope or ("page-closure" if closure else "full-manifest")
     output_dir.mkdir(parents=True, exist_ok=True)
     md = render_report(
         source_root=source_root,
         host_root=host_root,
         rows=rows,
         output_dir=output_dir,
-        batch_scope=args.batch_scope,
+        batch_scope=batch_scope,
         lockfile_status=lockfile_status,
         source_lockfile_status=source_lockfile_status,
         queue_rows=queue_rows,

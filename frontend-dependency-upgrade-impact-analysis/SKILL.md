@@ -2,20 +2,13 @@
 name: frontend-dependency-upgrade-impact-analysis
 description: >
   Analyze, never implement, a frontend dependency upgrade, removal, replacement,
-  compliance concern, or A→B migration-demand-diff (source Vue2 closure deps vs
-  Vue3 host lock). Use when asked to assess an exact package upgrade, decide what
-  to do about an unmaintained or vulnerable package, compare packages needed by a
-  page closure on source A against host B, or check whether the project Node
-  runtime can run the upgrade commands at all. Resolves the frontend workspace and
-  authoritative lock baseline, collects version-specific upstream and code-impact
-  evidence, detects host/project Node conflicts, scores seven-factor risk, and writes a
-  Markdown decision report plus optional structured JSON in Simplified Chinese.
-  Behavior preservation is the default. Open-target disposition and exact-upgrade
-  proceed/defer stay human choices via the confirmation queue; batch_implementation_gate
-  freezes Stage B/C until the batch is clear. This skill ends only after the queue is
-  cleared, the decision file is written, the report is regenerated, and Agent review
-  raises analysis_status to complete — never at a draft exit-7 handoff, never at
-  implementation.
+  compliance concern, or A→B migration-demand-diff (packages a source closure needs
+  versus the host lock). Use when asked to assess an exact package upgrade, decide
+  what to do about an unmaintained or vulnerable package, compare that closure with
+  the host lock, or check whether project Node can run the upgrade commands. Writes
+  a Markdown decision report plus optional structured JSON in Simplified Chinese.
+  Do not use for whole-framework Vue 2 to 3 architecture analysis, page-level
+  migration execution, or post-upgrade CSS regression debugging.
 ---
 
 # Frontend Dependency Upgrade Impact Analysis
@@ -115,21 +108,23 @@ Language split is deliberate: this skill, its flags, and machine enums stay in E
 ## Generator
 
 ```bash
-python scripts/generate_upgrade_report.py <project-root> \
+python <skill-dir>/scripts/generate_upgrade_report.py <project-root> \
   --upgrade <package>:<from>:<to> \
   --change-dir <existing-change-dir>
 ```
+
+`<skill-dir>` is this skill's directory. `<project-root>` is the frontend workspace. Pass both explicitly; do not assume the shell is in either one.
 
 Common forms:
 
 ```bash
 # Exact upgrade; infer from the authoritative current lock
-python scripts/generate_upgrade_report.py . \
+python <skill-dir>/scripts/generate_upgrade_report.py <project-root> \
   --upgrade axios::1.7.9 \
   --change-dir openspec/changes/<id>
 
 # Open-target governance analysis with reviewed evidence
-python scripts/generate_upgrade_report.py . \
+python <skill-dir>/scripts/generate_upgrade_report.py <project-root> \
   --assess deprecated-client \
   --reason "deprecated-client=不符合维护状态要求" \
   --analysis-evidence-file dependency-analysis-evidence.json \
@@ -137,20 +132,20 @@ python scripts/generate_upgrade_report.py . \
   --json-output
 
 # Offline draft — ONLY after human/caller confirms (never from .npmrc/intranet heuristics)
-python scripts/generate_upgrade_report.py . \
+python <skill-dir>/scripts/generate_upgrade_report.py <project-root> \
   --upgrade vite:4.5.0:5.2.0 \
   --change-dir openspec/changes/<id> \
   --offline
 
 # Large cross-major exact upgrades soft-cap the version interval by default;
 # pass --full-interval only when the caller needs every intermediate release.
-python scripts/generate_upgrade_report.py . \
+python <skill-dir>/scripts/generate_upgrade_report.py <project-root> \
   --upgrade vue:2.6.10:3.5.13 \
   --output-dir <dir> \
   --full-interval
 
 # After decisions + Agent review (online evidence): finalize Stage A
-python scripts/generate_upgrade_report.py . \
+python <skill-dir>/scripts/generate_upgrade_report.py <project-root> \
   --upgrade axios::1.7.9 \
   --change-dir openspec/changes/<id> \
   --finalize-review

@@ -173,7 +173,7 @@
 
 ## 8. 报告映射
 
-不新增第 13 个顶层章节。在现有 12 章中映射：
+不新增第 14 个顶层章节。在现有 13 章中映射：
 
 - **升级摘要**：`node_runtime_status`、`execution_readiness`、本机当前 Node、所选项目 Node。
 - **依赖变化**：完整约束来源、兼容交集、管理器、已安装候选、目标包 engines、`selected_node_support` 与计划表核对日期。

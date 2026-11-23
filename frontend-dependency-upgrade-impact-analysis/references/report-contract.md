@@ -79,7 +79,7 @@ package、analysis mode、governance/upgrade reason、from、to、recommended ac
 
 必须呈现 manifest、lock、peer、engines、overrides/resolutions。`catalog:` 声明需同时呈现协议与解析出的有效范围。另需在本章包含“Node 运行时兼容性”小节，呈现本机当前 Node、项目约束来源、版本管理器、已安装兼容候选、所选精确项目 Node、`selected_node_support` 与发布计划核对日期、切换策略、实施阻塞项和恢复计划。目标未知时必须先呈现「依赖来源与父包链」，再呈现删除状态、证据、阻塞点、未知项、覆盖范围和可信度；随后**始终**呈现替代库候选与处置方案选项，不因某一路径已有候选而省略其他路径。**不得出现同库目标版本候选表**：未指定目标版本的包不以同库升级收场。候选矩阵至少包含 `compliance_status`、核查标准、排除原因、证据 URL、兼容性、合规/维护、迁移成本、验证范围和回滚难度。`eligible` 必须有核查标准与证据 URL。
 
-替代库候选另需 `origin`（`analysis-evidence` 或 `curated-map`）、推荐版本（未解析时写 `待解析`）、`兼容回退版本`、`排序`、`排序依据`、`约束匹配`、peer/engines，并在候选 `engines.node` 与所选项目 Node 冲突时写入排除原因。`curated-map` 候选恒为 `compliance_status=unknown`，不得据此改变推荐动作。
+替代库候选另需 `origin`（`analysis-evidence` 或 `curated-map`）、推荐版本（未解析时写 `待解析`）、`其他可选版本`、`排序`、`排序依据`、`约束匹配`、peer/engines，并在候选 `engines.node` 与所选项目 Node 冲突时写入排除原因。`curated-map` 候选恒为 `compliance_status=unknown`，不得据此改变推荐动作。
 
 排序只用机器可核信号，优先级固定为 `ALTERNATIVE_RANK_SIGNALS`：`human-reviewed`、`project-constraint-fit`、`not-deprecated`、`recent-release`、`declared-license`；逐项取值写入“排序依据”列。`约束匹配` 取 `fits` / `unknown` / `conflicts`。排序只是呈现顺序，不改变 `recommended_action`，也不构成选型。
 
@@ -167,7 +167,7 @@ Node 约束冲突、EOL 运行时、需要全局切换或恢复未验证时，�
 
 **完成态互斥：** `analysis_status=complete` **不得**与 `decision_status=needs_choice` 同时成立。确认队列未清空前，报告状态保持 `draft`、`analysis_status` 最高为 `partial`；生成器在无更高优先级阻塞时以 exit `7` 表示「草稿已写出、待人工确认；Agent 下一动作=照队列提问/补证据，不是等待放行」。人选轨/推进写入决策文件并重跑后，`decision_status` 变为 `not_needed`；Agent 完成证据复核并以 `--finalize-review` 重跑升 `analysis_status=complete`——这才是本技能终点。`batch_implementation_gate=frozen` 不阻止该分析终点；仅当闸门为 `ready` 时才可交接 Stage B。本技能终点是定稿分析/决策报告，不是实施。
 
-选项完整性闸门：未指定目标版本的包必须至少产出一个可执行选项（替代包、已成立的原生重构方案、已解析出父包的父包处置，或 `safe_removal_candidate`/`requires_migration` 的删除路径）。任一包 `option_status=missing` 时，结论必须点名该包，且报告不得提升为 `complete`。该闸门只约束完成状态，不改写 `recommended_action`。
+选项完整性闸门：未指定目标版本的包必须至少产出一个可执行选项（替代包、已成立的原生重构方案、已解析出父包的父包处置，来源为 `phantom` 的消除用法，或 `safe_removal_candidate` 的删除路径）。任一包 `option_status=missing` 时，结论必须点名该包，且报告不得提升为 `complete`。该闸门只约束完成状态，不改写 `recommended_action`。
 
 当 `decision_status=needs_choice` 时，报告首页与结论章必须置顶「待人工确认」说明，指向「人工确认队列」，并写明**下一动作=提问**；Agent 不得只交付 draft 后等待放行，不得在未提问、未写入决策文件、未重跑、未复核升 `complete` 前宣称本技能完成。`batch_implementation_gate=frozen` 时不得开实施计划或执行变更。细则见 `human-confirmation-gates.md`。
 

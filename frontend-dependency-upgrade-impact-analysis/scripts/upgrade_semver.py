@@ -25,9 +25,10 @@ _PARTIAL_RE = re.compile(
     r"(?:\+[0-9A-Za-z.-]+)?$"
 )
 _OPERATOR_RE = re.compile(r"^(?P<operator>>=|<=|>|<|=|\^|~>|~)\s*(?P<rest>.+)$")
-_UPPER_SENTINEL = (10 ** 9, 0, 0, 1, "")
+_UPPER_SENTINEL = (10 ** 9, 0, 0, 1, ())
+_RANGE_SPACE_RE = re.compile(r"(>=|<=|~>|\^|~|>|<|=)\s+")
 
-Key = tuple[int, int, int, int, str]
+Key = tuple[int, int, int, int, tuple]
 
 
 def clean_version(value: str) -> str:
@@ -44,6 +45,16 @@ def clean_version(value: str) -> str:
     return match.group("version") if match else value
 
 
+def _prerelease_key(value: str) -> tuple:
+    """Numeric prerelease identifiers compare as numbers, and sort before text."""
+    if not value:
+        return ()
+    parts: list[tuple[int, int | str]] = []
+    for part in value.split("."):
+        parts.append((0, int(part)) if part.isdigit() else (1, part))
+    return tuple(parts)
+
+
 def semver_key(value: str) -> Key | None:
     version = clean_version(value)
     match = VERSION_RE.fullmatch(version)
@@ -52,7 +63,7 @@ def semver_key(value: str) -> Key | None:
     base = version.split("+", 1)[0]
     main, _, prerelease = base.partition("-")
     major, minor, patch = (int(part) for part in main.split("."))
-    return major, minor, patch, 1 if not prerelease else 0, prerelease
+    return major, minor, patch, 1 if not prerelease else 0, _prerelease_key(prerelease)
 
 
 def compare_versions(left: str, right: str) -> int | None:
@@ -82,7 +93,7 @@ def classify_change(from_version: str, to_version: str) -> str:
 
 
 def _key(major: int, minor: int, patch: int, prerelease: str = "") -> Key:
-    return major, minor, patch, 1 if not prerelease else 0, prerelease
+    return major, minor, patch, 1 if not prerelease else 0, _prerelease_key(prerelease)
 
 
 def _partial(token: str) -> tuple[int | None, int | None, int | None, str] | None:
@@ -242,7 +253,7 @@ def range_satisfies(version: str, requirement: str) -> bool | None:
     key = semver_key(version)
     if key is None:
         return None
-    requirement = str(requirement or "").strip()
+    requirement = _RANGE_SPACE_RE.sub(r"\1", str(requirement or "").strip())
     if not requirement or requirement in _WILDCARDS:
         return True
     understood_any = False
