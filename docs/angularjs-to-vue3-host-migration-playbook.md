@@ -205,8 +205,8 @@ iframe/mail/external URL 与应用内跳转语义不同、宿主 store 权限清
                           未提供时不猜测，也不把项目附录当状态源
 
 自动派生并保持稳定：
-- canonical_skill_id：`angularjs-to-vue3-host-migration`。CONFIG、handoff、next_skill、报告 Skill 字段必须原样使用；
-  不得缩写成相近名称。
+- canonical_skill_id：`angularjs-to-vue3-host-migration`。只写入 `<CONFIG>.canonical_skill_id` 和报告正文，不得缩写。
+  delivery handoff 不写顶层 `skill` 键；跨家族停点用 `next_skill: null`。
 - <SLUG>：批次大小为 1 时由 <UNIT> 规范化；批次更大时由 <UNITS> 首个成员加 `-batch<N>` 规范化；过长时追加短 SHA-256
 - <CHANGE_ID>：migrate-<SLUG>-to-vue3-host
 - <CHANGE_DIR>：openspec\changes\<CHANGE_ID>
@@ -234,8 +234,8 @@ trace_path → get_code_snippet → query_graph。
 
 Canonical identity gate（每个 Wave 的恢复检查都执行）：
 - `<CONFIG>.canonical_skill_id == "angularjs-to-vue3-host-migration"`
-- 当前 handoff 的 `skill` / `next_skill` 若指向本领域 Skill，值必须严格等于 `angularjs-to-vue3-host-migration`
-- 缩写、近似名、旧 id 均使产生它的 CONFIG/handoff 无效；停止并返回该工件的产生 Wave 修正，禁止静默兼容
+- delivery handoff 不写顶层 `skill` 键。跨家族停点的 `next_skill` 必须是 `null`，不得写本领域 Skill 或其缩写
+- 缩写、近似名、旧 id 均使产生它的 CONFIG 或报告无效；停止并返回该工件的产生 Wave 修正，禁止静默兼容
 
 <INDEX_MANIFEST> 记录 A/B graph project、repo path、revision、index mode、indexed_at。
 图谱 revision 与仓库当前 revision 不一致视为 stale；stale 证据不能用于 pass。
@@ -319,7 +319,7 @@ openspec: cli-only 时按 Frame Skill 固定三行报告，并询问 initialize_
 正式创建或恢复唯一 <CHANGE_DIR>，并创建 <DOMAIN_ROOT>、<CONFIG>、
 <INDEX_MANIFEST>、<RUNTIME_MANIFEST>、<FRESHNESS_MANIFEST> 初始结构。
 <CONFIG> 或初始 evidence 必须包含 repo acquisition 表与 git hygiene 摘要。
-<CONFIG> 必须写入 canonical_skill_id=`angularjs-to-vue3-host-migration`；handoff/next_skill 不得使用缩写。
+<CONFIG> 必须写入 canonical_skill_id=`angularjs-to-vue3-host-migration`。delivery handoff 不写顶层 `skill` 键；跨家族停点用 `next_skill: null`，不得把本领域 Skill 或其缩写写入 `next_skill`。
 本波不得安装依赖或启动 A/B。
 
 只写意图草稿：
@@ -506,7 +506,7 @@ Step 2 产出切片计划：
 截图/DOM dump 脚本）；尝试失败必须记录失败原因，相关行保持 wired-unverified，不得直接标 verified。
 - 对照面发现按 `page-contract` / `host-chrome` / `environment-auth` / `environment-service` /
   `toolchain-warning` 分类；不同 viewport、未登录、端口不可达、title 前缀或宿主链接差异不得直接记成页体缺陷
-若已有 change，把 <MATRIX> path/digest 和切片计划写入 external_artifacts。
+若已有 change，把 <MATRIX> 写入 external_artifacts。每项只有 `path`、`digest`、`claims_used` 三个键；切片计划、A/B revision 和单元写进 `claims_used` 的字符串。
 
 Step 3 design-ready 判定：
 按 hosted-method 的 Design-Ready Gate 逐项判定。
@@ -569,8 +569,8 @@ design-scope=repair 且无升级条件 → 下一步 Wave 4R 同会话连跑；
 若批次的 design-scope 是 `repair` 且没有触发任何升级条件，本波不适用：改走 Wave 4R 同会话连跑。
 由 `repair` 升级而来的成员在本波按 new-landing 处理，并作废原快车道资格。
 
-从 domain evidence 摘要写入 external_artifacts：path、digest、A/B revision、<UNITS>、
-每个成员的 old URL、新 host entry 候选、rollback、blockers/residuals。
+从 domain evidence 写入 external_artifacts。每项只有 `path`、`digest`、`claims_used` 三个键。
+A/B revision、<UNITS>、每个成员的 old URL、新 host entry 候选、rollback、blockers/residuals 写成 `claims_used` 里的字符串。
 不要要求 angularjs-to-vue3-host-migration 的 schema 进入 Delivery 状态。
 
 基于当前领域事实完成 proposal.md 和增量规格：
@@ -664,8 +664,8 @@ Implementation go = one user ask）。把两次问询压成一次会破坏契约
 或 Wave 3 记录了任一升级条件，停止并改走 Wave 4 + Wave 5。
 
 Frame 段：
-从 domain evidence 摘要写入 external_artifacts：path、digest、A/B revision、<UNITS>、
-每个成员的 old URL、现有 host entry、rollback、blockers/residuals。
+从 domain evidence 写入 external_artifacts。每项只有 `path`、`digest`、`claims_used` 三个键。
+A/B revision、<UNITS>、每个成员的 old URL、现有 host entry、rollback、blockers/residuals 写成 `claims_used` 里的字符串。
 不要要求 angularjs-to-vue3-host-migration 的 schema 进入 Delivery 状态。
 写 proposal.md 和增量规格，范围固定为“<UNITS> 源站对等修复”：
 - 目标与非目标；A 只读、B host-native
@@ -790,7 +790,7 @@ visual 的 manual-only 只能覆盖像素/截图/测量类结论。
 禁止用“无测量链 → manual-only”跳过任何 display-contract 行；这些行是静态可对照的，必须逐行给结论。
 
 Wave 6 出口清单——以下任一不满足，不得写 overall_status=verified
-（最多 verified_with_residuals 并逐条列明原因，而它不能满足 Wave 7 完成候选）：
+（改为 overall_status=in_progress，并逐条列出残留；in_progress 不能满足 Wave 7 完成候选）：
 1. <MATRIX> 已写回：0 行仍停留在 design 初期的整表 `missing`；已接线行至少 `wired-unverified`，
    仅纯代码可证行可写 `verified`；写回同时刷新 <FRESHNESS_MANIFEST> 对应 digest
 2. 已按宿主工具链实际尝试本批每个 UNIT 的浏览器取证并记录结果。无 `node_modules`、
@@ -825,8 +825,8 @@ residual 清单、verification、handoff path/revision。说明下一步为 Wave
 批次结论不取平均：逐成员出结论，任一成员未结清则整批 fail。
 
 应已存在：Delivery verification、verified handoff、当前 B 代码、领域 assess/design evidence。
-Delivery 未 verified 则回 Wave 6，不得声称迁移完成。Delivery verified_with_residuals 只能作为有残留交付证据，
-不能满足本波完成候选。
+Delivery 未 verified 则回 Wave 6，不得声称迁移完成。Delivery overall_status=in_progress 只能作为有残留交付证据，
+并逐条列出残留；它不能满足本波完成候选。
 
 先校验：
 - A revision 是否仍等于领域证据绑定 revision；变化则回 Wave 2
