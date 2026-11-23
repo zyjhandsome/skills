@@ -33,13 +33,24 @@ Check each of these explicitly and record the result (including “not applicabl
 
 | Trap | Why the tree misses it | How to check |
 |---|---|---|
-| Shaded / relocated copies | a shaded jar inlines classes under a renamed package, so the GAV never appears | `maven-shade-plugin` / Gradle `shadow` in the build; `rg -n "shaded\.(io\.netty\|com\.fasterxml)"`; inspect jar entries of suspect uber-jars |
+| Shaded / relocated copies | a shaded jar or a third-party `*-shaded*` / `*-bundle*` (for example `grpc-netty-shaded`, `aws-java-sdk-bundle`) inlines classes, so the vulnerable GAV never appears | `maven-shade-plugin` / Gradle `shadow` in the build; `rg -n "shaded\.(io\.netty\|com\.fasterxml)"`; list entries of suspect uber-jars |
 | `META-INF/services` SPI files | wiring is by file, not import | `rg -n --files-with-matches "" src/main/resources/META-INF/services` and compare provider names against the target release |
 | JPMS `module-info` | automatic-module names and `requires` are compile-time contracts | `rg -n "requires .*(netty\|jackson\|lucene)" **/module-info.java` |
 | Multi-Release jars | behavior differs per running JDK | `Multi-Release: true` in the jar manifest; confirm the deployed JDK |
 | Native / classified artifacts | classifier variants are published per platform | verify the target version exists **per classifier**, not just for the base artifact |
 | `provided` / `test` scope | a change there cannot reach production, or only affects CI | candidate `scope` field |
 | Container-supplied jars | app server or agent supplies its own copy | deployment descriptors, `-javaagent`, container lib listings |
+
+Run the next checks when the move is MAJOR, crosses a Boot line, or
+`authority_layer=jdk`. On a same-line PATCH, write “not applicable” instead of
+a full pass.
+
+| Trap | How to check |
+|---|---|
+| `javax.*` → `jakarta.*` | Search both namespaces. A renamed package plus a same-named leftover jar is a split, not a drop-in |
+| Boot `spring.factories` → `AutoConfiguration.imports` | Third-party starters that only register the old file are silently not loaded on Boot 3+ |
+| Cross-node serialization | Jackson `StreamReadConstraints`, Protobuf, and other persisted payloads can break a rolling deploy even when one node starts |
+| Bytecode tooling ceiling | Lombok, MapStruct, and ASM must support the target class version; JDK 16+ often also needs named `--add-opens` |
 
 ## Compatibility verification to name (plan only)
 
@@ -48,7 +59,8 @@ For MINOR/MAJOR and every downgrade, name a machine-checkable API-diff step inst
 | Check | Tool candidates | Proves |
 |---|---|---|
 | Binary/source API diff between the two exact versions | `japicmp`, `revapi` | removed/changed signatures your code or its consumers touch |
-| Bytecode target/JDK API floor | `animal-sniffer` | the target does not require a newer JDK API than deployed |
+| Bytecode major of the target jar | `enforceBytecodeVersion`, or `javap -verbose` on the target jar | the artifact's class version (for example 61 for JDK 17) still loads on the deployed JDK |
+| JDK API floor of this project's own classes | `animal-sniffer` | this project's compiled code does not call a newer JDK API than deployed. It does not measure the target dependency's class version |
 | Duplicate/conflicting classes after the move | `maven-enforcer` `banDuplicateClasses`, `duplicate-finder` | two versions of the same package on the classpath |
 
 For MAJOR coordinate/package migrations, record that established migration

@@ -11,7 +11,7 @@
 | batch_implementation_gate | frozen |
 | behavior_parity_required | yes |
 | network_mode | online |
-| report_path | openspec/changes/dep-upgrade-2026q3/evidence/java-dependency-upgrade/exact/boot-bom__boot-3.2.x__variant-default__scope-json-netty/ |
+| report_path | openspec/changes/dep-upgrade-2026q3/evidence/java-dependency-upgrade/exact/boot-bom__3.2.x__default__json-netty/ |
 
 **横幅：** 待人工确认·下一动作=提问（jackson 行）；Netty 行待补证据
 
@@ -22,10 +22,10 @@
 - 环境前置：`java 17` / `mvn 3.9` / `python 3.12` PASS
 - 主机 JDK（探测）vs 工程声明：均为 17
 - JDK / Spring Boot 线：JDK 17 / Boot `3.2.x`
+- 构建变体：default；批次范围：json-netty
 - 入口：exact-table（精确表）
 - 报告路径（解析结果）：见状态表 `report_path`
-- 构建变体：default；批次范围：json-netty
-- 假设与限制：本批仅覆盖 `boot-bom` 权威层；其它层另批处理
+- 假设与限制：本批仅覆盖 `boot-bom` 权威层；`app-library` 层（Lucene、commons-lang）与 `platform-plugin` 层（Eureka）另批处理
 
 ## 2. 依赖清单与解析路径
 
@@ -92,5 +92,5 @@
 
 ## 10. 未决问题与证据缺口
 
-- `io.netty:netty-codec-base` 与 `netty-codec-compression` 目标版探测为 HTTP 404；已搜替代：同 GAV 在 4.1.136.Final 无上述成员；跨族相近制品不得静默替换 → `no-viable-path`；确认队列仍为 `blocked`（不得答人工 `defer`）。
+- `io.netty:netty-codec-base` 与 `netty-codec-compression` 目标版探测为 HTTP 404；已搜替代：同 GAV 在 4.1.136.Final 无上述成员发布；跨族「相近制品」不得静默替换 → `no-viable-path`，确认队列 `blocked`（不得答人工 `defer`）。
 - Jackson 2.21.4 release notes 直链待补，当前仅有仓库地址。

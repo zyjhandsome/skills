@@ -55,9 +55,9 @@ Prefer a tested Boot BOM set over the newest standalone artifact. Blanket-moving
 | Rung | Maven | Gradle | Keeps family aligned |
 |---|---|---|---|
 | 1. Owner bump | newer `spring-boot-starter-parent` / imported BOM version | newer `platform()` / `mavenBom` coordinate | yes |
-| 2. Owner property override | `<properties><netty.version>…</netty.version></properties>` (also `jackson-bom.version`, `lucene.version` when the BOM declares it) | `ext['netty.version'] = '…'` with the Boot Gradle plugin | yes — whole family moves together |
+| 2. Owner property override | `<properties><netty.version>…</netty.version></properties>` (also `jackson-bom.version`, `lucene.version` when the BOM declares it) | `ext['netty.version'] = '…'` **only** when `io.spring.dependency-management` is applied. A native `implementation(platform(...))` ignores `ext` silently; use `enforcedPlatform` or a BOM property that the platform actually reads | yes — whole family moves together |
 | 3. Family BOM import | import `jackson-bom` / `netty-bom` at the target version | `platform("io.netty:netty-bom:…")` | yes, but adds a second authority |
-| 4. Per-GAV pin | `dependencyManagement` entry for one artifact | `constraints { implementation("g:a:v") }` | **no** — splits the family |
+| 4. Per-GAV pin / downgrade | `dependencyManagement` entry for one artifact | `version { strictly("v") }` or `resolutionStrategy.force("g:a:v")`. A plain `constraints { implementation("g:a:v") }` is a floor: Gradle still picks the highest version and will not downgrade | **no** — splits the family |
 | 5. Exclusion + direct declaration | `<exclusions>` on the consumer plus a direct dependency | `exclude group:` plus explicit dependency | no — last resort for *version authority* |
 
 Rungs 4–5 are the “override” that needs a complete Decision Record. Verify the property name exists in the resolved BOM (`help:effective-pom`, or read `spring-boot-dependencies` for the active line) before recommending rung 2 — an invented property silently does nothing.
@@ -90,7 +90,10 @@ table still supplies a `to`, keep recommending `remove` and ask
 
 Before and after any build-tool probe, capture `git status --short`. A new
 tracked-file change is a hard safety stop; report the command and affected files
-without reverting unrelated user work.
+without reverting unrelated user work. Untracked files (a Gradle probe may create
+`.gradle/`) are recorded in the assumptions, not a hard stop. When the directory
+is not a git checkout, snapshot the mtimes of `pom.xml` / `build.gradle*` /
+`settings.gradle*` / `gradle/libs.versions.toml` instead and stop on a change.
 
 For Gradle, also read version catalogs (`gradle/libs.versions.toml` / catalog
 aliases) as declaration evidence; still confirm the **selected** version with
@@ -106,12 +109,15 @@ system **or** wrapper graded pass; if only the wrapper exists, record
 wrapper → `blocked`.
 
 ```shell
-mvn dependency:tree -Dverbose
-mvn dependency:tree -Dincludes=groupId:artifactId
-mvn help:effective-pom -Dverbose
+mvn -pl <module> -am dependency:tree -Dverbose -Dincludes=groupId:artifactId
+mvn -pl <module> -am dependency:tree -Dincludes=groupId:artifactId
+mvn -pl <module> -am help:effective-pom -Dverbose
 # Only with fresh compiled outputs; does not fork test-compile:
-mvn dependency:analyze-only
+mvn -pl <module> dependency:analyze-only
 ```
+
+`-Dverbose` is a lead for conflict paths, not the selected-version authority
+(see above). Do not start from an unbounded reactor tree.
 
 When Enforcer dependency-convergence is configured:
 
@@ -123,21 +129,34 @@ Do not claim convergence from a tree alone.
 
 ### Gradle
 
-Prefer `./gradlew` when present after a system **or** wrapper graded pass
-(see `environment-preflight.md`). If only the wrapper exists, record
-`build_tool_source=wrapper` and continue. If neither system `gradle` nor
-wrapper works, preflight must stay `blocked`.
+Prefer `./gradlew` whenever the wrapper passed preflight, even if a system
+`gradle` also exists (see `environment-preflight.md`). Record
+`build_tool_source=wrapper`. If neither the wrapper nor system `gradle` works,
+preflight must stay `blocked`.
 
 ```shell
-./gradlew dependencies
-./gradlew dependencyInsight --dependency <name> --configuration <configuration>
-./gradlew buildEnvironment
+./gradlew :<module>:dependencies --configuration runtimeClasspath
+./gradlew :<module>:dependencyInsight --dependency <name> --configuration runtimeClasspath
+./gradlew :<module>:buildEnvironment
 ```
 
-Or the system CLI (`gradle …`) when that matches the project’s expected major.
+Default the configuration to `runtimeClasspath`. Switch it for `provided`,
+`test`, or `annotationProcessor` instead of assuming every dependency is runtime.
+`dependencies` without a project path only shows the project you invoked.
+Prefer the wrapper that passed preflight over a global `gradle`.
 
 Report the project's actual conflict/verification gate; Gradle has no universal convergence task.
 
 ## Multi-module / multi-Boot
 
 Record per module: Boot line, JDK, and whether the candidate is inherited from a parent BOM. Do not merge two Boot lines into one decision batch.
+
+## Maven and Gradle do not arbitrate the same way
+
+| Question | Maven | Gradle |
+|---|---|---|
+| Who wins a version conflict | Nearest definition; same depth → first declaration | Highest version, unless a rich version (`strictly`, `reject`) or a force says otherwise |
+| BOM import order | `dependencyManagement` imports: the first declaration wins for a given managed GAV | `platform()` advises; `enforcedPlatform()` forces. Later platforms do not silently override an earlier enforced one |
+| `${revision}` | Read `.flattened-pom.xml` when `flatten-maven-plugin` is bound; a new flattened POM after a probe is a tracked-file stop | Not applicable; read the version catalog or `gradle.properties` |
+| Lockfile | None by default | `gradle.lockfile` is the selected version when dependency locking is enabled; prefer it over a catalog pin |
+| Included build | Parent POM reactor | `buildSrc/` and `includeBuild` can supply versions the root catalog does not show; name them in assumptions |

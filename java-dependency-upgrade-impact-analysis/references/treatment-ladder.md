@@ -41,13 +41,13 @@
 
 升降级对称：上移用 `upgrade-*`，下移/同版重对齐用 `move-*`。叶子「简单钉版本」不是默认首选。
 
-1. **`exclude`** — 仅当有证据表明业务未触达该传递分支。须在决策记录写明：排除后必做核心链路回归，否则可能 `ClassNotFoundException` / `NoClassDefFoundError`。验证成本过高 → 放弃本档，进入下一档。
+1. **`exclude`** — 仅当有证据表明业务未触达该传递分支。一条 `<exclusions>` 只切断一条边，须核对所有引入路径。排除 SPI、Jackson 模块或 Spring 自动配置包时，失败常常是静默行为退化，而不只是 `ClassNotFoundException` / `NoClassDefFoundError`。须在决策记录写明回归范围。验证成本过高 → 放弃本档，进入下一档。
 2. **`upgrade-introducer` / `move-introducer`** — 工程默认最优：查 tree 找到 introducer，查其是否有能把传递依赖收敛到目标版的 GA（升或降列车/上层坐标）；有则推荐动 introducer，而不是先钉传递叶子。
 3. **`force-align`** — 上层无法及时收敛时的干预；等同 Owner 阶梯的 per-GAV pin / force，须完整 Decision Record + 破例条件。显式降级的传递目标同样走此档，不要伪装成 `move-self`。
 4. **`replace-introducer` / `replace-component`** — 排除与强制对齐都会崩、或存在更好的二合一 starter / 换栈坐标 → 替换上层或整族；须 1–3 个已验证候选供人选择。
 5. **原生改造** — 调用面可去依赖时记入路径菜单（通常经确认词 `other` 进入下波），见 `next-action-choice-menus.md` §B。
 
-传递单元出确认问题时，必须附路径选项菜单（introducer / force-align / 换 starter 或换栈 / 原生改造），不得只给「钉叶子版 proceed」。
+传递单元出确认问题时，路径选项菜单的最低要求见 `next-action-choice-menus.md` §B：至少 A，外加 B 或 C/D 之一；E 在调用面非空时评估，否则写已证伪。不得只给「钉叶子版 proceed」。
 
 ## 与 Owner 阶梯的关系
 
@@ -70,7 +70,7 @@
 | `introducer_gav` | `owner_class=transitive` 或处置为 `upgrade-introducer` / `exclude` / `replace-introducer` |
 | `introducer_upgrade_available` | 评估过 `upgrade-introducer` 时：`yes` / `no` / `unknown` + 版本与依据 |
 | `replacement_candidates` | `replace-component` / `replace-introducer`：1–3 个候选坐标 + 维护信号 |
-| `alternative_candidates` | `choose-alternative`：1–3 个 `g:a:v` + `same-gav` / `replacement` + 独立存在性证据 |
+| `alternative_candidates` | `choose-alternative`：1–3 个同 GAV 的 `g:a:v`（`same-gav`）+ 独立存在性证据。换坐标属于 `replace-*`，不要写进本处置 |
 | `target_channel` | 有 `target_to` 时：`ga` / `non-ga` |
 
 ## GA-only

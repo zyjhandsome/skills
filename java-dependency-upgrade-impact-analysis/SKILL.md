@@ -5,7 +5,8 @@ description: >
   BOM conflict, or whole-repo upgrade inventory. Use when asked to assess exact
   GAV from→to upgrades, Spring Boot–managed jars (Netty, Jackson, Lucene, Eureka),
   commons-lang migrations, CVE-driven version moves, unused-jar removal, transitive
-  exclusion/force-align, or component replacement.
+  exclusion/force-align, or component replacement. Not a Spring Boot generation
+  migration (2.x to 3.x or 3.x to 4.x); use spring-boot-4-upgrade for that.
 ---
 
 # Java Dependency Upgrade Impact Analysis
@@ -23,9 +24,11 @@ Resolve the report directory under Output unless the caller overrides it.
 ## Environment preflight
 
 Before any analysis (including manifest-only reads), run
-`references/environment-preflight.md`. Missing `java`, the **selected** build
-tool (system `mvn`/`gradle` preferred; wrapper-only is a graded pass — see
-preflight), or Python → batch-wide `analysis_status=blocked`; list gaps in
+`references/environment-preflight.md` with
+`python -B "<skill-dir>/scripts/preflight.py"` (`<skill-dir>` is this file's
+directory; if `python` fails, try `python3`, then `py -3`). Missing `java`, the
+**selected** build tool (Maven: system `mvn`, else wrapper; Gradle: wrapper when
+present; wrapper-only is a graded pass), or Python → batch-wide `analysis_status=blocked`; list gaps in
 chat; **do not write** reports. Host JDK vs project declaration mismatch is
 recorded, not a block. Network probe runs in the same wave; dual
 registry+GitHub failure follows the existing offline confirm gate (not a
@@ -49,8 +52,8 @@ tool-preflight failure).
 - **Default posture:** preserve observable behavior unless the user explicitly
   allows behavior change.
 - **Treatment then owner:** pick `recommended_treatment` from
-  `references/treatment-ladder.md` (direct: remove → upgrade → replace;
-  transitive: exclude-if-untouched → upgrade-introducer → force-align →
+  `references/treatment-ladder.md` (direct: remove → upgrade-self / upgrade-owner
+  → replace-component; transitive: exclude → upgrade-introducer → force-align →
   replace-introducer) before locking a version authority move. Then apply
   owner-first (`references/owner-and-resolution.md`: BOM bump → property →
   family BOM → per-GAV pin). Per-GAV pins / force-align need a complete Decision
@@ -129,9 +132,9 @@ Resolve the report directory in this order:
 
 1. Explicit `--output-dir` override when the caller must write elsewhere.
 2. Existing `--change-dir` → `<change-dir>/evidence/java-dependency-upgrade/`
-3. Else under the analyzed project root, match an existing
-   `openspec/changes/<id>/` (one → use; many → ask; none → ask for
-   `--change-dir` or `--output-dir`).
+3. Else match an existing `openspec/changes/<id>/` (one → use; many or none → ask).
+   Offer `~/.cache/java-dependency-upgrade/<project-directory-name>/` and do not
+   create it until the user accepts that path or names another directory.
 
 Do **not** invent a project-root report folder or create OpenSpec changes.
 This skill **may** create `evidence/java-dependency-upgrade/` inside an
@@ -139,10 +142,10 @@ This skill **may** create `evidence/java-dependency-upgrade/` inside an
 preflight passed, **read-only analysis is allowed**; **do not write** reports.
 Preflight failure → stop (no analysis, no write).
 
-Write at least `java-dependency-upgrade-report.md`. Multi-batch layout:
-`<entry-kind>/<authority-layer>__<boot-line>__variant-<build-variant>__scope-<batch-scope>[__domain-<decision-domain>]/…`
+Write at least `report.md`. Multi-batch layout:
+`<entry-kind>/<authority-layer>__<boot-line>__<build-variant>__<batch-scope>[__<decision-domain>]/…`
 plus root `BATCH-INDEX.md`
-(`entry-kind` = `exact` / `open-target`; `boot-line` = `boot-<line>` / `no-boot`).
+(`entry-kind` = `exact` / `open-target`; `boot-line` = `<line>` / `no-boot`, same text as `boot_line`).
 Prose defaults to Simplified Chinese; keep GAV/versions/paths/commands/enums/URLs
 verbatim. Required sections: `references/report-contract.md`. State the actual
 resolved report path in the packet header.
@@ -150,21 +153,20 @@ resolved report path in the packet header.
 ## Validator
 
 ```shell
-python scripts/validate_report.py <report.md>
-python scripts/validate_report.py --evidence-dir <evidence-dir> [--json]
+python -B "<skill-dir>/scripts/validate_report.py" <report.md>
+python -B "<skill-dir>/scripts/validate_report.py" --evidence-dir <evidence-dir> [--json]
 ```
 
 Exit `0` pass / `3` errors / `4` path missing. A pass means well-formed, never that
-evidence is sufficient. Fixtures: `fixtures/valid-report*.md` (partial/complete/
-remove/replace/open-target/choose-alternative/pending-baseline); multi-batch under
-`examples/sample-evidence-multi/`. Decision records live in `decision-records/`
-beside each report.
+evidence is sufficient. Decision records live in `records/` beside each
+report. Layout example: `examples/sample-evidence-multi/`. Do not load `fixtures/`
+during analysis.
 
 ## Status axes
 
 | Axis | Meaning |
 |---|---|
-| `analysis_status` | `partial` / `blocked` / `complete` — packet-level; `blocked` = batch-wide baseline/offline/**environment-preflight** gate (see confirmation gates) |
+| `analysis_status` | `partial` / `blocked` / `complete` — packet-level; `blocked` = batch-wide offline/**environment-preflight** gate. A claimed-`from` mismatch blocks that row only |
 | `decision_status` | `needs_choice` / `not_needed` / `decided` |
 | `batch_implementation_gate` | `frozen` / `ready` (informational; this skill never implements) |
 | also required | `behavior_parity_required`, `network_mode`, `report_path` — see `references/report-contract.md` |
@@ -179,16 +181,17 @@ stays `frozen`). Uncleared `ready`/`pending` ⇒ **ask now**, not “继续/放�
 - Environment preflight passed (JDK + selected `mvn`|`gradle`|wrapper + Python)
 - Baselines/owner/treatment recorded; targets + alternatives verified; ladder +
   owner-first done or ruled out; upstream URLs or offline gaps; fact/inference
-  split; queue zero `ready`/`pending`; `decision-records/` complete; validator
+  split; queue zero `ready`/`pending`; `records/` complete; validator
   exit `0`; Agent review → `analysis_status=complete`
 
 ## References
 
-`references/next-action-choice-menus.md`, `references/environment-preflight.md`,
-`references/treatment-ladder.md`, `references/owner-and-resolution.md`,
-`references/dual-entry-and-batching.md`, `references/reachability-and-upstream.md`,
-`references/impact-and-validation.md`, `references/human-confirmation-gates.md`,
-`references/report-contract.md`, `references/decision-record-schema.md`,
-`references/common-gav-repos.md`, `references/common-upgrade-patterns.md`,
-`templates/decision-packet.md`, `templates/decision-record.md`, `scripts/`,
-`fixtures/`, `examples/sample-evidence-multi/`.
+Always: `references/environment-preflight.md`, `references/report-contract.md`,
+`templates/decision-packet.md`, `templates/decision-record.md`.
+
+| When | Also read |
+|---|---|
+| Treatment or owner | `references/treatment-ladder.md`, `references/owner-and-resolution.md` |
+| Batching, targets, menus | `references/dual-entry-and-batching.md`, `references/next-action-choice-menus.md` |
+| Confirmation or offline | `references/human-confirmation-gates.md`, `references/reachability-and-upstream.md` |
+| Impact, patterns, records | `references/impact-and-validation.md`, `references/common-upgrade-patterns.md`, `references/common-gav-repos.md`, `references/decision-record-schema.md` |

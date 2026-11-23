@@ -34,5 +34,5 @@
 | 回滚触发条件 + 恢复目标 | 契约失败 → 恢复 `jackson-bom.version=2.21.2` |
 | 责任人 | 平台组 |
 | 推荐确认选项 | `proceed:com.fasterxml.jackson.core:jackson-databind:2.21.4` / `defer` / `other` |
-| 确认队列状态 | ready（partial 样例）/ decided（complete 样例） |
-| 人工答复 | （complete）`proceed:com.fasterxml.jackson.core:jackson-databind:2.21.4` |
+| 确认队列状态 | ready |
+| 人工答复 | — |

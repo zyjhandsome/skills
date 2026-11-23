@@ -11,7 +11,7 @@
 | batch_implementation_gate | frozen |
 | behavior_parity_required | yes |
 | network_mode | online |
-| report_path | openspec/changes/dep-upgrade-2026q3/evidence/java-dependency-upgrade/exact/app-library__no-boot__variant-default__scope-commons-lang__domain-commons-lang-major/ |
+| report_path | openspec/changes/dep-upgrade-2026q3/evidence/java-dependency-upgrade/exact/app-library__no-boot__default__commons-lang__commons-lang-major/ |
 
 **横幅：** 待人工确认·下一动作=提问
 

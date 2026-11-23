@@ -6,8 +6,8 @@ build file, resolves versions, or reaches the network — a passing report is st
 just a well-formed report, not verified evidence.
 
 Usage:
-    python scripts/validate_report.py <report.md> [--json]
-    python scripts/validate_report.py --evidence-dir <dir> [--json]
+    python -B "<skill-dir>/scripts/validate_report.py" <report.md> [--json]
+    python -B "<skill-dir>/scripts/validate_report.py" --evidence-dir <dir> [--json]
 
 Exit codes:
     0  no errors
@@ -25,9 +25,9 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-REPORT_NAME = "java-dependency-upgrade-report.md"
+REPORT_NAME = "report.md"
 BATCH_INDEX_NAME = "BATCH-INDEX.md"
-DECISION_RECORDS_DIR = "decision-records"
+DECISION_RECORDS_DIR = "records"
 
 STATUS_ENUMS: dict[str, set[str]] = {
     "analysis_status": {"partial", "blocked", "complete"},
@@ -86,18 +86,21 @@ TREATMENT_VALUES = {
 }
 NO_TARGET_TREATMENTS = {"remove", "exclude", "no-viable-path"}
 QUEUE_STATUSES = {"ready", "pending", "blocked", "decided", "deferred"}
-# Match Maven/Spring qualifiers with optional trailing digits: RC1, Alpha5, Beta2, M5.
+# Qualifiers, including Jackson ``.pr1``, ``-b01``, glued ``RC1``, and ``21-ea+35``.
+_NON_GA_WORD = (
+    "alpha|beta|milestone|snapshot|preview|nightly|candidate|eap|rc|cr|pr|pre|ea|dev|m"
+)
 NON_GA_PATTERN = re.compile(
-    r"(?i)(?:^|[.\-])"
-    r"(?:alpha|beta|rc|cr|m|milestone|snapshot|preview|pre|ea|eap|dev|nightly|candidate)"
-    r"\d*(?:[.\-]|$)"
+    rf"(?i)(?:^|[.\-])(?:{_NON_GA_WORD})\d*(?:[.\-+]|$)"
+    r"|(?<=\d)(?:alpha|beta|rc|cr|pr|ea|eap|preview)\d+"
+    r"|(?:^|[.\-])b\d+"
 )
 PENDING_MARKERS = ("待补证", "pending-baseline", "pending baseline", "补证清单")
 PENDING_OPTION_EXACT = {"defer", "other"}
 
 ENTRY_KINDS = {"exact", "open-target"}
 AUTHORITY_LAYERS = {"jdk", "boot-bom", "platform-plugin", "app-library"}
-BOOT_LINE_PATTERN = re.compile(r"^boot-[A-Za-z0-9][A-Za-z0-9._-]*$")
+BOOT_LINE_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 DECISION_DOMAIN_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
 GAV_TOKEN = re.compile(r"[A-Za-z0-9_.\-]+:[A-Za-z0-9_.\-*]+")
@@ -198,9 +201,11 @@ def split_row(line: str) -> list[str]:
     stripped = line.strip()
     if stripped.startswith("|"):
         stripped = stripped[1:]
-    if stripped.endswith("|"):
+    if stripped.endswith("|") and not stripped.endswith("\\|"):
         stripped = stripped[:-1]
-    return [clean_cell(cell) for cell in stripped.split("|")]
+    placeholder = "\x00"
+    stripped = stripped.replace("\\|", placeholder)
+    return [clean_cell(cell).replace(placeholder, "|") for cell in stripped.split("|")]
 
 
 def is_separator(line: str) -> bool:
@@ -232,10 +237,39 @@ def read_tables(lines: list[str]) -> list[list[list[str]]]:
     return tables
 
 
+def without_fenced_blocks(lines: list[str]) -> list[str]:
+    """Blank fenced regions but keep indexes aligned with the original lines."""
+    visible: list[str] = []
+    in_fence = False
+    for line in lines:
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            visible.append("")
+            continue
+        visible.append("" if in_fence else line)
+    return visible
+
+
+def heading_lines(lines: list[str]) -> list[tuple[int, str]]:
+    visible = without_fenced_blocks(lines)
+    found: list[tuple[int, str]] = []
+    for index, line in enumerate(visible):
+        if re.match(r"^#{1,2}\s+\S", line):
+            found.append((index, line))
+    return found
+
+
+def status_preamble(lines: list[str]) -> list[str]:
+    """Lines before the first required section. Status fields live here."""
+    for index, line in heading_lines(lines):
+        heading = re.sub(r"^\d+\.\s*", "", line.lstrip("#").strip())
+        if heading in REQUIRED_SECTIONS:
+            return lines[:index]
+    return lines
+
+
 def section_bounds(lines: list[str]) -> dict[str, tuple[int, int]]:
-    heading_at: list[tuple[int, str]] = [
-        (index, line) for index, line in enumerate(lines) if line.startswith("#")
-    ]
+    heading_at = heading_lines(lines)
     bounds: dict[str, tuple[int, int]] = {}
     for position, (index, line) in enumerate(heading_at):
         end = heading_at[position + 1][0] if position + 1 < len(heading_at) else len(lines)
@@ -247,20 +281,52 @@ def section_bounds(lines: list[str]) -> dict[str, tuple[int, int]]:
     return bounds
 
 
+def ordered_gav_tokens(cell: str) -> list[str]:
+    return GAV_TOKEN.findall(cell)
+
+
 def gav_tokens(cell: str) -> set[str]:
-    return set(GAV_TOKEN.findall(cell))
+    return set(ordered_gav_tokens(cell))
+
+
+def _is_status_assignment(key: str, value: str) -> bool:
+    if key in FREE_TEXT_STATUS:
+        return True
+    if looks_like_placeholder(value):
+        return True
+    return value in STATUS_ENUMS.get(key, set())
+
+
+def collect_status_occurrences(lines: list[str]) -> dict[str, list[str]]:
+    """Authoritative status rows are in the preamble.
+
+    A later table counts only when its cell is itself a status value, so an
+    explanatory mention such as 「待确认后改为 complete」is not a second field.
+    """
+    occurrences: dict[str, list[str]] = {}
+
+    def absorb(region: list[str], assignments_only: bool) -> None:
+        for table in read_tables(region):
+            for row in table:
+                if len(row) < 2:
+                    continue
+                key = row[0]
+                if key not in STATUS_ENUMS and key not in FREE_TEXT_STATUS:
+                    continue
+                value = row[1]
+                if assignments_only and not _is_status_assignment(key, value):
+                    continue
+                occurrences.setdefault(key, []).append(value)
+
+    preamble = status_preamble(lines)
+    absorb(preamble, False)
+    absorb(lines[len(preamble) :], True)
+    return occurrences
 
 
 def check_status_table(lines: list[str], findings: Findings) -> dict[str, str]:
     values: dict[str, str] = {}
-    occurrences: dict[str, list[str]] = {}
-    for table in read_tables(lines):
-        for row in table:
-            if len(row) < 2:
-                continue
-            key = row[0]
-            if key in STATUS_ENUMS or key in FREE_TEXT_STATUS:
-                occurrences.setdefault(key, []).append(row[1])
+    occurrences = collect_status_occurrences(lines)
 
     for key, found in occurrences.items():
         if len(found) > 1:
@@ -536,7 +602,7 @@ def pending_question_has_marker(question: str, options: str, row_text: str) -> b
 
 
 def primary_gav(component: str) -> str | None:
-    tokens = sorted(gav_tokens(component))
+    tokens = ordered_gav_tokens(component)
     return tokens[0] if tokens else None
 
 
@@ -549,21 +615,18 @@ def decision_record_slug(component: str) -> str:
 
 
 def parse_ga_version(cell: str) -> tuple[str | None, str | None]:
-    tokens = gav_tokens(cell)
+    tokens = ordered_gav_tokens(cell)
     if not tokens:
         version_match = re.search(r"([A-Za-z0-9_.+\-]+)\s*$", clean_cell(cell))
         return None, version_match.group(1) if version_match else None
-    token = sorted(tokens)[0]
-    group, _, rest = token.partition(":")
-    artifact, _, version = rest.partition(":")
-    if version:
-        return f"{group}:{artifact}", version
-    # replacement cell may be g:a:v already captured as one token without third colon
-    # when version was separate — handle g:a only
-    parts = clean_cell(cell).split(":")
-    if len(parts) >= 3:
-        return f"{parts[0]}:{parts[1]}", parts[2]
-    return f"{group}:{artifact}", None
+    token = tokens[0]
+    cleaned = clean_cell(cell)
+    at = cleaned.find(token)
+    rest = cleaned[at + len(token) :] if at >= 0 else ""
+    version_match = re.match(r":([A-Za-z0-9_.+\-]+)", rest)
+    if version_match:
+        return token, version_match.group(1)
+    return token, None
 
 
 def wildcard_artifact_match(pattern: str, concrete: str) -> bool:
@@ -675,7 +738,6 @@ def check_queue(
             findings.error(
                 f"「{section}」表为空，但 decision_status 不是 not_needed：确认队列必须出现过"
             )
-        return []
 
     component_at = header.index("组件")
     status_at = header.index("状态")
@@ -796,14 +858,14 @@ def check_queue(
             elif item.treatment == "choose-alternative":
                 expected_ga, _ = parse_ga_version(item.replacement)
                 original_ga = primary_gav(item.component)
-                same_gav = bool(
-                    expected_ga and original_ga and same_component(expected_ga, original_ga)
-                )
-                expected_kind = PROCEED_OPTION if same_gav else REPLACE_OPTION
-                expected_label = "proceed:g:a:v" if same_gav else "replace:g:a:v"
-                if not any(expected_kind.fullmatch(option) for option in cleaned_options):
+                if expected_ga and original_ga and not same_component(expected_ga, original_ga):
                     findings.error(
-                        f"choose-alternative 的 ready 行缺少合法 {expected_label}：{component}"
+                        f"choose-alternative 的推荐替代必须与原请求同 GAV："
+                        f"{component} 原={original_ga} 替代={expected_ga}"
+                    )
+                if not any(PROCEED_OPTION.fullmatch(option) for option in cleaned_options):
+                    findings.error(
+                        f"choose-alternative 的 ready 行缺少合法 proceed:g:a:v：{component}"
                     )
                 check_option_target_consistency(item, cleaned_options, findings)
 
@@ -873,6 +935,171 @@ def check_queue(
     return [(component, status) for component, status, _, _, _ in queue]
 
 
+def record_fields(text: str) -> dict[str, str] | None:
+    tables = read_tables(text.splitlines())
+    field_table = next(
+        (
+            table
+            for table in tables
+            if table
+            and len(table[0]) >= 2
+            and table[0][0] == "字段"
+            and table[0][1] == "内容"
+        ),
+        None,
+    )
+    if field_table is None or len(field_table) == 1:
+        return None
+    return {
+        row[0]: row[1]
+        for row in field_table[1:]
+        if len(row) >= 2 and row[0]
+    }
+
+
+def match_decision_record(
+    component: str, file_text: dict[Path, str]
+) -> tuple[Path, str] | None:
+    """Match on the file name first. Body text is only a fallback for the 组件 field.
+
+    A record that merely mentions another GAV (for example ``introducer_gav``)
+    must not be treated as that component's record.
+    """
+    slug = decision_record_slug(component)
+    by_name: list[tuple[Path, str]] = []
+    for path, text in file_text.items():
+        stem_gav = path.stem.replace("__", ":", 1)
+        if path.stem == slug or same_component(component, stem_gav):
+            by_name.append((path, text))
+    if by_name:
+        for path, text in by_name:
+            if path.stem == slug:
+                return path, text
+        return by_name[0]
+    for path, text in file_text.items():
+        fields = record_fields(text)
+        recorded = fields.get("组件", "") if fields else ""
+        if recorded and same_component(component, recorded):
+            return path, text
+    return None
+
+
+def _filled(value: str) -> str:
+    cleaned = value.strip()
+    if not cleaned or cleaned in {"-", "—", "TBD", "待填"} or looks_like_placeholder(cleaned):
+        return ""
+    return cleaned
+
+
+def check_partial_record_consistency(
+    item: InventoryItem,
+    fields: dict[str, str],
+    report_statuses: list[str],
+    name: str,
+    findings: Findings,
+) -> None:
+    """On a non-complete packet, check only the four fields that must not drift."""
+    component = _filled(fields.get("组件", ""))
+    if component and not same_component(item.component, component):
+        findings.error(f"决策记录组件与清单不一致：{name}")
+    treatment = _filled(fields.get("建议处置", "")).lower()
+    if treatment and treatment != item.treatment:
+        findings.error(f"决策记录建议处置与清单不一致：{name}")
+    direction = _filled(fields.get("方向", "")).lower()
+    if direction and direction != item.direction:
+        findings.error(f"决策记录方向与清单不一致：{name}")
+    queue_status = _filled(fields.get("确认队列状态", "")).lower()
+    if not queue_status:
+        return
+    if queue_status not in QUEUE_STATUSES:
+        findings.error(f"决策记录确认队列状态非法：{name}")
+        return
+    if report_statuses and queue_status not in report_statuses:
+        findings.error(
+            f"决策记录确认队列状态与报告确认队列不一致："
+            f"{name} 记录={queue_status} 报告={'/'.join(report_statuses)}"
+        )
+
+
+_ANSWER_PROCEED = re.compile(
+    r"proceed:([A-Za-z0-9_.\-]+):([A-Za-z0-9_.\-*]+):([A-Za-z0-9_.+\-]+)"
+)
+_ANSWER_REPLACE = re.compile(
+    r"replace:([A-Za-z0-9_.\-]+):([A-Za-z0-9_.\-*]+)(?::([A-Za-z0-9_.+\-]+))?"
+)
+
+
+def _has_answer_word(text: str, word: str) -> bool:
+    return bool(re.search(rf"(?<![A-Za-z0-9_.:\-]){word}(?![A-Za-z0-9_.:\-])", text))
+
+
+def check_recorded_answer(
+    item: InventoryItem,
+    queue_status: str,
+    answer: str,
+    name: str,
+    findings: Findings,
+) -> None:
+    if queue_status not in {"decided", "deferred"}:
+        return
+    text = answer or ""
+    proceeds = list(_ANSWER_PROCEED.finditer(text))
+    replaces = list(_ANSWER_REPLACE.finditer(text))
+    has_remove = _has_answer_word(text, "remove")
+    has_exclude = _has_answer_word(text, "exclude")
+    has_defer = _has_answer_word(text, "defer")
+    if queue_status == "deferred":
+        if not has_defer or proceeds or replaces or has_remove or has_exclude:
+            findings.error(f"deferred 的人工答复必须是 defer：{name}")
+        return
+    if has_defer and not (proceeds or replaces or has_remove or has_exclude):
+        findings.error(f"defer 答复对应的确认队列状态必须是 deferred：{name}")
+        return
+    if item.treatment in MOVE_TREATMENTS or item.treatment == "choose-alternative":
+        if not proceeds:
+            findings.error(f"已决策的版本移动缺少 proceed:g:a:v 答复：{name}")
+            return
+        group, artifact, version = proceeds[0].groups()
+        option_ga = f"{group}:{artifact}"
+        if item.treatment == "choose-alternative":
+            expected_ga, expected_version = parse_ga_version(item.replacement)
+        else:
+            expected_ga, expected_version = primary_gav(item.component), item.target
+        if expected_ga and not same_component(expected_ga, option_ga):
+            findings.error(
+                f"人工答复坐标与清单不一致：{name} 清单={expected_ga} 答复={option_ga}"
+            )
+        if (
+            expected_version
+            and expected_version not in {"-", "—"}
+            and version != expected_version
+        ):
+            findings.error(
+                f"人工答复版本与清单不一致：{name} 清单={expected_version} 答复={version}"
+            )
+        return
+    if item.treatment in REPLACE_TREATMENTS:
+        if not replaces:
+            findings.error(f"已决策的替换缺少 replace:g:a[:v] 答复：{name}")
+            return
+        group, artifact, version = replaces[0].groups()
+        option_ga = f"{group}:{artifact}"
+        expected_ga, expected_version = parse_ga_version(item.replacement)
+        if expected_ga and not same_component(expected_ga, option_ga):
+            findings.error(
+                f"人工答复坐标与清单不一致：{name} 清单={expected_ga} 答复={option_ga}"
+            )
+        if expected_version and version and expected_version != version:
+            findings.error(
+                f"人工答复版本与清单不一致：{name} 清单={expected_version} 答复={version}"
+            )
+        return
+    if item.treatment == "remove" and not has_remove:
+        findings.error(f"已决策的 remove 缺少 remove 答复：{name}")
+    elif item.treatment == "exclude" and not has_exclude:
+        findings.error(f"已决策的 exclude 缺少 exclude 答复：{name}")
+
+
 def check_decision_records(
     report_path: Path,
     inventory: list[InventoryItem],
@@ -904,52 +1131,30 @@ def check_decision_records(
     file_text = {path: path.read_text(encoding="utf-8") for path in files}
     for item in inventory:
         slug = decision_record_slug(item.component)
-        matched_path: Path | None = None
-        matched_text = ""
-        for path, text in file_text.items():
-            if path.stem == slug or same_component(item.component, path.stem.replace("__", ":")):
-                matched_path, matched_text = path, text
-                break
-            if same_component(item.component, text) or slug in path.stem:
-                matched_path, matched_text = path, text
-                break
-            if primary_gav(item.component) and primary_gav(item.component) in text:
-                matched_path, matched_text = path, text
-                break
-        if matched_path is None:
+        matched = match_decision_record(item.component, file_text)
+        if matched is None:
             findings.error(
                 f"依赖清单组件缺少决策记录文件：{item.component} "
-                f"（期望 {DECISION_RECORDS_DIR}/{slug}.md 或正文含该 GAV）"
+                f"（期望 {DECISION_RECORDS_DIR}/{slug}.md 或「组件」字段含该 GAV）"
             )
             continue
+        matched_path, matched_text = matched
         report_statuses = [
             status
             for component, status in (queue_rows or [])
             if same_component(item.component, component)
         ]
         report_is_pending = "pending" in report_statuses
-        # Full field checks remain complete-only; pending catch-up fields also apply on partial.
-        if analysis_status != "complete" and not report_is_pending:
-            continue
-        tables = read_tables(matched_text.splitlines())
-        field_table = next(
-            (
-                table
-                for table in tables
-                if table and len(table[0]) >= 2
-                and table[0][0] == "字段"
-                and table[0][1] == "内容"
-            ),
-            None,
-        )
-        if field_table is None or len(field_table) == 1:
+        fields = record_fields(matched_text)
+        if fields is None:
             findings.error(f"决策记录为空或缺少“字段/内容”表：{matched_path.name}")
             continue
-        fields = {
-            row[0]: row[1]
-            for row in field_table[1:]
-            if len(row) >= 2 and row[0]
-        }
+        if analysis_status != "complete":
+            check_partial_record_consistency(
+                item, fields, report_statuses, matched_path.name, findings
+            )
+            if not report_is_pending:
+                continue
         queue_status = fields.get("确认队列状态", "").lower()
         if report_is_pending or queue_status == "pending":
             baseline = fields.get("baseline_evidence_status", "").lower()
@@ -1004,6 +1209,8 @@ def check_decision_records(
             not answer or answer in {"-", "—", "TBD", "待填"}
         ):
             findings.error(f"已决策的决策记录必须填写人工答复：{matched_path.name}")
+        else:
+            check_recorded_answer(item, queue_status, answer, matched_path.name, findings)
         if item.treatment in ALTERNATIVE_TREATMENTS:
             for field_name in ("请求目标（GAV / 版本 / 存在性）", "推荐替代目标（GAV / 版本 / 存在性）", "替代候选"):
                 if fields.get(field_name, "") in {"", "-", "—", "TBD", "待填"}:
@@ -1064,17 +1271,9 @@ def parse_batch_dir(
     parts = batch_dir.split("__")
     if len(parts) not in {4, 5}:
         return None
-    layer, boot_line, variant_part, scope_part = parts[:4]
-    if not variant_part.startswith("variant-") or not scope_part.startswith("scope-"):
-        return None
-    build_variant = variant_part.removeprefix("variant-")
-    batch_scope = scope_part.removeprefix("scope-")
-    decision_domain = None
-    if len(parts) == 5:
-        if not parts[4].startswith("domain-"):
-            return None
-        decision_domain = parts[4].removeprefix("domain-")
-    if not build_variant or not batch_scope:
+    layer, boot_line, build_variant, batch_scope = parts[:4]
+    decision_domain = parts[4] if len(parts) == 5 else None
+    if not build_variant or not batch_scope or decision_domain == "":
         return None
     return layer, boot_line, build_variant, batch_scope, decision_domain
 
@@ -1181,6 +1380,36 @@ def check_batch_index(directory: Path, reports: list[Path], findings: Findings) 
         expected_domain = decision_domain or "—"
         if row[indexes["domain"]].strip() != expected_domain:
             findings.error(f"{BATCH_INDEX_NAME} 决策域与目录不一致：{batch_key}")
+        report_status = {
+            key: values[0]
+            for key, values in collect_status_occurrences(
+                report.read_text(encoding="utf-8").splitlines()
+            ).items()
+            if values
+        }
+        for key in ("analysis_status", "decision_status", "batch_implementation_gate"):
+            actual = report_status.get(key, "")
+            declared = row[indexes[key]].strip()
+            if actual and actual != declared:
+                findings.error(
+                    f"{BATCH_INDEX_NAME} {key} 与子报告不一致：{batch_key} "
+                    f"索引={declared} 报告={actual}"
+                )
+        report_status = {
+            key: values[0]
+            for key, values in collect_status_occurrences(
+                report.read_text(encoding="utf-8").splitlines()
+            ).items()
+            if values
+        }
+        for key in ("analysis_status", "decision_status", "batch_implementation_gate"):
+            actual = report_status.get(key, "")
+            declared = row[indexes[key]].strip()
+            if actual and actual != declared:
+                findings.error(
+                    f"{BATCH_INDEX_NAME} {key} 与子报告不一致：{batch_key} "
+                    f"索引={declared} 报告={actual}"
+                )
 
 
 def validate_batch_layout(directory: Path) -> tuple[Findings, list[Path]]:
@@ -1211,7 +1440,7 @@ def validate_batch_layout(directory: Path) -> tuple[Findings, list[Path]]:
         if len(parts) != 3:
             findings.error(
                 "批次报告路径不符合 <entry-kind>/<authority-layer>__<boot-line>"
-                "__variant-<build-variant>__scope-<batch-scope>/"
+                "__<build-variant>__<batch-scope>/"
                 f"{REPORT_NAME}：{relative.as_posix()}"
             )
             continue
@@ -1224,8 +1453,8 @@ def validate_batch_layout(directory: Path) -> tuple[Findings, list[Path]]:
         if parsed is None:
             findings.error(
                 f"批次目录名须为 <authority-layer>__<boot-line>"
-                f"__variant-<build-variant>__scope-<batch-scope>"
-                f"[__domain-<decision-domain>]：{batch_dir}"
+                f"__<build-variant>__<batch-scope>"
+                f"[__<decision-domain>]：{batch_dir}"
             )
             continue
         layer, boot_line, build_variant, batch_scope, decision_domain = parsed
@@ -1233,11 +1462,21 @@ def validate_batch_layout(directory: Path) -> tuple[Findings, list[Path]]:
             findings.error(
                 f"authority-layer 非法：{layer}（允许：{' / '.join(sorted(AUTHORITY_LAYERS))}）"
             )
-        if boot_line != "no-boot" and not BOOT_LINE_PATTERN.fullmatch(boot_line):
-            findings.error(f"boot-line 非法：{boot_line}（须为 boot-<线> 或 no-boot）")
+        if not BOOT_LINE_PATTERN.fullmatch(boot_line):
+            findings.error(
+                f"boot-line 非法：{boot_line}（须为 3.2.x 这种线名，或 no-boot）"
+            )
         for label, value in (("build-variant", build_variant), ("batch-scope", batch_scope)):
             if not DECISION_DOMAIN_PATTERN.fullmatch(value):
                 findings.error(f"{label} 非法：{value}（须为小写字母/数字/连字符 slug）")
+        if batch_scope == "all":
+            findings.warn(
+                f"batch-scope=all 会把整仓探测量级藏进一个批次：{batch_dir}"
+            )
+        if batch_scope == "all":
+            findings.warn(
+                f"batch-scope=all 会把整仓探测量级藏进一个批次：{batch_dir}"
+            )
         if decision_domain is not None and not DECISION_DOMAIN_PATTERN.fullmatch(
             decision_domain
         ):

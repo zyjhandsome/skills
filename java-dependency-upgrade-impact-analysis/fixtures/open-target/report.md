@@ -11,7 +11,7 @@
 | batch_implementation_gate | frozen |
 | behavior_parity_required | yes |
 | network_mode | online |
-| report_path | openspec/changes/dep-upgrade-2026q3/evidence/java-dependency-upgrade/open-target/boot-bom__boot-3.2.x__variant-default__scope-yaml/ |
+| report_path | openspec/changes/dep-upgrade-2026q3/evidence/java-dependency-upgrade/open-target/boot-bom__3.2.x__default__yaml/ |
 
 **横幅：** 待人工确认·下一动作=提问
 

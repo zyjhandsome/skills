@@ -11,8 +11,9 @@
 ### 信号
 
 - 目标制品存在（`target_artifact_exists=yes`），处置方向可判（含显式降级）
-- 但 `resolved_from` 未用 tree/insight/list 证实，或模块级探针失败
-- 常见原因：PATH 无 `mvn`/`JAVA_HOME`、需 wrapper、需分期跑 leaf-module tree
+- 环境前置已经通过，并且只读探针已经跑过
+- 但 `resolved_from` 仍未证实：Reactor 兄弟模块未安装、私服鉴权失败、profile 未定，或探针超时
+- 缺 JDK、缺选中的构建工具、缺 Python 不是本菜单。那是 `preflight.py` exit `5`，不写报告
 
 ### 禁止误写
 
@@ -29,7 +30,7 @@
 
 按序给出，可勾选：
 
-1. **恢复构建工具会话**：设置 `JAVA_HOME` / PATH；优先系统 `mvn`/`gradle`，否则项目 `mvnw`/`gradlew`（记 `build_tool_source=wrapper`）。
+1. **重跑已失败的探针**（工具本身已通过前置）。补的是鉴权、未安装的 Reactor 兄弟模块、未定 profile 或超时，不是安装 JDK / `mvn`。
 2. **分期 leaf 探针**（有超时；禁止一上来全 reactor 无界 tree）：
    - Maven：`mvn -pl <module> -am dependency:tree -Dincludes=<groupId>:<artifactId>`
    - 复核：`dependency:list` 或 `help:effective-pom`（勿把 verbose-only 当选中版权威）
@@ -44,7 +45,7 @@
 
 | 字段 | 取值 |
 |---|---|
-| `baseline_evidence_status` | `confirmed` / `pending-tooling` / `pending-tree` / `mismatch` |
+| `baseline_evidence_status` | `confirmed` / `pending-tooling` / `pending-tree` / `mismatch`。`pending-tooling` = 探针已跑但没给出选中版本；`pending-tree` = 树跑了但没证实 `resolved_from` |
 | 下一步补证 | 上列有序清单的裁剪版（含具体 module / includes） |
 
 ---
