@@ -86,6 +86,13 @@ between the bold speaker name and the colon, such as `**全名**（14:20）：�
 stay keyed to the base speaker name; the parenthetical renders as a `.tag` pill
 beside `.step-speaker`.
 
+A quote that has not yet closed with `」` stays open across a blank line. The
+next line that starts with `「` is the same speaker's next paragraph, and the
+converter warns `dialogue continuation without speaker`.
+The writing rule still wants each paragraph to repeat `**全名**：`. A paragraph
+that already ends with `」` does not absorb a later bare `「` line. A wrapped
+line with no blank line and no new `「` stays in the same paragraph.
+
 ## 争辩型访谈 layers
 
 A section may use `原声交锋` / `语境与释义` / `未决问题` instead of (or

@@ -217,6 +217,22 @@ def test_renamed_section_does_not_replace_or_drop_old_diagrams(tmp_path):
     assert not list(tmp_path.glob(".lecture-upgrade-*"))
 
 
+def test_dialogue_continuation_warning_still_replaces_the_page(tmp_path):
+    source = SAMPLE_MD.replace(
+        "**嘉宾**：「回答，\n跨行的后半句」",
+        "**嘉宾**：「回答还没说完\n\n「下一段仍算嘉宾。」",
+    )
+    md, target, output = prepare_upgrade(tmp_path, source)
+    guest = output.split('<p class="step-speaker">嘉宾</p>', 1)[1].split("</article>", 1)[0]
+    assert "下一段仍算嘉宾" in guest
+    result = batch.process_one(md, tmp_path, SCRIPTS / "build_html.py")
+    assert result["ok"], result
+    assert any("dialogue continuation without speaker" in w for w in result["warnings"])
+    upgraded = target.read_text(encoding="utf-8")
+    guest = upgraded.split('<p class="step-speaker">嘉宾</p>', 1)[1].split("</article>", 1)[0]
+    assert "下一段仍算嘉宾" in guest
+
+
 def test_warning_is_reported_and_old_page_is_kept(tmp_path, capsys):
     md, target, _ = prepare_upgrade(tmp_path)
     original = target.read_bytes()

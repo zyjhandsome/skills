@@ -200,6 +200,64 @@ def test_multiline_quote_joined_into_one_step(tmp_path):
     assert "回答， 跨行的后半句」" in html
 
 
+CONTINUATION_MD = """# 续段标题
+
+## 文章元数据
+
+| 项目 | 内容 |
+|------|------|
+| 对谈人物 | **主持人**（主持）× **嘉宾** |
+| 内容链接 | https://youtu.be/abc123 |
+| 发布时间 | 2026-09-01 |
+
+## 核心导读
+
+> **全文论点**：论点。
+
+## 一节
+
+### 核心洞察
+
+> 一句。
+
+### 深度解析
+
+解析。
+
+### 对谈实录
+
+**嘉宾**：「第一段还没说完
+
+「第二段仍未收口
+
+「第三段收口。」
+
+**主持人**：「问完了。」
+
+**嘉宾**：「这句已经收口。」
+
+「这句不该算嘉宾的下一段。」
+"""
+
+
+def test_unclosed_quote_continuation_stays_with_speaker(tmp_path, capsys):
+    html = _build(tmp_path, CONTINUATION_MD, "continuation_整理文档")
+    articles = re.findall(r'<article class="step.*?</article>', html, re.S)
+    assert len(articles) == 3
+    assert articles[0].count("<p>「") == 3
+    assert "第一段还没说完" in articles[0]
+    assert "第二段仍未收口" in articles[0]
+    assert "第三段收口" in articles[0]
+    assert "第一段还没说完 「第二段" not in articles[0]
+    assert "不该算嘉宾" not in "".join(articles)
+    assert "不该算嘉宾" in html
+    warned = capsys.readouterr().out
+    assert warned.count("dialogue continuation without speaker in「一节」") == 2
+    assert "第二段仍未收口" in warned
+    assert "第三段收口" in warned
+    assert "不该算嘉宾" not in warned
+
+
 def test_known_layers_still_render(tmp_path):
     html = _build(tmp_path)
     assert "section-insight" in html          # 核心洞察 callout

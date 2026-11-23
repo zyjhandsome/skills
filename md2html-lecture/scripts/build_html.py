@@ -501,16 +501,27 @@ def _speaker_heading(name, note):
     return '%s <span class="tag">%s</span>' % (inline(name), inline(note))
 
 
-def render_steps(lines, roles=None):
-    """Return (step_html, leftover_lines) for a '**讲者**（可选角注）：「台词」' block.
+def _quote_closed(text):
+    return text.rstrip().endswith("」")
 
-    A line that does not open a new step continues the previous quote (quotes
-    wrap across lines in the source); consecutive turns by the same speaker
-    share one step unless a new timestamp/role note is attached. Anything else
+
+def render_steps(lines, roles=None):
+    """Return (step_html, leftover_lines, continuations) for one dialogue layer.
+
+    A line that does not open a new step continues the previous quote when the
+    source merely wraps it (no blank line). A blank line ends that wrap.
+    Consecutive turns by the same speaker share one step unless a new
+    timestamp or role note is attached.
+
+    A blank line does not end a quote that still has no closing 」. The next
+    line that starts with 「 is another paragraph by the same speaker, and its
+    text is also returned in continuations so the caller can warn. The writing
+    rule still wants each paragraph to repeat **全名**：. A paragraph that
+    already ends with 」 does not absorb a later bare 「 line. Anything else
     is handed back so the caller can render it as prose rather than discard it.
     """
     roles = roles or SpeakerRoles()
-    steps, leftover, cont = [], [], False
+    steps, leftover, continuations, cont = [], [], [], False
     for l in lines:
         s = l.strip()
         if s == "":
@@ -525,6 +536,10 @@ def render_steps(lines, roles=None):
                 steps[-1][2].append(quote)
             else:
                 steps.append([name, note, [quote]])
+            cont = True
+        elif steps and s.startswith("「") and not _quote_closed(steps[-1][2][-1]):
+            steps[-1][2].append(s)
+            continuations.append(s)
             cont = True
         elif cont and steps:
             steps[-1][2][-1] = ("%s %s" % (steps[-1][2][-1], s)).strip()
@@ -546,7 +561,7 @@ def render_steps(lines, roles=None):
         )
         for name, note, quotes in steps
     ]
-    return out, leftover
+    return out, leftover, continuations
 
 
 def extract_md_tables(body):
@@ -587,7 +602,7 @@ def extract_md_tables(body):
 LAYER_ORDER = ("核心洞察", "深度解析", "对谈实录", "原声交锋", "语境与释义", "未决问题")
 
 
-def render_content_section(title, body, roles=None, used_ids=None):
+def render_content_section(title, body, roles=None, used_ids=None, warns=None):
     used_ids = set() if used_ids is None else used_ids
     sid = unique_id(slugify(title), used_ids)
     escaped_sid = html.escape(sid, quote=True)
@@ -612,7 +627,12 @@ def render_content_section(title, body, roles=None, used_ids=None):
 
     def timeline(layer, anchor, css, heading):
         # Folded as one unit so 「只看要点」 can collapse every dialogue layer.
-        steps, extra = render_steps(layers[layer], roles)
+        steps, extra, continuations = render_steps(layers[layer], roles)
+        if warns is not None:
+            for snippet in continuations:
+                warns.append(
+                    "dialogue continuation without speaker in「%s」: %s" % (title, snippet[:40])
+                )
         n = len(steps)
         body = []
         if steps:
@@ -847,6 +867,7 @@ def build(md_path, out_path):
     content_sections = []   # (html, sid, title)
     cjk_total = 0
     roles = None
+    render_warns = []
 
     for title, body in sections:
         if title in SKIP_TITLES:
@@ -906,7 +927,7 @@ def build(md_path, out_path):
         # regular content section (文章元数据 precedes these, so roles see 对谈人物)
         if roles is None:
             roles = SpeakerRoles([(n, h) for n, h, _ in parse_people(meta)])
-        sec_html, sid, n = render_content_section(title, body, roles, used_ids)
+        sec_html, sid, n = render_content_section(title, body, roles, used_ids, render_warns)
         content_sections.append((sec_html, sid, title))
         cjk_total += n
 
@@ -1052,7 +1073,7 @@ def build(md_path, out_path):
     print("  sections=%d  cjk=%d  read=%s" % (len(content_sections), cjk_total, read_time))
     if not source_url:
         print("  WARN: no source URL found in 文章元数据")
-    for w in source_warnings(sections, people_info):
+    for w in source_warnings(sections, people_info) + render_warns:
         print("  WARN: %s" % w)
 
 

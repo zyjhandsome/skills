@@ -246,7 +246,10 @@ def process_one(md: Path, root: Path, build: Path, refresh_header: bool = False)
         if proc.returncode != 0:
             result["error"] = (proc.stderr or proc.stdout or "build failed")[-500:].strip()
             return result
-        if result["warnings"]:
+        # This continuation is already back inside the speaker card. Report it,
+        # but do not keep the old page: blocking here would preserve the bug.
+        blocking = [w for w in result["warnings"] if "dialogue continuation without speaker" not in w]
+        if blocking:
             result["error"] = "source warnings require review; old HTML kept"
             return result
 

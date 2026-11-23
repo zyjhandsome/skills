@@ -57,6 +57,8 @@ python "<skill-dir>/scripts/batch_upgrade_dir.py" "<notes-dir>"
 升级脚本只处理有同名 `.md` 的讲义 HTML，先生成临时页面，恢复图表与页头编辑，
 核对章节和锚点后再替换。遇到 WARN、图表恢复不足或转换失败，保留旧 HTML，
 报告 FAIL 并返回非零退出码；不得把这类结果描述为升级完成。
+`dialogue continuation without speaker` 除外：未用」收口的续段已经放回原发言人，
+升级仍替换页面，并在结果里打印这条告警。
 
 新页面记录自动推导的页头值，后续升级只保留被人工修改的字段，其余随源稿更新。
 没有记录的旧页面会保留现有页头。若用户希望全部重新推导，添加 `--refresh-header`。
