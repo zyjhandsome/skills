@@ -11,14 +11,14 @@
 | batch_implementation_gate | frozen |
 | behavior_parity_required | yes |
 | network_mode | online |
-| report_path | openspec/changes/dep-upgrade-2026q3/evidence/java-dependency-upgrade/exact/platform-plugin__boot-3.2.x__variant-default__scope-eureka/ |
+| report_path | openspec/changes/dep-upgrade-2026q3/evidence/java-dependency-upgrade/exact/platform-plugin__3.2.x__default__eureka/ |
 
 **横幅：** 待补基线证据；下一动作=补证清单（非降级否决）
 
 ## 1. 基线与假设
 
 - 项目根路径：`/repo`
-- 构建工具：Maven（wrapper graded pass；本会话尚未跑 leaf tree）
+- 构建工具：Maven（wrapper graded pass；leaf tree 已跑，未证实 resolved_from）
 - 环境前置：`java 17` / `./mvnw 3.9` / `python 3.12` PASS；`build_tool_source=wrapper`
 - 主机 JDK（探测）vs 工程声明：均为 17
 - JDK / Spring Boot 线：JDK 17 / Boot `3.2.x`；Cloud 列车示意 `2023.0.x`
@@ -66,7 +66,7 @@
 
 | 组件 | 状态 | 问题 | 选项 |
 |---|---|---|---|
-| `com.netflix.eureka:eureka-client` | pending | **降级**可行·**待补证**：目标 2.0.5 存在，但 `resolved_from=2.0.6` 尚未 tree 证实。是否恢复 `./mvnw` 并同意 `-pl discovery -am dependency:tree -Dincludes=com.netflix.eureka:eureka-client`？（补证清单见 §10；证实前不发 `proceed`） | `defer` / `other` |
+| `com.netflix.eureka:eureka-client` | pending | **降级**可行·**待补证**：目标 2.0.5 存在，但 `resolved_from=2.0.6` 尚未 tree 证实。leaf `dependency:tree` 已执行，但 Reactor 兄弟模块未安装，`resolved_from=2.0.6` 仍未证实（补证清单见 §10；证实前不发 `proceed`） | `defer` / `other` |
 
 ## 8. 验证矩阵
 
@@ -85,5 +85,5 @@
 
 ## 10. 未决问题与证据缺口
 
-- 有序补证清单：① 确认 `JAVA_HOME`/wrapper；② `mvn -pl discovery -am dependency:tree -Dincludes=com.netflix.eureka:eureka-client`；③ list/effective-pom 复核 `resolved_from`；④ 一致后再生为 `ready` 并附路径菜单（A move-introducer / B force-align / C–E 换 starter·换栈·原生改造）。
+- 有序补证清单：① 安装 Reactor 兄弟模块后重跑已失败的 `mvn -pl discovery -am dependency:tree -Dincludes=com.netflix.eureka:eureka-client`；③ list/effective-pom 复核 `resolved_from`；④ 一致后再生为 `ready` 并附路径菜单（A move-introducer / B force-align / C–E 换 starter·换栈·原生改造）。
 - 缺降级业务动机：记入证据缺口，不否决分析。

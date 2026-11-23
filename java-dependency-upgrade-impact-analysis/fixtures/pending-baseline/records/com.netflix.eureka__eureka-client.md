@@ -14,7 +14,7 @@
 | introducer_gav | `org.springframework.cloud:spring-cloud-starter-netflix-eureka-client`（示意） |
 | introducer_upgrade_available | unknown（待 tree/BOM 证据） |
 | baseline_evidence_status | pending-tree |
-| 下一步补证 | 恢复 wrapper → `-pl discovery -am dependency:tree -Dincludes=com.netflix.eureka:eureka-client` → list 复核 claimed `from=2.0.6` |
+| 下一步补证 | 重跑已失败的 leaf tree（Reactor 兄弟模块安装后）→ `-pl discovery -am dependency:tree -Dincludes=com.netflix.eureka:eureka-client` → list 复核 claimed `from=2.0.6` |
 | 路径选项菜单 | （基线证实后的 ready 波）A move-introducer / B force-align / C 换 discovery starter / D 换栈 / E 原生改造 — 本波 pending 不列 proceed |
 | 替代候选 | — |
 | scope | compile |

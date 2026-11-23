@@ -29,44 +29,47 @@
 
 ## 字段
 
-`validate_report.py` 在 `analysis_status=complete` 时强制的字段见
-`scripts/validate_report.py` 的 `DECISION_RECORD_REQUIRED_FIELDS`（模板
-`templates/decision-record.md` 同表）。下表「完整包推荐」列：校验器不强制但
-Agent 仍应按场景填写。
+字段名与 `templates/decision-record.md` 逐字一致。`analysis_status=complete` 时，下表标「强制」的名称就是 `scripts/validate_report.py` 的 `DECISION_RECORD_REQUIRED_FIELDS`。标「推荐」的校验器不强制，仍应按场景填写。
 
 | 字段 | 完整包推荐 | 所需证据 |
 |---|---|---|
-| 组件 | 强制 | 精确 `groupId:artifactId`（有 classifier 时写明）与受影响模块 |
-| 版本 | 强制 | 当前与目标的**解析后**版本；`remove`/`exclude` 可无目标，记 `—` |
+| 组件 | 强制 | 精确 `groupId:artifactId`（有 classifier 时写明） |
+| 模块 | 强制 | 受影响模块 |
+| 版本（当前解析 → 目标） | 强制 | 当前与目标的**解析后**版本；`remove`/`exclude` 可无目标，记 `—` |
 | 目标存在性 | 强制 | `target_artifact_exists`：`yes` / `no` / `unknown` / `n/a`（仅无目标处置） |
 | 目标通道 | 推荐（有目标时） | `target_channel`：`ga` / `non-ga`；非 GA 默认不可 `ready` |
-| 请求目标 | 替代行强制 | `requested_gav` / `requested_to` / `requested_target_exists` |
-| 推荐替代目标 | 替代行强制 | `recommended_*`；须独立探测且为 `yes` 才可 `ready` |
-| 建议处置 | 强制 | `recommended_treatment`（见 `treatment-ladder.md`） |
+| 请求目标（GAV / 版本 / 存在性） | 替代行强制 | `choose-alternative` / `replace-*` 保留原请求 |
+| 推荐替代目标（GAV / 版本 / 存在性） | 替代行强制 | 同 GAV 换版本或换坐标；须独立探测且为 `yes` 才可 `ready` |
+| 建议处置 | 强制 | `recommended_treatment`（见 `treatment-ladder.md` 的合法枚举，不要写简写） |
 | usage_status | 推荐（direct） | `used` / `unused` / `ambiguous` |
-| introducer | 推荐（传递） | `introducer_gav` + `introducer_upgrade_available` |
-| baseline_evidence_status | 推荐（基线未证实或工具待恢复时） | `confirmed` / `pending-tooling` / `pending-tree` / `mismatch` |
-| 下一步补证 | 推荐（pending baseline） | 有序清单：恢复 mvn/JAVA_HOME → 分期 leaf tree/insight → 证实 claimed `from`（见 `next-action-choice-menus.md` §A） |
-| 路径选项菜单 | 推荐（传递升降级） | A–E：introducer / force-align / 换 starter / 换栈 / 原生改造 + 各条证据摘要（见同文件 §B） |
-| 替代候选 | 替代行强制 | 1–3 个版本或坐标 + 维护信号 |
-| scope / optional / exclusions | 强制 | 解析后作用域；决定是否触及生产路径 |
+| introducer_gav | 推荐（传递） | 引入该坐标的直接依赖 |
+| introducer_upgrade_available | 推荐（传递） | `yes` / `no` / `unknown` |
+| baseline_evidence_status | 推荐（基线未证实时） | `confirmed` / `pending-tooling` / `pending-tree` / `mismatch`。`pending-tooling` 表示探针已跑但工具没给出选中版本（鉴权、未安装的 Reactor 兄弟模块、超时），不是缺 JDK / `mvn` |
+| 下一步补证 | 推荐（pending baseline） | 重跑已失败的 leaf tree/insight，再证实 claimed `from`（见 `next-action-choice-menus.md` §A） |
+| 路径选项菜单 | 推荐（传递升降级） | 至少 A 与（B 或 C/D 之一）；E 在调用面非空时评估（见同文件 §B） |
+| 替代候选 | 替代行强制 | `choose-alternative` 写 1–3 个同 GAV 版本；`replace-*` 写 1–3 个新坐标 |
+| scope | 强制 | `compile` / `runtime` / `provided` / `test` / `system` |
+| optional | 强制 | `yes` / `no` |
+| exclusions_present | 强制 | `yes` / `no` |
 | 依赖路径 | 强制 | 完整的直接 / 托管 / 传递路径 |
 | 有效 Owner | 强制 | parent、BOM、platform、plugin、直接声明或传递来源 |
 | 权威层 | 强制 | `jdk` / `boot-bom` / `platform-plugin` / `app-library` |
-| Boot 线 | 推荐 | 字段值如 `3.2.x`；目录 token 为 `boot-3.2.x` / `no-boot` |
-| 构建变体 / 批次范围 | 强制 | profile/property slug + 有界模块/族 slug |
+| Boot 线 | 推荐 | 字段值如 `3.2.x`，目录 token 与字段相同；无 Boot 时为 `no-boot`。同一批次内不变，仍建议填写 |
+| 构建变体 | 强制 | `default` 或 profile/property slug |
+| 批次范围 | 强制 | 有界模块或依赖族 slug |
 | Owner 阶梯档位 | 推荐 | `1-owner-bump` → `2-property-override` → `3-family-bom` → `4-per-gav-pin` → `5-exclusion-direct` |
+| 方向 | 强制 | `upgrade` / `downgrade` / `same` / `unknown` |
+| 入口来源 | 强制 | `inventory` / `exact-table` / `cve` / `other` |
 | 主 Owner 动作 | 强制 | 已尝试或已证伪；属性名须在 BOM 核实 |
 | 残差冲突 | 推荐 | 主 Owner 动作后仍在的图/收敛证据 |
-| 兼容性 | 强制（URL） | 发行说明/支持矩阵；`exclude` 须写 CNFE/回归警告 |
-| 验证 | 强制 | 已命名检查；MINOR/MAJOR/降级须命名 API 差异项 |
-| 迁移路径选项 | 推荐（MAJOR/`replace-*`） | 命名 recipe（含 URL）及残余风险；**仅描述，不执行** |
-| 回滚 | 强制 | 可观察触发条件 + 精确恢复目标 |
+| 兼容性证据（URL） | 强制 | 发行说明/支持矩阵；`exclude` 须写回归警告，含 SPI / 自动装配静默退化 |
+| 已命名验证项 | 强制 | MINOR/MAJOR/降级须命名 API 差异项 |
+| 迁移路径选项（仅描述） | 推荐（MAJOR/`replace-*`） | 命名 recipe（含 URL）及残余风险；**仅描述，不执行** |
+| 回滚触发条件 + 恢复目标 | 强制 | 可观察触发条件 + 精确恢复目标 |
 | 责任人 | 强制 | 负责人/团队 |
-| 入口来源 | 强制 | `inventory` / `exact-table` / `cve` / `other` |
-| 方向 | 强制 | `upgrade` / `downgrade` / `same` / `unknown` |
+| 推荐确认选项 | 强制 | 与 `human-confirmation-gates.md` 词表一致 |
 | 确认队列状态 | 强制；须与报告确认队列同行一致 | `ready` / `pending` / `blocked` / `decided` / `deferred` |
-| 推荐确认选项 / 人工答复 | 强制（decided/deferred 须有答复） | 与 `human-confirmation-gates.md` 词表一致 |
+| 人工答复 | 强制（decided/deferred 须有答复） | 与队列选项同词表；`defer` 只对应 `deferred` |
 
 ## 不算兼容性证据
 
@@ -82,7 +85,7 @@ Agent 仍应按场景填写。
 须同时满足：
 
 1. 有效主 Owner 已知  
-2. 处置阶梯更优档（remove / upgrade-owner / upgrade-introducer / exclude-with-evidence）已尝试或已证伪  
+2. 处置阶梯更优档（remove / upgrade-owner / upgrade-introducer / exclude）已尝试或已证伪  
 3. Owner 阶梯 1–3 档已尝试或已证伪（含属性覆盖；属性名已在 BOM 核实）  
 4. 按上述推理后残差冲突仍在  
 5. 目标为 GA，且与 Boot 线及重要消费者兼容  

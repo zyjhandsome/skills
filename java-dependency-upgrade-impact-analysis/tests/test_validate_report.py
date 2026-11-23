@@ -9,7 +9,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE = ROOT / "fixtures" / "valid-report.md"
+FIXTURE = ROOT / "fixtures" / "partial" / "report.md"
+COMPLETE = ROOT / "fixtures" / "complete" / "report.md"
+PENDING = ROOT / "fixtures" / "pending-baseline" / "report.md"
 
 
 def load_validator():
@@ -32,7 +34,7 @@ class ReportValidationTests(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.text = FIXTURE.read_text(encoding="utf-8")
 
-    def write(self, text: str, name: str = "java-dependency-upgrade-report.md") -> Path:
+    def write(self, text: str, name: str = "report.md") -> Path:
         path = self.tmp / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
@@ -163,11 +165,11 @@ class ReportValidationTests(unittest.TestCase):
         self.assertTrue(any("确认队列状态非法" in m for m in self.errors_for(text)))
 
     def test_pending_baseline_fixture_passes(self) -> None:
-        path = ROOT / "fixtures" / "valid-report-pending-baseline.md"
+        path = PENDING
         self.assertEqual(validator.validate_report(path).errors, [])
 
     def test_pending_row_forbids_proceed(self) -> None:
-        pending = (ROOT / "fixtures" / "valid-report-pending-baseline.md").read_text(
+        pending = (PENDING).read_text(
             encoding="utf-8"
         )
         text = pending.replace(
@@ -179,7 +181,7 @@ class ReportValidationTests(unittest.TestCase):
         )
 
     def test_pending_requires_marker(self) -> None:
-        pending = (ROOT / "fixtures" / "valid-report-pending-baseline.md").read_text(
+        pending = (PENDING).read_text(
             encoding="utf-8"
         )
         text = pending.replace("**待补证**", "基线未确认").replace("补证清单", "后续步骤")
@@ -231,16 +233,17 @@ class ReportValidationTests(unittest.TestCase):
     def test_pending_decision_record_requires_baseline_fields(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            report = root / "java-dependency-upgrade-report.md"
+            report = root / "report.md"
             shutil.copyfile(
-                ROOT / "fixtures" / "valid-report-pending-baseline.md", report
+                PENDING, report
             )
-            records = root / "decision-records"
+            records = root / "records"
             records.mkdir()
             src = (
                 ROOT
                 / "fixtures"
-                / "decision-records"
+                / "pending-baseline"
+                / "records"
                 / "com.netflix.eureka__eureka-client.md"
             )
             body = src.read_text(encoding="utf-8").replace(
@@ -299,7 +302,7 @@ class ReportValidationTests(unittest.TestCase):
         self.assertFalse(any("n/a 仅允许" in m for m in errors))
 
     def test_complete_fixture_passes(self) -> None:
-        complete = ROOT / "fixtures" / "valid-report-complete.md"
+        complete = COMPLETE
         self.assertEqual(validator.validate_report(complete).errors, [])
 
     def test_non_ga_versions_are_detected(self) -> None:
@@ -312,10 +315,15 @@ class ReportValidationTests(unittest.TestCase):
             "1.0.0-SNAPSHOT": True,
             "9.13.0-preview1": True,
             "21-ea": True,
+            "21-ea+35": True,
+            "2.10.0.pr1": True,
+            "4.0.0-b01": True,
+            "1.0RC1": True,
             "3.0.0-EAP2": True,
             "1.0.0-nightly": True,
             "4.1.136.Final": False,
             "2.21.4": False,
+            "2.3.4.RELEASE": False,
         }
         for version, expected in cases.items():
             self.assertEqual(
@@ -365,7 +373,7 @@ class ReportValidationTests(unittest.TestCase):
         self.assertTrue(any("analysis_status=blocked" in message for message in errors))
 
     def test_gate_frozen_errors_when_queue_fully_cleared(self) -> None:
-        complete = (ROOT / "fixtures" / "valid-report-complete.md").read_text(
+        complete = (COMPLETE).read_text(
             encoding="utf-8"
         )
         text = complete.replace(
@@ -379,7 +387,7 @@ class ReportValidationTests(unittest.TestCase):
         self.assertTrue(any("必须为 ready" in message for message in errors))
 
     def test_decided_queue_status_allowed_when_complete(self) -> None:
-        complete = ROOT / "fixtures" / "valid-report-complete.md"
+        complete = COMPLETE
         self.assertIn("| decided |", complete.read_text(encoding="utf-8"))
         self.assertEqual(validator.validate_report(complete).errors, [])
 
@@ -517,7 +525,7 @@ class ReportValidationTests(unittest.TestCase):
         self.assertTrue(any("对应 move-*" in message for message in self.errors_for(text)))
 
     def test_complete_missing_six_layer_is_error(self) -> None:
-        text = (ROOT / "fixtures" / "valid-report-complete.md").read_text(
+        text = (COMPLETE).read_text(
             encoding="utf-8"
         )
         text = "\n".join(
@@ -530,10 +538,10 @@ class ReportValidationTests(unittest.TestCase):
     def test_complete_empty_decision_record_is_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            report = root / "java-dependency-upgrade-report.md"
-            shutil.copyfile(ROOT / "fixtures" / "valid-report-complete.md", report)
-            shutil.copytree(ROOT / "fixtures" / "decision-records", root / "decision-records")
-            (root / "decision-records" / "com.fasterxml.jackson.core__jackson-databind.md").write_text(
+            report = root / "report.md"
+            shutil.copyfile(COMPLETE, report)
+            shutil.copytree(ROOT / "fixtures" / "complete" / "records", root / "records")
+            (root / "records" / "com.fasterxml.jackson.core__jackson-databind.md").write_text(
                 "", encoding="utf-8"
             )
             self.assertTrue(
@@ -548,28 +556,29 @@ class ReportValidationTests(unittest.TestCase):
 
     def test_extra_fixtures_pass(self) -> None:
         for name in (
-            "valid-report-remove.md",
-            "valid-report-replace.md",
-            "valid-report-open-target.md",
-            "valid-report-choose-alternative.md",
-            "valid-report-pending-baseline.md",
+            "remove",
+            "replace",
+            "open-target",
+            "choose-alternative",
+            "pending-baseline",
         ):
-            path = ROOT / "fixtures" / name
+            path = ROOT / "fixtures" / name / "report.md"
             self.assertEqual(validator.validate_report(path).errors, [], msg=name)
 
     def test_pending_baseline_with_decision_record_passes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            report = root / "java-dependency-upgrade-report.md"
+            report = root / "report.md"
             shutil.copyfile(
-                ROOT / "fixtures" / "valid-report-pending-baseline.md", report
+                PENDING, report
             )
-            records = root / "decision-records"
+            records = root / "records"
             records.mkdir()
             src = (
                 ROOT
                 / "fixtures"
-                / "decision-records"
+                / "pending-baseline"
+                / "records"
                 / "com.netflix.eureka__eureka-client.md"
             )
             shutil.copyfile(src, records / src.name)
@@ -578,14 +587,14 @@ class ReportValidationTests(unittest.TestCase):
     def test_decision_record_queue_status_must_match_report(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            report = root / "java-dependency-upgrade-report.md"
-            shutil.copyfile(ROOT / "fixtures" / "valid-report-complete.md", report)
+            report = root / "report.md"
+            shutil.copyfile(COMPLETE, report)
             shutil.copytree(
-                ROOT / "fixtures" / "decision-records", root / "decision-records"
+                ROOT / "fixtures" / "complete" / "records", root / "records"
             )
             record = (
                 root
-                / "decision-records"
+                / "records"
                 / "com.fasterxml.jackson.core__jackson-databind.md"
             )
             record.write_text(
@@ -601,11 +610,11 @@ class ReportValidationTests(unittest.TestCase):
             )
 
     def test_complete_requires_decision_records(self) -> None:
-        complete = (ROOT / "fixtures" / "valid-report-complete.md").read_text(
+        complete = (COMPLETE).read_text(
             encoding="utf-8"
         )
         with tempfile.TemporaryDirectory() as tmp:
-            report = Path(tmp) / "java-dependency-upgrade-report.md"
+            report = Path(tmp) / "report.md"
             report.write_text(complete, encoding="utf-8")
             errors = validator.validate_report(report).errors
             self.assertTrue(any("决策记录" in message for message in errors))
@@ -614,6 +623,162 @@ class ReportValidationTests(unittest.TestCase):
         evidence = ROOT / "examples" / "sample-evidence-multi"
         code = validator.main(["--evidence-dir", str(evidence)])
         self.assertEqual(code, 0)
+
+
+    def test_empty_queue_still_pairs_inventory_rows(self) -> None:
+        lines = [
+            line
+            for line in self.text.splitlines()
+            if not line.startswith("| `com.fasterxml.jackson.core:jackson-databind` | ready |")
+            and not line.startswith("| `io.netty:netty-*` | blocked |")
+        ]
+        text = "\n".join(lines)
+        text = (
+            text.replace("| decision_status | needs_choice |", "| decision_status | not_needed |")
+            .replace("| analysis_status | partial |", "| analysis_status | blocked |")
+            .replace("| batch_implementation_gate | frozen |", "| batch_implementation_gate | ready |")
+        )
+        errors = self.errors_for(text)
+        self.assertTrue(any("缺少确认队列条目" in message for message in errors))
+
+    def test_fenced_heading_does_not_end_a_section(self) -> None:
+        text = self.text.replace(
+            "| 组件 | 状态 | 问题 | 选项 |",
+            "```shell\n# 复核命令\nmvn -pl service-api dependency:tree\n```\n\n| 组件 | 状态 | 问题 | 选项 |",
+            1,
+        )
+        self.assertFalse(
+            any("确认队列" in message and "表头" in message for message in self.errors_for(text))
+        )
+
+    def test_subheading_does_not_end_a_section(self) -> None:
+        text = self.text.replace(
+            "| 组件 | 模块 | 当前解析版本 |",
+            "### 2.1 本层\n\n| 组件 | 模块 | 当前解析版本 |",
+            1,
+        )
+        self.assertFalse(
+            any(
+                "依赖清单与解析路径" in message and "表头" in message
+                for message in self.errors_for(text)
+            )
+        )
+
+    def test_escaped_pipe_stays_inside_the_cell(self) -> None:
+        text = self.text.replace(
+            "`spring-boot-starter-web` → `spring-boot-starter-json` → databind",
+            r"`starter \| json` → databind",
+            1,
+        )
+        self.assertFalse(any("权威层取值非法" in message for message in self.errors_for(text)))
+
+    def test_primary_gav_uses_first_mention(self) -> None:
+        cell = "org.yaml:snakeyaml（经 org.springframework.boot:spring-boot-starter 引入）"
+        self.assertEqual(validator.primary_gav(cell), "org.yaml:snakeyaml")
+
+    def test_choose_alternative_rejects_a_different_coordinate(self) -> None:
+        text = (
+            ROOT / "fixtures" / "choose-alternative" / "report.md"
+        ).read_text(encoding="utf-8")
+        text = text.replace(
+            "| `org.yaml:snakeyaml:2.2` | yes |",
+            "| `org.snakeyaml:snakeyaml-engine:2.7` | yes |",
+        ).replace(
+            "`proceed:org.yaml:snakeyaml:2.2` / `defer` / `other`",
+            "`replace:org.snakeyaml:snakeyaml-engine:2.7` / `defer` / `other`",
+        )
+        self.assertTrue(any("同 GAV" in message for message in self.errors_for(text)))
+
+    def test_recorded_answer_must_match_inventory_version(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            report = root / "report.md"
+            shutil.copyfile(COMPLETE, report)
+            shutil.copytree(
+                ROOT / "fixtures" / "complete" / "records",
+                root / "records",
+            )
+            record = root / "records" / "com.fasterxml.jackson.core__jackson-databind.md"
+            record.write_text(
+                record.read_text(encoding="utf-8").replace(":2.21.4", ":9.9.9"),
+                encoding="utf-8",
+            )
+            errors = validator.validate_report(report).errors
+            self.assertTrue(any("人工答复版本与清单不一致" in message for message in errors))
+
+    def test_introducer_mention_does_not_steal_another_record(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            text = COMPLETE.read_text(encoding="utf-8")
+            inventory_row = (
+                "| `io.projectreactor.netty:reactor-netty-http` | `gateway` | 1.1.20 | 1.1.21 "
+                "| upgrade | yes | upgrade-self | — | n/a | 直接声明 | `direct` | boot-bom | PATCH / 低 |"
+            )
+            text = text.replace(
+                "| `com.fasterxml.jackson.core:jackson-databind` | `service-api` |",
+                inventory_row
+                + "\n| `com.fasterxml.jackson.core:jackson-databind` | `service-api` |",
+                1,
+            )
+            text = text.replace(
+                "| `com.fasterxml.jackson.core:jackson-databind` | decided |",
+                "| `io.projectreactor.netty:reactor-netty-http` | decided | 已确认："
+                "`proceed:io.projectreactor.netty:reactor-netty-http:1.1.21` | — |\n"
+                "| `com.fasterxml.jackson.core:jackson-databind` | decided |",
+                1,
+            )
+            report = root / "report.md"
+            report.write_text(text, encoding="utf-8")
+            shutil.copytree(
+                ROOT / "fixtures" / "complete" / "records",
+                root / "records",
+            )
+            source = (
+                root / "records" / "com.fasterxml.jackson.core__jackson-databind.md"
+            ).read_text(encoding="utf-8")
+            cloned = (
+                source.replace(
+                    "com.fasterxml.jackson.core:jackson-databind",
+                    "io.projectreactor.netty:reactor-netty-http",
+                )
+                .replace("| 建议处置 | upgrade-owner |", "| 建议处置 | upgrade-self |")
+                .replace("2.21.2", "1.1.20")
+                .replace("2.21.4", "1.1.21")
+            )
+            (
+                root / "records" / "io.projectreactor.netty__reactor-netty-http.md"
+            ).write_text(cloned, encoding="utf-8")
+            errors = validator.validate_report(report).errors
+            self.assertFalse(any("io.netty__netty-ALL" in message for message in errors), errors)
+
+    def test_partial_record_queue_status_must_match(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            report = root / "report.md"
+            shutil.copyfile(FIXTURE, report)
+            shutil.copytree(
+                ROOT / "fixtures" / "partial" / "records",
+                root / "records",
+            )
+            record = root / "records" / "com.fasterxml.jackson.core__jackson-databind.md"
+            record.write_text(
+                record.read_text(encoding="utf-8").replace(
+                    "| 确认队列状态 | ready |",
+                    "| 确认队列状态 | decided |",
+                ),
+                encoding="utf-8",
+            )
+            errors = validator.validate_report(report).errors
+            self.assertTrue(any("确认队列状态与报告确认队列不一致" in message for message in errors))
+
+    def test_explanatory_status_mention_is_not_a_duplicate_field(self) -> None:
+        text = self.text.replace(
+            "## 10. 未决问题与证据缺口",
+            "## 10. 未决问题与证据缺口\n\n| 字段 | 说明 |\n|---|---|\n"
+            "| analysis_status | 待确认后改为 complete |\n",
+            1,
+        )
+        self.assertFalse(any("状态字段重复" in message for message in self.errors_for(text)))
 
 
 class BatchLayoutTests(unittest.TestCase):
@@ -630,21 +795,21 @@ class BatchLayoutTests(unittest.TestCase):
         return validator.validate_batch_layout(self.tmp)[0].errors
 
     def test_single_batch_at_root(self) -> None:
-        self.place("java-dependency-upgrade-report.md")
+        self.place("report.md")
         self.assertEqual(self.errors(), [])
 
     def test_single_batch_in_subdir_is_rejected(self) -> None:
-        self.place("exact/boot-bom__boot-3.2.x/java-dependency-upgrade-report.md")
+        self.place("exact/boot-bom__3.2.x/report.md")
         self.assertTrue(any("证据目录根" in message for message in self.errors()))
 
     def test_multi_batch_requires_index(self) -> None:
-        self.place("exact/boot-bom__boot-3.2.x/java-dependency-upgrade-report.md")
-        self.place("exact/app-library__no-boot/java-dependency-upgrade-report.md")
+        self.place("exact/boot-bom__3.2.x/report.md")
+        self.place("exact/app-library__no-boot/report.md")
         self.assertTrue(any("BATCH-INDEX.md" in message for message in self.errors()))
 
     def test_multi_batch_valid_layout(self) -> None:
-        self.place("exact/boot-bom__boot-3.2.x__variant-default__scope-json/java-dependency-upgrade-report.md")
-        self.place("exact/app-library__no-boot__variant-default__scope-lucene/java-dependency-upgrade-report.md")
+        self.place("exact/boot-bom__3.2.x__default__json/report.md")
+        self.place("exact/app-library__no-boot__default__lucene/report.md")
         (self.tmp / "BATCH-INDEX.md").write_text(
             "\n".join(
                 [
@@ -652,8 +817,8 @@ class BatchLayoutTests(unittest.TestCase):
                     "",
                     "| 目录 | 权威层 | Boot 线 | 构建变体 | 批次范围 | 决策域 | 成员 | analysis_status | decision_status | batch_implementation_gate |",
                     "|---|---|---|---|---|---|---|---|---|---|",
-                    "| exact/boot-bom__boot-3.2.x__variant-default__scope-json/ | boot-bom | boot-3.2.x | default | json | — | jackson, netty | partial | needs_choice | frozen |",
-                    "| exact/app-library__no-boot__variant-default__scope-lucene/ | app-library | no-boot | default | lucene | — | lucene | partial | needs_choice | frozen |",
+                    "| exact/boot-bom__3.2.x__default__json/ | boot-bom | 3.2.x | default | json | — | jackson, netty | partial | needs_choice | frozen |",
+                    "| exact/app-library__no-boot__default__lucene/ | app-library | no-boot | default | lucene | — | lucene | partial | needs_choice | frozen |",
                     "",
                 ]
             ),
@@ -662,23 +827,23 @@ class BatchLayoutTests(unittest.TestCase):
         self.assertEqual(self.errors(), [])
 
     def test_multi_batch_index_must_list_batches_and_status_fields(self) -> None:
-        self.place("exact/boot-bom__boot-3.2.x/java-dependency-upgrade-report.md")
-        self.place("exact/app-library__no-boot/java-dependency-upgrade-report.md")
+        self.place("exact/boot-bom__3.2.x/report.md")
+        self.place("exact/app-library__no-boot/report.md")
         (self.tmp / "BATCH-INDEX.md").write_text("# 批次索引\n空壳\n", encoding="utf-8")
         errors = self.errors()
         self.assertTrue(any("analysis_status" in message for message in errors))
         self.assertTrue(any("未索引批次" in message for message in errors))
 
     def test_batch_index_requires_values_not_only_headers(self) -> None:
-        self.place("exact/boot-bom__boot-3.2.x__variant-default__scope-json/java-dependency-upgrade-report.md")
-        self.place("exact/app-library__no-boot__variant-default__scope-lucene/java-dependency-upgrade-report.md")
+        self.place("exact/boot-bom__3.2.x__default__json/report.md")
+        self.place("exact/app-library__no-boot__default__lucene/report.md")
         (self.tmp / "BATCH-INDEX.md").write_text(
             "\n".join(
                 [
                     "| 目录 | 权威层 | Boot 线 | 构建变体 | 批次范围 | 决策域 | 成员 | analysis_status | decision_status | batch_implementation_gate |",
                     "|---|---|---|---|---|---|---|---|---|---|",
-                    "| exact/boot-bom__boot-3.2.x__variant-default__scope-json/ | | | | | — | | partial | needs_choice | frozen |",
-                    "| exact/app-library__no-boot__variant-default__scope-lucene/ | | | | | — | | partial | needs_choice | frozen |",
+                    "| exact/boot-bom__3.2.x__default__json/ | | | | | — | | partial | needs_choice | frozen |",
+                    "| exact/app-library__no-boot__default__lucene/ | | | | | — | | partial | needs_choice | frozen |",
                 ]
             ),
             encoding="utf-8",
@@ -688,17 +853,17 @@ class BatchLayoutTests(unittest.TestCase):
 
     def test_decision_domain_layout_and_index(self) -> None:
         self.place(
-            "exact/app-library__no-boot__variant-default__scope-commons-lang__domain-commons-lang-major/"
-            "java-dependency-upgrade-report.md"
+            "exact/app-library__no-boot__default__commons-lang__commons-lang-major/"
+            "report.md"
         )
-        self.place("exact/app-library__no-boot__variant-default__scope-lucene/java-dependency-upgrade-report.md")
+        self.place("exact/app-library__no-boot__default__lucene/report.md")
         (self.tmp / "BATCH-INDEX.md").write_text(
             "\n".join(
                 [
                     "| 目录 | 权威层 | Boot 线 | 构建变体 | 批次范围 | 决策域 | 成员 | analysis_status | decision_status | batch_implementation_gate |",
                     "|---|---|---|---|---|---|---|---|---|---|",
-                    "| exact/app-library__no-boot__variant-default__scope-commons-lang__domain-commons-lang-major/ | app-library | no-boot | default | commons-lang | commons-lang-major | commons-lang | partial | needs_choice | frozen |",
-                    "| exact/app-library__no-boot__variant-default__scope-lucene/ | app-library | no-boot | default | lucene | — | lucene | partial | needs_choice | frozen |",
+                    "| exact/app-library__no-boot__default__commons-lang__commons-lang-major/ | app-library | no-boot | default | commons-lang | commons-lang-major | commons-lang | partial | needs_choice | frozen |",
+                    "| exact/app-library__no-boot__default__lucene/ | app-library | no-boot | default | lucene | — | lucene | partial | needs_choice | frozen |",
                 ]
             ),
             encoding="utf-8",
@@ -707,10 +872,10 @@ class BatchLayoutTests(unittest.TestCase):
 
     def test_decision_domain_requires_index_column(self) -> None:
         self.place(
-            "exact/app-library__no-boot__variant-default__scope-commons-lang__domain-commons-lang-major/"
-            "java-dependency-upgrade-report.md"
+            "exact/app-library__no-boot__default__commons-lang__commons-lang-major/"
+            "report.md"
         )
-        self.place("exact/app-library__no-boot__variant-default__scope-lucene/java-dependency-upgrade-report.md")
+        self.place("exact/app-library__no-boot__default__lucene/report.md")
         (self.tmp / "BATCH-INDEX.md").write_text(
             "\n".join(
                 [
@@ -725,8 +890,8 @@ class BatchLayoutTests(unittest.TestCase):
         self.assertTrue(any("缺少结构化索引表" in message for message in self.errors()))
 
     def test_empty_boot_line_is_rejected(self) -> None:
-        self.place("exact/boot-bom__boot-__variant-default__scope-netty/java-dependency-upgrade-report.md")
-        self.place("exact/app-library__no-boot__variant-default__scope-lucene/java-dependency-upgrade-report.md")
+        self.place("exact/boot-bom__3.2.X__default__netty/report.md")
+        self.place("exact/app-library__no-boot__default__lucene/report.md")
         (self.tmp / "BATCH-INDEX.md").write_text(
             "\n".join(
                 [
@@ -741,12 +906,60 @@ class BatchLayoutTests(unittest.TestCase):
         self.assertTrue(any("boot-line 非法" in message for message in self.errors()))
 
     def test_illegal_layer_and_boot_line(self) -> None:
-        self.place("exact/mystery__3.2.x__variant-default__scope-x/java-dependency-upgrade-report.md")
-        self.place("exact/app-library__no-boot__variant-default__scope-lucene/java-dependency-upgrade-report.md")
+        self.place("exact/mystery__3.2.X__default__x/report.md")
+        self.place("exact/app-library__no-boot__default__lucene/report.md")
         (self.tmp / "BATCH-INDEX.md").write_text("# 批次索引\n", encoding="utf-8")
         errors = self.errors()
         self.assertTrue(any("authority-layer 非法" in message for message in errors))
         self.assertTrue(any("boot-line 非法" in message for message in errors))
+
+    def test_batch_index_status_must_match_the_report(self) -> None:
+        self.place(
+            "exact/boot-bom__3.2.x__default__json/"
+            "report.md"
+        )
+        self.place(
+            "exact/app-library__no-boot__default__lucene/"
+            "report.md"
+        )
+        (self.tmp / "BATCH-INDEX.md").write_text(
+            "\n".join(
+                [
+                    "| 目录 | 权威层 | Boot 线 | 构建变体 | 批次范围 | 决策域 | 成员 | analysis_status | decision_status | batch_implementation_gate |",
+                    "|---|---|---|---|---|---|---|---|---|---|",
+                    "| exact/boot-bom__3.2.x__default__json/ | boot-bom | 3.2.x | default | json | — | jackson | blocked | needs_choice | frozen |",
+                    "| exact/app-library__no-boot__default__lucene/ | app-library | no-boot | default | lucene | — | lucene | partial | needs_choice | frozen |",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        self.assertTrue(
+            any("analysis_status 与子报告不一致" in message for message in self.errors())
+        )
+
+    def test_scope_all_is_a_warning(self) -> None:
+        self.place(
+            "exact/app-library__no-boot__default__all/"
+            "report.md"
+        )
+        self.place(
+            "exact/app-library__no-boot__default__lucene/"
+            "report.md"
+        )
+        (self.tmp / "BATCH-INDEX.md").write_text(
+            "\n".join(
+                [
+                    "| 目录 | 权威层 | Boot 线 | 构建变体 | 批次范围 | 决策域 | 成员 | analysis_status | decision_status | batch_implementation_gate |",
+                    "|---|---|---|---|---|---|---|---|---|---|",
+                    "| exact/app-library__no-boot__default__all/ | app-library | no-boot | default | all | — | everything | partial | needs_choice | frozen |",
+                    "| exact/app-library__no-boot__default__lucene/ | app-library | no-boot | default | lucene | — | lucene | partial | needs_choice | frozen |",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        findings = validator.validate_batch_layout(self.tmp)[0]
+        self.assertTrue(any("batch-scope=all" in message for message in findings.warnings))
+        self.assertFalse(any("batch-scope 非法" in message for message in findings.errors))
 
     def test_missing_report(self) -> None:
         self.assertTrue(any("找不到" in message for message in self.errors()))
@@ -759,13 +972,13 @@ class CliTests(unittest.TestCase):
         self.assertEqual(validator.main([str(ROOT / "does-not-exist.md")]), 4)
 
     def test_fixtures_dir_is_not_evidence_layout(self) -> None:
-        # Sample files are named valid-report*.md — not java-dependency-upgrade-report.md.
+        # Sample files are named valid-report*.md — not report.md.
         code = validator.main(["--evidence-dir", str(ROOT / "fixtures")])
         self.assertEqual(code, 3)
 
     def test_evidence_dir_single_renamed_fixture(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            target = Path(tmp) / "java-dependency-upgrade-report.md"
+            target = Path(tmp) / "report.md"
             shutil.copyfile(FIXTURE, target)
             self.assertEqual(validator.main(["--evidence-dir", tmp]), 0)
 

@@ -2,20 +2,19 @@
 
 ## 文件名
 
-- `java-dependency-upgrade-report.md`（必填）
-- `decision-records/<groupId>__<artifactId>.md`（每个清单组件/族必填；`*` → `ALL`）
-- `java-dependency-upgrade-report.json`（可选）
+- `report.md`（必填）
+- `records/<groupId>__<artifactId>.md`（每个清单组件/族必填；`*` → `ALL`）
 
 语言：可见正文默认简体中文；机器枚举、GAV、版本、路径、命令、URL 保持英文原文。
 
 ### 决策记录落盘
 
-与报告**同目录**下建 `decision-records/`：
+与报告**同目录**下建 `records/`：
 
 | 清单组件示例 | 文件名 |
 |---|---|
-| `com.fasterxml.jackson.core:jackson-databind` | `decision-records/com.fasterxml.jackson.core__jackson-databind.md` |
-| `io.netty:netty-*` | `decision-records/io.netty__netty-ALL.md` |
+| `com.fasterxml.jackson.core:jackson-databind` | `records/com.fasterxml.jackson.core__jackson-databind.md` |
+| `io.netty:netty-*` | `records/io.netty__netty-ALL.md` |
 
 字段见 `templates/decision-record.md` / `decision-record-schema.md`。
 `analysis_status=complete` 时缺少对应决策记录 → 校验 **ERROR**；`partial` 时缺目录 → **WARN**。
@@ -28,16 +27,18 @@
 | 批次数 | 布局 |
 |---|---|
 | 1 | 报告直接写在证据目录根 |
-| ≥2 | `<entry-kind>/<authority-layer>__<boot-line>__variant-<build-variant>__scope-<batch-scope>[__domain-<decision-domain>]/java-dependency-upgrade-report.md`，且根目录有 `BATCH-INDEX.md` |
+| ≥2 | `<entry-kind>/<authority-layer>__<boot-line>__<build-variant>__<batch-scope>[__<decision-domain>]/report.md`，且根目录有 `BATCH-INDEX.md` |
+
+目录段不再加 `variant-`、`scope-`、`domain-`、`boot-` 前缀，避免 Windows 260 字符路径上限。
 
 - `entry-kind`：`exact` / `open-target`
 - `authority-layer`：`jdk` / `boot-bom` / `platform-plugin` / `app-library`
-- `boot-line`：`boot-<线>`（如 `boot-3.2.x`）或 `no-boot`；候选项字段 `boot_line=3.2.x` ↔ 目录 token `boot-3.2.x`
+- `boot-line`：与候选项 `boot_line` 相同，如 `3.2.x`；无 Boot 时为 `no-boot`
 - `build-variant`：`default` 或 Maven profile / Gradle property 组合的稳定 slug
 - `batch-scope`：有界模块或依赖族 slug；不得用 `all` 隐藏整仓无界探测
 - `decision-domain`：仅同组合内必须隔离的 MAJOR/坐标迁移使用
-- 示例：`exact/app-library__no-boot__variant-default__scope-commons-io/java-dependency-upgrade-report.md`
-- MAJOR：`exact/app-library__no-boot__variant-default__scope-commons-lang__domain-commons-lang-major/java-dependency-upgrade-report.md`
+- 示例：`exact/app-library__no-boot__default__commons-io/report.md`
+- MAJOR：`exact/app-library__no-boot__default__commons-lang__commons-lang-major/report.md`
 
 `BATCH-INDEX.md` 必须使用结构化 Markdown 表，每行一个批次，**必须**写明：
 目录路径、权威层、Boot 线、构建变体、批次范围、决策域（无则 `—`）、成员 GAV、
@@ -57,7 +58,8 @@
 3. 均未提供时：在分析目标仓库下查找与本请求匹配的既有 `openspec/changes/<id>/`  
    - 唯一匹配 → 当作 `--change-dir`  
    - 多个 → 询问使用哪一个  
-   - 没有 → 询问既有 `--change-dir` 或显式 `--output-dir`，然后停止写入直到明确
+   - 没有 → 询问。同时给出一个仓库外的稳定推荐路径  
+     `~/.cache/java-dependency-upgrade/<项目目录名>/`，用户接受或改口之前不要创建
 
 硬规则：
 
@@ -73,20 +75,15 @@
 出包前与决策后重生成时都要跑：
 
 ```shell
-python scripts/validate_report.py <report.md>
-python scripts/validate_report.py --evidence-dir <evidence-dir> --json
+python -B "<skill-dir>/scripts/validate_report.py" <report.md>
+python -B "<skill-dir>/scripts/validate_report.py" --evidence-dir <evidence-dir> --json
 ```
 
-退出码 `0` 通过 / `3` 存在结构错误 / `4` 路径不存在。校验通过只代表**结构合规**，
-不代表证据充分；owner 判定与上游依据仍需 Agent 复核。样例见 `fixtures/valid-report.md`（partial）、`fixtures/valid-report-complete.md`（定稿且可残留 blocked）、
-`fixtures/valid-report-remove.md` / `valid-report-replace.md` / `valid-report-open-target.md` /
-`valid-report-choose-alternative.md` / `valid-report-pending-baseline.md`，
-以及多批布局 `examples/sample-evidence-multi/`（含 `BATCH-INDEX.md`）。
-决策记录样例在 `fixtures/decision-records/`。
-**注意：** `fixtures/` 根目录不是证据布局（文件名不是统一的 `java-dependency-upgrade-report.md`），
-请用 `validate_report.py <fixture.md>` 校验单文件；多批请用
+`<skill-dir>` 是本技能 `SKILL.md` 所在目录。退出码 `0` 通过 / `3` 存在结构错误 / `4` 路径不存在。校验通过只代表**结构合规**，
+不代表证据充分；owner 判定与上游依据仍需 Agent 复核。分析时读 `examples/sample-evidence-multi/`，不要读 `fixtures/`。
+`fixtures/<scenario>/` 只给单测：每个场景目录里是报告加本场景的 `records/`。
+不要对 `fixtures/` 根直接 `--evidence-dir`。多批布局用
 `validate_report.py --evidence-dir examples/sample-evidence-multi`。
-不要对 `fixtures/` 根直接 `--evidence-dir`。
 
 ## 顶层状态字段
 
@@ -94,7 +91,7 @@ python scripts/validate_report.py --evidence-dir <evidence-dir> --json
 
 | 字段 | 取值 |
 |---|---|
-| `analysis_status` | `partial` / `blocked` / `complete`（`blocked`=批级环境前置/基线/离线闸，见 confirmation gates） |
+| `analysis_status` | `partial` / `blocked` / `complete`（`blocked`=批级环境前置或离线闸。claimed `from` 与解析版本不一致只阻塞该行，见 confirmation gates） |
 | `decision_status` | `needs_choice` / `not_needed` / `decided` |
 | `batch_implementation_gate` | `frozen` / `ready` |
 | `behavior_parity_required` | `yes` / `no` |
@@ -159,7 +156,3 @@ python scripts/validate_report.py --evidence-dir <evidence-dir> --json
 - `needs_choice` + `pending` → 横幅：待补基线证据；下一动作=补证清单（非降级否决）
 - 证据阻塞 → 待补证据
 - `batch_implementation_gate=frozen` → 整批不得实施（调用方）
-
-## JSON（可选）
-
-镜像：状态字段、`report_path`、`candidates[]`、`decision_records[]`、`confirmation_queue[]`、`evidence_gaps[]`。

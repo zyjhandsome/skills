@@ -8,8 +8,12 @@ writing reports. Failure of a **hard** tool gate is a batch-wide stop.
 Preferred executable:
 
 ```bash
-python scripts/preflight.py <project-root> --build-tool auto --timeout 20 --json
+python -B "<skill-dir>/scripts/preflight.py" <project-root> --build-tool auto --timeout 20 --json
 ```
+
+`<skill-dir>` is the directory containing this skill's `SKILL.md`. If `python` is
+missing, try `python3`, then `py -3`. `--skip-network` exists for unit tests
+only; an analysis run must not pass it.
 
 Exit codes from `scripts/preflight.py`:
 
@@ -39,22 +43,26 @@ as batch-wide environment `blocked`.
 
 | Gate | Pass command (exit 0) | Notes |
 |---|---|---|
-| JDK | `java -version` | Record major/vendor. If `java` is not on PATH, locate an installed JDK and set `JAVA_HOME` (and PATH) for the session before re-probing — still the same hard gate. Host vs project `release` / toolchain / `java.version` mismatch → **record only**, do not block. |
-| Maven (when selected) | Prefer `mvn -v` on PATH. If missing, `./mvnw -v` (or `mvnw.cmd`) is a **graded pass**. | Record `build_tool_source=system` or `wrapper`. |
-| Gradle (when selected) | Prefer `gradle -v` on PATH. If missing, `./gradlew -v` (or `gradlew.bat`) is a **graded pass**. | Same as Maven. |
+| JDK | `java -version` | Record major/vendor. If `java` is not on PATH, the script searches `JAVA_HOME`, common install roots, and SDKMAN, and prefers a JDK whose major matches the project declaration. Host vs project mismatch → **record only**, do not block. |
+| Maven (when selected) | Prefer `mvn -v` on PATH. If that entry is missing or fails, `./mvnw -v` (or `mvnw.cmd`, including a parent directory) is a **graded pass**. | Record `build_tool_source=system` or `wrapper`. |
+| Gradle (when selected) | Prefer `./gradlew -v` (or `gradlew.bat`) when the wrapper exists, including in a parent directory. Use `gradle -v` only when there is no wrapper, or when the wrapper itself fails. | The wrapper is the version the build locked. |
 | Python | Prefer PATH `python --version` or `python3 --version`; if missing, the interpreter running `preflight.py` (`sys.executable`) is a **graded pass** (`python_source=current-interpreter`). | Needed for `scripts/validate_report.py`. Record which executable passed. |
 
 **Graded pass rules:**
 
-1. System CLI on PATH is preferred when both exist.
-2. Wrapper-only is allowed for analysis when the wrapper script exists in the
-   project root (or module root in use) and `-v` exits 0. State clearly in
-   基线与假设：`build_tool_source=wrapper` plus wrapper path/version.
+1. Maven prefers a working system `mvn`. Gradle prefers the project wrapper when
+   the script exists, because a global `gradle` often cannot read that build.
+2. A failing PATH entry is not final: try the other candidate before blocking.
+   Wrapper-only is a **graded pass** when `-v` exits 0. State
+   `build_tool_source=wrapper` plus wrapper path/version in 基线与假设.
 3. If **neither** system CLI nor wrapper works → hard `blocked` (no report write).
-4. After a graded/wrapper pass, use that same wrapper for non-mutating
+   A settings-only Gradle root (`settings.gradle` / `settings.gradle.kts` and no
+   `build.gradle`) is still a Gradle root.
+4. After a graded pass, use that same executable for non-mutating
    `dependency:tree` / `dependencies` / `dependencyInsight`.
-5. If system and wrapper disagree on major version, record both; prefer the
-   wrapper for resolution once the gate passed.
+5. If system and wrapper disagree on major version, record both. Maven resolution
+   follows the candidate that passed; Gradle resolution stays on the wrapper when
+   the wrapper passed.
 
 Always record active Maven profiles / Gradle properties as `build_variant`.
 Also record `build_variant_source`. A profile auto-activated by the analyst's

@@ -20,7 +20,7 @@
 | 权威层 | app-library |
 | 构建变体 | default |
 | 批次范围 | commons-lang |
-| 方向 | upgrade |
+| 方向 | unknown |
 | 入口来源 | exact-table |
 | 迁移路径选项（仅描述） | OpenRewrite `commons-lang.MigrateCommonsLangToCommonsLang3`（不执行） |
 | 确认队列状态 | ready |

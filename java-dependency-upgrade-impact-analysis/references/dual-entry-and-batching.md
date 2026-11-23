@@ -29,7 +29,7 @@ Every inventory hit or table row normalizes to:
 | `exclusions_present` | yes/no | An `<exclusions>` on the path explains a version the tree alone makes look wrong |
 | `owner_class` | yes after resolve | See owner-and-resolution.md |
 | `authority_layer` | yes | `jdk` / `boot-bom` / `platform-plugin` / `app-library` |
-| `boot_line` | when Boot present | field value e.g. `3.2.x` → directory token `boot-3.2.x` (or `no-boot`) |
+| `boot_line` | when Boot present | field value e.g. `3.2.x` is also the directory token (`no-boot` when absent) |
 | `semver_class` | when comparable | `PATCH` / `MINOR` / `MAJOR` / `SECURITY` / `NON_SEMVER` |
 | `entry_source` | yes | `inventory` / `exact-table` / `cve` / `other` |
 | `usage_status` | direct candidates | `used` / `unused` / `ambiguous` — safe analyze-only plus call-site/config/SPI evidence |
@@ -58,7 +58,7 @@ Accept rows like:
 Rules:
 
 - Expand multi-artifact families into per-GAV candidates **or** one family row with explicit member list.
-- Infer `resolved_from` from the effective graph; if it disagrees with claimed `from`, set the **row** `blocked` and set packet `analysis_status=blocked` until the user picks the baseline (no `ready` rows while packet is `blocked`). Do not analyze the claimed interval as if it were effective.
+- Infer `resolved_from` from the effective graph. If it disagrees with claimed `from`, set that **row** `blocked` and ask which baseline to use. Other rows stay askable, so the packet stays `partial` with `decision_status=needs_choice`. Do not set packet `analysis_status=blocked` for one mismatched row, and do not analyze the claimed interval as if it were effective.
 - Batch CVE / open-target transitive holes by the **introducer**'s full packet key
   (`authority_layer × boot_line × build_variant × batch_scope`), not by the
   vulnerable leaf alone.
@@ -122,7 +122,7 @@ One decision packet / confirmation wave normally covers:
 Examples:
 
 - OK: Boot `3.2.x` × default profile × `json` scope × Jackson patch family
-- OK: Same `boot-bom × boot-3.2.x` packet with Jackson `ready` **and** Netty
+- OK: Same `boot-bom × 3.2.x` packet with Jackson `ready` **and** Netty
   `blocked` (existence 404) — do **not** force a separate packet just because one
   family is blocked; ready + blocked may coexist until the blocked target is restated
 - Not OK: JDK 17→21 + Boot 2.7→3.2 + commons-lang 2→3 in one batch
@@ -136,7 +136,7 @@ their own batch even if discovered in the same compliance table. When that
 migration shares the same authority layer and Boot line with another packet,
 append a stable `decision_domain` slug to the batch key:
 
-`app-library__no-boot__variant-default__scope-commons-lang__domain-commons-lang-major`
+`app-library__no-boot__default__commons-lang__commons-lang-major`
 
 Do not add a domain merely because one family is evidence-`blocked`; ready +
 blocked rows of the same ordinary packet still coexist.

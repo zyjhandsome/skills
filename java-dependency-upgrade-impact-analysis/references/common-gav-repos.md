@@ -8,10 +8,12 @@ before citing. Inspired by [Jodu1005/java-dependency-upgrade](https://github.com
 | org.springframework.boot | spring-boot-starter-parent, spring-boot-dependencies | https://github.com/spring-projects/spring-boot |
 | org.springframework | spring-core, spring-framework-bom | https://github.com/spring-projects/spring-framework |
 | org.springframework.security | spring-security-bom | https://github.com/spring-projects/spring-security |
-| org.springframework.cloud | spring-cloud-dependencies | https://github.com/spring-cloud |
+| org.springframework.cloud | spring-cloud-dependencies | https://github.com/spring-cloud/spring-cloud-release |
 | com.netflix.eureka | eureka-client, eureka-core (`1.x` / `2.0.x` line) | https://github.com/Netflix/eureka |
 | org.springframework.cloud | spring-cloud-starter-netflix-eureka-client, spring-cloud-netflix-eureka-client (`4.x` / release-train line) | https://github.com/spring-cloud/spring-cloud-netflix |
-| com.fasterxml.jackson.core | jackson-databind, jackson-core | https://github.com/FasterXML/jackson-databind |
+| com.fasterxml.jackson.core | jackson-databind | https://github.com/FasterXML/jackson-databind |
+| com.fasterxml.jackson.core | jackson-core | https://github.com/FasterXML/jackson-core |
+| com.fasterxml.jackson.core | jackson-annotations | https://github.com/FasterXML/jackson-annotations |
 | com.fasterxml.jackson | jackson-bom | https://github.com/FasterXML/jackson-bom |
 | io.netty | netty-handler, netty-codec-*, netty-common | https://github.com/netty/netty |
 | org.apache.lucene | lucene-core, lucene-queryparser, lucene-* | https://github.com/apache/lucene |
@@ -38,6 +40,10 @@ before citing. Inspired by [Jodu1005/java-dependency-upgrade](https://github.com
 | com.alibaba.fastjson2 | fastjson2 | https://github.com/alibaba/fastjson2 |
 | com.squareup.okhttp3 | okhttp | https://github.com/square/okhttp |
 | io.micrometer | micrometer-core | https://github.com/micrometer-metrics/micrometer |
+| org.yaml | snakeyaml | https://bitbucket.org/snakeyaml/snakeyaml |
+| com.alibaba | fastjson (1.x; not fastjson2) | https://github.com/alibaba/fastjson |
+| com.mysql | mysql-connector-j | https://github.com/mysql/mysql-connector-j |
+| org.bouncycastle | bcprov-jdk18on | https://github.com/bcgit/bc-java |
 
 ## Notes
 

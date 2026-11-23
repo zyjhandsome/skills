@@ -11,7 +11,7 @@
 | batch_implementation_gate | frozen |
 | behavior_parity_required | yes |
 | network_mode | online |
-| report_path | openspec/changes/dep-upgrade-2026q3/evidence/java-dependency-upgrade/exact/app-library__no-boot__variant-default__scope-commons-io/ |
+| report_path | openspec/changes/dep-upgrade-2026q3/evidence/java-dependency-upgrade/exact/app-library__no-boot__default__commons-io/ |
 
 **横幅：** 待人工确认·下一动作=提问
 
@@ -22,10 +22,10 @@
 - 环境前置：`java 17` / `mvn 3.9` / `python 3.12` PASS
 - 主机 JDK（探测）vs 工程声明：均为 17
 - JDK / Spring Boot 线：JDK 17 / 无 Boot
+- 构建变体：default；批次范围：commons-io
 - 入口：exact-table
 - 报告路径（解析结果）：见状态表 `report_path`
-- 构建变体：default；批次范围：commons-io
-- 假设与限制：单组件 remove 样例；安全的 `dependency:analyze-only` 与调用点证据一致显示 unused
+- 假设与限制：安全的 `dependency:analyze-only` 与调用点/配置证据一致显示 unused
 
 ## 2. 依赖清单与解析路径
 
