@@ -245,6 +245,8 @@ UNIT_DECISION_HEADERS = [
     "switch_disposition",
     "decision_evidence",
     "external_owner_or_approval",
+    "source_path",
+    "host_entry",
 ]
 
 COMPARISON_SURFACE_HEADERS = [
@@ -271,6 +273,8 @@ UNIT_DECISION_LABELS = [
     ("switch_disposition", "切换处置"),
     ("decision_evidence", "决策证据"),
     ("external_owner_or_approval", "外部责任人/批准"),
+    ("source_path", "源路径"),
+    ("host_entry", "宿主入口"),
 ]
 COMPARISON_SURFACE_LABELS = [
     ("unit", "单元"),
@@ -823,6 +827,28 @@ def signal_value(root: Path, signal: str) -> str:
     return f"detected ({count} matches)" if count else "not detected"
 
 
+EXTRA_ALIASES: dict[str, str] = {}
+TOKEN_IGNORE = {"src", "main", "webapp", "views", "pages", "page", "components", "component", "index", "html", "htm", "vue", "js", "ts"}
+GENERIC_ALIASES = {"management": "manage", "managed": "manage", "manager": "manage"}
+STEM_SUFFIXES = {"ment", "ing", "er", "ed", "s"}
+
+
+def fold_plural(token: str) -> str:
+    if len(token) > 3 and token.endswith("s") and not token.endswith("ss"):
+        return token[:-1]
+    return token
+
+
+def apply_token_alias(token: str) -> str:
+    return {**GENERIC_ALIASES, **EXTRA_ALIASES}.get(token, token)
+
+
+def split_tokens(value: str) -> list[str]:
+    value = value.replace("\\", "/")
+    value = re.sub(r"([a-z0-9])([A-Z])", r"\1-\2", value)
+    return [token.lower() for token in re.split(r"[^A-Za-z0-9]+", value) if token]
+
+
 def normalize_key(rel: Path) -> str:
     parts = [p.lower() for p in rel.with_suffix("").parts]
     ignored = {
@@ -845,35 +871,43 @@ def normalize_key(rel: Path) -> str:
     }
     parts = [re.sub(r"[^a-z0-9]+", "-", p).strip("-") for p in parts if p not in ignored]
     parts = [p for p in parts if p and p not in {"index", "main", "app"}]
-    return "/".join(parts[-2:]) if parts else rel.stem.lower()
+    deduped = []
+    for part in parts:
+        if not deduped or deduped[-1] != part:
+            deduped.append(part)
+    return "/".join(deduped[-2:]) if deduped else rel.stem.lower()
 
 
 def token_key(value: str) -> str:
-    value = value.replace("\\", "/")
-    value = re.sub(r"([a-z0-9])([A-Z])", r"\1-\2", value)
-    tokens = [token.lower() for token in re.split(r"[^A-Za-z0-9]+", value) if token]
-    aliases = {"management": "manage", "bench": "bench", "work": "work", "phones": "phone"}
-    normalized = [aliases.get(token, token) for token in tokens]
-    return "-".join(normalized)
+    return "-".join(fold_plural(apply_token_alias(token)) for token in split_tokens(value))
 
 
 def last_token_set(value: str) -> set[str]:
-    key = token_key(value)
-    aliases = {
-        "management": "manage",
-        "managed": "manage",
-        "manager": "manage",
-        "bench": "bench",
-        "workbench": "work bench",
-        "taskmanage": "task manage",
-        "taskmanagement": "task manage",
-        "projectprogress": "project progress",
-        "phones": "phone",
-    }
-    expanded = []
-    for token in key.split("-"):
-        expanded.extend(aliases.get(token, token).split())
-    return {token for token in expanded if token and token not in {"src", "main", "webapp", "views", "pages", "page", "components", "component", "index", "html", "htm", "vue", "js", "ts"}}
+    kept = []
+    for token in split_tokens(value):
+        for piece in apply_token_alias(token).split():
+            if piece and piece not in TOKEN_IGNORE:
+                folded = fold_plural(piece)
+                if folded not in TOKEN_IGNORE:
+                    kept.append(folded)
+    return set(kept)
+
+
+def compact_tail(key: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", re.split(r"[/-]", key)[-1])
+
+
+def entry_name_compact(path: str) -> str:
+    candidate = Path(path)
+    name = candidate.parent.name if candidate.stem.lower() in {"index", "main"} and candidate.parent.name else candidate.stem
+    return re.sub(r"[^a-z0-9]", "", name.lower())
+
+
+def stem_suffix_match(left: str, right: str) -> bool:
+    if not left or not right or left == right:
+        return False
+    short, long = (left, right) if len(left) <= len(right) else (right, left)
+    return long.startswith(short) and long[len(short):] in STEM_SUFFIXES
 
 
 def page_kind(root: Path, rel: Path, source: bool) -> str:
@@ -954,6 +988,14 @@ def score_page_match(source: dict[str, str], host: dict[str, str]) -> tuple[int,
     if source_key and source_key == host_key:
         score += 60
         basis.append("normalized-key")
+    source_compact = compact_tail(source_key)
+    host_compact = compact_tail(host_key)
+    if "normalized-key" not in basis and source_compact and source_compact == host_compact:
+        score += 60
+        basis.append("compact-key")
+    elif "normalized-key" not in basis and stem_suffix_match(source_compact, host_compact):
+        score += 60
+        basis.append("stem-suffix")
     overlap = source_tokens & host_tokens
     if overlap:
         score += min(30, len(overlap) * 10)
@@ -1467,7 +1509,7 @@ def repair_scope_gate(comparison: list[dict[str, str]]) -> list[dict[str, str]]:
         if not row.get("source_path"):
             continue
         status = row.get("status", "")
-        has_route_evidence = row.get("host_entry_evidence", "") == "route/menu/MPA evidence"
+        has_route_evidence = row.get("host_entry_evidence", "") in {"route/menu/MPA evidence", "human-confirmed entry"}
         if status == "partial-overlap" and has_route_evidence:
             scope = "repair"
             reason = "partial-overlap 且宿主入口有 route/menu/MPA 证据"
@@ -1622,6 +1664,11 @@ def best_host_entry_for_page(
         entry_tokens = last_token_set(entry_text)
         overlap = page_tokens & entry_tokens
         score = len(overlap) * 10
+        page_compact = entry_name_compact(page["path"])
+        entry_name = entry.get("host_entry_ts") or entry.get("host_entry_html") or ""
+        entry_compact = entry_name_compact(entry_name)
+        if page_compact and entry_compact and (page_compact == entry_compact or stem_suffix_match(page_compact, entry_compact)):
+            score += 80
         if entry_text and any(piece and piece in entry_text.lower() for piece in page_path.split("/")):
             score += 25
         host_route = entry.get("host_route_path", "")
@@ -1723,11 +1770,42 @@ def matching_units(units: list[str], row: dict[str, str]) -> list[str]:
     return [unit for unit in units if unit_matches_row(unit, row)]
 
 
+def meaningful_decision(value: str) -> bool:
+    text = (value or "").strip()
+    return bool(text) and not text.startswith("[")
+
+
+def load_unit_decisions(path: str) -> dict[str, dict[str, str]]:
+    with Path(path).open(encoding="utf-8-sig", newline="") as handle:
+        return {
+            row["unit"].strip(): {key.strip(): (value or "").strip() for key, value in row.items() if isinstance(key, str)}
+            for row in csv.DictReader(handle)
+            if (row.get("unit") or "").strip()
+        }
+
+
+def apply_unit_decisions(comparison: list[dict[str, str]], decisions: dict[str, dict[str, str]]) -> None:
+    for unit, decision in decisions.items():
+        matches = resolve_unit_rows(unit, comparison)
+        if len(matches) != 1:
+            continue
+        row = matches[0]
+        status = decision.get("comparison_status", "")
+        if meaningful_decision(status):
+            row["status"] = status
+        host_entry = decision.get("host_entry", "")
+        evidence = decision.get("decision_evidence", "")
+        if meaningful_decision(host_entry) and meaningful_decision(evidence):
+            row["host_entry"] = host_entry
+            row["host_entry_evidence"] = "human-confirmed entry"
+
+
 def unit_decision_rows(units: list[str], comparison: list[dict[str, str]]) -> list[dict[str, str]]:
     rows = []
     for unit in units:
-        matches = [row for row in comparison if unit_matches_row(unit, row)]
+        matches = resolve_unit_rows(unit, comparison)
         statuses = sorted({row.get("status", "unknown") for row in matches}) or ["unknown"]
+        chosen = matches[0] if len(matches) == 1 else {}
         rows.append(
             {
                 "unit": unit,
@@ -1737,6 +1815,8 @@ def unit_decision_rows(units: list[str], comparison: list[dict[str, str]]) -> li
                 "switch_disposition": "[unresolved]",
                 "decision_evidence": "[human evidence required]",
                 "external_owner_or_approval": "[unresolved]",
+                "source_path": chosen.get("source_path", ""),
+                "host_entry": chosen.get("host_entry", ""),
             }
         )
     return rows
@@ -1877,6 +1957,7 @@ def matrix_row_matches_unit(unit: str, row: dict[str, str]) -> bool:
     return slugify(unit) in slugify(row.get("DISP-ID", ""))
 
 
+OPEN_COMPARISON_STATUSES = {"unmigrated", "dest-built-unwired", "wired-hidden", "develop-native", "orphan-mpa", "unknown"}
 MATRIX_LIFECYCLES = {"active", "retired", "stale"}
 
 
@@ -1902,8 +1983,11 @@ def verify_one_unit(
             "status": "fail",
             "reason": f"unit matches {len(matches)} source pages: {paths}; tighten the unit name",
         }
-    if any(row.get("status") == "unmigrated" for row in matches):
+    status = matches[0].get("status")
+    if status == "unmigrated":
         return {"unit": unit, "status": "fail", "reason": "selected unit is unmigrated"}
+    if status in OPEN_COMPARISON_STATUSES:
+        return {"unit": unit, "status": "fail", "reason": f"unit comparison status is open: {status}"}
     if persisted_matrix is None:
         return {
             "unit": unit,
@@ -2392,6 +2476,8 @@ def collect_data(args) -> dict:
     comparison = compare_pages(source_pages, host_pages)
     url_entry_mapping = build_url_entry_mapping(source, host, source_pages, host_pages)
     reconcile_comparison_entries(comparison, url_entry_mapping)
+    if getattr(args, "unit_decisions", None):
+        apply_unit_decisions(comparison, load_unit_decisions(args.unit_decisions))
     data = {
         "source_repo": source,
         "host_repo": host,
@@ -2494,6 +2580,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--format", choices=["markdown", "html", "csv", "all"], default="all")
     parser.add_argument("--source-acquisition-warning", default="", help="Optional warning from source repo clone/fetch, recorded as evidence.")
     parser.add_argument("--host-acquisition-warning", default="", help="Optional warning from host repo clone/fetch, recorded as evidence.")
+    parser.add_argument("--unit-decisions", help="CSV of human-corrected unit decisions. A filled 19-unit-decisions.csv can be passed back.")
+    parser.add_argument("--alias", action="append", default=[], help="Extra token alias, from=to. Repeat for more than one.")
     return parser
 
 
@@ -2510,6 +2598,12 @@ def parse_units(raw_units: list[str]) -> list[str]:
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
+    EXTRA_ALIASES.clear()
+    for item in args.alias:
+        if "=" not in item:
+            parser.error(f"--alias must be from=to, got {item}")
+        source_token, target_token = item.split("=", 1)
+        EXTRA_ALIASES[source_token.strip().lower()] = target_token.strip().lower()
     args.units = parse_units(args.unit)
     if args.mode in {"design", "verify"} and not args.units:
         parser.error(f"{args.mode} mode requires --unit")

@@ -81,6 +81,8 @@ If only one repo is available, perform source-only assessment and state that hos
 python -B "<skill-dir>/scripts/generate_migration_plan.py" assess --project-name "<source>-to-<host>" --source-repo "<A>" --host-repo "<B>" --output-dir "<evidence-dir>"
 python -B "<skill-dir>/scripts/generate_migration_plan.py" design --unit "<unit>" --source-repo "<A>" --host-repo "<B>" --output-dir "<evidence-dir>"
 python -B "<skill-dir>/scripts/generate_migration_plan.py" verify --unit "<unit>" --matrix "<ledger.md|.csv>" --source-repo "<A>" --host-repo "<B>" --output-dir "<evidence-dir>"
+# After a person corrects 19-unit-decisions.csv, pass it back. Placeholder values that start with "[" are ignored.
+python -B "<skill-dir>/scripts/generate_migration_plan.py" verify --unit "<unit>" --matrix "<ledger.md|.csv>" --unit-decisions "<19-unit-decisions.csv>" --source-repo "<A>" --host-repo "<B>" --output-dir "<evidence-dir>"
 ```
 
 14. Treat script output as evidence baseline only. Do not treat generated tables as implementation design until reviewed against source and host code. Header-only FLOW/VAR/CHAIN contracts are not design-ready, and generated tables never substitute for the display-contract matrix.

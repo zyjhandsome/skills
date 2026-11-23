@@ -431,5 +431,72 @@ class GateAlignmentTest(unittest.TestCase):
         self.assertEqual("身份上下文", dict(gen.COMPARISON_SURFACE_LABELS)["identity_context"])
 
 
+class UnitDecisionTest(TempDirCase):
+    def decisions(self, status: str, host_entry: str = "", evidence: str = "menu.json:12") -> dict:
+        write(self.tmp / "d.csv",
+              "unit,comparison_status,unit_identity_kind,landing_strategy,switch_disposition,"
+              "decision_evidence,external_owner_or_approval,source_path,host_entry\n"
+              f"taskManage,{status},business-page,native,authorized-switch,{evidence},owner,views/taskManage.jsp,{host_entry}\n")
+        return gen.load_unit_decisions(str(self.tmp / "d.csv"))
+
+    def test_human_open_status_blocks_verify(self):
+        comparison = [dict(PARTIAL[0])]
+        gen.apply_unit_decisions(comparison, self.decisions("wired-hidden"))
+        result = gen.verify_one_unit("taskManage", comparison, CLOSED)
+        self.assertEqual("fail", result["status"])
+        self.assertIn("unit comparison status is open: wired-hidden", result["reason"])
+
+    def test_human_already_migrated_reaches_matrix_check(self):
+        comparison = [dict(PARTIAL[0], status="unmigrated")]
+        gen.apply_unit_decisions(comparison, self.decisions("already-migrated"))
+        self.assertEqual("pass", gen.verify_one_unit("taskManage", comparison, CLOSED)["status"])
+
+    def test_placeholder_values_are_ignored(self):
+        comparison = [dict(PARTIAL[0])]
+        gen.apply_unit_decisions(comparison, self.decisions("[unresolved]"))
+        self.assertEqual("partial-overlap", comparison[0]["status"])
+
+    def test_human_confirmed_entry_authorizes_repair(self):
+        comparison = [dict(PARTIAL[0], host_entry_evidence="filename guess only")]
+        gen.apply_unit_decisions(comparison, self.decisions("partial-overlap", host_entry="src/pages/task/task.ts"))
+        self.assertEqual("human-confirmed entry", comparison[0]["host_entry_evidence"])
+        self.assertEqual("repair", gen.repair_scope_gate(comparison)[0]["design_scope"])
+
+    def test_entry_without_evidence_does_not_authorize_repair(self):
+        comparison = [dict(PARTIAL[0], host_entry_evidence="filename guess only")]
+        gen.apply_unit_decisions(
+            comparison, self.decisions("partial-overlap", host_entry="src/pages/task/task.ts", evidence="[human evidence required]"))
+        self.assertEqual("filename guess only", comparison[0]["host_entry_evidence"])
+
+
+class MatcherTest(unittest.TestCase):
+    def score(self, source_rel: str, host_rel: str) -> int:
+        source = {"key": gen.normalize_key(Path(source_rel)), "tokens": " ".join(sorted(gen.last_token_set(source_rel))),
+                  "kind": "source-page", "path": source_rel}
+        host = {"key": gen.normalize_key(Path(host_rel)), "tokens": " ".join(sorted(gen.last_token_set(host_rel))),
+                "kind": gen.page_kind(Path("."), Path(host_rel), False), "path": host_rel}
+        return gen.score_page_match(source, host)[0]
+
+    def test_generic_rules_match_without_project_words(self):
+        pairs = [
+            ("src/main/webapp/views/userProfile.jsp", "src/pages/userprofile/userprofile.html"),
+            ("src/main/webapp/views/taskManage.jsp", "src/pages/taskManagement/taskManagement.html"),
+            ("src/main/resources/templates/thymeleaf/workBench/index.html", "src/pages/workbench/workbench.html"),
+            ("src/main/webapp/views/orders.jsp", "src/pages/order/order.html"),
+        ]
+        for source_rel, host_rel in pairs:
+            self.assertGreaterEqual(self.score(source_rel, host_rel), 45, f"{source_rel} -> {host_rel}")
+
+    def test_unrelated_pages_stay_below_threshold(self):
+        self.assertLess(self.score("views/taskManage.jsp", "src/pages/taskCenter/taskCenter.html"), 45)
+        self.assertLess(self.score("views/userList.jsp", "src/pages/orderList/orderList.html"), 45)
+        self.assertLess(self.score("views/taskManage.jsp", "src/views/TaskCenter.vue"), 45)
+
+    def test_source_has_no_project_vocabulary(self):
+        text = (SKILL_ROOT / "scripts/generate_migration_plan.py").read_text(encoding="utf-8")
+        for word in ['"workbench"', '"taskmanage"', '"taskmanagement"', '"projectprogress"', '"phones"']:
+            self.assertNotIn(word, text)
+
+
 if __name__ == "__main__":
     unittest.main()
