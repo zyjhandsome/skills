@@ -1,11 +1,5 @@
 # jQuery To Vue 3 Business Logic Analysis
 
-Distilled from:
-
-- `D:\projects\book2skills\jQuery 业务逻辑代码分析方法.txt`
-- `D:\projects\book2skills\jQuery 迁移 Vue 影响范围分析表.txt`
-- `D:\projects\book2skills\jQuery 业务逻辑分析表模板.txt`
-
 ## Core Principle
 
 jQuery migration analysis is not line-by-line syntax translation. First reconstruct the business flow:
@@ -51,16 +45,16 @@ Only after the flow is explicit should it be mapped to Vue components, reactive 
 
 ## Code Audit Commands
 
-Use these as evidence collection, not as a substitute for reading handlers and callbacks:
+`<EXCL>` is defined in `SKILL.md` → Scan Commands; run from the repository root. Use these as evidence collection, not as a substitute for reading handlers and callbacks:
 
-```bash
-rg -n "\$\(document\)\.ready|\$\(function|\.ready\(" .
-rg -n "\.on\(|\.click\(|\.change\(|\.submit\(|\.keyup\(|\.blur\(" .
-rg -n "\$\.ajax\(|\$\.get\(|\$\.post\(|url\s*:" .
-rg -n "\.val\(|\.html\(|\.text\(|\.append\(|\.show\(|\.hide\(|\.addClass\(|\.removeClass\(|\.css\(" .
-rg -n "\.prop\(|\.attr\(|return false|alert\(|confirm\(|if\s*\(|switch\s*\(" .
-rg -n "DataTables|dataTable|jqGrid|bootstrapTable|datepicker|zTree|modal\(|upload|select2|chosen|validate\(" .
-rg -n "window\.|setInterval\(|setTimeout\(|location\.href|window\.location|history\.back|data-" .
+```text
+rg -n <EXCL> '\$\(document\)\.ready|\$\(function|\.ready\(' .
+rg -n <EXCL> '\.on\(|\.click\(|\.change\(|\.submit\(|\.keyup\(|\.blur\(' .
+rg -n <EXCL> '\$\.ajax\(|\$\.get\(|\$\.post\(|url\s*:' .
+rg -n <EXCL> '\.val\(|\.html\(|\.text\(|\.append\(|\.show\(|\.hide\(|\.addClass\(|\.removeClass\(|\.css\(' .
+rg -n <EXCL> '\.prop\(|\.attr\(|return false|alert\(|confirm\(|if\s*\(|switch\s*\(' .
+rg -n <EXCL> 'DataTables|dataTable|jqGrid|bootstrapTable|datepicker|zTree|modal\(|upload|select2|chosen|validate\(' .
+rg -n <EXCL> 'window\.|setInterval\(|setTimeout\(|location\.href|window\.location|history\.back|data-' .
 ```
 
 ## jQuery To Vue Mapping

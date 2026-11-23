@@ -1,12 +1,6 @@
 # AngularJS To Vue 3 Migration Method
 
-Distilled from `D:\projects\book2skills\AngularJS 前端项目升级迁移到 Vue 3 的深度研究报告.md`.
-
-## Hosted Migration Override
-
-For this skill, the default migration path is now hosted migration into an existing Vue3 repository. Load `references/hosted-vue3-migration-method.md` first when a host repo exists.
-
-Use this file for AngularJS construct mapping, risk background, and greenfield fallback only. Do not recommend creating a Vite/create-vue skeleton when the user's Vue3 host already exists.
+Greenfield only. Hosted runs use `hosted-vue3-migration-method.md` and `angularjs-construct-mapping.md`.
 
 ## Coverage Standard
 
@@ -85,17 +79,17 @@ If a bridge becomes the only way new pages can be delivered, the migration is dr
 
 ## Code Audit Commands
 
-Use these commands as a first pass when a repository is available. They should create evidence for the inventory, not replace manual review:
+`<EXCL>` is defined in `SKILL.md` → Scan Commands; run from the repository root. Use these commands as a first pass when a repository is available. They should create evidence for the inventory, not replace manual review:
 
-```bash
-rg -n "angular\.module|\.component\(|\.directive\(|\.controller\(|\.service\(|\.factory\(|\.provider\(|\.filter\(" src
-rg -n "\$scope|\$rootScope|\$watch|\$emit|\$broadcast" src
-rg -n "\$http|\$resource|\$q|interceptor" src
-rg -n "\$stateProvider|\$urlRouterProvider|ui-router|ngRoute|\$location" src
-rg -n "ng-repeat|ng-if|ng-show|ng-model|ng-class|ng-style|filter:" src
-rg -n "jquery|\$\(|moment|lodash|chart|editor|datepicker|upload" src
-rg -n "Karma|Jasmine|Protractor|selenium|cypress|playwright" .
-rg -n "gulp|grunt|bower|webpack|vite|rollup" .
+```text
+rg -n <EXCL> 'angular\.module|\.component\(|\.directive\(|\.controller\(|\.service\(|\.factory\(|\.provider\(|\.filter\(' .
+rg -n <EXCL> '\$scope|\$rootScope|\$watch|\$emit|\$broadcast' .
+rg -n <EXCL> '\$http|\$resource|\$q|interceptor' .
+rg -n <EXCL> '\$stateProvider|\$urlRouterProvider|ui-router|ngRoute|\$location' .
+rg -n <EXCL> 'ng-repeat|ng-if|ng-show|ng-model|ng-class|ng-style|filter:' .
+rg -n <EXCL> 'jquery|\$\(|moment|lodash|chart|editor|datepicker|upload' .
+rg -n <EXCL> 'Karma|Jasmine|Protractor|selenium|cypress|playwright' .
+rg -n <EXCL> 'gulp|grunt|bower|webpack|vite|rollup' .
 ```
 
 Classify findings into:
@@ -115,25 +109,7 @@ Classify findings into:
 
 ## AngularJS To Vue 3 Mapping
 
-| AngularJS 1.x | Vue 3 Target | Migration Rule |
-|---|---|---|
-| `angular.module()` | `createApp()` and app shell | Rebuild application boundary; do not mimic module globals. |
-| controller + `$scope` | SFC + `setup()` + `ref/reactive` | Declare state explicitly and keep side effects out of computed values. |
-| component bindings `<`, `@`, `&` | props and emits | Make input/output contracts explicit. |
-| directive with template | Vue component | Prefer components for visual behavior. |
-| directive with DOM behavior | Vue custom directive or component lifecycle | Use custom directives only for low-level DOM reuse. |
-| service/factory/provider | API modules, composables, Pinia stores | First remove AngularJS DI coupling, then adopt Vue boundaries. |
-| filter | computed, methods, utility functions | Do not recreate global template filters. |
-| `$http`, `$resource` | fetch or axios API client | Centralize auth headers, base URL, errors, timeout, retry. |
-| `$q` | Promise and async/await | Normalize async behavior during API extraction. |
-| `$watch` | `watch` or `watchEffect` | Watch only necessary sources; avoid deep bridge watching. |
-| `$emit` / `$broadcast` | props/emits, Pinia, or a narrow event bus | Prefer ownership and store boundaries over broad events. |
-| ui-router / ngRoute | Vue Router 4 | Map route meta, guards, lazy pages, redirects, and legacy deep links. |
-| `ng-repeat` | `v-for` with `:key` | Filter/sort through computed arrays before rendering. |
-| `ng-if` / `ng-show` | `v-if` / `v-show` | Preserve mount/unmount semantics and state reset behavior. |
-| `ng-model` | `v-model` / `modelValue` events | Component v-model has explicit event semantics in Vue 3. |
-| Karma/Jasmine | Vitest + Vue Test Utils | New code should start with modern tests. |
-| Protractor | Playwright or Cypress | Cover critical route and business flows in real browsers. |
+The construct table and the runtime-semantics table live in `angularjs-construct-mapping.md`.
 
 ## Concrete Migration Examples
 
@@ -167,7 +143,7 @@ angular.module('app').component('userEditor', {
 
 ```vue
 <script setup>
-import { reactive, watch } from 'vue'
+import { reactive, toRaw } from 'vue'
 import { userApi } from '@/api/userApi'
 
 const props = defineProps({
@@ -175,13 +151,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['saved'])
-const form = reactive({ ...props.user })
-
-watch(
-  () => props.user,
-  (next) => Object.assign(form, next),
-  { deep: true }
-)
+const form = reactive(structuredClone(toRaw(props.user)))
 
 async function save() {
   const saved = await userApi.update(form)
@@ -202,7 +172,8 @@ Migration meaning:
 - `<` binding becomes props.
 - `&` callback becomes emits.
 - `ng-model` becomes `v-model`.
-- `$onInit` initialization becomes setup state initialization.
+- `$onInit` initialization becomes setup state initialization. Copy once, matching `$onInit`; do not watch the prop and overwrite later edits.
+- When the object contains functions or class instances, use the host's existing deep-copy helper instead of `structuredClone`.
 - API access moves through a framework-independent API module.
 
 ### AngularJS Service To API Module And Pinia
@@ -399,15 +370,7 @@ Remove old stack only after all routes and pages are migrated:
 
 ## Coexistence Pitfalls
 
-Write these into engineering standards before the first mixed release:
-
-- Do not mechanically put `v-if` and `v-for` on the same node when translating `ng-repeat` plus filters. Prefer a computed list, then render with `v-for`.
-- Keep computed values side-effect free. Use `watch` for side effects.
-- Avoid deep bridge watching. AngularJS bridge deep watch can traverse/copy large objects during digest and create serious performance regressions.
-- Do not confuse AngularJS `ng-model` with Vue 3 component `v-model`. Vue 3 component v-model uses explicit `modelValue` and `update:modelValue` semantics.
-- Do not convert every AngularJS directive to a Vue custom directive. Visual and stateful behavior should usually become a component.
-- Do not replace all third-party UI plugins during the same step as framework migration unless the page is isolated and well-tested.
-- Do not remove old URLs until deep links, bookmarks, and support documents are updated or redirected.
+The coexistence rules live in `angularjs-construct-mapping.md`. Write them into the engineering standard before the first mixed release.
 
 ## Testing, Performance, And Monitoring
 

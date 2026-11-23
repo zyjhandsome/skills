@@ -121,9 +121,9 @@ An unresolved record must state the known source, missing evidence, risk, and a 
 
 Every material node includes `file:line`, scope/function, condition, business meaning, and confidence.
 
-- **High:** definition and consumption both have direct source evidence.
-- **Medium:** an explicit call relationship connects the nodes, but framework or runtime resolution remains.
-- **Low:** a dynamic property, string event, plugin state, or missing caller requires inference.
+- **high:** definition and consumption both have direct source evidence.
+- **medium:** an explicit call relationship connects the nodes, but framework or runtime resolution remains.
+- **low:** a dynamic property, string event, plugin state, or missing caller requires inference.
 
 Separate facts, inferences, and `UNRESOLVED` edges. Never raise confidence because a guessed chain appears plausible.
 
@@ -187,10 +187,10 @@ Given the `app.js` and `order.html` fixture used below, the save flow is:
 
 | FLOW-ID | 步骤 | 入口/触发 | 条件 | 输入 | 处理 | 输出 | 调用目标 | 副作用 | 业务含义 | 证据 | 置信度 | 关联 CHAIN-ID |
 |---|---:|---|---|---|---|---|---|---|---|---|---|---|
-| FLOW-SAVE | 1 | form submit | — | `orderForm` | call `vm.submit` | form state | controller | begin save | user requests save | `order.html:2` | High | CHAIN-CITY, CHAIN-POSTAL, CHAIN-PERMISSION |
-| FLOW-SAVE | 2 | `vm.submit` | valid and edit allowed | form, order, permission | build payload | id/city/postalCode | `buildPayload` | — | enforce save rules | `app.js:17-21` | High | CHAIN-CITY, CHAIN-POSTAL, CHAIN-PERMISSION |
-| FLOW-SAVE | 3 | payload ready | guard passed | payload | POST order | Promise response | `OrderApi.save` | request | persist order | `app.js:5,21-22` | High | CHAIN-CITY, CHAIN-POSTAL |
-| FLOW-SAVE | 4 | Promise resolved | success callback | response | map result | status/message | callback | state and DOM updates | show save result | `app.js:22-25` | High | CHAIN-STATUS |
+| FLOW-SAVE | 1 | form submit | — | `orderForm` | call `vm.submit` | form state | controller | begin save | user requests save | `order.html:2` | high | CHAIN-CITY, CHAIN-POSTAL, CHAIN-PERMISSION |
+| FLOW-SAVE | 2 | `vm.submit` | valid and edit allowed | form, order, permission | build payload | id/city/postalCode | `buildPayload` | — | enforce save rules | `app.js:17-21` | high | CHAIN-CITY, CHAIN-POSTAL, CHAIN-PERMISSION |
+| FLOW-SAVE | 3 | payload ready | guard passed | payload | POST order | Promise response | `OrderApi.save` | request | persist order | `app.js:5,21-22` | high | CHAIN-CITY, CHAIN-POSTAL |
+| FLOW-SAVE | 4 | Promise resolved | success callback | response | map result | status/message | callback | state and DOM updates | show save result | `app.js:22-25` | high | CHAIN-STATUS |
 
 Key aliases:
 
@@ -204,17 +204,17 @@ Representative chains:
 
 | CHAIN-ID | 步骤 | VAR-ID | 规范化路径 | 操作 | 作用域/函数 | 上游 | 下游 | 条件 | 业务含义 | 证据 | 置信度 | Vue3 Host 落点 |
 |---|---:|---|---|---|---|---|---|---|---|---|---|---|
-| CHAIN-CITY | 1 | VAR-ORDER | `$scope.initialOrder` | INJECT | `OrderCtrl` | scope input | `vm.order` | — | initial order source | `app.js:14` | High | route/prop/store input |
-| CHAIN-CITY | 2 | VAR-CITY | `vm.order.customer.address.city` | ALIAS | `OrderCtrl/vm.submit` | `vm.order→customer→address` | `address.city` | — | locate shipping city | `app.js:14-18` | High | reactive form state |
-| CHAIN-CITY | 3 | VAR-CITY | `vm.order.customer.address.city` | PASS | `vm.submit→buildPayload` | `address.city` | `payload.city` | form valid and allowed | request city | `app.js:19,21,29-33` | High | API request DTO |
-| CHAIN-CITY | 4 | VAR-CITY | `payload.city` | AJAX | `OrderApi.save` | payload | POST body | guard passed | persist city | `app.js:5,22` | High | API client |
-| CHAIN-CITY | 5 | VAR-CITY | `vm.order.customer.address.city` | WATCH | `$scope.$watch` | order city | callback `city` | city changes | refresh preview | `app.js:37-38` | High | Vue `watch` |
-| CHAIN-CITY | 6 | VAR-CITY | `vm.order.customer.address.city` | DOM | watch callback | callback `city` | `#city-preview` text | city changes | display city preview | `app.js:38` | High | declarative template |
-| CHAIN-POSTAL | 1 | VAR-POSTAL | `vm.order.customer.address.postal.code` | TEMPLATE | `order.html` | order state | interpolation | span rendered | display postal code | `order.html:5` | High | interpolation/computed |
-| CHAIN-POSTAL | 2 | VAR-POSTAL | `vm.order.customer.address.postal.code` | PASS | `buildPayload` | `address.postal.code` | `payload.postalCode` | form valid and allowed | request postal code | `app.js:21,29-33` | High | API request DTO |
-| CHAIN-STATUS | 1 | VAR-STATUS | `response.data.status` | READ | Promise callback | response | `vm.order.status` | request succeeds | receive saved status | `app.js:22-23` | High | API response DTO |
-| CHAIN-STATUS | 2 | VAR-STATUS | `vm.order.status` | WRITE | Promise callback | response status | order state | request succeeds | update saved order | `app.js:23-24` | High | reactive state/store |
-| CHAIN-STATUS | 3 | VAR-STATUS | `vm.order.status` | TEMPLATE | `order.html` | order state | `ng-if` | equals `saved` | show saved content | `order.html:4-6` | High | `v-if` |
+| CHAIN-CITY | 1 | VAR-ORDER | `$scope.initialOrder` | INJECT | `OrderCtrl` | scope input | `vm.order` | — | initial order source | `app.js:14` | high | route/prop/store input |
+| CHAIN-CITY | 2 | VAR-CITY | `vm.order.customer.address.city` | ALIAS | `OrderCtrl/vm.submit` | `vm.order→customer→address` | `address.city` | — | locate shipping city | `app.js:14-18` | high | reactive form state |
+| CHAIN-CITY | 3 | VAR-CITY | `vm.order.customer.address.city` | PASS | `vm.submit→buildPayload` | `address.city` | `payload.city` | form valid and allowed | request city | `app.js:19,21,29-33` | high | API request DTO |
+| CHAIN-CITY | 4 | VAR-CITY | `payload.city` | AJAX | `OrderApi.save` | payload | POST body | guard passed | persist city | `app.js:5,22` | high | API client |
+| CHAIN-CITY | 5 | VAR-CITY | `vm.order.customer.address.city` | WATCH | `$scope.$watch` | order city | callback `city` | city changes | refresh preview | `app.js:37-38` | high | Vue `watch` |
+| CHAIN-CITY | 6 | VAR-CITY | `vm.order.customer.address.city` | DOM | watch callback | callback `city` | `#city-preview` text | city changes | display city preview | `app.js:38` | high | declarative template |
+| CHAIN-POSTAL | 1 | VAR-POSTAL | `vm.order.customer.address.postal.code` | TEMPLATE | `order.html` | order state | interpolation | span rendered | display postal code | `order.html:5` | high | interpolation/computed |
+| CHAIN-POSTAL | 2 | VAR-POSTAL | `vm.order.customer.address.postal.code` | PASS | `buildPayload` | `address.postal.code` | `payload.postalCode` | form valid and allowed | request postal code | `app.js:21,29-33` | high | API request DTO |
+| CHAIN-STATUS | 1 | VAR-STATUS | `response.data.status` | READ | Promise callback | response | `vm.order.status` | request succeeds | receive saved status | `app.js:22-23` | high | API response DTO |
+| CHAIN-STATUS | 2 | VAR-STATUS | `vm.order.status` | WRITE | Promise callback | response status | order state | request succeeds | update saved order | `app.js:23-24` | high | reactive state/store |
+| CHAIN-STATUS | 3 | VAR-STATUS | `vm.order.status` | TEMPLATE | `order.html` | order state | `ng-if` | equals `saved` | show saved content | `order.html:4-6` | high | `v-if` |
 
 Permission resolution remains explicit:
 
