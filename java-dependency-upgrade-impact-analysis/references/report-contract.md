@@ -121,8 +121,8 @@ python -B "<skill-dir>/scripts/validate_report.py" --evidence-dir <evidence-dir>
 
 同波可列出全部 `ready`/`pending` 单元，但**每个决策单元须有独立显式答复**；无 `to` 时禁止一条「全部 proceed」。  
 人工答复后将队列状态改为 `decided`（proceed/remove/exclude/replace）或 `deferred`；`analysis_status=complete` 时不得残留 `ready`/`pending`。残留的证据型 `blocked` 可与 `complete` 共存（见 `human-confirmation-gates.md` 状态转移）。  
-`blocked` 行的「选项」列只写重述目标 / `restate target` / `other`（放弃或改写），**不要**列出
-`proceed`/`remove`/`exclude`/`replace`/`defer` 作为独立选项 token（说明性文字里提到这些词可以）。  
+`blocked` 行按原因填写选项。目标缺失、存在性未知且无可用替代，或非 GA 未获允许时，请用户「重述目标」（`restate target`）或选 `other` 放弃或改写。目标可用但声称的 `from` 与解析版本不一致时，只给 `use-claimed` / `use-resolved` 两个完整选项。
+若两种阻塞并存，先重述目标，并在决策记录保留 `baseline_evidence_status=mismatch`。仍有基线冲突时，整包保持 `partial` / `needs_choice` / `frozen`。选项用斜杠分隔。
 `pending` 行（可行·待补证）问题须含「待补证」/`pending-baseline`/「补证清单」；选项仅 `defer`/`other`，**不得** `proceed:`。  
 `proceed:g:a:v` / `replace:g:a:v` 的版本必须与清单目标或推荐替代一致。
 

@@ -111,8 +111,8 @@ REPLACE_OPTION = re.compile(
     r"^replace:([A-Za-z0-9_.\-]+):([A-Za-z0-9_.\-*]+)"
     r"(?::([A-Za-z0-9_.+\-]+))?$"
 )
-BLOCKED_OPTION_EXACT = {"remove", "exclude", "defer"}
-BLOCKED_RESTATE_MARKERS = ("重述", "restate")
+BLOCKED_OPTION_EXACT = {"proceed", "remove", "exclude", "replace", "defer"}
+BASELINE_CHOICES = {"use-claimed", "use-resolved"}
 MOVE_TREATMENTS = {
     "upgrade-self",
     "upgrade-owner",
@@ -583,20 +583,18 @@ def option_is_forbidden_on_pending(option: str) -> bool:
     return False
 
 
-def offers_baseline_choice(options: str) -> bool:
-    lowered = options.lower()
-    return "use-claimed" in lowered and "use-resolved" in lowered
-
-
-def blocked_options_allow_restate(options: str, option_tokens: list[str]) -> bool:
-    if offers_baseline_choice(options):
-        return True
-    joined = options.lower()
-    if any(marker.lower() in joined for marker in BLOCKED_RESTATE_MARKERS):
-        return True
-    if any(token.lower() == "other" for token in option_tokens):
-        return True
-    return False
+def blocked_menu(options: str) -> str | None:
+    tokens = [clean_cell(part).lower() for part in options.split("/")]
+    if len(tokens) == 2 and set(tokens) == BASELINE_CHOICES:
+        return "baseline"
+    # A restatement can be preceded by a note, e.g. “不可 remove；重述目标”.
+    restate = (
+        r"(?:.*[；;]\s*)?(?:重述[^；;]*目标|restate\b[^；;]*\btarget|other)"
+        r"(?:\s*[（(].*[）)])?"
+    )
+    if all(re.fullmatch(restate, token) for token in tokens):
+        return "restate"
+    return None
 
 
 def pending_options_allow_catchup(option_tokens: list[str]) -> bool:
@@ -730,7 +728,8 @@ def check_queue(
     inventory: list[InventoryItem],
     statuses: dict[str, str],
     findings: Findings,
-) -> list[tuple[str, str, str]]:
+    baselines: dict[str, str],
+) -> list[tuple[str, str]]:
     """Validate confirmation queue; return [(component, status), ...] for cross-checks."""
     section = "确认队列"
     if section not in bounds:
@@ -751,6 +750,9 @@ def check_queue(
     question_at = header.index("问题") if "问题" in header else None
     options_at = header.index("选项")
     queue: list[tuple[str, str, str, str, str]] = []
+    unresolved_baselines = {
+        component for component, baseline in baselines.items() if baseline == "mismatch"
+    }
     for row in rows:
         needed = max(component_at, status_at, options_at, question_at or 0)
         if len(row) <= needed:
@@ -779,9 +781,13 @@ def check_queue(
                 findings.error(
                     f"blocked 行不得提供 proceed/remove/exclude/replace/defer：{component}"
                 )
-            if not blocked_options_allow_restate(options, option_tokens):
+            menu = blocked_menu(options)
+            if menu == "baseline":
+                unresolved_baselines.add(component)
+            elif menu is None:
                 findings.error(
-                    f"blocked 行只能提供重述目标/restate target 或 other：{component}"
+                    f"blocked 行须按阻塞原因提供重述目标/other 或完整的 "
+                    f"use-claimed / use-resolved：{component}"
                 )
         if status == "pending":
             if any(option_is_forbidden_on_pending(token) for token in option_tokens):
@@ -825,24 +831,38 @@ def check_queue(
         target_for_channel = (
             item.replacement if item.treatment in ALTERNATIVE_TREATMENTS else item.target
         )
-        if target_for_channel and NON_GA_PATTERN.search(target_for_channel):
-            ready_hits = [match for match in matches if match[1] == "ready"]
-            if ready_hits:
-                allow_markers = (
-                    item.row_text + " " + " ".join(match[4] for match in matches)
-                ).lower()
-                if "non-ga-allowed" not in allow_markers:
-                    findings.error(
-                        f"非 GA 目标不得进入 ready（须显式 non-ga-allowed）："
-                        f"{item.component} → {target_for_channel}"
-                    )
+        allow_markers = (item.row_text + " " + " ".join(match[4] for match in matches)).lower()
+        channel_blocked = (
+            bool(NON_GA_PATTERN.search(target_for_channel)) and "non-ga-allowed" not in allow_markers
+        )
+        target_blocked = (
+            effective_existence in {"no", "unknown"}
+            or item.treatment == "no-viable-path"
+            or channel_blocked
+        )
+        if channel_blocked and any(match[1] == "ready" for match in matches):
+            findings.error(
+                f"非 GA 目标不得进入 ready（须显式 non-ga-allowed）："
+                f"{item.component} → {target_for_channel}"
+            )
         if item.direction == "downgrade":
             downgrade_notice = " ".join(match[4] for match in matches).lower()
             if "降级" not in downgrade_notice and "downgrade" not in downgrade_notice:
                 findings.error(
                     f"显式降级必须在确认问题中醒目标注“降级/downgrade”：{item.component}"
                 )
+        baseline = baselines.get(item.component, "")
         for component, status, _, options, _ in matches:
+            if baseline == "mismatch" and status != "blocked":
+                findings.error(f"基线未选定时确认队列必须为 blocked：{component}")
+            if status == "blocked":
+                menu = blocked_menu(options)
+                if menu == "baseline" and target_blocked:
+                    findings.error(f"须先重述可达目标或选 other，不能选择基线：{component}")
+                elif menu == "baseline" and baseline not in {"", "mismatch"}:
+                    findings.error(f"基线选项与 baseline_evidence_status={baseline} 冲突：{component}")
+                elif menu == "restate" and baseline == "mismatch" and not target_blocked:
+                    findings.error(f"基线未选定的 blocked 行只能提供 use-claimed / use-resolved：{component}")
             if status != "ready":
                 continue
             cleaned_options = split_options(options)
@@ -892,17 +912,12 @@ def check_queue(
             f"确认队列仍有 ready/pending 时 decision_status 必须为 needs_choice："
             + "、".join(askable)
         )
-    baseline_asks = [
-        component
-        for component, status, _, options, _ in queue
-        if status == "blocked" and offers_baseline_choice(options)
-    ]
-    if decision_status == "needs_choice" and not askable and not baseline_asks:
+    if decision_status == "needs_choice" and not askable and not unresolved_baselines:
         findings.error(
-            "decision_status=needs_choice 但确认队列没有 ready/pending 项"
+            "decision_status=needs_choice 但队列没有 ready/pending 项或待选基线"
         )
-    if baseline_asks:
-        joined = "、".join(baseline_asks)
+    if unresolved_baselines:
+        joined = "、".join(sorted(unresolved_baselines))
         if analysis_status != "partial":
             findings.error(
                 "基线未选定（use-claimed / use-resolved）时 analysis_status 必须为 partial："
@@ -957,7 +972,7 @@ def check_queue(
                 "队列已全部 decided/deferred 且无 blocked/pending，"
                 "analysis_status=complete 时 batch_implementation_gate 必须为 ready"
             )
-    return [(component, status, options) for component, status, _, options, _ in queue]
+    return [(component, status) for component, status, _, _, _ in queue]
 
 
 def record_fields(text: str) -> dict[str, str] | None:
@@ -1125,16 +1140,14 @@ def check_recorded_answer(
         findings.error(f"已决策的 exclude 缺少 exclude 答复：{name}")
 
 
-def check_decision_records(
+def load_decision_records(
     report_path: Path,
     inventory: list[InventoryItem],
     analysis_status: str | None,
     findings: Findings,
-    queue_rows: list[tuple[str, str, str]] | None = None,
-    statuses: dict[str, str] | None = None,
-) -> None:
+) -> dict[str, tuple[Path, dict[str, str]]]:
     if not inventory:
-        return
+        return {}
     records_dir = report_path.parent / DECISION_RECORDS_DIR
     if not records_dir.is_dir():
         message = (
@@ -1145,7 +1158,7 @@ def check_decision_records(
             findings.error(message)
         else:
             findings.warn(message)
-        return
+        return {}
     files = list(records_dir.glob("*.md"))
     if not files:
         message = f"决策记录目录为空：{DECISION_RECORDS_DIR}/"
@@ -1153,8 +1166,9 @@ def check_decision_records(
             findings.error(message)
         else:
             findings.warn(message)
-        return
+        return {}
     file_text = {path: path.read_text(encoding="utf-8") for path in files}
+    records = {}
     for item in inventory:
         slug = decision_record_slug(item.component)
         matched = match_decision_record(item.component, file_text)
@@ -1165,46 +1179,29 @@ def check_decision_records(
             )
             continue
         matched_path, matched_text = matched
-        report_statuses = []
-        baseline_offered = False
-        for component, status, options in queue_rows or []:
-            if not same_component(item.component, component):
-                continue
-            report_statuses.append(status)
-            baseline_offered = baseline_offered or offers_baseline_choice(options)
-        report_is_pending = "pending" in report_statuses
         fields = record_fields(matched_text)
         if fields is None:
             findings.error(f"决策记录为空或缺少“字段/内容”表：{matched_path.name}")
             continue
-        baseline = _filled(fields.get("baseline_evidence_status", "")).lower()
-        if baseline == "mismatch":
-            if analysis_status != "partial":
-                findings.error(
-                    "基线未选定（baseline_evidence_status=mismatch）时 "
-                    f"analysis_status 必须为 partial：{matched_path.name}"
-                )
-            if statuses is not None and statuses.get("decision_status") != "needs_choice":
-                findings.error(
-                    f"基线未选定时 decision_status 必须为 needs_choice：{matched_path.name}"
-                )
-            if (
-                statuses is not None
-                and statuses.get("batch_implementation_gate") != "frozen"
-            ):
-                findings.error(
-                    "基线未选定时 batch_implementation_gate 必须为 frozen："
-                    f"{matched_path.name}"
-                )
-            if "blocked" not in report_statuses:
-                findings.error(
-                    f"基线未选定时确认队列必须为 blocked：{matched_path.name}"
-                )
-            if not baseline_offered:
-                findings.error(
-                    "基线未选定的 blocked 行必须提供 use-claimed 与 use-resolved："
-                    f"{matched_path.name}"
-                )
+        records[item.component] = matched_path, fields
+    return records
+
+
+def check_decision_records(
+    records: dict[str, tuple[Path, dict[str, str]]],
+    inventory: list[InventoryItem],
+    analysis_status: str | None,
+    findings: Findings,
+    queue_rows: list[tuple[str, str]],
+) -> None:
+    for item in inventory:
+        if item.component not in records:
+            continue
+        matched_path, fields = records[item.component]
+        report_statuses = [
+            status for component, status in queue_rows if same_component(item.component, component)
+        ]
+        report_is_pending = "pending" in report_statuses
         if analysis_status != "complete":
             check_partial_record_consistency(
                 item, fields, report_statuses, matched_path.name, findings
@@ -1309,16 +1306,15 @@ def validate_report(path: Path) -> Findings:
     statuses = check_status_table(lines, findings)
     bounds = check_sections(lines, findings)
     inventory = check_inventory(lines, bounds, findings)
-    queue_rows = check_queue(lines, bounds, inventory, statuses, findings)
-    check_six_layer_coverage(lines, bounds, statuses.get("analysis_status"), findings)
-    check_decision_records(
-        path,
-        inventory,
-        statuses.get("analysis_status"),
-        findings,
-        queue_rows=queue_rows,
-        statuses=statuses,
-    )
+    analysis_status = statuses.get("analysis_status")
+    records = load_decision_records(path, inventory, analysis_status, findings)
+    baselines = {
+        component: _filled(fields.get("baseline_evidence_status", "")).lower()
+        for component, (_, fields) in records.items()
+    }
+    queue_rows = check_queue(lines, bounds, inventory, statuses, findings, baselines)
+    check_six_layer_coverage(lines, bounds, analysis_status, findings)
+    check_decision_records(records, inventory, analysis_status, findings, queue_rows)
     return findings
 
 

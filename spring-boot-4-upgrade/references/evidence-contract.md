@@ -36,7 +36,7 @@ python <skill>/scripts/check_contract.py <report.json> --gate verified --snapsho
 python <skill>/scripts/check_contract.py <report.json> --gate verified-with-bridges --snapshot <最终核实快照>
 ```
 
-退出码 0 表示结构一致，1 表示缺记录/失败/快照或文件哈希不匹配。boot4 检查当前 3.5 检查点，拒绝 assess、2.x 和 4.x 补丁误用；按 verification 受控跳过 3.5 时不运行 boot4 门。源为 3.x 时，两种最终门还要求合格的 `baseline35`（快照可以不同于最终快照），或恰好一条字段齐全的 `baseline35-skip`。没有其一就不能报 verified。已记录的 3.5 检查点若未通过，排除记录不能代替它。4.x 源的补丁/minor 升级不要求 `baseline35`。程序不证明 3.5 检查点发生在 4.0 修改之前，也不把 401/403/超时认作 404。
+退出码 0 表示结构一致，1 表示记录缺失、冲突、检查失败或快照/文件哈希不匹配。boot4 检查当前 3.5 检查点，拒绝 assess、2.x 和 4.x 补丁误用。按 verification 受控跳过 3.5 时不运行 boot4 门。源为 3.x 时，两种最终门只接受其中一条路径：合格的 `baseline35`（快照可以不同于最终快照），或 `baseline35` 为 null 且有唯一一条合格的 `baseline35-skip`。同时登记检查点和跳过记录会触发冲突，即使检查点通过也会被拒绝。4.x 源的补丁/minor 升级不要求 `baseline35`。程序不证明 3.5 检查点发生在 4.0 修改之前，也不把 401/403/超时认作 404。
 
 本契约不依靠“禁止命令字符串”防护：`test -DskipTests`、Gradle `-x test` 或绕过 shell 的工具均可能骗过黑名单。要求实际执行数、必需检查和证据文件；人工审查仍要禁止用跳测试、关闭鉴权、空补丁、单一 health 来满足验收。
 

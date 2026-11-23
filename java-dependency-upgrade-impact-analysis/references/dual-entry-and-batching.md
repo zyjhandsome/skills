@@ -58,7 +58,7 @@ Accept rows like:
 Rules:
 
 - Expand multi-artifact families into per-GAV candidates **or** one family row with explicit member list.
-- Infer `resolved_from` from the effective graph. If it disagrees with claimed `from`, set that **row** `blocked` and offer `use-claimed` / `use-resolved`. Other rows stay askable. The packet stays `partial` with `decision_status=needs_choice` until that choice is regenerated away, even when the mismatch row is the only row. Do not set packet `analysis_status=blocked` for one mismatched row, and do not set `analysis_status=complete` while `baseline_evidence_status=mismatch`. Do not analyze the claimed interval as if it were effective.
+- Infer `resolved_from` from the effective graph. If it disagrees with claimed `from`, set that **row** `blocked`. Ask for a viable target first if needed, then offer `use-claimed` / `use-resolved`. Other rows stay askable. The packet stays `partial` with `decision_status=needs_choice` until that choice is regenerated away, even when the mismatch row is the only row. Do not set packet `analysis_status=blocked` for one mismatched row, and do not set `analysis_status=complete` while `baseline_evidence_status=mismatch`. Do not analyze the claimed interval as if it were effective.
 - Batch CVE / open-target transitive holes by the **introducer**'s full packet key
   (`authority_layer × boot_line × build_variant × batch_scope`), not by the
   vulnerable leaf alone.

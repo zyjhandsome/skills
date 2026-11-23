@@ -100,14 +100,14 @@
 }
 ```
 
-先运行 `node scripts/prepare-auth.mjs --config parity-config.json --side candidate`。脚本会先用
+逐侧运行 `node scripts/prepare-auth.mjs --config parity-config.json --side <side>`。脚本会先用
 现有 `storageState`（若有）或干净会话做短探测（默认约 4 秒）。首个 route/journey 的 URL、比较面和
 `waitFor` / `readySelector` 先通过、再保持一小段时间（`readyHoldMs`，默认 1.5 秒）仍通过，才算就绪。
 未就绪则尝试打开隔离的持久化浏览器。`prepare-auth` 必须后台运行；只有输出
-`LOGIN_WINDOW_READY` 且 `visible:true` 才能确认窗口已经创建。只有“准备创建”或进程已经退出时，
-应报告启动错误，不能让用户寻找不存在的窗口。按 baseline → candidate 逐侧处理，不要同时开两侧。
-确认开窗后让用户自行完成账号、扫码、MFA 或证书登录，并在对话回复「已登录」；随后执行
-`node scripts/prepare-auth.mjs --config parity-config.json --side candidate --confirm`。
+`LOGIN_WINDOW_READY` 且 `visible:true` 才能确认窗口已经创建。进程在握手前退出且未返回 `status=ready` 时，
+回报启动错误。baseline 返回 `status=ready` 后才启动 candidate。
+确认开窗后让用户自行完成账号、扫码、MFA 或证书登录，并在对话回复「已登录」。原后台进程仍在等待时才执行
+`node scripts/prepare-auth.mjs --config parity-config.json --side <side> --confirm`。
 `--confirm` 会先检查该 side 的等待租约与后台 PID，只向仍在等待的窗口写确认标记；孤立确认会失败，
 不会遗留到下一次运行。窗口会立刻校验，未就绪则马上打印 URL 和原因退出，不再默默等到
 `timeoutMs`。页面自己就绪时仍会自动保存。
@@ -298,7 +298,7 @@ Journey 只在**第一个视口**执行一次。默认定位在该 journey 的 `
 | `--keepGoing` | capture | 有状态采集失败也返回 0 |
 | `--force-interactive` | prepare-auth | 未就绪必须开窗；**仍先探测**已有会话，通过则不开窗 |
 | `--skip-probe` | prepare-auth | 跳过无头探测。仅自检/调试；正式跑禁用 |
-| `--confirm` | prepare-auth | 用户回复「已登录」后调用；先验证活跃等待租约，再让开着的窗口立刻校验；无窗口时拒绝 |
+| `--confirm` | prepare-auth | 用户回复「已登录」且本侧仍在等待时调用。校验等待租约后写入确认标记，最终就绪状态见原后台进程的输出 |
 | `--channel <chrome\|msedge>` | capture / compare | 覆盖配置里的 `channel`，用本机浏览器 |
 | `--executablePath <path>` | capture / compare | 覆盖配置里的 `executablePath` |
 

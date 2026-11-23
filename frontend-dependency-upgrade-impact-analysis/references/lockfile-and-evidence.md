@@ -62,6 +62,7 @@
 - Yarn v1 selector 块通过 `version` 字段解析实际版本。
 - Berry selector 常含 `npm:` 协议；保留 selector，用 `version` 作为解析版本。
 - 多 selector 合并到同一块时仍需记录所有声明与实际版本。
+- 对照升级前后的 Yarn 锁时，分别用对应时期的 `package.json` 匹配 selector，区分 workspace 直接依赖与锁里并存的其他版本。
 - 没有 workspace importer 信息时必须注明限制。
 
 ## 5. Bun lock

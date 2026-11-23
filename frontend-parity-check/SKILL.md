@@ -79,15 +79,16 @@ node scripts/selftest/run.mjs     # 含 unit.mjs；也可单独跑 node scripts/
    - 「我已经在浏览器里登录了」不等于脚本已登录。说「免登录」也要先短探测；
      内网静默跳 SSO 时，探测失败再开窗，不要自己点站排查。
    - 只有脚本输出 `LOGIN_WINDOW_READY` 且 `visible:true`，才能说窗口已创建。
-     「准备创建」不是成功；进程先退出就回报启动错误，禁止让用户寻找不存在的窗口。
+     只有「准备创建」时继续读取输出。若进程在握手前退出，已返回 `status=ready` 就按会话就绪处理，否则回报启动错误。
    - 确认开窗后立刻结束本轮，原样告诉用户：
 
      **已创建 `<side>` 登录窗口，目标为 `<targetUrl>`。请在该窗口登录；完成后回复「已登录」。不要把密码发给我。若窗口未置顶，请从任务栏或 Alt+Tab 打开。**
 
      不要称「最新窗口」。禁止说「不用回复」，禁止本轮死等 `timeoutMs`。
-   - 用户回复后立刻
-     `node scripts/prepare-auth.mjs --config <file> --side <side> --confirm`。
-     未就绪把脚本打印的原因原样告诉用户。
+   - 用户回复「已登录」后，先读本侧原后台进程的最新输出。若已返回 `status=ready`，直接继续。
+     若仍在等待登录，立即执行 `node scripts/prepare-auth.mjs --config <file> --side <side> --confirm`。
+     `confirm-written` 只表示确认已送达。即使提示「没有正在等待的登录窗口」，也要回看原进程的最终结果。
+     本侧返回 `status=ready` 才继续；若失败，原样回报原因并停在本侧。
 3. **数据前提** `dataParity`：
    - `same-data`：行数、文案、链接差异都算真实缺陷。
    - `different-data`（默认）：数据类差异降级为参考项，**此时不能宣称「内容一致」**。

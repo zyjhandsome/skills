@@ -20,11 +20,10 @@
    source, `require.context`), `composition_context_removed`
    (`ctx.root` / `ctx.parent` / `ctx.listeners` / `ctx.refs`),
    `umd_library_export` (`libraryTarget: 'umd'` only), `qiankun_loader`, and
-   `vite_plugin_qiankun`. `source_cjs_export`, `webpack_require_context` and
-   `umd_library_export` are reasons to keep `build_axis: cli5-webpack5`.
-   `qiankun_loader` only records a microfrontend loader; `vite_plugin_qiankun`
-   is Vite evidence. Neither adds a `build_axis` value
-   (`subsystem-inventory.md`).
+   `vite_plugin_qiankun`. Root Vue CLI, Vite and webpack configs also supply
+   UMD and qiankun samples. Follow the active build script for custom config
+   paths. Weigh confirmed runtime and output requirements when choosing the
+   build axis (`subsystem-inventory.md`, “Builder-selection evidence”).
    Also complete §10
    `人工补搜检查` for residual gaps
    and non-`vue-*` blockers (`tui-editor`, internal plugins, editors, etc.).

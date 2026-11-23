@@ -2,7 +2,7 @@
 
 > 填写后保存为 `report.md`。  
 > 状态枚举、GAV、版本号、路径、命令、URL 保持英文原文；表头与说明默认简体中文。  
-> 校验红线：`pending` 横幅写「待补基线证据」；入口可写 `cve` / `other`；六层表必须出现代码 / 配置 / 数据 / 接口 / 测试 / 部署（可写不适用）；`blocked` 的选项列不得把 `proceed` / `remove` / `exclude` / `replace` / `defer` 当作独立选项；基线冲突的 blocked 行只给 `use-claimed` / `use-resolved`，整包保持 `partial`；非 GA 要进 `ready` 须写出字面量 `non-ga-allowed`。
+> 校验红线：`pending` 横幅写「待补基线证据」；入口可写 `cve` / `other`；六层表必须出现代码 / 配置 / 数据 / 接口 / 测试 / 部署（可写不适用）；`blocked` 的选项列不得把 `proceed` / `remove` / `exclude` / `replace` / `defer` 当作独立选项；非 GA 要进 `ready` 须写出字面量 `non-ga-allowed`。
 
 ## 状态
 
@@ -77,6 +77,7 @@
 |---|---|---|---|
 
 状态：`ready` / `pending` / `blocked` / `decided` / `deferred`。  
+`blocked` 行按原因提问。目标缺失或非 GA 未获允许，给「重述目标」或 `other`。目标可用但起始版本冲突，只给 `use-claimed` / `use-resolved`。两者并存先重述目标，基线未选定前整包保持 `partial`。
 `pending`=可行·待补证（选项仅 `defer`/`other`；问题须含待补证标记）；基线证实后升为 `ready`。  
 人工答复后：`proceed`/`remove`/`exclude`/`replace` → `decided`；`defer` → `deferred`。`analysis_status=complete` 时不得残留 `ready`/`pending`。  
 选项按**决策单元**逐条显式答复（禁止「全部 proceed」）：`proceed:g:a:v` / `remove` / `exclude` / `replace:g:a[:v]` / `defer` / `other`。  
@@ -96,6 +97,6 @@
 
 ## 10. 未决问题与证据缺口
 
-- （pending baseline：有序补证清单 — 恢复构建工具 / 分期 `dependency:tree` / 证实 `resolved_from`）
+- （pending baseline：写明未取得解析版本的模块或配置，重跑该范围的 `dependency:tree` 或 `dependencyInsight`，核实 `resolved_from`）
 - （传递升降级：已探路径菜单摘要 — introducer / force-align / 换 starter 或换栈 / 原生改造；等人选）
 -

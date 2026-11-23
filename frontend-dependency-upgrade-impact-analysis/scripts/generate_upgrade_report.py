@@ -82,6 +82,7 @@ SKIP_DIRS = {
     "build", "coverage", "dist", "node_modules", "out",
     "openspec",
 }
+DEFAULT_REPORT_JSON = "frontend-dependency-upgrade-report.json"
 SKIP_PATH_PARTS = frozenset({
     "frontend-dependency-upgrade",
     "upstream-evidence",
@@ -5485,7 +5486,7 @@ def collect_package_report(upgrade: Upgrade, args: argparse.Namespace) -> Packag
 
 
 def is_code_scan_candidate(path: Path) -> bool:
-    if path.name.lower() in LOCK_NAMES:
+    if path.name.lower() in LOCK_NAMES or path.name.lower() == DEFAULT_REPORT_JSON:
         return False
     if any(part.lower() in SKIP_PATH_PARTS for part in path.parts):
         return False
@@ -7283,11 +7284,15 @@ def build_bundle(
         manifest_path = Path(workspace.manifest_path)
     manifest = load_manifest(manifest_path if manifest_path.exists() else None, project_root)
     lock_specs = {entry.package: entry.spec for entry in manifest.packages.values()}
+    before_specs = None
+    if args.before_package_json and args.before_lock:
+        before_manifest = load_manifest(Path(args.before_package_json), project_root)
+        before_specs = {name: entry.spec for name, entry in before_manifest.packages.items()}
     toolchain_names = sorted(set(manifest.packages) & TOOLCHAIN_PACKAGES)
     initial_analysis_packages = list(dict.fromkeys(package_names + toolchain_names))
     before_lock = parse_lock(
         Path(args.before_lock).resolve() if args.before_lock else None,
-        initial_analysis_packages, args.workspace_importer, role="before", manifest_specs=lock_specs,
+        initial_analysis_packages, args.workspace_importer, role="before", manifest_specs=before_specs,
     )
     after_lock = parse_lock(
         Path(args.after_lock).resolve() if args.after_lock else None,
@@ -7317,7 +7322,7 @@ def build_bundle(
         analysis_packages = list(dict.fromkeys(initial_analysis_packages + peer_names))
         before_lock = parse_lock(
             Path(args.before_lock).resolve() if args.before_lock else None,
-            analysis_packages, args.workspace_importer, role="before", manifest_specs=lock_specs,
+            analysis_packages, args.workspace_importer, role="before", manifest_specs=before_specs,
         )
         after_lock = parse_lock(
             Path(args.after_lock).resolve() if args.after_lock else None,
@@ -7329,7 +7334,9 @@ def build_bundle(
     for report in reports:
         baseline_for(report, manifest, before_lock, current_lock, after_lock)
         assess_peer_compatibility(report, manifest, before_lock, current_lock, after_lock)
-    scan_skips = [output_dir]
+    scan_skips = []
+    if args.json_output not in (None, "__auto__"):
+        scan_skips.append(Path(args.json_output).resolve())
     if args.analysis_evidence_file:
         evidence_candidate = Path(args.analysis_evidence_file)
         if not evidence_candidate.is_absolute():
@@ -7505,7 +7512,7 @@ def build_bundle(
     }
     if args.json_output is not None:
         json_path = (
-            output_dir / "frontend-dependency-upgrade-report.json"
+            output_dir / DEFAULT_REPORT_JSON
             if args.json_output == "__auto__"
             else Path(args.json_output).resolve()
         )
@@ -7557,7 +7564,7 @@ def write_bundle(bundle: AnalysisBundle, args: argparse.Namespace, output_dir: P
     bundle.report_output_dir = str(target)
     bundle.report_paths["markdown"] = str(markdown_path)
     if args.json_output is not None:
-        json_path = target / "frontend-dependency-upgrade-report.json" if args.json_output == "__auto__" else Path(args.json_output).resolve()
+        json_path = target / DEFAULT_REPORT_JSON if args.json_output == "__auto__" else Path(args.json_output).resolve()
         bundle.report_paths["json"] = str(json_path)
     evidence_root = getattr(args, "upstream_evidence_root", None)
     if evidence_root is not None and Path(evidence_root).is_dir():

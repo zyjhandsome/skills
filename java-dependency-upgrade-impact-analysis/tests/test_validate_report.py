@@ -62,16 +62,80 @@ class ReportValidationTests(unittest.TestCase):
     def test_fixture_passes(self) -> None:
         self.assertEqual(validator.validate_report(FIXTURE).errors, [])
 
-    def test_unresolved_baseline_choice_keeps_packet_partial(self) -> None:
+    def single_baseline_report(self, options: str) -> str:
         text = self.text.replace(
             "| `com.fasterxml.jackson.core:jackson-databind` | ready | "
             "是否按 Owner 属性（`upgrade-owner`）把 Jackson 家族升至 2.21.4？ | "
             "`proceed:com.fasterxml.jackson.core:jackson-databind:2.21.4` / `defer` / `other` |",
             "| `com.fasterxml.jackson.core:jackson-databind` | blocked | "
             "声称 from=2.21.1 与解析 from=2.21.2 不一致，选定基线前不分析区间 | "
+            f"{options} |",
+        )
+        return "\n".join(
+            line for line in text.splitlines() if not line.startswith("| `io.netty:netty-")
+        )
+
+    def test_unresolved_baseline_choice_keeps_packet_partial(self) -> None:
+        for options in ("`use-claimed` / `use-resolved`", "`use-resolved`/`use-claimed`"):
+            with self.subTest(options=options):
+                self.assertEqual(self.errors_for(self.single_baseline_report(options)), [])
+
+    def test_baseline_menu_requires_two_exact_choices(self) -> None:
+        for options in (
+            "use-claimed-later / use-resolved-later",
+            "use-claimed / use-resolved / other",
+            "use-claimed / other",
+        ):
+            with self.subTest(options=options):
+                self.assertTrue(self.errors_for(self.single_baseline_report(options)))
+
+    def test_missing_target_rejects_baseline_menu(self) -> None:
+        text = self.text.replace("重述目标 / `other`", "`use-claimed` / `use-resolved`")
+        self.assertTrue(any("io.netty:netty-*" in error for error in self.errors_for(text)))
+
+    def test_verified_alternative_allows_baseline_choice(self) -> None:
+        text = (ROOT / "fixtures" / "choose-alternative" / "report.md").read_text(encoding="utf-8")
+        text = text.replace(
+            "| ready | 请求 2.3.999 不存在；是否改用已验证同 GAV `2.2`（`choose-alternative`）？ | "
+            "`proceed:org.yaml:snakeyaml:2.2` / `defer` / `other` |",
+            "| blocked | 原目标缺失，已有可用替代。声称 from=1.9，解析为 2.0，按哪个基线评估？ | "
             "`use-claimed` / `use-resolved` |",
         )
+        self.assertIn("| blocked |", text)
         self.assertEqual(self.errors_for(text), [])
+
+    def test_non_ga_target_requires_permission_before_baseline_choice(self) -> None:
+        text = self.single_baseline_report("use-claimed / use-resolved").replace(
+            "| 2.21.4 | upgrade |", "| 2.21.4-RC1 | upgrade |",
+        )
+        self.assertTrue(any("重述" in error for error in self.errors_for(text)))
+        self.assertEqual(self.errors_for(text.replace("| 声称 from", "| non-ga-allowed 声称 from")), [])
+
+    def test_baseline_menu_rejects_confirmed_record(self) -> None:
+        record = FIXTURE.parent / "records" / "com.fasterxml.jackson.core__jackson-databind.md"
+        self.write(
+            record.read_text(encoding="utf-8").replace(
+                "| 确认队列状态 | ready |",
+                "| 确认队列状态 | blocked |\n| baseline_evidence_status | confirmed |",
+            ),
+            f"records/{record.name}",
+        )
+        errors = self.errors_for(self.single_baseline_report("use-claimed / use-resolved"))
+        self.assertTrue(any("confirmed" in error for error in errors), errors)
+
+    def test_missing_target_and_mismatch_restate_target_first(self) -> None:
+        text = "\n".join(
+            line for line in self.text.splitlines()
+            if not line.startswith("| `com.fasterxml.jackson.core:jackson-databind`")
+        )
+        record = FIXTURE.parent / "records" / "io.netty__netty-ALL.md"
+        self.write(
+            record.read_text(encoding="utf-8") + "| baseline_evidence_status | mismatch |\n",
+            f"records/{record.name}",
+        )
+        self.assertEqual(self.errors_for(text), [])
+        closed = text.replace("| partial |", "| complete |").replace("| needs_choice |", "| decided |")
+        self.assertTrue(any("基线未选定" in e for e in self.errors_for(closed)))
 
     def test_complete_rejects_unresolved_baseline_mismatch(self) -> None:
         text = self.text.replace(

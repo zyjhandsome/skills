@@ -29,7 +29,7 @@ Community/Moderne Edition 的坐标、能力、许可与分发方式可能不同
 
 ### 阶段 A：先到 3.5
 
-这些是分段执行模板。assess 模式不执行 `run`；`discover`/`dryRun` 只在不改仓库文件时可执行。Maven 用下方命令行坐标。Gradle 只有已存在的仓外 init script 时才跑 dryRun；没有现成脚本就不跑 dryRun，也不改构建文件。本文件不提供通用 init script。先检查构建副作用，补丁只作评估证据。先在当前快照完成基线。将占位精确版本和环境参数填实；使用 `.cmd` 的命令块适用于 PowerShell。
+这些是分段执行模板。先在当前快照完成基线，并填实精确版本和环境参数。assess 模式只预览补丁：先检查构建副作用，确认无需改动项目文件后，用下方 Maven 命令行坐标执行 `discover`/`dryRun`。Gradle 的预览路径见下文 Gradle 小节。使用 `.cmd` 的命令块适用于 PowerShell。
 
 ```powershell
 $rewritePluginVersion = '<已核实的 Maven 插件精确版本>'
@@ -115,7 +115,9 @@ if ($LASTEXITCODE -ne 0) { throw '4.0 migration failed' }
 
 ## Gradle（Groovy 与 Kotlin DSL）
 
-优先已有 rewrite 配置；否则依据所选插件的官方运行说明，使用临时 init script 或最小范围的 build 配置。不要对未知 Gradle 结构生成一个宣称通用的 init script：settings/pluginManagement、复合构建、子项目和仓库凭证都影响配置。只评估时，没有现成的仓外 init script 就不跑 dryRun，也不把下面的 DSL 写进仓库。
+**只评估**时，先检查现有构建配置及任务副作用。目标项目已有 `rewriteDryRun` 且能加载选定配方时，直接按现有配置运行该任务，读取生成的补丁作为评估证据。缺少可用任务时，可使用与该构建匹配的仓外 init script。两条路径都须保持源码、构建声明及部署配置原样；都不可行时，记录未预览的原因并继续静态评估。
+
+**实施迁移**时，优先使用已有 Rewrite 配置。需要接入插件时，按所选版本的官方说明使用临时 init script 或最小范围的 build 配置，核对 settings/pluginManagement、复合构建、子项目和仓库凭证。
 
 **先找 owner，再确定放置位置**：Boot 版本的 catalog/settings/convention/included build 与 rewrite 插件应用位置可能不同。下例只描述选定项目的 DSL 结构，不表示将它粘到根 build；先用 `projects` 和 `:<实际项目>:tasks --all` 确认目标，独立 included build 从自身构建根处理。3.5 阶段通过后才将 `migrationRecipe` 显式切换为 4.0，禁止默认回退到 4.0。
 

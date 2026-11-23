@@ -34,7 +34,9 @@
 
 **提示：** 两个要登录的 URL。用户说「我来登录」。
 
-| | 行为 |
-|---|---|
-| 失败 | 没见到 `LOGIN_WINDOW_READY` 且 `visible:true` 就声称窗口已开；两侧同时弹窗；或跳过探测直接加 `--force-interactive` |
-| 通过 | 逐侧先探测。只有握手成功才结束本轮，用固定话术等用户回复「已登录」；baseline 已是 `status=ready` 之后才启动 candidate |
+| 场景 | 通过 | 失败 |
+|---|---|---|
+| 选择启动参数 | 按默认参数先探测 | 使用 `--skip-probe` 跳过探测，或仅凭「我来登录」添加 `--force-interactive`（该参数仍会探测） |
+| 两侧已有有效会话 | baseline 无头验证返回 `status=ready` 后启动 candidate。两侧都通过即可全程不开窗 | 要求用户再次登录 |
+| baseline 需要人工登录 | 收到 `LOGIN_WINDOW_READY` 且 `visible:true`，按固定话术告知窗口和目标地址，结束本轮等用户回复 | 提前声称已开窗，或同时启动 candidate |
+| 用户回复「已登录」 | 原进程已返回 `status=ready` 就继续。仍在等待才发 `--confirm`，以原进程最终结果决定是否继续 | 收到 `confirm-written` 就启动 candidate，或原进程已就绪仍要求重登 |

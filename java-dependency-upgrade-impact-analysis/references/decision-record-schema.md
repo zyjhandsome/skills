@@ -18,7 +18,8 @@
 |---|---|---|
 | `proceed:…` / `remove` / `exclude` / `replace:…` | `decided` | 全部清完 → `decided` |
 | `defer` | `deferred` | 同上 |
-| （证据/存在性/非 GA/claimed-from 缺口，尚未可问版本移动） | `blocked` | 若仍有其他 `ready`/`pending` → `needs_choice` |
+| 证据/存在性/非 GA 缺口 | `blocked` | 若仍有其他 `ready`/`pending` → `needs_choice` |
+| 声称的 `from` 与解析版本冲突 | `blocked` | `needs_choice`，即使本包只有这一行 |
 | 目标可达但 tooling/tree 未证实基线 | `pending` | `needs_choice`（选项仅 `defer`/`other`） |
 | 等待版本/处置答复 | `ready` | `needs_choice` |
 
@@ -44,7 +45,7 @@
 | usage_status | 推荐（direct） | `used` / `unused` / `ambiguous` |
 | introducer_gav | 推荐（传递） | 引入该坐标的直接依赖 |
 | introducer_upgrade_available | 推荐（传递） | `yes` / `no` / `unknown` |
-| baseline_evidence_status | 推荐（基线未证实时） | `confirmed` / `pending-tooling` / `pending-tree` / `mismatch`。`pending-tooling` 表示探针已跑但工具没给出选中版本（鉴权、未安装的 Reactor 兄弟模块、超时），不是缺 JDK / `mvn`。`mismatch` 表示声称 `from` 与解析版本不一致：该行队列 `blocked`，选项只有 `use-claimed` / `use-resolved`，整包保持 `partial` 直到按所选基线再生 |
+| baseline_evidence_status | 推荐（基线未证实时） | `confirmed` / `pending-tooling` / `pending-tree` / `mismatch`。`pending-tooling` 表示探针已跑但工具没给出选中版本（鉴权、未安装的 Reactor 兄弟模块、超时）。`mismatch` 表示声称的 `from` 与解析版本不一致，该行保持 `blocked`、整包保持 `partial`。如目标也不可用，先重述目标。目标可用时，只给 `use-claimed` / `use-resolved`，按所选基线重新生成报告 |
 | 下一步补证 | 推荐（pending baseline） | 重跑已失败的 leaf tree/insight，再证实 claimed `from`（见 `next-action-choice-menus.md` §A） |
 | 路径选项菜单 | 推荐（传递升降级） | 至少 A 与（B 或 C/D 之一）；E 在调用面非空时评估（见同文件 §B） |
 | 替代候选 | 替代行强制 | `choose-alternative` 写 1–3 个同 GAV 版本；`replace-*` 写 1–3 个新坐标 |

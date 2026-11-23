@@ -13,7 +13,9 @@ import json
 import re
 import sys
 from collections import Counter
+from collections.abc import Iterator
 from datetime import date
+from itertools import chain
 from pathlib import Path
 
 RELATED_NAMES = {
@@ -42,6 +44,29 @@ REPLACE_ON_SIGHT = {
 LOCK_NAMES = ("pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb", "package-lock.json")
 SKIP_DIRS = {"node_modules", ".git", "dist", "build", "coverage", ".idea", ".vscode"}
 SOURCE_SUFFIXES = {".vue", ".js", ".jsx", ".ts", ".tsx", ".html"}
+BUILD_CONFIG_NAMES = {
+    f"{builder}.config.{ext}"
+    for builder in ("vue", "vite", "webpack")
+    for ext in ("js", "ts", "cjs", "mjs", "cts", "mts")
+}
+
+# Named groups capture evidence. The other alternatives consume comments and
+# literals so that example code inside them cannot produce a hit.
+MODULE_REFERENCE = r"""\b(?:from\s*|import\s*(?:\(\s*)?|require\s*\(\s*)['"]"""
+BUILD_SIGNAL = re.compile(
+    rf"""
+    //[^\r\n]* | /\*[\s\S]*?(?:\*/|\Z)
+    | (?P<source_cjs_export>\bmodule\s*\.\s*exports\b | ^[ \t]*exports\.[\w$]+\s*=)
+    | (?P<webpack_require_context>\brequire\s*\.\s*context\s*\()
+    | (?P<umd_library_export>\blibraryTarget\s*:\s*['"]umd['"])
+    | (?P<qiankun_loader>{MODULE_REFERENCE}qiankun(?:/[^'"\r\n]*)?['"]
+                         | \b(?:window|globalThis)\s*\.\s*qiankun\b)
+    | (?P<vite_plugin_qiankun>{MODULE_REFERENCE}vite-plugin-qiankun(?:/[^'"\r\n]*)?['"])
+    | "(?:\\[\s\S]|[^"\\\r\n])*" | '(?:\\[\s\S]|[^'\\\r\n])*' | `(?:\\[\s\S]|[^`\\])*`
+    """,
+    re.MULTILINE | re.VERBOSE,
+)
+INLINE_SCRIPT = re.compile(r"<!--.*?(?:-->|\Z)|<script(?=[\s>])[^>]*>(.*?)</script\s*>", re.I | re.S)
 SOURCE_PATTERNS = {
     "new_vue": re.compile(r"\bnew\s+Vue\s*\("),
     "vue_use": re.compile(r"\bVue\.use\s*\("),
@@ -192,27 +217,11 @@ SOURCE_PATTERNS = {
         r"<[^>]{0,300}?v-for=[^>]{0,300}?v-if=|<[^>]{0,300}?v-if=[^>]{0,300}?v-for=",
         re.S,
     ),
-    # Dev lane vs build lane divergence: source-level CommonJS resolves through the
-    # rollup commonjs plugin in a production build but not through the dev server's
-    # native-ESM pipeline, so one lane stays green while the other fails at boot.
-    "source_cjs_export": re.compile(
-        r"(?m)\bmodule\.exports\b|^\s*exports\.[A-Za-z_$][\w$]*\s*="
-    ),
-    "webpack_require_context": re.compile(r"\brequire\.context\s*\("),
     # Vue 2 `@vue/composition-api` setup context. Vue 3's setup context has
     # attrs/slots/emit/expose only; these fields fail at runtime, not at build.
     "composition_context_removed": re.compile(
         r"\b(?:ctx|context)\s*\.\s*(?:root|parent|listeners|refs)\b"
     ),
-    # UMD library output is builder-selection evidence for keeping a webpack-class
-    # build (`cli5-webpack5`). It does not add a build_axis value.
-    "umd_library_export": re.compile(
-        r"libraryTarget\s*:\s*['\"]umd['\"]"
-    ),
-    # A qiankun loader records a microfrontend. It does not select webpack.
-    # `vite-plugin-qiankun` contains the word qiankun, so it stays on its own signal.
-    "qiankun_loader": re.compile(r"(?<!vite-plugin-)\bqiankun\b"),
-    "vite_plugin_qiankun": re.compile(r"\bvite-plugin-qiankun\b"),
 }
 # Signals whose Vue3 breakage is invisible to build and lint: every hit needs an
 # interaction-level or runtime-level assertion of its own, so counts and five
@@ -854,6 +863,21 @@ def discover_source_roots(root: Path) -> list[Path]:
     return candidates
 
 
+def iter_build_signals(path: Path, text: str, *, is_config: bool) -> Iterator[str]:
+    if path.suffix.lower() in {".html", ".vue"}:
+        scripts = (m[1] for m in INLINE_SCRIPT.finditer(text) if m[1] is not None)
+    else:
+        scripts = (text,)
+    for script in scripts:
+        for match in BUILD_SIGNAL.finditer(script):
+            signal = match.lastgroup
+            if signal is None:
+                continue
+            if is_config and signal in {"source_cjs_export", "webpack_require_context"}:
+                continue
+            yield signal
+
+
 def scan_source(
     root: Path,
     source_roots: list[Path] | None = None,
@@ -876,24 +900,18 @@ def scan_source(
     candidate_truncated_signals: set[str] = set()
     external_ready_rows: list[dict[str, object]] = []
     roots = source_roots if source_roots is not None else discover_source_roots(root)
-    if not roots:
-        return {"scanned_files": 0, "skipped_large_files": 0, "truncated": False,
-                "signals": {}, "samples": {}, "vue_plugin_packages": {},
-                "global_mounts": {},
-                "interaction_assertion_candidates": {
-                    "cap": INTERACTION_CANDIDATE_CAP,
-                    "cap_scope": "per-signal",
-                    "truncated": False,
-                    "truncated_signals": [],
-                    "total_hits_by_signal": {},
-                    "emitted_rows_by_signal": {},
-                    "rows": [],
-                }}
-    paths = (path for source_root in roots for path in source_root.rglob("*"))
-    for path in paths:
-        if _path_is_skipped(path, root) or not path.is_file() or path.suffix.lower() not in SOURCE_SUFFIXES:
+    configs = (root / name for name in sorted(BUILD_CONFIG_NAMES))
+    source_files = (path for source_root in roots for path in source_root.rglob("*"))
+    for path in chain(configs, source_files):
+        is_config = path.name in BUILD_CONFIG_NAMES
+        if not is_config and path.suffix.lower() not in SOURCE_SUFFIXES:
             continue
-        if scanned_files >= max_files:
+        if not path.is_file() or _path_is_skipped(path, root):
+            continue
+        # Root configs have a fixed allowlist and their own size bound. Keep
+        # the source-file counter and budget comparable with earlier profiles.
+        in_source_tree = path.parent != root
+        if in_source_tree and scanned_files >= max_files:
             truncated = True
             break
         try:
@@ -903,8 +921,14 @@ def scan_source(
             text = path.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
-        scanned_files += 1
+        if in_source_tree:
+            scanned_files += 1
         relative = path.relative_to(root).as_posix()
+        for signal in iter_build_signals(path, text, is_config=is_config):
+            counts[signal] += 1
+            _append_sample(samples, signal, relative)
+        if is_config:
+            continue
         bindings: dict[str, str] = {}
         for pattern in (IMPORT_DEFAULT, IMPORT_NAMESPACE, REQUIRE_BINDING):
             for match in pattern.finditer(text):

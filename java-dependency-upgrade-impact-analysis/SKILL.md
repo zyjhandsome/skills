@@ -5,8 +5,8 @@ description: >
   BOM conflict, or whole-repo upgrade inventory. Use when asked to assess exact
   GAV from→to upgrades, Spring Boot–managed jars (Netty, Jackson, Lucene, Eureka),
   commons-lang migrations, CVE-driven version moves, unused-jar removal, transitive
-  exclusion/force-align, or component replacement. Not a Spring Boot generation
-  migration. Boot 3.x to 4.x (or a later 4.x minor) belongs to spring-boot-4-upgrade. Boot 2.x to 3.x is outside both skills: say so and stop. A same-generation Boot BOM bump stays here.
+  exclusion/force-align, or component replacement. Assess a same-generation Boot BOM bump here for named dependencies, e.g. Jackson in Boot 4.0→4.1.
+  Route application-wide Boot 3.x→4.x or 4.x minor/patch upgrades (including assessments) to spring-boot-4-upgrade. Boot 2.x to 3.x is outside both skills.
 ---
 
 # Java Dependency Upgrade Impact Analysis

@@ -274,6 +274,9 @@ def check_contract(data, base, gate, snapshot):
         for item in exclusions:
             if not isinstance(item, dict) or not item.get("item") or not item.get("reason"):
                 errors.append("each excluded scope needs item and reason")
+            elif (item.get("kind") == "baseline35-skip" and source and source[0] == 3
+                  and data.get("baseline35") is not None):
+                errors.append("baseline35-skip requires baseline35 to be null")
     if gate == "boot4":
         if not source or source[0] != 3 or source[:2] > (3, 5):
             errors.append("boot4 gate is for the 3.x-to-4 transition, not 4.x patch upgrades")

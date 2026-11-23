@@ -96,6 +96,36 @@ class SemverAndRuntimeTests(unittest.TestCase):
 
 
 class LockParserTests(unittest.TestCase):
+    def test_yarn_before_and_after_use_their_own_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            before = root / "before"
+            after = root / "after"
+            for directory, direct in ((before, "1.0.3"), (after, "2.0.4")):
+                directory.mkdir()
+                (directory / "package.json").write_text(json.dumps({
+                    "dependencies": {"leaf": direct, "wrapper": "2.0.0"},
+                    "engines": {"node": ">=18 <21"},
+                }), encoding="utf-8")
+                lock = (
+                    '# yarn lockfile v1\n\nwrapper@2.0.0:\n  version "2.0.0"\n'
+                    '  dependencies:\n    leaf "2.0.4"\n\nleaf@2.0.4:\n  version "2.0.4"\n'
+                )
+                if directory == before:
+                    lock += '\nleaf@1.0.3:\n  version "1.0.3"\n'
+                (directory / "yarn.lock").write_text(lock, encoding="utf-8")
+            out = root / "out"
+            code = run_main([
+                root, "--before-package-json", before / "package.json", "--before-lock", before / "yarn.lock",
+                "--after-package-json", after / "package.json", "--after-lock", after / "yarn.lock",
+                "--offline", "--output-dir", out, "--json-output",
+            ])
+            report = read_report(out)["reports"][0]
+            self.assertEqual(report["before_lock_version"], "1.0.3")
+            self.assertEqual(report["after_lock_version"], "2.0.4")
+            self.assertEqual(report["baseline_status"], "matches_from")
+            self.assertEqual(code, 7)
+
     def test_npm_hoisted_workspace_direct_version_comes_from_root_node_modules(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
@@ -235,6 +265,28 @@ class LockParserTests(unittest.TestCase):
 
 
 class GateAndEvidenceTests(unittest.TestCase):
+    def test_output_location_preserves_source_points_on_rerun(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            write_npm_project(root, {"axios": "1.6.8"}, {"node_modules/axios": {"version": "1.6.8"}})
+            src = root / "src"
+            src.mkdir()
+            (src / "main.js").write_text("import axios from 'axios';\naxios.create();\n", encoding="utf-8")
+            argv = [root, "--upgrade", "axios::1.7.9", "--offline", "--json-output"]
+            out = root / "reports"
+            run_main([*argv, "--output-dir", out])
+            expected = read_report(out)["code_points"]
+            self.assertIn("src/main.js", {point["file"] for point in expected})
+            for destination in (root, src):
+                with self.subTest(destination=destination.name):
+                    for _ in range(2):
+                        run_main([*argv, "--output-dir", destination])
+                        self.assertEqual(read_report(destination)["code_points"], expected)
+            custom = src / "upgrade-review.json"
+            for _ in range(2):
+                run_main([*argv, custom, "--output-dir", root])
+                self.assertEqual(json.loads(custom.read_text(encoding="utf-8"))["code_points"], expected)
+
     def test_schema_example_and_node_runtime_only_evidence_load(self) -> None:
         doc = (ROOT / "references" / "analysis-evidence-schema.md").read_text(encoding="utf-8")
         example = json.loads(doc.split("```json", 1)[1].split("```", 1)[0])
@@ -418,8 +470,10 @@ class MigrationDemandDiffFixTests(unittest.TestCase):
         }), encoding="utf-8")
         return source, host
 
-    def _rows(self, root: Path, extra: list[str]) -> tuple[int, dict, list[dict]]:
-        source, host = self._pair(root)
+    def _rows(
+        self, root: Path, extra: list[str], pair: tuple[Path, Path] | None = None,
+    ) -> tuple[int, dict, list[dict]]:
+        source, host = pair or self._pair(root)
         out = root / "out"
         code = MIGRATION.main([
             "--source-root", str(source),
@@ -447,6 +501,53 @@ class MigrationDemandDiffFixTests(unittest.TestCase):
             _code, _summary, rows = self._rows(root, ["--closure-packages", str(closure)])
             self.assertEqual(rows[0]["disposition"], "add-to-B")
             self.assertNotIn("4.17.21", rows[0]["b_status"])
+
+    def test_yarn_host_reuse_requires_a_direct_declaration(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            source, host = self._pair(root)
+            (host / "package-lock.json").unlink()
+            (host / "yarn.lock").write_text(
+                '# yarn lockfile v1\n\naxios@^1.6.0:\n  version "1.6.8"\n'
+                '  dependencies:\n    left-pad "^1.3.0"\n\nleft-pad@^1.3.0:\n  version "1.3.0"\n'
+                '\naxios@^0.21.0:\n  version "0.21.4"\n', encoding="utf-8",
+            )
+            closure = root / "closure.txt"
+            closure.write_text("left-pad\n", encoding="utf-8")
+            code, summary, rows = self._rows(root, ["--closure-packages", str(closure)], (source, host))
+            self.assertEqual(rows[0]["disposition"], "add-to-B")
+            self.assertEqual(rows[0]["queue_status"], "ready")
+            self.assertEqual(code, 7)
+            self.assertEqual(summary["batch_implementation_gate"], "frozen")
+            closure.write_text("axios\n", encoding="utf-8")
+            _, _, rows = self._rows(root, ["--closure-packages", str(closure)], (source, host))
+            self.assertEqual(rows[0]["b_status"], "present@1.6.8")
+
+    def test_saved_reuse_is_reopened_when_host_loses_the_package(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            source, host = self._pair(root)
+            closure = root / "closure.txt"
+            closure.write_text("axios\n", encoding="utf-8")
+            decisions = root / "decisions.json"
+            args = ["--closure-packages", str(closure), "--decision-file", str(decisions)]
+            decisions.write_text(json.dumps({"axios": "proceed:demand:axios:reuse-B-major-review"}), encoding="utf-8")
+            code, summary, _ = self._rows(root, args, (source, host))
+            self.assertEqual((code, summary["batch_implementation_gate"]), (0, "ready"))
+            write_npm_project(host, {"vue": "^3.4.0"}, {"node_modules/vue": {"version": "3.4.21"}})
+            for stale in ("reuse-B", "reuse-B-major-review"):
+                with self.subTest(stale=stale):
+                    decisions.write_text(json.dumps({"axios": f"proceed:demand:axios:{stale}"}), encoding="utf-8")
+                    code, summary, rows = self._rows(root, args, (source, host))
+                    self.assertEqual((rows[0]["b_status"], rows[0]["disposition"]), ("absent", "add-to-B"))
+                    self.assertEqual(rows[0]["queue_status"], "ready")
+                    self.assertEqual((code, summary["batch_implementation_gate"]), (7, "frozen"))
+            for choice in ("add-to-B", "copy-local"):
+                with self.subTest(choice=choice):
+                    decisions.write_text(json.dumps({"axios": f"proceed:demand:axios:{choice}"}), encoding="utf-8")
+                    code, summary, rows = self._rows(root, args, (source, host))
+                    self.assertEqual(rows[0]["disposition"], choice)
+                    self.assertEqual((code, summary["batch_implementation_gate"]), (0, "ready"))
 
     def test_loose_proceed_prefix_does_not_decide_and_defer_freezes_the_gate(self) -> None:
         with tempfile.TemporaryDirectory() as raw:

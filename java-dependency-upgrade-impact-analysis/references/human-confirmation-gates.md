@@ -24,7 +24,7 @@ set) × one family. Different variants, scopes, families, treatments, or targets
 |---|---|---|
 | `ready` | Askable for a version/treatment move; awaiting human answer | List **all** ready units in the **same wave**; each needs its **own explicit answer** |
 | `pending` | Target reachable + treatment known, but `resolved_from` / tooling not yet confirmed（可行·待补证） | Ask **tooling/baseline catch-up** only (`defer` / `other`); **no** `proceed:` until baseline confirmed → then promote to `ready` |
-| `blocked` | Evidence / existence / GA gap，或 claimed-from mismatch | Do **not** ask proceed/defer. Existence/GA: restate target or `other`. Mismatch: `use-claimed` / `use-resolved` only |
+| `blocked` | Evidence / existence / GA gap，或 claimed-from mismatch | Existence/GA: restate target or `other` first. With a viable target and a baseline mismatch, offer only `use-claimed` / `use-resolved` |
 | `decided` | Human chose proceed / remove / exclude / replace | Keep in queue after regenerate; counts as cleared for completion |
 | `deferred` | Human chose `defer` | Keep in queue; counts as cleared for completion |
 | after `other` / clarifying follow-up | stays `ready`/`pending` until follow-up records a final answer or rewrites/removes the candidate | Open next wave only; do not treat `other` as `decided`/`deferred` |
@@ -44,7 +44,7 @@ set) × one family. Different variants, scopes, families, treatments, or targets
 
 **Packet `analysis_status=blocked`** is for **batch-wide** blockers (environment preflight failure; offline gate awaiting human). It is **not** the same as a queue-row `blocked`. A claimed `from` that disagrees with the effective version blocks that row only. Environment-preflight failure: list missing probes in chat, do **not** write report files, and do **not** invent baselines from manifest skim — see `references/environment-preflight.md`. While packet status is `blocked`, do **not** keep or ask any `ready`/`pending` rows — clear the batch-wide gate first (fix environment / confirm offline), then reclassify rows to `partial` + `needs_choice` if units become askable. Row-level existence or non-GA gaps keep those rows `blocked` but leave the packet `partial` when other units are `ready`/`pending`. A claimed-`from` mismatch stays `partial` / `needs_choice` / `frozen` until `use-claimed` or `use-resolved` is regenerated, even when that row is the only one. Do not set `analysis_status=complete` while `baseline_evidence_status=mismatch`.
 
-**Cleared queue** means: zero `ready` and zero `pending` rows. Residual evidence-`blocked` rows do **not** block `analysis_status=complete`, but they **do** keep `batch_implementation_gate=frozen`.
+The queue is cleared when it has zero `ready` or `pending` rows and no unresolved baseline mismatch. Documented existence/GA gaps can remain `blocked` in a completed packet and keep `batch_implementation_gate=frozen`.
 
 **Requested target missing:** preserve the request and verify 1–3 alternatives.
 At least one verified same-GAV version or replacement coordinate becomes a
@@ -59,7 +59,7 @@ Never set `analysis_status=blocked` while any queue row is `ready`/`pending` (re
 
 1. Draft the full packet once (evidence + recommended treatment + queue).
 2. If any `ready` or `pending` remains: **ask now** in the same turn. Do not paste a draft and wait for “继续/放行”.
-3. Never ask proceed on `blocked`/`pending` items (`pending` may offer `defer`/`other` for tooling catch-up; `blocked` only restates a missing target).
+3. Use the row-state table above for `blocked` and `pending` menus. If a target gap and a baseline mismatch coexist, retain the mismatch in the record while asking for a viable target.
 4. **No blanket `全部 proceed`.** Especially when `target_to` is missing: every unit that needs a version or replacement must get a human answer (`proceed:g:a:v` / `remove` / `exclude` / `replace:…` / `defer` / `other`).
 5. Open-target / CVE-without-`to`: probe official fix range and owner security line first. If a GA fix is findable, put it in the question with URLs and set the unit **`ready`**. If no fix version is findable → keep evidence-`blocked` and ask only to **restate target** or `other` (abandon/rewrite next wave) — **never** invent a version and **never** offer `defer`/`proceed` while still `blocked`.
 6. Explicit `from > to` is already permission to analyze a downgrade. Add a prominent downgrade warning and High scrutiny, then use the normal per-unit choice; do not ask for a second authorization.

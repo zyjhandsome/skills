@@ -212,6 +212,20 @@ public class HomeController {
 }''')
         self.assertEqual({"/home": "views/home", "/mv": "views/mv"}, routes)
 
+    def test_historical_mappings_and_returns_in_comments_are_ignored(self):
+        routes = self.routes('''
+/** This class used to have @RequestMapping("/legacy"). */
+public class OrdersController {
+  // @GetMapping("/removed")
+  @GetMapping(/* old path = "/previous" */ "/orders")
+  public String orders() {
+    // return "views/removed";
+    return "views/orders";
+  }
+}''')
+        self.assertEqual({"/orders": "views/orders"}, routes)
+        self.assertEqual("src/main/java/C.java:5", gen.extract_java_routes(self.tmp)[0]["source_route_evidence"])
+
     def test_multiline_mapping_annotation(self):
         routes = self.routes('''
 public class X {
@@ -232,8 +246,8 @@ class EntryEvidenceTest(TempDirCase):
             write(host / rel, text)
         source_pages = gen.discover_pages(src, gen.SOURCE_PAGE_EXTS, True)
         host_pages = gen.discover_pages(host, gen.HOST_PAGE_EXTS, False)
-        comparison = gen.compare_pages(source_pages, host_pages)
         mapping = gen.build_url_entry_mapping(src, host, source_pages, host_pages)
+        comparison = gen.compare_pages(source_pages, host_pages, mapping)
         gen.reconcile_comparison_entries(comparison, mapping)
         return {row["source_path"]: row for row in gen.repair_scope_gate(comparison)}
 

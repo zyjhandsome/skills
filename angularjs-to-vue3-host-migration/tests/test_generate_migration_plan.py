@@ -206,6 +206,39 @@ router.beforeEach(authGuard);
         with path.open(encoding="utf-8-sig", newline="") as csv_file:
             return list(csv.reader(csv_file))
 
+    def test_registered_route_links_renamed_page_only_to_its_own_template(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source, host = root / "source", root / "host"
+            write(source / "views/tags.jsp", "<ul></ul>")
+            write(source / "views/tags-history.jsp", "<div>History</div>")
+            write(source / "TagController.java", '''
+class TagController {
+  @GetMapping("/tags") public String tags() { return "views/tags"; }
+}''')
+            write(host / "src/views/Tag.vue", "<template><ul/></template>")
+            write(host / "src/router/index.ts", """
+import Tag from '../views/Tag.vue';
+export const routes = [{ path: '/tags', component: Tag }];
+""")
+            for decoy in (False, True):
+                with self.subTest(unregistered_namesake=decoy):
+                    output = root / ("with-decoy" if decoy else "route-only")
+                    if decoy:
+                        write(host / "src/views/Tags.vue", "<template><aside/></template>")
+                    self.run_generator(output, source, host, "assess")
+                    with (output / "csv/06-page-comparison.csv").open(encoding="utf-8-sig") as report:
+                        rows = list(csv.DictReader(report))
+                    tags = next(row for row in rows if row["source_path"] == "views/tags.jsp")
+                    self.assertEqual("partial-overlap", tags["status"])
+                    self.assertEqual("src/views/Tag.vue", tags["host_path"])
+                    self.assertIn("route-path", tags["match_basis"])
+                    host_only = [row["host_path"] for row in rows if row["status"] == "host-page-only"]
+                    self.assertEqual(["src/views/Tags.vue"] if decoy else [], host_only)
+                    with (output / "csv/07b-design-scope-gate.csv").open(encoding="utf-8-sig") as report:
+                        scopes = {row["source_path"]: row["design_scope"] for row in csv.DictReader(report)}
+                    self.assertEqual({"views/tags.jsp": "repair", "views/tags-history.jsp": "new-landing"}, scopes)
+
     def test_assess_generates_dual_repo_evidence_and_excludes_vendor(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

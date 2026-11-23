@@ -72,7 +72,7 @@ build variant × scope** (A→B: workspace=A; scope often `page-closure`).
   evidence favors `direct-vue3` or coexistence. Deviating to in-place
   `direct-vue3` requires a §3 `default_path_deviation:` line naming what compat
   would have absorbed and which validations take over.
-  Source CJS, `require.context`, or `libraryTarget: 'umd'` keeps this path id and sets `build_axis: cli5-webpack5` without Wave 1 `other`.
+  Check CJS, `require.context` and UMD hits against the active build and replacement cost. If keeping webpack is justified, record `build_axis: cli5-webpack5` under the same path id without Wave 1 `other`.
 - **A→B / 并入 / iframe 收编:** `host-port-direct` (`direct-vue3` +
   `existing-vite` + `host-port`). §1 needs `source_root`,
   `implementation_target`, `forbid_source_mutation: yes`. Compat is **not**

@@ -17,8 +17,8 @@ This is **not** an in-place upgrade of A and **not** an exact `from→to` on B a
 
 | Id | Meaning | Queued? |
 |---|---|---|
-| `reuse-B` | B has package with same major (or host `vue`) | no |
-| `reuse-B-major-review` | B has package but **major differs** | **yes** |
+| `reuse-B` | B directly declares the package with the same major (or host `vue`) | no |
+| `reuse-B-major-review` | B directly declares the package but **major differs** | **yes** |
 | `add-to-B` | Missing on B; human must approve adding | yes |
 | `replace-as-B-stack` | A package maps to a different host stack package | yes |
 | `copy-local` | Vendor/first-party snippet; copy into B, no npm add | yes |
@@ -32,6 +32,8 @@ This is **not** an in-place upgrade of A and **not** an exact `from→to` on B a
   `source_lockfile_status` (A) is informational only for host-port
 - `batch_implementation_gate=ready` only when B lock is `present` and every
   askable demand row is decided via `--decision-file`
+- On rerun, if B no longer declares a package approved for reuse, reopen the row
+  with its current disposition. Keep the batch frozen until the updated row is decided.
 - Prefer page-closure demand sets over A's entire `package.json`
 - UI `replace-as-B-stack` (e.g. `element-ui`) emits
   `visual_strategy_hint=needs_choice` for the visual skill

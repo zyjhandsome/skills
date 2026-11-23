@@ -1006,26 +1006,34 @@ def score_page_match(source: dict[str, str], host: dict[str, str]) -> tuple[int,
     return score, basis
 
 
-def compare_pages(source_pages: list[dict[str, str]], host_pages: list[dict[str, str]]) -> list[dict[str, str]]:
+def compare_pages(
+    source_pages: list[dict[str, str]],
+    host_pages: list[dict[str, str]],
+    url_entry_mapping: Iterable[dict[str, str]] = (),
+) -> list[dict[str, str]]:
+    host_by_path = {host["path"]: host for host in host_pages}
+    mapping_by_source = {row["source_page_path"]: row for row in url_entry_mapping if row.get("source_page_path")}
     matched_host_paths = set()
     rows = []
     for source in source_pages:
-        scored = []
-        for host in host_pages:
+        mapping = mapping_by_source.get(source["path"], {})
+        route_host = host_by_path.get(mapping.get("host_entry_ts", "")) if same_registered_route(mapping) else None
+        host = route_host
+        if route_host:
             score, basis = score_page_match(source, host)
-            if score > 0:
-                scored.append((score, basis, host))
-        scored.sort(key=lambda item: item[0], reverse=True)
-        if scored and scored[0][0] >= 45:
-            score, basis, host = scored[0]
+            basis.append("route-path")
+        else:
+            score, basis = 0, []
+            for candidate in host_pages:
+                candidate_score, candidate_basis = score_page_match(source, candidate)
+                if candidate_score >= 45 and candidate_score > score:
+                    score, basis, host = candidate_score, candidate_basis, candidate
+        if host:
             matched_host_paths.add(host["path"])
             status = "partial-overlap"
-            confidence = "medium" if score >= 60 else "low"
+            confidence = "medium" if route_host or score >= 60 else "low"
             next_action = "人工校正映射；在标 already-migrated 前先追 URL/API/权限/行为"
         else:
-            host = None
-            score = 0
-            basis = []
             status = "unmigrated"
             confidence = "medium"
             next_action = "识别宿主落点"
@@ -1037,7 +1045,7 @@ def compare_pages(source_pages: list[dict[str, str]], host_pages: list[dict[str,
                 "needs_human_correction": "yes",
                 "source_key": source["key"],
                 "source_path": source["path"],
-                "source_url": source["url_guess"],
+                "source_url": mapping["source_url"] if route_host else source["url_guess"],
                 "host_path": host["path"] if host else "",
                 "host_entry": host["url_guess"] if host else "",
                 "confidence": confidence,
@@ -1085,67 +1093,37 @@ JAVA_TYPE_DECL_RE = re.compile(r"\b(?:class|interface)\s+[A-Za-z_]")
 JAVA_STRING_RE = re.compile(r'"([^"]*)"')
 JAVA_RETURN_RE = re.compile(r'return\s+"([^"]+)"')
 JAVA_MODEL_AND_VIEW_RE = re.compile(r'new\s+ModelAndView\(\s*"([^"]+)"')
+JAVA_NON_CODE_RE = re.compile(
+    r'//[^\n]*|/\*.*?(?:\*/|\Z)|"""(?:\\.|[^"\\]|"(?!""))*"""|"(?:\\.|[^"\\\n])*"|'
+    r"'(?:\\.|[^'\\\n])*'",
+    re.S,
+)
 
 
 def mask_java_comments_and_strings(text: str) -> str:
-    """Blank comments and string literals while keeping every index aligned with the original."""
-    chars = list(text)
-    index = 0
-    limit = len(chars)
-    while index < limit:
-        char = chars[index]
-        nxt = chars[index + 1] if index + 1 < limit else ""
-        if char == "/" and nxt == "/":
-            while index < limit and chars[index] != "\n":
-                chars[index] = " "
-                index += 1
-            continue
-        if char == "/" and nxt == "*":
-            chars[index] = " "
-            chars[index + 1] = " "
-            index += 2
-            while index + 1 < limit and not (chars[index] == "*" and chars[index + 1] == "/"):
-                if chars[index] != "\n":
-                    chars[index] = " "
-                index += 1
-            if index < limit:
-                chars[index] = " "
-            if index + 1 < limit:
-                chars[index + 1] = " "
-                index += 2
-            else:
-                index = limit
-            continue
-        if char == '"':
-            chars[index] = " "
-            index += 1
-            while index < limit and chars[index] != '"':
-                if chars[index] == "\\" and index + 1 < limit:
-                    if chars[index] != "\n":
-                        chars[index] = " "
-                    index += 1
-                if index < limit and chars[index] != "\n":
-                    chars[index] = " "
-                index += 1
-            if index < limit:
-                chars[index] = " "
-                index += 1
-            continue
-        index += 1
-    return "".join(chars)
+    """Keep code and ordinary string delimiters aligned for extracting literal values by span."""
+    def mask(match: re.Match) -> str:
+        token = match.group()
+        if token.startswith('"') and not token.startswith('"""'):
+            return '"' + " " * (len(token) - 2) + '"'
+        return re.sub(r"[^\n]+", lambda line: " " * len(line.group()), token)
+
+    return JAVA_NON_CODE_RE.sub(mask, text)
 
 
-def mapping_paths(args: str) -> list[str]:
+def mapping_paths(annotation: re.Match, text: str) -> list[str]:
     """Return the path values of a Spring mapping annotation's argument list."""
-    if not args:
+    args = annotation.group("args") or ""
+    target = re.search(r"\b(?:value|path)\s*=\s*(\{.*?\}|\"[^\"]*\")", args, re.S)
+    if not target:
+        target = re.match(r"\s*(\{.*?\}|\"[^\"]*\")", args, re.S)
+    if not target:
         return []
-    named = re.search(r"\b(?:value|path)\s*=\s*(\{.*?\}|\"[^\"]*\")", args, re.S)
-    if named:
-        target = named.group(1)
-    else:
-        bare = re.match(r"\s*(\{.*?\}|\"[^\"]*\")", args, re.S)
-        target = bare.group(1) if bare else ""
-    return JAVA_STRING_RE.findall(target)
+    offset = annotation.start("args")
+    return [
+        text[offset + match.start(1):offset + match.end(1)]
+        for match in JAVA_STRING_RE.finditer(args, *target.span(1))
+    ]
 
 
 def extract_java_routes(source: Path) -> list[dict[str, str]]:
@@ -1154,32 +1132,36 @@ def extract_java_routes(source: Path) -> list[dict[str, str]]:
         if path.suffix.lower() != ".java":
             continue
         text = read_text(path)
-        class_decl = JAVA_TYPE_DECL_RE.search(mask_java_comments_and_strings(text))
-        preamble = text[: class_decl.start()] if class_decl else ""
+        syntax = mask_java_comments_and_strings(text)
+        class_decl = JAVA_TYPE_DECL_RE.search(syntax)
+        preamble = syntax[: class_decl.start()] if class_decl else ""
         class_route = ""
         for match in MAPPING_ANNOTATION_RE.finditer(preamble):
             if match.group("name") == "RequestMapping":
-                paths = mapping_paths(match.group("args") or "")
+                paths = mapping_paths(match, text)
                 class_route = paths[0] if paths else ""
                 break
         class_file = str(path.relative_to(source)).replace("\\", "/")
-        matches = list(MAPPING_ANNOTATION_RE.finditer(text))
+        matches = list(MAPPING_ANNOTATION_RE.finditer(syntax))
         for index, match in enumerate(matches):
             if class_decl and match.start() < class_decl.start():
                 continue
-            method_paths = mapping_paths(match.group("args") or "")
+            method_paths = mapping_paths(match, text)
             if not method_paths:
                 continue
             next_start = matches[index + 1].start() if index + 1 < len(matches) else len(text)
-            block = text[match.start():next_start]
+            returns = (
+                text[found.start(1):found.end(1)]
+                for found in JAVA_RETURN_RE.finditer(syntax, match.end(), next_start)
+            )
             template = next(
-                (candidate for candidate in JAVA_RETURN_RE.findall(block)
+                (candidate for candidate in returns
                  if not candidate.startswith(("redirect:", "forward:"))),
                 "",
             )
             if not template:
-                view = JAVA_MODEL_AND_VIEW_RE.search(block)
-                template = view.group(1) if view else ""
+                view = JAVA_MODEL_AND_VIEW_RE.search(syntax, match.end(), next_start)
+                template = text[view.start(1):view.end(1)] if view else ""
             for route in method_paths:
                 full_route = "/".join(part.strip("/") for part in (class_route, route) if part)
                 rows.append(
@@ -1496,18 +1478,23 @@ def same_mpa_page_dir(left: str, right: str) -> bool:
     return bool(left_match and right_match and left_match.group(1).lower() == right_match.group(1).lower())
 
 
+def same_registered_route(mapping: dict[str, str]) -> bool:
+    """Tie the registered source URL to this template before comparing it with the host route."""
+    if not mapping.get("host_route_path") or mapping.get("source_route_evidence", "") in {"", "url_guess only"}:
+        return False
+    template = "/" + mapping.get("source_template", "").strip("/")
+    source_path = "/" + mapping["source_page_path"]
+    if not (source_path.endswith(template) or source_path.rsplit(".", 1)[0].endswith(template)):
+        return False
+    return normalize_route_path(mapping["source_url"]) == normalize_route_path(mapping["host_route_path"])
+
+
 def entry_link_basis(row: dict[str, str], mapping: dict[str, str]) -> str:
     """Return route-path, matched-host-path, or token-guess for one source page's chosen host entry."""
-    host_route = mapping.get("host_route_path", "")
-    source_url = mapping.get("source_url", "")
-    if (
-        host_route
-        and mapping.get("source_route_evidence", "") not in {"", "url_guess only"}
-        and normalize_route_path(source_url) == normalize_route_path(host_route)
-    ):
+    host_path = row.get("host_path", "")
+    if host_path and host_path == mapping.get("host_entry_ts") and same_registered_route(mapping):
         return "route-path"
     host_files = [mapping.get("host_entry_html", ""), mapping.get("host_entry_ts", "")]
-    host_path = row.get("host_path", "")
     if host_path and any(
         item and (item == host_path or same_mpa_page_dir(item, host_path)) for item in host_files
     ):
@@ -2512,8 +2499,8 @@ def collect_data(args) -> dict:
 
     source_pages = discover_pages(source, SOURCE_PAGE_EXTS, source=True)
     host_pages = discover_pages(host, HOST_PAGE_EXTS, source=False) if host else []
-    comparison = compare_pages(source_pages, host_pages)
     url_entry_mapping = build_url_entry_mapping(source, host, source_pages, host_pages)
+    comparison = compare_pages(source_pages, host_pages, url_entry_mapping)
     reconcile_comparison_entries(comparison, url_entry_mapping)
     if getattr(args, "unit_decisions", None):
         apply_unit_decisions(comparison, load_unit_decisions(args.unit_decisions))

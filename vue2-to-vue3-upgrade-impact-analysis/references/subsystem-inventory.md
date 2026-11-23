@@ -23,14 +23,18 @@ the **installed target major** (resolved from registry metadata at
 
 ## Builder-selection evidence
 
-`source_cjs_export`, `webpack_require_context` and `umd_library_export`
-(`libraryTarget: 'umd'` only) are evidence for the existing `build_axis`
-values. Heavy CJS, `require.context`, or UMD library output is a reason to keep
-`cli5-webpack5` instead of assuming `vite`, without leaving the path id and
-without Wave 1 `other`. They do **not** add a `build_axis` value.
-`qiankun_loader` records a microfrontend loader and does not select
-`cli5-webpack5`; read the bundler the host already uses
-(`common-upgrade-patterns.md`). `vite_plugin_qiankun` is Vite evidence.
+Follow the workspace's dev and build scripts to the active config. Use the
+sample paths for `source_cjs_export`, `webpack_require_context` and
+`umd_library_export` to verify which shipped entries or consumers depend on
+them. Compare the work to replace that behavior with the cost of keeping
+webpack during cutover. For an existing Vite project whose only CJS mention
+is a comment or a config file's own export, keep Vite. If a live webpack
+dependency justifies `cli5-webpack5`, record the reason in the path Decision
+Record under the same path id without Wave 1 `other`.
+
+`qiankun_loader` identifies references to the qiankun runtime. A
+`vite_plugin_qiankun` import points to Vite integration. Check which host or
+sub-app uses each before selecting the build axis (`common-upgrade-patterns.md`).
 Rsbuild/Rspack is not an axis; if a human still wants it, that is Wave 1
 `other`, and the packet must keep `build_axis` inside `vite` / `cli5-webpack5` /
 `existing-vite`.

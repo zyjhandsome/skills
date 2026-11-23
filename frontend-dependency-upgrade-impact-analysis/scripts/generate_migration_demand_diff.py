@@ -46,6 +46,7 @@ ASKABLE_DISPOSITIONS = {
     "copy-local",
     "unknown",
 }
+REUSE_DISPOSITIONS = {"reuse-B", "reuse-B-major-review"}
 UI_REPLACE_PACKAGES = {"element-ui", "ant-design-vue", "vant", "naive-ui", "quasar"}
 SCHEMA = "migration-demand-diff-report/v1"
 PRODUCER = "frontend-dependency-upgrade-impact-analysis"
@@ -66,13 +67,6 @@ def read_deps(package_json: Path) -> dict[str, tuple[str, str]]:
             for name, spec in block.items():
                 out.setdefault(str(name), (str(spec), field))
     return out
-
-
-def host_direct_versions(lock_path: Path | None, packages: list[str]) -> dict[str, str]:
-    """Resolved direct versions only. Transitive copies are not a host reuse."""
-    if lock_path is None or not lock_path.is_file():
-        return {}
-    return parse_lock(lock_path, packages).direct_versions
 
 
 def major_of(versionish: str) -> int | None:
@@ -103,7 +97,7 @@ def classify(
             "note": f"A 的包映射到宿主技术栈包 {stack_map[name]}",
             "queue": "yes",
         }
-    if name in b_manifest or name in b_lock:
+    if name in b_manifest:
         b_ver = b_lock.get(name) or b_manifest.get(name) or "?"
         if name == "vue":
             return {
@@ -133,12 +127,12 @@ def classify(
         }
     host_ui = None
     for cand in ("element-plus", "vant", "naive-ui", "ant-design-vue", "quasar"):
-        if cand in b_manifest or cand in b_lock:
+        if cand in b_manifest:
             host_ui = cand
             break
     host_store = None
     for cand in ("pinia", "vuex"):
-        if cand in b_manifest or cand in b_lock:
+        if cand in b_manifest:
             host_store = cand
             break
     replacements = {
@@ -177,7 +171,7 @@ def classify(
         "a_spec": a_spec,
         "b_status": "absent",
         "disposition": "add-to-B",
-        "note": "B 的 manifest 和直接 lock 都没有该包，加入前需确认",
+        "note": "宿主未直接声明该包，加入前需确认",
         "queue": "yes",
     }
 
@@ -233,7 +227,16 @@ def apply_decisions(rows: list[dict[str, str]], decisions: dict[str, str]) -> li
         status = "ready" if row.get("queue") == "yes" else "decided"
         if answer:
             disposition = accepted_demand_disposition(answer, pkg)
-            if disposition:
+            current = row["disposition"]
+            stale_reuse = disposition in REUSE_DISPOSITIONS and disposition != current
+            stale_add = disposition == "add-to-B" and current in REUSE_DISPOSITIONS
+            if stale_reuse or stale_add:
+                status = "ready"
+                row = {
+                    **row, "queue": "yes", "decision_note": answer,
+                    "note": f"{row['note']}。原决定 {disposition} 与当前结果 {current} 不符，请重新确认。",
+                }
+            elif disposition:
                 status = "decided"
                 row = {**row, "disposition": disposition, "decision_note": answer}
             elif answer == "defer":
@@ -474,7 +477,8 @@ def main(argv: list[str]) -> int:
     source_lock = next((p for p in source_lock_candidates if p.is_file()), None)
     lockfile_status = "present" if lock_path else "absent"
     source_lockfile_status = "present" if source_lock else "absent"
-    b_lock = host_direct_versions(lock_path, list(demand))
+    declared_demand = [name for name in demand if name in b_manifest]
+    b_lock = parse_lock(lock_path, declared_demand, manifest_specs=b_manifest).direct_versions
     stack_map = load_json(Path(args.stack_map)) if args.stack_map else {}
     if not isinstance(stack_map, dict):
         print("ERROR: stack-map must be a JSON object", file=sys.stderr)

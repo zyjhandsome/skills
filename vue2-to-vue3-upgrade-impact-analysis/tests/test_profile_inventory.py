@@ -878,6 +878,7 @@ class ProfileInventoryTests(unittest.TestCase):
             src.mkdir()
             (root / "package.json").write_text(json.dumps(pkg), encoding="utf-8")
             (src / "legacy.js").write_text(
+                "import { start } from 'qiankun'\nstart()\n"
                 "export default {\n"
                 "  setup(props, ctx) {\n"
                 "    return { router: ctx.root.$router, parent: ctx.parent }\n"
@@ -885,14 +886,18 @@ class ProfileInventoryTests(unittest.TestCase):
                 "}\n",
                 encoding="utf-8",
             )
-            (src / "vue.config.js").write_text(
+            (root / "vue.config.js").write_text(
                 "module.exports = { configureWebpack: { output: { libraryTarget: 'umd' } } }\n",
                 encoding="utf-8",
             )
             data = self._run_profile(root)
-            signals = data["source_impact_signals"]["signals"]
+            impact = data["source_impact_signals"]
+            signals = impact["signals"]
             self.assertGreaterEqual(signals.get("composition_context_removed", 0), 1)
-            self.assertGreaterEqual(signals.get("umd_library_export", 0), 1)
+            self.assertEqual(signals.get("umd_library_export"), 1)
+            self.assertEqual(impact["samples"]["umd_library_export"], ["vue.config.js"])
+            self.assertEqual(impact["samples"]["qiankun_loader"], ["src/legacy.js"])
+            self.assertNotIn("source_cjs_export", signals)
 
     def test_qiankun_loader_is_not_umd_library_export(self) -> None:
         pkg = {"name": "signals", "dependencies": {"vue": "^2.6.14"}}
@@ -905,8 +910,9 @@ class ProfileInventoryTests(unittest.TestCase):
                 "import { start } from 'qiankun'\nstart()\n",
                 encoding="utf-8",
             )
-            (src / "vite.config.js").write_text(
-                "import plugin from 'vite-plugin-qiankun'\nexport default plugin\n",
+            (root / "vite.config.ts").write_text(
+                "import qiankun from 'vite-plugin-qiankun'\n"
+                "export default { plugins: [qiankun('app')] }\n",
                 encoding="utf-8",
             )
             data = self._run_profile(root)
@@ -914,6 +920,45 @@ class ProfileInventoryTests(unittest.TestCase):
             self.assertEqual(signals.get("umd_library_export", 0), 0)
             self.assertEqual(signals.get("qiankun_loader", 0), 1)
             self.assertEqual(signals.get("vite_plugin_qiankun", 0), 1)
+            samples = data["source_impact_signals"]["samples"]
+            self.assertEqual(samples["qiankun_loader"], ["src/micro.js"])
+            self.assertEqual(samples["vite_plugin_qiankun"], ["vite.config.ts"])
+
+    def test_plugin_alias_and_commented_cjs_in_vite_source(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "package.json").write_text(json.dumps({
+                "dependencies": {"vue": "^2.7.0", "vite": "^4"},
+            }), encoding="utf-8")
+            src = root / "src"
+            src.mkdir()
+            (src / "plugins.ts").write_text(
+                "// Previously: module.exports = legacy\n"
+                "/* require.context('./views') */\n"
+                "const example = 'module.exports'\n"
+                "import qiankun from 'vite-plugin-qiankun'\n"
+                "export const plugins = [qiankun('legacy')]\n",
+                encoding="utf-8",
+            )
+            data = self._run_profile(root)
+            self.assertEqual(data["builder"], "vite")
+            signals = data["source_impact_signals"]["signals"]
+            self.assertEqual(signals.get("vite_plugin_qiankun"), 1)
+            for key in ("qiankun_loader", "source_cjs_export", "webpack_require_context"):
+                self.assertNotIn(key, signals)
+
+    def test_root_config_signals_with_no_source_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "package.json").write_text('{"name":"shell"}', encoding="utf-8")
+            (root / "vite.config.cjs").write_text(
+                "const qiankun = require('vite-plugin-qiankun')\n"
+                "module.exports = { plugins: [qiankun('shell')] }\n",
+                encoding="utf-8",
+            )
+            impact = self._run_profile(root)["source_impact_signals"]
+            self.assertEqual(impact["scanned_files"], 0)
+            self.assertEqual(impact["signals"], {"vite_plugin_qiankun": 1})
 
 
 if __name__ == "__main__":

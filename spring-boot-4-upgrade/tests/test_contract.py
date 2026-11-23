@@ -290,6 +290,20 @@ class EvidenceContractTests(unittest.TestCase):
         errors = self.check("verified")
         self.assertTrue(any(e.startswith("baseline35:") for e in errors), errors)
 
+    def test_checkpoint_and_controlled_skip_are_mutually_exclusive(self):
+        self.controlled_skip(clear_baseline=False)
+        skip = self.data["scope"]["excluded"].pop()
+        for gate in ("boot4", "verified", "verified-with-bridges"):
+            with self.subTest(gate=gate):
+                if gate == "verified-with-bridges":
+                    self.data["final"]["bridges"] = [
+                        {"component": "legacy-sdk", "reason": "temporary adapter", "exit_condition": "SDK upgraded"}
+                    ]
+                self.assertEqual(self.check(gate), [])
+                self.data["scope"]["excluded"] = [skip]
+                self.assertIn("baseline35-skip requires baseline35 to be null", self.check(gate))
+            self.data["scope"]["excluded"] = []
+
     def test_controlled_skip_record_is_required_for_verified(self):
         self.controlled_skip()
         self.assertEqual(self.check("verified"), [])
