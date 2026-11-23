@@ -18,10 +18,13 @@
    access, bare `<template>` wrappers, CSS that suppresses target-kit overlay
    chrome, the runtime-lane family (`module.exports` / `exports.x` inside
    source, `require.context`), `composition_context_removed`
-   (`ctx.root` / `ctx.parent` / `ctx.listeners` / `ctx.refs`), and
-   `umd_library_export`. `source_cjs_export`, `webpack_require_context` and
-   `umd_library_export` are builder-selection evidence for the existing
-   `build_axis` values (`subsystem-inventory.md`); they do not add an axis.
+   (`ctx.root` / `ctx.parent` / `ctx.listeners` / `ctx.refs`),
+   `umd_library_export` (`libraryTarget: 'umd'` only), `qiankun_loader`, and
+   `vite_plugin_qiankun`. `source_cjs_export`, `webpack_require_context` and
+   `umd_library_export` are reasons to keep `build_axis: cli5-webpack5`.
+   `qiankun_loader` only records a microfrontend loader; `vite_plugin_qiankun`
+   is Vite evidence. Neither adds a `build_axis` value
+   (`subsystem-inventory.md`).
    Also complete §10
    `人工补搜检查` for residual gaps
    and non-`vue-*` blockers (`tui-editor`, internal plugins, editors, etc.).

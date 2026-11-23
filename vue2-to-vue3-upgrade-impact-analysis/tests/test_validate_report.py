@@ -1179,6 +1179,17 @@ class ValidateReportTests(unittest.TestCase):
             {"vue-compat", "gogocode-vue"},
         )
 
+    def test_fixture_manual_gap_rows_are_unique(self) -> None:
+        marker = "| `<template v-for>` 的 key |"
+        seen = 0
+        for path in FIXTURES.rglob("*.md"):
+            count = path.read_text(encoding="utf-8").count(marker)
+            if not count:
+                continue
+            seen += 1
+            self.assertEqual(count, 1, path)
+        self.assertGreaterEqual(seen, 5)
+
     def test_rejects_missing_template_vfor_key_checklist_row(self) -> None:
         body = (FIXTURES / "valid-report.md").read_text(encoding="utf-8")
         body = re.sub(r"(?m)^\| `<template v-for>` 的 key.*\n", "", body)

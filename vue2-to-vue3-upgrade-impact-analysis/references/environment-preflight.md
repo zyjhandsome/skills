@@ -105,4 +105,5 @@ condition. Never silently change only the analyst's local Node.
    `confirm:node-strategy:…` — and ask them in **one** message with
    recommendations attached, rather than interrupting once per probe. If the
    chosen target versions change, recompute the exact Node version and re-ask
-   `confirm:node-target`. Do not pin a version number in the menu.
+   `confirm:node-target`. The recommended reply token carries that concrete
+   version. Do not hardcode a version in this file.

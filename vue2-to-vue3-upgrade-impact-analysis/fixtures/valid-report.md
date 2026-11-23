@@ -189,13 +189,6 @@
 | `inline-template` 属性 | 待全仓搜索 `inline-template`，Vue 3 已移除该属性 |
 | custom element 的保留标签 `is` | 待核对 `<tr is="...">` 一类写法，Vue 3 不再按组件渲染 |
 | `@vue/composition-api` setup context（`ctx.root` / `ctx.parent` / `ctx.listeners`） | 待核对 setup 第二个参数上的 `ctx.root`、`ctx.parent`、`ctx.listeners`、`ctx.refs` |
-| `<template v-for>` 的 key | 待按官方 key-attribute 页核对 `<template v-for>` 与非 v-for 节点上的 key |
-| `transition-group` 默认根节点 | 待核对默认不再渲染包裹根元素后的选择器与布局 |
-| 作为根元素的 `<transition>`（transition-as-root） | 待核对根节点是 transition 的组件 |
-| props default 工厂里的 `this` | 待核对 `default()` 内对 `this` 的访问（含 `this.$t`） |
-| `inline-template` 属性 | 待全仓搜索 `inline-template`，Vue 3 已移除该属性 |
-| custom element 的保留标签 `is` | 待核对 `<tr is="...">` 一类写法，Vue 3 不再按组件渲染 |
-| `@vue/composition-api` setup context（`ctx.root` / `ctx.parent` / `ctx.listeners`） | 待核对 setup 第二个参数上的 `ctx.root`、`ctx.parent`、`ctx.listeners`、`ctx.refs` |
 
 - 过滤器与 `$listeners` 的静态命中数待补精确扫描
 - Element Plus 视觉回归范围待产品确认

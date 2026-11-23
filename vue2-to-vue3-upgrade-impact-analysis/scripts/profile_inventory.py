@@ -204,12 +204,15 @@ SOURCE_PATTERNS = {
     "composition_context_removed": re.compile(
         r"\b(?:ctx|context)\s*\.\s*(?:root|parent|listeners|refs)\b"
     ),
-    # UMD library output and qiankun loaders are builder-selection evidence.
-    # They do not add a build_axis value; they argue for keeping a webpack-class
-    # build (`cli5-webpack5`) instead of assuming Vite.
+    # UMD library output is builder-selection evidence for keeping a webpack-class
+    # build (`cli5-webpack5`). It does not add a build_axis value.
     "umd_library_export": re.compile(
-        r"libraryTarget\s*:\s*['\"]umd['\"]|\bvite-plugin-qiankun\b|\bqiankun\b"
+        r"libraryTarget\s*:\s*['\"]umd['\"]"
     ),
+    # A qiankun loader records a microfrontend. It does not select webpack.
+    # `vite-plugin-qiankun` contains the word qiankun, so it stays on its own signal.
+    "qiankun_loader": re.compile(r"(?<!vite-plugin-)\bqiankun\b"),
+    "vite_plugin_qiankun": re.compile(r"\bvite-plugin-qiankun\b"),
 }
 # Signals whose Vue3 breakage is invisible to build and lint: every hit needs an
 # interaction-level or runtime-level assertion of its own, so counts and five
@@ -658,7 +661,11 @@ def find_lockfiles(root: Path) -> list[str]:
 def _npm_lock_version(
     packages: dict, name: str, project_root: Path, lock_root: Path
 ) -> str | None:
-    """Prefer the importer-local ``node_modules/<name>`` over the workspace root."""
+    """Prefer this package's own ``node_modules/<name>``, then the hoisted root.
+
+    ``node_modules/<dep>/node_modules/<name>`` is that dependency's copy. It
+    must not replace the version this package resolves.
+    """
     suffix = f"node_modules/{name}"
     try:
         relative = project_root.resolve().relative_to(lock_root.resolve()).as_posix()
@@ -666,24 +673,22 @@ def _npm_lock_version(
         relative = ""
     if relative == ".":
         relative = ""
-    ranked: list[tuple[int, int, str]] = []
+    direct = f"{relative}/{suffix}" if relative else suffix
+    hoisted = suffix
+    direct_version: str | None = None
+    hoisted_version: str | None = None
     for key, meta in packages.items():
         if not isinstance(meta, dict) or not meta.get("version"):
             continue
         normalized = str(key).replace("\\", "/").lstrip("./")
-        if normalized != suffix and not normalized.endswith("/" + suffix):
-            continue
-        inside_project = bool(relative) and (
-            normalized == f"{relative}/{suffix}" or normalized.startswith(relative + "/")
-        )
-        if inside_project:
-            ranked.append((0, -len(normalized), str(meta["version"])))
-        elif normalized == suffix:
-            ranked.append((1, -len(normalized), str(meta["version"])))
-    if not ranked:
-        return None
-    ranked.sort()
-    return ranked[0][2]
+        version = str(meta["version"])
+        if normalized == direct:
+            direct_version = version
+        elif relative and normalized == hoisted:
+            hoisted_version = version
+    if direct_version is not None:
+        return direct_version
+    return hoisted_version
 
 
 def package_lock_versions(

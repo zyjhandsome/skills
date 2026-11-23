@@ -12,7 +12,7 @@ the **installed target major** (resolved from registry metadata at
 |---|---|---|---|
 | `core-vue` | `vue` major/version, SFC compiler | Vue 2→3 breaking index | `vue` 3.x + `@vue/compiler-sfc` at the **same exact version** |
 | `router` | `vue-router` | v3→v4 guide (primary cutover for a Vue2 workspace) | `vue-router` — `latest` has moved past v4; resolve and pin the major, and record v4-vs-v5 as a decision |
-| `build` | Vue CLI / Webpack / Vite; multi-entry evidence (`build_entries`: `pages`, entry globs, `public/*.html`); browser floor (browserslist → Vite target / `@vitejs/plugin-legacy`); builder-selection signals `source_cjs_export`, `webpack_require_context`, `umd_library_export` | Vite migration page **for the selected major**, or Vue CLI 5 / webpack 5 docs when `build_axis` stays `cli5-webpack5` | The builder named by `build_axis`. Vue CLI 5 + `vue-loader` 17 and a kept webpack 5 config are valid Vue 3 targets; do not treat Vite as mandatory |
+| `build` | Vue CLI / Webpack / Vite; multi-entry evidence (`build_entries`: `pages`, entry globs, `public/*.html`); browser floor (browserslist → Vite target / `@vitejs/plugin-legacy`); builder-selection signals `source_cjs_export`, `webpack_require_context`, `umd_library_export`; microfrontend signals `qiankun_loader`, `vite_plugin_qiankun` | Vite migration page **for the selected major**, or Vue CLI 5 / webpack 5 docs when `build_axis` stays `cli5-webpack5` | The builder named by `build_axis`. Vue CLI 5 + `vue-loader` 17 and a kept webpack 5 config are valid Vue 3 targets; do not treat Vite as mandatory |
 | `store` | Vuex / Pinia / both | Vuex 3→4, or Vuex→Pinia cookbook | In-place default is Vuex 4. Pinia only when the A→B host already uses it, or the user replies `confirm:store-target:pinia` |
 | `ui` | Element UI / Ant Design Vue 1.x / Vuetify 2 / other | that library's own migration page | Matching Vue3 library (e.g. Element Plus), major resolved from registry |
 | `test` | `@vue/test-utils`, Jest/Vitest, E2E | test-utils v1→v2 | `@vue/test-utils` v2 line + Vitest/Jest Vue3 config |
@@ -23,11 +23,15 @@ the **installed target major** (resolved from registry metadata at
 
 ## Builder-selection evidence
 
-`source_cjs_export`, `webpack_require_context` and `umd_library_export` (including
-`libraryTarget: 'umd'` and `qiankun`) are evidence for the existing `build_axis`
+`source_cjs_export`, `webpack_require_context` and `umd_library_export`
+(`libraryTarget: 'umd'` only) are evidence for the existing `build_axis`
 values. Heavy CJS, `require.context`, or UMD library output is a reason to keep
-`cli5-webpack5` instead of assuming `vite`. They do **not** add a `build_axis`
-value. Rsbuild/Rspack is not an axis; if a human still wants it, that is Wave 1
+`cli5-webpack5` instead of assuming `vite`, without leaving the path id and
+without Wave 1 `other`. They do **not** add a `build_axis` value.
+`qiankun_loader` records a microfrontend loader and does not select
+`cli5-webpack5`; read the bundler the host already uses
+(`common-upgrade-patterns.md`). `vite_plugin_qiankun` is Vite evidence.
+Rsbuild/Rspack is not an axis; if a human still wants it, that is Wave 1
 `other`, and the packet must keep `build_axis` inside `vite` / `cli5-webpack5` /
 `existing-vite`.
 

@@ -186,10 +186,3 @@
 | `inline-template` 属性 | 待在 A 搜索 `inline-template`；有命中则不能原样迁入 B |
 | custom element 的保留标签 `is` | 待核对 A 的 `<tr is="...">` 一类写法，B 不再按组件渲染 |
 | `@vue/composition-api` setup context（`ctx.root` / `ctx.parent` / `ctx.listeners`） | 待核对 A 的 setup context：`ctx.root`、`ctx.parent`、`ctx.listeners` 在 B 的 Vue 3 中不存在 |
-| `<template v-for>` 的 key | 待按源仓 A 核对 `<template v-for>` 的 key 落点，迁入 B 时按 key-attribute 改 |
-| `transition-group` 默认根节点 | 待核对 A 里依赖 transition-group 默认包裹元素的选择器，B 的 Vue 3 不再渲染该根 |
-| 作为根元素的 `<transition>`（transition-as-root） | 待核对 A 里以 transition 为根的组件，迁入 B 时按 transition-as-root 处理 |
-| props default 工厂里的 `this` | 待核对 A 的 `default()` 是否读取 `this`（含 `this.$t`） |
-| `inline-template` 属性 | 待在 A 搜索 `inline-template`；有命中则不能原样迁入 B |
-| custom element 的保留标签 `is` | 待核对 A 的 `<tr is="...">` 一类写法，B 不再按组件渲染 |
-| `@vue/composition-api` setup context（`ctx.root` / `ctx.parent` / `ctx.listeners`） | 待核对 A 的 setup context：`ctx.root`、`ctx.parent`、`ctx.listeners` 在 B 的 Vue 3 中不存在 |

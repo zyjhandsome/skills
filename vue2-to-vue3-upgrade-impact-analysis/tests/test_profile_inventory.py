@@ -810,6 +810,38 @@ class ProfileInventoryTests(unittest.TestCase):
                 all("package-lock.json" in item and "mono" in item for item in data["lockfiles"])
             )
 
+    def test_transitive_nested_vue_does_not_override_importer(self) -> None:
+        legacy_pkg = {"name": "legacy", "dependencies": {"vue": "^2.7.16"}}
+        lock = {
+            "name": "mono",
+            "lockfileVersion": 3,
+            "packages": {
+                "": {"name": "mono"},
+                "node_modules/vue": {"version": "3.4.21"},
+                "packages/legacy/node_modules/vue": {"version": "2.7.16"},
+                "packages/legacy/node_modules/foo/node_modules/vue": {"version": "3.5.0"},
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "mono"
+            legacy = root / "packages" / "legacy"
+            legacy.mkdir(parents=True)
+            (root / ".git").mkdir()
+            (root / "package.json").write_text(
+                json.dumps({"name": "mono", "private": True}), encoding="utf-8"
+            )
+            (legacy / "package.json").write_text(json.dumps(legacy_pkg), encoding="utf-8")
+            (root / "package-lock.json").write_text(json.dumps(lock), encoding="utf-8")
+            data = self._run_profile(legacy)
+            self.assertEqual(data["vue_major"], "2")
+            self.assertEqual(
+                data["related_packages"]["vue"]["resolved_version"], "2.7.16"
+            )
+            self.assertEqual(data["lockfile_status"], "present")
+            self.assertFalse(
+                any("major-mismatch:vue" in item for item in data["lockfile_errors"])
+            )
+
     def test_lockfile_walk_stops_at_git_root(self) -> None:
         stray = {
             "name": "stray",
@@ -861,6 +893,27 @@ class ProfileInventoryTests(unittest.TestCase):
             signals = data["source_impact_signals"]["signals"]
             self.assertGreaterEqual(signals.get("composition_context_removed", 0), 1)
             self.assertGreaterEqual(signals.get("umd_library_export", 0), 1)
+
+    def test_qiankun_loader_is_not_umd_library_export(self) -> None:
+        pkg = {"name": "signals", "dependencies": {"vue": "^2.6.14"}}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            src = root / "src"
+            src.mkdir()
+            (root / "package.json").write_text(json.dumps(pkg), encoding="utf-8")
+            (src / "micro.js").write_text(
+                "import { start } from 'qiankun'\nstart()\n",
+                encoding="utf-8",
+            )
+            (src / "vite.config.js").write_text(
+                "import plugin from 'vite-plugin-qiankun'\nexport default plugin\n",
+                encoding="utf-8",
+            )
+            data = self._run_profile(root)
+            signals = data["source_impact_signals"]["signals"]
+            self.assertEqual(signals.get("umd_library_export", 0), 0)
+            self.assertEqual(signals.get("qiankun_loader", 0), 1)
+            self.assertEqual(signals.get("vite_plugin_qiankun", 0), 1)
 
 
 if __name__ == "__main__":

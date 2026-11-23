@@ -185,12 +185,5 @@
 | `inline-template` 属性 | 已全仓搜索，无 `inline-template` |
 | custom element 的保留标签 `is` | 已核对：无 `<tr is="...">` 一类保留标签组件写法 |
 | `@vue/composition-api` setup context（`ctx.root` / `ctx.parent` / `ctx.listeners`） | 已核对：6 处 `ctx.root` / `ctx.parent`，Vue 3 setup context 没有这些字段 |
-| `<template v-for>` 的 key | 已核对：3 处 `<template v-for>` 的 key 在子节点上，须按 key-attribute 改到 template 上 |
-| `transition-group` 默认根节点 | 已核对：2 处依赖默认包裹元素的选择器，目标版本不再渲染该根节点 |
-| 作为根元素的 `<transition>`（transition-as-root） | 已核对：1 个组件以 transition 为根，按 transition-as-root 单列 |
-| props default 工厂里的 `this` | 已核对：4 处 `default()` 读取 `this.$t`，Vue 3 工厂内没有 `this` |
-| `inline-template` 属性 | 已全仓搜索，无 `inline-template` |
-| custom element 的保留标签 `is` | 已核对：无 `<tr is="...">` 一类保留标签组件写法 |
-| `@vue/composition-api` setup context（`ctx.root` / `ctx.parent` / `ctx.listeners`） | 已核对：6 处 `ctx.root` / `ctx.parent`，Vue 3 setup context 没有这些字段 |
 
 - 无阻塞缺口；实施需另授权

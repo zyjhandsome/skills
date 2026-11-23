@@ -33,7 +33,8 @@ Before analysis (including manifest-only reads), run
 project Node mismatch is recorded, not a hard block. Node is two-plane: the
 project's effective contract, separate from the selected target toolchain's
 `engines.node` intersection. Unknown target range or unresolved conflict keeps
-the handoff frozen; `upgrade-required` needs `confirm:node-target:<exact version recomputed at evidence_as_of>` and `confirm:node-strategy:…` (do not pin a version).
+the handoff frozen; `upgrade-required` needs `confirm:node-strategy:…` and
+`confirm:node-target:<exact version recomputed at evidence_as_of>` in the menu (D10). Do not hardcode a version in this skill.
 Network probe same wave; dual registry+docs failure → offline confirm gate.
 
 ## Boundaries
@@ -71,6 +72,7 @@ build variant × scope** (A→B: workspace=A; scope often `page-closure`).
   evidence favors `direct-vue3` or coexistence. Deviating to in-place
   `direct-vue3` requires a §3 `default_path_deviation:` line naming what compat
   would have absorbed and which validations take over.
+  Source CJS, `require.context`, or `libraryTarget: 'umd'` keeps this path id and sets `build_axis: cli5-webpack5` without Wave 1 `other`.
 - **A→B / 并入 / iframe 收编:** `host-port-direct` (`direct-vue3` +
   `existing-vite` + `host-port`). §1 needs `source_root`,
   `implementation_target`, `forbid_source_mutation: yes`. Compat is **not**
