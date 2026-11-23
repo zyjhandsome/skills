@@ -157,13 +157,12 @@ A→B 不要混用职责：本 skill 只出领域证据与页级设计；改 B �
 
 ```text
 /angularjs-to-vue3-host-migration
-依次执行 assess 和 design（本阶段不改应用代码）。
+mode: assess（本阶段不改应用代码）
 源仓 A：<AngularJS/jQuery/JSP 仓库>
 宿主仓 B：<已有 Vue3 仓库>
-migration_unit：
-- source_entry：<A 的页面/入口/用户行为>
-- host entry：<B 的 route 或 HTML 入口>
-# 缺具体入口就停，不要编占位
+# 选定单元后再跑 design：
+# migration_unit：<A 的页面/URL/菜单项/用户行为>
+# 宿主已有入口时填 host entry；新落地不填，由 design 给出
 A 只读；B 壳 host-native；内容区 strict parity
 ```
 

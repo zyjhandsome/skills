@@ -36,7 +36,7 @@ Record acquisition evidence:
 |---|---|
 | repo role | source or host |
 | repo path | final path used by the analysis |
-| acquisition status | cloned, existing-git-repo, clone-warning-existing-git-repo, failed |
+| acquisition status | cloned, existing-git-repo, clone-warning-existing-git-repo, failed, not-provided, path-exists-not-git |
 | acquisition warning | command failure such as exit 128, SSL workaround, retry note |
 | revision | `git rev-parse --short HEAD` |
 | dirty entries | current `git status --porcelain` count |
@@ -116,6 +116,7 @@ Required outputs:
 - verification checklist
 - unresolved evidence
 - per-unit identity/landing/switch decisions, comparison surface, and host-integration checklist
+- host chrome ledger with a keep/hide/replace decision and landing method per chrome element, for every unit landing under the host shell
 
 ### verify
 
@@ -183,9 +184,9 @@ Cover at minimum:
 - sprite sheets with their coordinate/size maps, icon fonts, and empty-state images
 - jQuery and the jQuery plugin styles/behaviors the template boots
 - global JS libraries the template assumes, such as date, table, chart, validation, or dialog helpers
-- server-rendered globals, hidden inputs, and session/request values injected into `window`
+- server-rendered globals, hidden inputs, and session/request values injected into `window`, the CSRF token source, and server-side auth tags such as `sec:authorize` or `shiro:`
 
-Status enum: `host-provides`, `host-partial`, `host-missing`, `not-needed`.
+Status enum: `host-provides`, `host-partial`, `host-missing`, `not-needed`, `unknown`.
 
 A `host-missing` or `host-partial` row is a standing constraint for every page closure in this host: each source region depending on it needs an explicit B landing method in its CSS closure row. Discovering a missing global baseline while repairing a page is a symptom of a skipped assess step, not a new finding.
 
@@ -277,7 +278,7 @@ Build a separate URL/entry map before design:
 | source template | JSP/Thymeleaf return value, `templateUrl`, view resolver target, or template path. |
 | server controller | Java file and line for `@RequestMapping`, `@GetMapping`, or equivalent. |
 | host entry | MPA HTML/TS entry, Vue Router route, menu registration, or shell mount. |
-| mapping status | candidate, confirmed, unresolved, host-only-candidate. |
+| mapping status | candidate, confirmed, unresolved, host-page-only-candidate. |
 
 File-path URL guesses are low confidence. Do not use guessed URLs as acceptance criteria without route/menu/runtime evidence.
 
@@ -457,8 +458,8 @@ Any failing axis is a deviation. Record it as its own matrix row with reason and
 
 For every source region of the unit, emit one row with a stable ID `DISP-<unit>-<region>-<n>`. This matrix is a persisted artifact created in `assess` for `partial-overlap` units, filled in `design`, and checked row by row in `verify`. Incremental repairs update existing rows rather than opening a new analysis round.
 
-| 源区域 | 可见文案（源 i18n 原文） | 控件形态 | API + 字段/公式 | 默认值/校验 | 依赖 CSS（页级 + common + sprite） | 启动副作用 | B 现状 |
-|---|---|---|---|---|---|---|---|
+| DISP-ID | 迁移单元 | 源区域 | 可见文案（源 i18n 原文） | 控件形态 | API + 字段/公式 | 默认值/校验 | 依赖 CSS（页级 + common + sprite） | 启动副作用 | B 现状 | row_lifecycle | 证据 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
 
 Column rules:
 
@@ -536,7 +537,7 @@ Generated script tables are an evidence baseline. They never substitute for the 
 
 ## Design-Ready Gate
 
-Do not enter Delivery framing from a header-only design contract. A unit is design-ready only when it has:
+Do not hand a header-only design contract to scope approval. A unit is design-ready only when it has:
 
 - page closure: source templates/fragments/scripts/controllers/services/APIs/assets
 - display-contract matrix rows for every source region of the unit, split from any generated whole-page `(skeleton)` row
@@ -554,6 +555,7 @@ Do not enter Delivery framing from a header-only design contract. A unit is desi
 - old source URL to new host entry mapping backed by Java/menu/MPA evidence
 - permission/session/API parity draft
 - rollback switch and condition
+- host chrome ledger with a keep/hide/replace decision and landing method per chrome element, for every unit landing under the host shell
 
 If these are empty or only table headers, mark the design gate `not-ready: empty-contract` and remain in design. For a `partial-overlap` shell page, a missing display-contract matrix, page-init list, i18n table, or CSS closure table is `not-ready` on its own.
 
@@ -565,7 +567,7 @@ Admission — all must hold, otherwise split the batch:
 
 | Rule | Why |
 |---|---|
-| At most 5 units | Beyond that the High cost/risk/rollback summary stops being reviewable. |
+| At most 5 units | Beyond that the cost/risk/rollback summary stops being reviewable. |
 | One shared design scope | `repair` and `new-landing` have different approval chains; a mixed batch would need both. |
 | Each unit resolves to exactly one source page | A unit name matching several pages has no definite scope. |
 | No two units share a host landing | Same-file units must be sequenced or merged. |
@@ -585,7 +587,7 @@ A second writer on any of these is a blocker even inside one change, because the
 
 Per-unit properties a batch must preserve: page closure, matrix rows, i18n table, CSS closure, rollback switch, verify conclusion, and completion decision. Batch conclusions are never averaged.
 
-Pilot rule: the first unit of an A/B repo pair runs alone, because the host compile/diagnostic overlay, CSS closure landing method, entry-mounting pattern, comparison surface, and runtime-evidence feasibility are only proven by implementing and verifying once. Batching before that multiplies one wrong assumption by N. Remaining units may draft contracts in parallel with the pilot's implementation, but the pilot's change must be archived before the batch enters planning, or cross-change path overlap turns into a readiness blocker. Recorded measured evidence for those host facts, bound to the current host revision, can substitute for the pilot; nothing else can.
+Pilot rule: the first unit of an A/B repo pair runs alone, because the host compile/diagnostic overlay, CSS closure landing method, entry-mounting pattern, comparison surface, and runtime-evidence feasibility are only proven by implementing and verifying once. Batching before that multiplies one wrong assumption by N. Remaining units may draft contracts in parallel with the pilot's implementation, but the pilot must be closed (its archive gate row filled) before the batch enters planning, or overlapping edits to the same host paths become a readiness blocker. Recorded measured evidence for those host facts, bound to the current host revision, can substitute for the pilot; nothing else can.
 
 ## Host Compile And Diagnostic Overlay
 
@@ -641,13 +643,13 @@ Design fills this table from current host evidence, the approved execute plan ca
 | Comparison-surface parity | Like-for-like baseline/candidate surface, chrome, viewport, auth/environment, normalization, and hit-layer evidence. |
 | Host-integration parity | Session readiness, chrome/hit layer, events/i18n, downloads, build flags, host controls, freeze/ownership, and test-data disposition. |
 | Source contract gates | Navigation landing, comparison and identity mapping, shared modal modes, mounted view closure, runtime-hidden and host-extra regions, formula/empty-state/payload scope, hit layer, selector-to-DOM binding, CSS utility closure, interruption hygiene, contract test harness, and browser automation disposition. |
-| API parity | Endpoint, method, params/body, response codes, failure handling, messages. |
+| API parity | Endpoint, method, params/body, response codes, failure handling, messages, request Content-Type and body encoding (form-urlencoded vs JSON), array-parameter encoding, and whether a host interceptor unwraps the response or handles error codes globally. |
 | Visual measurement parity | Screenshots, measurements, diff threshold, or mark manual-only. Does not cover display-contract rows. |
 | Runtime parity | Host Node actually used vs declared baseline, lockfile, existing lint/build/test commands, lint/type baseline, and compile/diagnostic overlay disposition. |
 | Git hygiene | No dependency/cache/build directory noise in intended commit; source A unchanged; B changes scoped. |
 | Rollback | Switch, owner, affected URL/page, restore condition, data compatibility. |
 | Archive gate | One filled row per unit: completion state, verified/total row count, unresolved row IDs, carried degradation labels, archive disposition. |
-| Completion authority | Delivery verified + domain verify + current host revision + no blocking residuals. |
+| Completion authority | an implementation authority record from the caller (for example a Delivery `verified` handoff) + domain verify + current host revision + no blocking residuals. |
 
 ## Completion Authority
 
@@ -655,7 +657,7 @@ Design fills this table from current host evidence, the approved execute plan ca
 
 Do not announce a page migration complete unless all are true:
 
-- The implementing path has a current authority record: a Delivery `verified` handoff for the approved scope.
+- The implementing path has a current authority record: an implementation authority record from the caller (for example a Delivery `verified` handoff).
 - Domain verify evidence is current for the same source and host revisions.
 - Host B revision is the revision that was built, tested, and reviewed.
 - Git hygiene has no blocking dependency/cache/build noise.
@@ -707,7 +709,7 @@ Method:
 
 `partial-overlap` is allowed to enter repair design because the host has a plausible mounted entry. It is still open work: until MATRIX rows, page-init, URL/API, CSS, and runtime reachability close, it must not be labeled `already-migrated`.
 
-A repair packet still requires two approval records for High migration work: one scope/specification approval and one implementation-go approval. The repair fast lane may run Frame and Plan in the same session, but it must not collapse the two gates into one. Application code changes still belong to the approved execute owner, and the completion authority record is unchanged. Any escalation trigger below cancels the repair fast lane and returns the unit to full framing.
+A repair packet still requires two approval records: one scope/specification approval and one implementation-go approval. The repair fast lane may obtain both approvals in the same session, but it must not collapse the two gates into one. Application code changes still belong to the approved execute owner, and the completion authority record is unchanged. Any escalation trigger below cancels the repair fast lane and returns the unit to full framing.
 
 Same-wrapper discoveries can stay in repair design: a source region found later under the same mounted wrapper may be added to the matrix and slice plan without restarting the whole assessment. Escalate out of repair and back to full framing when any of these appear: a different page or wrapper, a missing or changed API contract, a permission-model change, new behavior beyond source parity, traffic switching, rollback-scope change, or a discovery that the original source closure never scanned the selected wrapper.
 

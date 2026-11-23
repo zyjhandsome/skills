@@ -662,7 +662,7 @@ router.beforeEach(authGuard);
             shared_text = "\n".join(",".join(row) for row in shared)
             self.assertIn("router registration", shared_text)
             self.assertIn("src/router/index.ts", shared_text)
-            self.assertIn("[未分配：Plan 必须指定唯一任务组]", shared_text)
+            self.assertIn("[未分配：实施计划必须指定唯一任务组]", shared_text)
             self.assertTrue((output_dir / "csv" / "19-unit-decisions.csv").exists())
             self.assertTrue((output_dir / "csv" / "20-comparison-surface.csv").exists())
             self.assertTrue((output_dir / "csv" / "21-host-integration.csv").exists())

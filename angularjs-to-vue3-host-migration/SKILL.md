@@ -42,20 +42,21 @@ If only one repo is available, perform source-only assessment and state that hos
 2. Prefer Codebase Memory when available: index both repos, use graph search/trace/snippets for code discovery, then fall back to `rg` for templates, literals, configs, and vendor-excluded scans.
 3. Load `references/hosted-vue3-migration-method.md` before any hosted migration assessment or design.
 4. Load supporting analysis references only when their evidence shape appears:
+   - Load `references/angularjs-construct-mapping.md` when the selected unit has AngularJS controllers, directives, components, or filters.
    - Load `references/jquery-vue3-business-logic-analysis.md` when the selected unit has jQuery entry functions, handlers, DOM mutation, or plugins.
    - Load `references/business-logic-variable-flow-analysis.md` when material behavior crosses functions/stores/server values, derives visible formulas, or builds non-trivial request/response payloads.
 5. Do not load `references/angularjs-vue3-migration-method.md` on the hosted path. Load it only in `greenfield` mode, or when the user confirms no Vue3 host exists.
 6. First read host B conventions before proposing landing code:
    - MPA/SPA entry layout, router, route meta, auth/permission, axios/API client, state store, component library, i18n, proxy, env config, lockfile, Node baseline, lint/build/test gates.
-   - Host compile/diagnostic overlay: Vue CLI `lintOnSave`, Vite/Webpack ESLint or checker plugins, HMR overlay scope, TS `noImplicitAny`/`strict`, Prettier/EditorConfig, lint baseline, and actual `node -v` versus the declared baseline.
+   - Host compile/diagnostic overlay: Vue CLI `lintOnSave`, Vite/Webpack ESLint or checker plugins, HMR overlay scope, TS `noImplicitAny`/`strict`, Prettier/EditorConfig, lint baseline, and actual `node -v` versus the declared baseline. Rules: `Host Compile And Diagnostic Overlay` in the hosted method.
 7. Build a source A page-entry inventory before deep scanning:
    - JSP, Thymeleaf, HTML, server templates, page-level `ng-app`/`ng-controller`, AngularJS modules/controllers/services/directives/filters, jQuery entry functions, Ajax, DOM operations, plugins.
-   - Exclude dependency and evidence noise: `.git`, `node_modules`, `dist`, `build`, `target`, `coverage`, `reports`, `evidence`, `openspec`, `test`, `tests`, `e2e-tests`, `vendor`, `vendors`, `lib`, `libs`, `locale`, `locales`, generated bundles, minified files, `*.spec.*`, `*.test.*`, `*.e2e.*`.
+   - Exclude dependency noise at any depth: `.git`, `node_modules`, `bower_components`, `dist`, `build`, `target`, `coverage`, `vendor`, `vendors`, `lib`, `libs`, `locale`, `locales`, `test`, `tests`, `e2e-tests`, generated bundles, minified files, `*.spec.*`, `*.test.*`, `*.e2e.*`. Exclude `reports`, `evidence`, `openspec`, `docs`, and `doc` only when they are the repository root's first directory.
 8. Produce A/B page comparison:
-   - `unmigrated`, `partial-overlap`, `already-migrated`, `dest-built-unwired`, `wired-hidden`, `develop-native`, `orphan-mpa`, `deprecated-removed`, `host-page-only`, `host-component`, `host-shell`, `unknown`.
+   - Classify each candidate with the statuses defined in `A/B Page Comparison`.
    - Include old URL/template and new host entry/route when evidence exists.
    - Treat filename/path matches as candidates only. Include match basis, candidate score, and whether human correction is required. Never mark `already-migrated` from filename matching alone.
-   - Keep four decisions separate: comparison status, unit identity kind, landing strategy, and switch disposition. Do not create compound status names for every combination. Definitions and tables live in `references/hosted-vue3-migration-method.md`.
+   - Keep comparison status separate from the four unit axes (identity kind, landing strategy, switch disposition, archive disposition). Do not create compound status names for every combination. Definitions and tables live in `references/hosted-vue3-migration-method.md`.
    - Mark `already-migrated` only when source parity is closed, the approved landing strategy is satisfied, and the unit is independently reachable at runtime. Native or reused-B strategies require authorized exits to land on B; an explicitly approved `iframe-keep-A` boundary may instead complete by preserving A origin and behavior.
    - Distinguish host pages/entries from reusable components and shell files. Do not treat every `.vue` file or root `index.html` as a page.
 9. Produce URL and entry mapping:
@@ -77,25 +78,28 @@ If only one repo is available, perform source-only assessment and state that hos
 13. Generate evidence baseline artifacts when requested:
 
 ```bash
-python scripts/generate_migration_plan.py assess \
-  --project-name "<source>-to-<host>" \
-  --source-repo "D:/path/<source-repo>" \
-  --host-repo "D:/path/<host-repo>" \
-  --output-dir reports/angularjs-vue3-migration
+python -B "<skill-dir>/scripts/generate_migration_plan.py" assess --project-name "<source>-to-<host>" --source-repo "<A>" --host-repo "<B>" --output-dir "<evidence-dir>"
+python -B "<skill-dir>/scripts/generate_migration_plan.py" design --unit "<unit>" --source-repo "<A>" --host-repo "<B>" --output-dir "<evidence-dir>"
+python -B "<skill-dir>/scripts/generate_migration_plan.py" verify --unit "<unit>" --matrix "<ledger.md|.csv>" --source-repo "<A>" --host-repo "<B>" --output-dir "<evidence-dir>"
+# After a person corrects 19-unit-decisions.csv, pass it back. Placeholder values that start with "[" are ignored.
+python -B "<skill-dir>/scripts/generate_migration_plan.py" verify --unit "<unit>" --matrix "<ledger.md|.csv>" --unit-decisions "<19-unit-decisions.csv>" --source-repo "<A>" --host-repo "<B>" --output-dir "<evidence-dir>"
 ```
 
 14. Treat script output as evidence baseline only. Do not treat generated tables as implementation design until reviewed against source and host code. Header-only FLOW/VAR/CHAIN contracts are not design-ready, and generated tables never substitute for the display-contract matrix.
 
 ## Scan Commands
 
-Use Codebase Memory first. Use these `rg` commands only as fallback or for non-code/template evidence:
+Use Codebase Memory first. Run these from the repository root (working directory = `<source>` or `<host>`, path `.`) so root-only excludes anchor correctly. Patterns are single-quoted so PowerShell and bash both pass `$` through. A whitelist glob must come before `<EXCL>`. Use these `rg` commands only as fallback or for non-code/template evidence:
 
-```bash
-rg -n --glob '!{node_modules,dist,build,target,coverage,reports,evidence,openspec,test,tests,e2e-tests,vendor,vendors,lib,libs,locale,locales}/**' --glob '!*.min.*' --glob '!*.spec.*' --glob '!*.test.*' "ng-app|ng-controller|ng-repeat|ng-model|ng-src|ng-click|ng-change|angular\.module|\.controller\(|\.component\(|\.directive\(|\.service\(|\.factory\(|\.filter\(" <source>
-rg -n --glob '!{node_modules,dist,build,target,coverage,vendor,vendors,lib,libs,locale,locales}/**' --glob '!*.min.*' "\$scope|\$rootScope|\$watch|\$emit|\$broadcast|\$http|\$resource|\$q" <source>
-rg -n --glob '!{node_modules,dist,build,target,coverage,vendor,vendors,lib,libs,locale,locales}/**' --glob '!*.min.*' "\$\(document\)\.ready|\$\(function|\.on\(|\.click\(|\.change\(|\.submit\(|\$\.ajax\(|\.val\(|\.html\(|\.append\(" <source>
-rg -n --glob '!{node_modules,dist,build,target,coverage,reports,evidence,openspec,test,tests,e2e-tests,vendor,vendors,lib,libs,locale,locales}/**' --glob '!*.min.*' --glob '!*.spec.*' --glob '!*.test.*' "th:(text|if|each|href|src|class|object|field|value|action|replace|insert|fragment|with|unless|switch|case|include|attr)\b|<%@|jsp:|session\.|request\.|data-|window\.|location\.href|setInterval\(" <source>
-rg -n "createApp|createRouter|defineStore|axios|i18n|proxy|vite|webpack|scripts/getpage|element-plus|@opentiny/vue|ant-design-vue|naive-ui|pinia|jquery" <host>
+```text
+EXCL = -g '!**/{node_modules,bower_components,dist,build,target,coverage,vendor,vendors,lib,libs,locale,locales,test,tests,e2e-tests}/**' -g '!/{reports,evidence,openspec,docs,doc}/**' -g '!**/*.min.*' -g '!**/*.{spec,test,e2e}.*'
+
+rg -n <EXCL> 'ng-(app|controller|repeat|model|src|click|change|if|show|hide|include|bind-html)|ui-(view|sref)|angular\.module|\.(controller|component|directive|service|factory|filter)\(|\$(stateProvider|routeProvider|compile)\b' .
+rg -n <EXCL> '\$(scope|rootScope|watch|watchCollection|emit|broadcast|http|resource|q|timeout|interval)\b' .
+rg -n <EXCL> '\$\(document\)\.ready|\$\(function|\.on\(|\.click\(|\.change\(|\.submit\(|\$\.(ajax|get|post)\(|\.val\(|\.html\(|\.append\(' .
+rg -n -g '*.{jsp,jspx,html,htm,ftl,vm}' <EXCL> 'th:(text|if|each|href|src|class|object|field|value|action|replace|insert|fragment|with|unless|switch|case|include|attr|inline)\b|<%@|<jsp:|<c:(if|forEach|choose)|sec:authorize|shiro:|_csrf|\$\{[^}]+\}' .
+rg -n -g '*.{jsp,jspx,html,htm,ftl,vm,js}' <EXCL> 'session\.|request\.|window\.|location\.href|setInterval\(|postMessage\(' .
+rg -n -g '!**/{node_modules,dist,build,coverage}/**' -g '!**/{package-lock.json,pnpm-lock.yaml,yarn.lock}' 'createApp|createRouter|defineStore|axios|createI18n|proxy|rollupOptions|getPages|element-plus|@opentiny/vue|ant-design-vue|naive-ui|pinia|jquery' .
 ```
 
 These commands discover candidates only. Read definitions, callers, templates, callbacks, API wrappers, and final consumers before drawing conclusions.
@@ -106,14 +110,14 @@ These commands discover candidates only. Read definitions, callers, templates, c
 - Reuse host B shell, auth/session, entry model, API client, state, i18n, proxy, runtime, and test gates. Do not replace the host stack unless evidence proves a blocker and the user approves.
 - Do not copy source global layout. Close every selected page over source copy, field formulas, init effects, page/shared CSS, utilities, sprites, plugins, and click targets; host-extra regions and silent source "fixes" are deviations.
 - A host component may replace a source widget only when the hosted-method interaction-equivalence axes pass. Generic chrome does not excuse changed selection semantics, defaults, validation, geometry, payload, rich text, or modal modes.
-- Resolve unit identity and route shape before landing design. Filename similarity, a root `index.html`, a drawer, a parent shell, or a nearby tab never proves the selected source page; keep comparison status, identity, landing strategy, switch disposition, and archive disposition separate.
-- Treat T16/outbound switching as separately authorized. Keep one landing function per UNIT, preserve query/hash identity and destination-specific absolute/relative URL semantics, and leave active exits on their approved fallback until parity and authorization are proven.
+- Resolve unit identity and route shape before landing design. Filename similarity, a root `index.html`, a drawer, a parent shell, or a nearby tab never proves the selected source page. Keep comparison status separate from the four unit axes (identity kind, landing strategy, switch disposition, archive disposition).
+- Treat outbound switching as separately authorized. Keep one landing function per UNIT, preserve query/hash identity and destination-specific absolute/relative URL semantics, and leave active exits on their approved fallback until parity and authorization are proven.
 - Apply every Source Contract Gate, Comparison Surface row, and Host Integration Checklist item from the hosted method. A B skeleton, DOM presence without visibility, or a screenshot from a mismatched surface cannot pass.
-- Pin identity context (tenant/workspace/department/role scope) on every comparison surface alongside viewport, auth, and locale. A unit with permission- or context-gated visibility needs both a hidden-state and a visible-state surface; hidden-surface evidence never closes gated rows, and a native landing must implement gate-hidden UI behind the same gate rather than omit it.
-- Permission-list provenance is identity: the host gate must read the same list the source page reads (DOM, server-injected, parent frame, or API), not a nearby host store list. A cardinality gap between the two lists means a wrong source, not a naming match.
+- Pin identity context on every comparison surface, including a hidden-state and a visible-state surface when visibility is gated. Rules: `Comparison Surface` in the hosted method.
+- Permission-list provenance is identity, and a cardinality gap is evidence of a wrong source. Rules: `Comparison And Identity` in the hosted method.
 - Record a host chrome keep/hide/replace ledger before landing any unit under the host shell. An approved host chrome difference never legalizes an empty pane, a duplicated breadcrumb/footer, a base-font or title change, or a changed scroll model.
 - Record host/session readiness per runtime surface (embedded in the logged-in shell vs a standalone entry); never gate the entire shell mount behind a signal one surface cannot produce.
-- Contract-test counts are never MATRIX counts, and MATRIX write-back belongs to the implementing stage: wired rows end at least `wired-unverified`, untouched rows stay `missing`. A verify run on a ledger still wholly at design-time `missing` stops as `matrix-not-written-back`.
+- Contract-test counts are never MATRIX counts, and a ledger still wholly at design-time `missing` stops as `matrix-not-written-back`. Rules: `Display Contract Matrix` in the hosted method.
 - `repair` requires a proven mounted host entry and matching route shape. Same-wrapper regions may extend its MATRIX; different wrappers or API, permission, traffic, or rollback changes return to full framing.
 - Runtime evidence must be attempted through the host toolchain. Without agent evidence, affected runtime rows remain `wired-unverified`; only explicit per-row human evidence may produce `manual-verified`.
 - A slice is complete only when its entry mounts, calls the intended API, and is user-reachable. Helpers, components, tabs, or files alone are not completion.
@@ -129,9 +133,9 @@ These commands discover candidates only. Read definitions, callers, templates, c
 | Root `index.html`, parent shell, drawer, or nearby tab is used as page evidence | Classify the shell separately and recover the selected unit's real mounted entry. |
 | Generated `(skeleton)`, empty FLOW/CHAIN, or unresolved host gap is presented as design-ready | Stop at `not-ready` and fill the authoritative hosted-method gate. |
 | `manual-only` visual evidence is used to waive MATRIX rows | Reject it; measurement fallback never closes display-contract rows. |
-| `verified_with_residuals`, `wired-unverified`, or a shortened skill id is used as completion/recovery evidence | Reject completion or recovery and return to the producing wave. |
+| An implementation status other than `verified` (for example `verified_with_residuals`), a `wired-unverified` row, or a shortened skill id is used as completion/recovery evidence | Reject completion or recovery and return it to the stage that produced it. |
 | A Vite/Webpack host has no `lintOnSave` key | Inspect its ESLint/checker/HMR plugins and lint/type baseline before claiming there is no diagnostic overlay. |
-| A host store/login permission list is wired as the page gate | Prove its provenance equals the list the source page reads; treat a cardinality gap as a wrong source. |
+| A host store/login permission list is wired as the page gate | Prove its provenance equals the list the source page reads. A cardinality gap is evidence of a wrong source and must be explained before the gate is wired. |
 | Hidden-state (read-only) surface evidence is used to close permission-gated rows | Pin a visible-state surface and re-verify; gated rows stay open until the gated UI exists behind the same gate. |
 | "N contract tests pass" is reported as MATRIX row status | Reject; each row's `B 现状` is written from row-level evidence, not test counts. |
 | Verify starts on a ledger still wholly `missing` | Stop with `matrix-not-written-back` and return to the implementing stage. |
@@ -144,25 +148,13 @@ Rules:
 
 - The matrix is one persisted artifact reused across `assess`, `design`, and `verify`. Incremental repairs update existing rows instead of starting a new analysis round.
 - A generated whole-page `(skeleton)` row is a placeholder, not a contract. Split it by source region before the unit can be design-ready.
-- Display-contract parity is code-comparable and mandatory. It is separate from pixel/screenshot measurement, and `manual-only` never excuses copy, widget shape, defaults, geometry, or field formulas.
-- DOM presence is not visibility. For rows marked as visible copy or visible numbers, confirm the element is actually visible at runtime, since host or shared CSS such as `font-size: 0` can hide correct markup.
-- The ledger's ID column header stays literally `DISP-ID`. A renamed header is a `matrix-header-mismatch` ledger/tooling repair, distinct from unclosed rows; do not regenerate a new ledger to work around it.
-
-## Host Compile And Diagnostic Overlay
-
-Read these host facts before landing code, and record them as parity requirements:
-
-- Active diagnostic mechanism: Vue CLI `lintOnSave`, Vite/Webpack ESLint/checker plugins, HMR/dev-server overlay scope, TS `noImplicitAny`/`strict`, and the current lint baseline.
-- Actual `node -v` versus host-declared Volta/`.nvmrc`/`engines.node`. A test or build run on a different Node is not verification evidence.
-- New or changed TS helpers in the selected UNIT must type callback parameters and empty arrays/objects when host strictness can infer implicit `any`, `any[]`, or `never[]`.
-- Do not reformat, retype, or otherwise "fix along the way" legacy files outside approved scope. Any active diagnostic plugin or lint-on-save path can turn an unrelated dirty file into a full-page overlay; record those files as residuals with an owner instead of editing them.
-- A compile failure on the current unit's entry is blocking. A repo-wide overlay from unrelated files is a residual, and neither may be reported as a healthy dev server.
+- All other ledger rules: `Display Contract Matrix` in the hosted method.
 
 ## Output Contracts
 
 User-facing evidence reports, copied table contracts, and filled FLOW/VAR/CHAIN rows default to Simplified Chinese. Keep status enums, IDs (`FLOW-ID`, `unmigrated`, `not-ready: empty-contract`), paths, commands, URLs, and CSV field keys in English.
 
-Field-level column definitions, status enums, and table headers live in `references/hosted-vue3-migration-method.md`. Do not restate them here or in orchestration prompts. This section only lists what must exist for a mode to pass.
+Field-level column definitions, status enums, and table headers live in `references/hosted-vue3-migration-method.md`. Do not restate them here or in orchestration prompts. This section only lists what must exist for a mode to pass. Persisted ledger tables (display-contract matrix, FLOW/VAR/CHAIN, host baseline gap) are table contracts and keep their Chinese column headers in CSV as well.
 
 ### Assess
 
@@ -190,6 +182,7 @@ For each selected page or user behavior (1 to 5 per run):
 - behavior flow plus variable/API chains, including a field formula for each visible number/list
 - host reuse/change/create decisions, URL mapping, permission/session/API parity, rollback switch and condition
 - per-unit identity kind, landing strategy, switch disposition, comparison surface, and host-integration checklist
+- host chrome ledger with a keep/hide/replace decision per chrome element, for every unit landing under the host shell
 - vertical slices whose completion criterion is entry mounted and user-reachable
 - for a batch: an admission table (units resolve to exactly one source page each, one shared design scope, no overlapping host landing) and a shared-host-surface table naming the single owner of router registration, menu, shared i18n, global stylesheets, and global store. Each unit keeps its own closure, matrix rows, and rollback switch; the gate is judged per unit and one `not-ready` unit blocks the batch.
 
@@ -201,7 +194,7 @@ For each selected page or user behavior (1 to 5 per run):
 - entry-wiring parity: each slice is mounted, called, and reachable
 - strategy parity: identity, approved landing, switch disposition, comparison surface, and host-integration checks remain current
 - visual measurement parity: screenshots/measurements, otherwise `manual-only`. `manual-only` here does not exempt any display-contract row.
-- completion authority: domain verify evidence cannot by itself declare migration complete; require Delivery verified evidence, current host revision, and no blocking residuals
+- completion authority: domain verify evidence cannot by itself declare migration complete; require an implementation authority record from the caller (for example a Delivery `verified` handoff), current host revision, and no blocking residuals
 - delivery boundary: completion reports may name downstream Delivery evidence as a required authority, but this skill must not load or call `delivery-*`
 - open-state block: no selected unit may remain `dest-built-unwired`, `wired-hidden`, `develop-native`, `orphan-mpa`, `unknown`, or any other non-closed status
 - archive gate table per `references/hosted-vue3-migration-method.md`: one row per unit carrying completion state, verified/total matrix count, unresolved row IDs, degradation labels, and archive disposition (`parity-complete` / `repair-done-partial` / `blocked`). Degradation labels stay attached in later reports, and known deviations enter the matrix before archive, not in a follow-up repair
@@ -210,7 +203,8 @@ For each selected page or user behavior (1 to 5 per run):
 ## Bundled Resources
 
 - `references/hosted-vue3-migration-method.md`: hosted dual-repo migration method, display-contract matrix, and report contracts. Load on every hosted run.
-- `references/angularjs-vue3-migration-method.md`: AngularJS construct mapping and greenfield fallback guidance. Not loaded on the hosted path; load only in `greenfield` mode or when no host exists.
+- `references/angularjs-construct-mapping.md`: AngularJS construct and runtime-semantics mapping. Load when the selected unit has AngularJS controllers, directives, components, or filters.
+- `references/angularjs-vue3-migration-method.md`: greenfield fallback guidance. Not loaded on the hosted path; load only in `greenfield` mode or when no host exists.
 - `references/jquery-vue3-business-logic-analysis.md`: jQuery business logic analysis method and table contracts.
 - `references/business-logic-variable-flow-analysis.md`: evidence-backed business-flow and variable-chain tracing contracts.
 - `scripts/generate_migration_plan.py`: generates dual-repo evidence baseline artifacts for `assess`, `design`, or `verify`.

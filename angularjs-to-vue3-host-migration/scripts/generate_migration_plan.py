@@ -25,12 +25,10 @@ EXCLUDED_DIRS = {
     "target",
     "coverage",
     "covers",
-    "docs",
-    "doc",
-    "reports",
-    "report",
-    "evidence",
-    "openspec",
+    "bower_components",
+    "jspm_packages",
+    "__pycache__",
+    ".pytest_cache",
     "test",
     "tests",
     "e2e",
@@ -67,7 +65,8 @@ LOCKFILES = {
 
 MINIFIED_RE = re.compile(r"\.min\.(js|css)$", re.I)
 TEST_FILE_RE = re.compile(r"(\.|-)(spec|test|e2e)\.(js|jsx|ts|tsx|vue)$", re.I)
-ARTIFACT_HTML_RE = re.compile(r"(evidence|report|coverage|openspec|handoff|verification).*\.html?$", re.I)
+ROOT_ONLY_EXCLUDED_DIRS = {"docs", "doc", "reports", "evidence", "openspec"}
+ARTIFACT_HTML_RE = re.compile(r"^(assess|design|verify)-evidence\.html?$", re.I)
 SOURCE_PAGE_EXTS = {".jsp", ".jspx", ".html", ".htm", ".ftl", ".vm"}
 HOST_PAGE_EXTS = {".vue", ".html", ".htm", ".jsx", ".tsx"}
 SOURCE_CODE_EXTS = {".java", ".kt", ".groovy", ".xml", ".properties", ".yml", ".yaml", ".json", ".js", ".ts"}
@@ -146,14 +145,18 @@ GATE_ROWS = [
     ["runtime", "宿主 Node、lockfile、既有 lint/build/test 命令", "待跑宿主命令"],
     ["git hygiene", "拟提交内容无依赖/缓存/构建目录；区分业务干净与整仓干净", "待复核 git status"],
     ["rollback", "开关、范围、责任人、恢复条件、数据兼容", "待设计"],
-    ["completion authority", "领域复核只是证据；完成需要 Delivery verified + 领域复核 + 当前宿主修订", "待两边门禁"],
+    ["completion authority", "领域复核只是证据；完成需要实施方权威记录（例如 Delivery verified）+ 领域复核 + 当前宿主修订", "待两边门禁"],
+    ["page-init", "run 块、controller 初始化、定时器、首屏请求、默认筛选值", "待补证据"],
+    ["display-contract", "逐行对照源文案、控件形态、字段公式、默认值、几何、CSS 依赖和运行时可见性", "待补证据"],
+    ["entry-wiring", "每个切片已挂载、已调用，并且用户可达", "待补证据"],
+    ["archive gate", "每单元一行：完成态、verified/总行、未结清行、降级标签、archive 处置", "待补证据"],
 ]
 
 ARTIFACT_STATUS_ROWS = [
     {
         "artifact_level": "baseline-only",
         "authority": "evidence scaffold, not design-ready",
-        "handoff_rule": "human-filled MATRIX/FLOW/CHAIN/design-ready packet must be written back to DOMAIN_ROOT",
+        "handoff_rule": "human-filled MATRIX/FLOW/CHAIN/design-ready packet must be written back to the persisted evidence directory",
     }
 ]
 
@@ -175,6 +178,8 @@ DESIGN_READY_ROWS = [
     ["host decisions", "已给出宿主入口/路由/API/store/组件/i18n/样式的复用/改动/新建决策", "not-ready: empty-contract"],
     ["URL mapping", "旧源 URL 到新宿主入口有 Java/菜单/MPA/Vue Router 证据", "not-ready: empty-contract"],
     ["permission/API/rollback", "已起草权限/会话/API 对等与回退条件", "not-ready: empty-contract"],
+    ["field formulas", "每个可见数字和列表都有源字段公式", "not-ready: empty-contract"],
+    ["host chrome ledger", "落在宿主壳下的单元已逐项记录 keep/hide/replace 及落地方式", "not-ready: empty-contract"],
 ]
 
 MATRIX_CLOSED_STATUSES = {"verified", "manual-verified", "approved-deviation"}
@@ -228,6 +233,7 @@ DISPLAY_CONTRACT_HEADERS = [
     "依赖 CSS（页级 + common + sprite）",
     "启动副作用",
     "B 现状",
+    "row_lifecycle",
     "证据",
 ]
 
@@ -239,6 +245,8 @@ UNIT_DECISION_HEADERS = [
     "switch_disposition",
     "decision_evidence",
     "external_owner_or_approval",
+    "source_path",
+    "host_entry",
 ]
 
 COMPARISON_SURFACE_HEADERS = [
@@ -257,6 +265,53 @@ COMPARISON_SURFACE_HEADERS = [
 
 HOST_INTEGRATION_HEADERS = ["unit", "category", "contract", "status", "owner_or_evidence"]
 
+UNIT_DECISION_LABELS = [
+    ("unit", "单元"),
+    ("comparison_status", "对照状态"),
+    ("unit_identity_kind", "身份类型"),
+    ("landing_strategy", "落地策略"),
+    ("switch_disposition", "切换处置"),
+    ("decision_evidence", "决策证据"),
+    ("external_owner_or_approval", "外部责任人/批准"),
+    ("source_path", "源路径"),
+    ("host_entry", "宿主入口"),
+]
+COMPARISON_SURFACE_LABELS = [
+    ("unit", "单元"),
+    ("baseline_surface", "基线面"),
+    ("candidate_surface", "候选面"),
+    ("included_chrome", "包含的 chrome"),
+    ("viewport", "视口"),
+    ("auth_session", "登录态"),
+    ("identity_context", "身份上下文"),
+    ("environment_dependencies", "环境依赖"),
+    ("allowed_normalization", "允许的归一化"),
+    ("hit_layer_expectation", "命中层预期"),
+    ("evidence", "证据"),
+]
+HOST_INTEGRATION_LABELS = [
+    ("unit", "单元"),
+    ("category", "类别"),
+    ("contract", "合同"),
+    ("status", "状态"),
+    ("owner_or_evidence", "责任人/证据"),
+]
+BATCH_ADMISSION_LABELS = [
+    ("unit", "单元"),
+    ("matched_source_pages", "匹配源页"),
+    ("comparison_status", "对照状态"),
+    ("design_scope", "design-scope"),
+    ("admission", "准入"),
+    ("reason", "依据"),
+]
+BATCH_SHARED_SURFACE_LABELS = [
+    ("surface", "共享面"),
+    ("host_path", "宿主路径"),
+    ("shared_by", "共用单元"),
+    ("owner", "责任任务组"),
+    ("sequencing", "顺序"),
+]
+
 HOST_INTEGRATION_CATEGORIES = [
     "host/session readiness",
     "host chrome and hit layer",
@@ -271,9 +326,49 @@ HOST_INTEGRATION_CATEGORIES = [
 
 def read_text(path: Path) -> str:
     try:
-        return path.read_text(encoding="utf-8", errors="ignore")
+        data = path.read_bytes()
     except OSError:
         return ""
+    for encoding in ("utf-8-sig", "gb18030"):
+        try:
+            return data.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return data.decode("utf-8", errors="replace")
+
+
+def strip_jsonc(text: str) -> str:
+    """Remove comments and trailing commas outside JSON strings."""
+    out = []
+    index = 0
+    in_string = False
+    escape = False
+    while index < len(text):
+        char = text[index]
+        nxt = text[index + 1] if index + 1 < len(text) else ""
+        if in_string:
+            out.append(char)
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+        elif char == '"':
+            in_string = True
+            out.append(char)
+        elif char == "/" and nxt == "/":
+            newline = text.find("\n", index)
+            index = len(text) if newline < 0 else newline
+            continue
+        elif char == "/" and nxt == "*":
+            end = text.find("*/", index + 2)
+            index = len(text) if end < 0 else end + 2
+            continue
+        else:
+            out.append(char)
+        index += 1
+    return re.sub(r",(\s*[}\]])", r"\1", "".join(out))
 
 
 def iter_files(root: Path, include_resource_closure_dirs: bool = False) -> Iterable[Path]:
@@ -287,8 +382,9 @@ def iter_files(root: Path, include_resource_closure_dirs: bool = False) -> Itera
             excluded |= RESOURCE_CLOSURE_DIRS
         if parts & excluded:
             continue
-        rel_text = str(rel).replace("\\", "/")
-        if TEST_FILE_RE.search(path.name) or ARTIFACT_HTML_RE.search(rel_text):
+        if rel.parts and rel.parts[0].lower() in ROOT_ONLY_EXCLUDED_DIRS:
+            continue
+        if TEST_FILE_RE.search(path.name) or ARTIFACT_HTML_RE.search(path.name):
             continue
         if MINIFIED_RE.search(path.name):
             continue
@@ -548,17 +644,28 @@ def detect_compile_diagnostics(root: Path) -> str:
     return "; ".join(findings) if findings else "not detected"
 
 
+def ts_compiler_flags(config: object) -> tuple[object, object]:
+    options = config.get("compilerOptions", {}) if isinstance(config, dict) else {}
+    if not isinstance(options, dict):
+        return "not set", "not set"
+    return options.get("strict", "not set"), options.get("noImplicitAny", "not set")
+
+
 def detect_ts_strict(root: Path) -> str:
     path = root / "tsconfig.json"
     if not path.exists():
         return "tsconfig not found"
     try:
-        config = json.loads(read_text(path))
+        config = json.loads(strip_jsonc(read_text(path)))
     except json.JSONDecodeError:
         return "tsconfig unreadable"
-    options = config.get("compilerOptions", {}) if isinstance(config, dict) else {}
-    strict = options.get("strict", "not set") if isinstance(options, dict) else "not set"
-    no_implicit_any = options.get("noImplicitAny", "not set") if isinstance(options, dict) else "not set"
+    strict, no_implicit_any = ts_compiler_flags(config)
+    app = root / "tsconfig.app.json"
+    if strict == "not set" and no_implicit_any == "not set" and app.exists():
+        try:
+            strict, no_implicit_any = ts_compiler_flags(json.loads(strip_jsonc(read_text(app))))
+        except json.JSONDecodeError:
+            return "tsconfig unreadable"
     return f"strict={strict}; noImplicitAny={no_implicit_any}"
 
 
@@ -720,6 +827,28 @@ def signal_value(root: Path, signal: str) -> str:
     return f"detected ({count} matches)" if count else "not detected"
 
 
+EXTRA_ALIASES: dict[str, str] = {}
+TOKEN_IGNORE = {"src", "main", "webapp", "views", "pages", "page", "components", "component", "index", "html", "htm", "vue", "js", "ts"}
+GENERIC_ALIASES = {"management": "manage", "managed": "manage", "manager": "manage"}
+STEM_SUFFIXES = {"ment", "ing", "er", "ed", "s"}
+
+
+def fold_plural(token: str) -> str:
+    if len(token) > 3 and token.endswith("s") and not token.endswith("ss"):
+        return token[:-1]
+    return token
+
+
+def apply_token_alias(token: str) -> str:
+    return {**GENERIC_ALIASES, **EXTRA_ALIASES}.get(token, token)
+
+
+def split_tokens(value: str) -> list[str]:
+    value = value.replace("\\", "/")
+    value = re.sub(r"([a-z0-9])([A-Z])", r"\1-\2", value)
+    return [token.lower() for token in re.split(r"[^A-Za-z0-9]+", value) if token]
+
+
 def normalize_key(rel: Path) -> str:
     parts = [p.lower() for p in rel.with_suffix("").parts]
     ignored = {
@@ -742,35 +871,43 @@ def normalize_key(rel: Path) -> str:
     }
     parts = [re.sub(r"[^a-z0-9]+", "-", p).strip("-") for p in parts if p not in ignored]
     parts = [p for p in parts if p and p not in {"index", "main", "app"}]
-    return "/".join(parts[-2:]) if parts else rel.stem.lower()
+    deduped = []
+    for part in parts:
+        if not deduped or deduped[-1] != part:
+            deduped.append(part)
+    return "/".join(deduped[-2:]) if deduped else rel.stem.lower()
 
 
 def token_key(value: str) -> str:
-    value = value.replace("\\", "/")
-    value = re.sub(r"([a-z0-9])([A-Z])", r"\1-\2", value)
-    tokens = [token.lower() for token in re.split(r"[^A-Za-z0-9]+", value) if token]
-    aliases = {"management": "manage", "bench": "bench", "work": "work", "phones": "phone"}
-    normalized = [aliases.get(token, token) for token in tokens]
-    return "-".join(normalized)
+    return "-".join(fold_plural(apply_token_alias(token)) for token in split_tokens(value))
 
 
 def last_token_set(value: str) -> set[str]:
-    key = token_key(value)
-    aliases = {
-        "management": "manage",
-        "managed": "manage",
-        "manager": "manage",
-        "bench": "bench",
-        "workbench": "work bench",
-        "taskmanage": "task manage",
-        "taskmanagement": "task manage",
-        "projectprogress": "project progress",
-        "phones": "phone",
-    }
-    expanded = []
-    for token in key.split("-"):
-        expanded.extend(aliases.get(token, token).split())
-    return {token for token in expanded if token and token not in {"src", "main", "webapp", "views", "pages", "page", "components", "component", "index", "html", "htm", "vue", "js", "ts"}}
+    kept = []
+    for token in split_tokens(value):
+        for piece in apply_token_alias(token).split():
+            if piece and piece not in TOKEN_IGNORE:
+                folded = fold_plural(piece)
+                if folded not in TOKEN_IGNORE:
+                    kept.append(folded)
+    return set(kept)
+
+
+def compact_tail(key: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", re.split(r"[/-]", key)[-1])
+
+
+def entry_name_compact(path: str) -> str:
+    candidate = Path(path)
+    name = candidate.parent.name if candidate.stem.lower() in {"index", "main"} and candidate.parent.name else candidate.stem
+    return re.sub(r"[^a-z0-9]", "", name.lower())
+
+
+def stem_suffix_match(left: str, right: str) -> bool:
+    if not left or not right or left == right:
+        return False
+    short, long = (left, right) if len(left) <= len(right) else (right, left)
+    return long.startswith(short) and long[len(short):] in STEM_SUFFIXES
 
 
 def page_kind(root: Path, rel: Path, source: bool) -> str:
@@ -851,6 +988,14 @@ def score_page_match(source: dict[str, str], host: dict[str, str]) -> tuple[int,
     if source_key and source_key == host_key:
         score += 60
         basis.append("normalized-key")
+    source_compact = compact_tail(source_key)
+    host_compact = compact_tail(host_key)
+    if "normalized-key" not in basis and source_compact and source_compact == host_compact:
+        score += 60
+        basis.append("compact-key")
+    elif "normalized-key" not in basis and stem_suffix_match(source_compact, host_compact):
+        score += 60
+        basis.append("stem-suffix")
     overlap = source_tokens & host_tokens
     if overlap:
         score += min(30, len(overlap) * 10)
@@ -940,34 +1085,72 @@ def compare_pages(source_pages: list[dict[str, str]], host_pages: list[dict[str,
     return rows
 
 
+MAPPING_ANNOTATION_RE = re.compile(
+    r"@(?P<name>RequestMapping|GetMapping|PostMapping|PutMapping|DeleteMapping|PatchMapping)"
+    r"\s*(?:\(\s*(?P<args>.*?)\s*\))?",
+    re.S,
+)
+JAVA_TYPE_DECL_RE = re.compile(r"\b(?:class|interface)\s+[A-Za-z_]")
+JAVA_STRING_RE = re.compile(r'"([^"]*)"')
+JAVA_RETURN_RE = re.compile(r'return\s+"([^"]+)"')
+JAVA_MODEL_AND_VIEW_RE = re.compile(r'new\s+ModelAndView\(\s*"([^"]+)"')
+
+
+def mapping_paths(args: str) -> list[str]:
+    """Return the path values of a Spring mapping annotation's argument list."""
+    if not args:
+        return []
+    named = re.search(r"\b(?:value|path)\s*=\s*(\{.*?\}|\"[^\"]*\")", args, re.S)
+    if named:
+        target = named.group(1)
+    else:
+        bare = re.match(r"\s*(\{.*?\}|\"[^\"]*\")", args, re.S)
+        target = bare.group(1) if bare else ""
+    return JAVA_STRING_RE.findall(target)
+
+
 def extract_java_routes(source: Path) -> list[dict[str, str]]:
     rows = []
-    route_re = re.compile(r"@(RequestMapping|GetMapping|PostMapping)\s*(?:\(\s*)?(?:value\s*=\s*)?[{\"']([^}\"']+)[}\"']")
-    return_re = re.compile(r"return\s+[\"']([^\"']+)[\"']")
     for path in iter_files(source):
         if path.suffix.lower() != ".java":
             continue
         text = read_text(path)
-        class_match = re.search(r"@RequestMapping\s*(?:\(\s*)?(?:value\s*=\s*)?[{\"']([^}\"']+)[}\"']", text)
-        class_route = class_match.group(1) if class_match else ""
+        class_decl = JAVA_TYPE_DECL_RE.search(text)
+        preamble = text[: class_decl.start()] if class_decl else ""
+        class_route = ""
+        for match in MAPPING_ANNOTATION_RE.finditer(preamble):
+            if match.group("name") == "RequestMapping":
+                paths = mapping_paths(match.group("args") or "")
+                class_route = paths[0] if paths else ""
+                break
         class_file = str(path.relative_to(source)).replace("\\", "/")
-        matches = list(route_re.finditer(text))
+        matches = list(MAPPING_ANNOTATION_RE.finditer(text))
         for index, match in enumerate(matches):
-            if class_match and match.start() == class_match.start():
+            if class_decl and match.start() < class_decl.start():
                 continue
-            route = match.group(2)
+            method_paths = mapping_paths(match.group("args") or "")
+            if not method_paths:
+                continue
             next_start = matches[index + 1].start() if index + 1 < len(matches) else len(text)
             block = text[match.start():next_start]
-            returns = return_re.findall(block)
-            full_route = "/".join(part.strip("/") for part in (class_route, route) if part).replace("//", "/")
-            rows.append(
-                {
-                    "source_url": "/" + full_route.strip("/"),
-                    "source_route_evidence": f"{class_file}:{text[:match.start()].count(chr(10)) + 1}",
-                    "source_template": returns[0] if returns else "",
-                    "server_controller": class_file,
-                }
+            template = next(
+                (candidate for candidate in JAVA_RETURN_RE.findall(block)
+                 if not candidate.startswith(("redirect:", "forward:"))),
+                "",
             )
+            if not template:
+                view = JAVA_MODEL_AND_VIEW_RE.search(block)
+                template = view.group(1) if view else ""
+            for route in method_paths:
+                full_route = "/".join(part.strip("/") for part in (class_route, route) if part)
+                rows.append(
+                    {
+                        "source_url": "/" + full_route.strip("/"),
+                        "source_route_evidence": f"{class_file}:{text[:match.start()].count(chr(10)) + 1}",
+                        "source_template": template,
+                        "server_controller": class_file,
+                    }
+                )
     return rows
 
 
@@ -1267,6 +1450,32 @@ def build_url_entry_mapping(source: Path, host: Path | None, source_pages: list[
     return rows
 
 
+def same_mpa_page_dir(left: str, right: str) -> bool:
+    pattern = re.compile(r"src/pages/([^/]+)/", re.I)
+    left_match = pattern.match(left.replace("\\", "/"))
+    right_match = pattern.match(right.replace("\\", "/"))
+    return bool(left_match and right_match and left_match.group(1).lower() == right_match.group(1).lower())
+
+
+def entry_link_basis(row: dict[str, str], mapping: dict[str, str]) -> str:
+    """Return route-path, matched-host-path, or token-guess for one source page's chosen host entry."""
+    host_route = mapping.get("host_route_path", "")
+    source_url = mapping.get("source_url", "")
+    if (
+        host_route
+        and mapping.get("source_route_evidence", "") not in {"", "url_guess only"}
+        and normalize_route_path(source_url) == normalize_route_path(host_route)
+    ):
+        return "route-path"
+    host_files = [mapping.get("host_entry_html", ""), mapping.get("host_entry_ts", "")]
+    host_path = row.get("host_path", "")
+    if host_path and any(
+        item and (item == host_path or same_mpa_page_dir(item, host_path)) for item in host_files
+    ):
+        return "matched-host-path"
+    return "token-guess"
+
+
 def reconcile_comparison_entries(comparison: list[dict[str, str]], url_entry_mapping: list[dict[str, str]]) -> None:
     """Write the proven router/MPA entry back into the comparison table instead of leaving a filename guess."""
     by_source_path = {
@@ -1280,17 +1489,17 @@ def reconcile_comparison_entries(comparison: list[dict[str, str]], url_entry_map
             continue
         route = mapping.get("host_menu_or_route", "")
         entry = mapping.get("host_entry_ts", "") or mapping.get("host_entry_html", "")
-        if route:
-            row["host_entry"] = route
+        basis = entry_link_basis(row, mapping)
+        if basis in {"route-path", "matched-host-path"}:
+            row["host_entry"] = route or entry
             row["host_entry_evidence"] = "route/menu/MPA evidence"
-        elif entry:
-            row["host_entry"] = entry
-            row["host_entry_evidence"] = "host entry file evidence"
         else:
+            if route or entry:
+                row["host_entry"] = route or entry
             row["host_entry_evidence"] = "filename guess only"
             row["needs_human_correction"] = "yes"
-        if row.get("status") == "partial-overlap" and not route:
-            row["next_action"] = "入口证据不足：仅文件名相似，不得据此给 design-scope=repair"
+            if row.get("status") == "partial-overlap":
+                row["next_action"] = "入口证据不足：仅文件名相似，不得据此给 design-scope=repair"
 
 
 def repair_scope_gate(comparison: list[dict[str, str]]) -> list[dict[str, str]]:
@@ -1300,7 +1509,7 @@ def repair_scope_gate(comparison: list[dict[str, str]]) -> list[dict[str, str]]:
         if not row.get("source_path"):
             continue
         status = row.get("status", "")
-        has_route_evidence = row.get("host_entry_evidence", "") == "route/menu/MPA evidence"
+        has_route_evidence = row.get("host_entry_evidence", "") in {"route/menu/MPA evidence", "human-confirmed entry"}
         if status == "partial-overlap" and has_route_evidence:
             scope = "repair"
             reason = "partial-overlap 且宿主入口有 route/menu/MPA 证据"
@@ -1333,7 +1542,7 @@ def batch_admission_rows(
     scope_by_path = {row["source_path"]: row for row in design_scope_gate}
     resolved = []
     for unit in units:
-        matches = [row for row in comparison if row.get("source_path") and unit_matches_row(unit, row)]
+        matches = resolve_unit_rows(unit, comparison)
         scopes = sorted({scope_by_path[row["source_path"]]["design_scope"] for row in matches if row["source_path"] in scope_by_path})
         resolved.append((unit, matches, scopes))
 
@@ -1394,7 +1603,7 @@ def batch_shared_surface_rows(
                     "surface": surface,
                     "host_path": rel,
                     "shared_by": "批次默认全体",
-                    "owner": "[未分配：Plan 必须指定唯一任务组]",
+                    "owner": "[未分配：实施计划必须指定唯一任务组]",
                     "sequencing": "作为前置任务组先落地，其余 unit 只读依赖",
                 })
 
@@ -1455,6 +1664,11 @@ def best_host_entry_for_page(
         entry_tokens = last_token_set(entry_text)
         overlap = page_tokens & entry_tokens
         score = len(overlap) * 10
+        page_compact = entry_name_compact(page["path"])
+        entry_name = entry.get("host_entry_ts") or entry.get("host_entry_html") or ""
+        entry_compact = entry_name_compact(entry_name)
+        if page_compact and entry_compact and (page_compact == entry_compact or stem_suffix_match(page_compact, entry_compact)):
+            score += 80
         if entry_text and any(piece and piece in entry_text.lower() for piece in page_path.split("/")):
             score += 25
         host_route = entry.get("host_route_path", "")
@@ -1517,6 +1731,20 @@ def slugify(value: str) -> str:
     return slug or "unit"
 
 
+def unit_stem(path: str) -> str:
+    candidate = Path(path)
+    name = candidate.parent.name if candidate.stem.lower() in {"index", "main"} and candidate.parent.name else candidate.stem
+    return re.sub(r"[^a-z0-9]", "", name.lower())
+
+
+def resolve_unit_rows(unit: str, comparison: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Return the source-page rows for a unit, narrowed to an exact file stem when one exists."""
+    candidates = [row for row in comparison if row.get("source_path") and unit_matches_row(unit, row)]
+    needle = re.sub(r"[^a-z0-9]", "", unit.lower())
+    exact = [row for row in candidates if unit_stem(row["source_path"]) == needle]
+    return exact or candidates
+
+
 def unit_matches_row(unit: str, row: dict[str, str]) -> bool:
     if not unit:
         return False
@@ -1542,11 +1770,42 @@ def matching_units(units: list[str], row: dict[str, str]) -> list[str]:
     return [unit for unit in units if unit_matches_row(unit, row)]
 
 
+def meaningful_decision(value: str) -> bool:
+    text = (value or "").strip()
+    return bool(text) and not text.startswith("[")
+
+
+def load_unit_decisions(path: str) -> dict[str, dict[str, str]]:
+    with Path(path).open(encoding="utf-8-sig", newline="") as handle:
+        return {
+            row["unit"].strip(): {key.strip(): (value or "").strip() for key, value in row.items() if isinstance(key, str)}
+            for row in csv.DictReader(handle)
+            if (row.get("unit") or "").strip()
+        }
+
+
+def apply_unit_decisions(comparison: list[dict[str, str]], decisions: dict[str, dict[str, str]]) -> None:
+    for unit, decision in decisions.items():
+        matches = resolve_unit_rows(unit, comparison)
+        if len(matches) != 1:
+            continue
+        row = matches[0]
+        status = decision.get("comparison_status", "")
+        if meaningful_decision(status):
+            row["status"] = status
+        host_entry = decision.get("host_entry", "")
+        evidence = decision.get("decision_evidence", "")
+        if meaningful_decision(host_entry) and meaningful_decision(evidence):
+            row["host_entry"] = host_entry
+            row["host_entry_evidence"] = "human-confirmed entry"
+
+
 def unit_decision_rows(units: list[str], comparison: list[dict[str, str]]) -> list[dict[str, str]]:
     rows = []
     for unit in units:
-        matches = [row for row in comparison if unit_matches_row(unit, row)]
+        matches = resolve_unit_rows(unit, comparison)
         statuses = sorted({row.get("status", "unknown") for row in matches}) or ["unknown"]
+        chosen = matches[0] if len(matches) == 1 else {}
         rows.append(
             {
                 "unit": unit,
@@ -1556,6 +1815,8 @@ def unit_decision_rows(units: list[str], comparison: list[dict[str, str]]) -> li
                 "switch_disposition": "[unresolved]",
                 "decision_evidence": "[human evidence required]",
                 "external_owner_or_approval": "[unresolved]",
+                "source_path": chosen.get("source_path", ""),
+                "host_entry": chosen.get("host_entry", ""),
             }
         )
     return rows
@@ -1598,7 +1859,10 @@ def display_contract_rows(comparison: list[dict[str, str]], units: list[str] | N
     selected = units or []
     rows = []
     for row in comparison:
-        if row.get("status") != "partial-overlap":
+        status = row.get("status")
+        if status not in {"partial-overlap", "unmigrated"}:
+            continue
+        if status == "unmigrated" and not selected:
             continue
         owners = matching_units(selected, row) if selected else []
         if selected and not owners:
@@ -1615,7 +1879,8 @@ def display_contract_rows(comparison: list[dict[str, str]], units: list[str] | N
                 "默认值/校验": "从源码填写",
                 "依赖 CSS（页级 + common + sprite）": "从源码填写",
                 "启动副作用": "从源码填写",
-                "B 现状": "wired-unverified",
+                "B 现状": "missing" if status == "unmigrated" else "wired-unverified",
+                "row_lifecycle": "active",
                 "证据": f"{row.get('source_path', '')} -> {row.get('host_path', '')}",
             }
         )
@@ -1646,12 +1911,15 @@ def parse_markdown_matrix(path: Path) -> list[dict[str, str]]:
             continue
         headers = [normalize_matrix_header(header) for header in split_markdown_table_row(line)]
         rows = []
-        for candidate in lines[index + 2 :]:
+        for line_number, candidate in enumerate(lines[index + 2 :], start=index + 3):
             if not candidate.lstrip().startswith("|"):
                 break
             values = split_markdown_table_row(candidate)
             if len(values) != len(headers):
-                continue
+                raise SystemExit(
+                    f"matrix-row-column-mismatch: {path}:{line_number}: expected {len(headers)} cells, "
+                    f"got {len(values)}; escape a literal '|' as '\\|'"
+                )
             rows.append(dict(zip(headers, values)))
         return rows
     return []
@@ -1664,7 +1932,11 @@ def load_persisted_matrix(path_value: str) -> list[dict[str, str]]:
     if path.suffix.lower() == ".csv":
         with path.open("r", encoding="utf-8-sig", newline="") as handle:
             rows = [
-                {normalize_matrix_header(key): value for key, value in row.items()}
+                {
+                    normalize_matrix_header(key.strip()): value
+                    for key, value in row.items()
+                    if isinstance(key, str)
+                }
                 for row in csv.DictReader(handle)
             ]
     else:
@@ -1685,27 +1957,63 @@ def matrix_row_matches_unit(unit: str, row: dict[str, str]) -> bool:
     return slugify(unit) in slugify(row.get("DISP-ID", ""))
 
 
+OPEN_COMPARISON_STATUSES = {"unmigrated", "dest-built-unwired", "wired-hidden", "develop-native", "orphan-mpa", "unknown"}
+MATRIX_LIFECYCLES = {"active", "retired", "stale"}
+
+
+def matrix_row_lifecycle(row: dict[str, str]) -> str:
+    value = row.get("row_lifecycle", "active")
+    if not isinstance(value, str):
+        return "active"
+    return value.strip() or "active"
+
+
 def verify_one_unit(
     unit: str,
     comparison: list[dict[str, str]],
     persisted_matrix: list[dict[str, str]] | None,
 ) -> dict[str, str]:
-    matches = [row for row in comparison if unit_matches_row(unit, row)]
+    matches = resolve_unit_rows(unit, comparison)
     if not matches:
         return {"unit": unit, "status": "fail", "reason": "selected unit has no source/host comparison row"}
-    if any(row.get("status") == "unmigrated" for row in matches):
+    if len(matches) > 1:
+        paths = ", ".join(row.get("source_path", "") for row in matches)
+        return {
+            "unit": unit,
+            "status": "fail",
+            "reason": f"unit matches {len(matches)} source pages: {paths}; tighten the unit name",
+        }
+    status = matches[0].get("status")
+    if status == "unmigrated":
         return {"unit": unit, "status": "fail", "reason": "selected unit is unmigrated"}
+    if status in OPEN_COMPARISON_STATUSES:
+        return {"unit": unit, "status": "fail", "reason": f"unit comparison status is open: {status}"}
     if persisted_matrix is None:
         return {
             "unit": unit,
             "status": "not-evaluated",
             "reason": "verify requires --matrix with the persisted human-filled display-contract ledger",
         }
-    matrix_rows = [
-        row
-        for row in persisted_matrix
-        if matrix_row_matches_unit(unit, row) and row.get("row_lifecycle", "active") == "active"
+    unit_rows = [row for row in persisted_matrix if matrix_row_matches_unit(unit, row)]
+    invalid = [
+        f"{row.get('DISP-ID', '')}={matrix_row_lifecycle(row)}"
+        for row in unit_rows
+        if matrix_row_lifecycle(row) not in MATRIX_LIFECYCLES
     ]
+    if invalid:
+        return {
+            "unit": unit,
+            "status": "fail",
+            "reason": f"matrix-row-lifecycle-invalid: {', '.join(invalid)}",
+        }
+    stale_ids = [row.get("DISP-ID", "") for row in unit_rows if matrix_row_lifecycle(row) == "stale"]
+    if stale_ids:
+        return {
+            "unit": unit,
+            "status": "fail",
+            "reason": f"stale matrix rows must be refreshed: {', '.join(stale_ids)}",
+        }
+    matrix_rows = [row for row in unit_rows if matrix_row_lifecycle(row) == "active"]
     if not matrix_rows:
         return {"unit": unit, "status": "fail", "reason": "selected unit has no display-contract matrix rows"}
     if any("(skeleton)" in row.get("DISP-ID", "") for row in matrix_rows):
@@ -1722,6 +2030,12 @@ def verify_one_unit(
         }
     if any(row["B 现状"] not in MATRIX_CLOSED_STATUSES for row in matrix_rows):
         return {"unit": unit, "status": "fail", "reason": "display-contract matrix is not verified"}
+    if not any(row["B 现状"] in {"verified", "manual-verified"} for row in matrix_rows):
+        return {
+            "unit": unit,
+            "status": "fail",
+            "reason": "no verified or manual-verified row; a ledger closed only by approved-deviation is not parity",
+        }
     return {
         "unit": unit,
         "status": "pass",
@@ -1860,7 +2174,7 @@ def build_markdown(args, data: dict) -> str:
         "## 脚本证据级别",
         "- artifact_level: `baseline-only`",
         "- authority: evidence scaffold, not design-ready",
-        "- handoff_rule: human-filled MATRIX/FLOW/CHAIN/design-ready packet must be written back to `<DOMAIN_ROOT>`",
+        "- handoff_rule: human-filled MATRIX/FLOW/CHAIN/design-ready packet must be written back to the persisted evidence directory",
         "",
         "> 状态枚举、路径、命令、URL、CSV 字段名保持英文原文；章节标题、表头与说明默认简体中文。",
         "",
@@ -2003,7 +2317,7 @@ def build_markdown(args, data: dict) -> str:
         table(["门禁", "检查项", "状态"], GATE_ROWS),
         "",
         "## 完成判定权",
-        "不得仅凭本领域工件宣布页面迁移完成。完成需要 Delivery verified 证据、领域复核证据、当前宿主修订绑定，以及无阻断残留。",
+        "不得仅凭本领域工件宣布页面迁移完成。完成需要实施方权威记录（例如 Delivery verified）、领域复核证据、当前宿主修订绑定，以及无阻断残留。",
     ]
 
     if mode in {"design", "verify"}:
@@ -2019,24 +2333,24 @@ def build_markdown(args, data: dict) -> str:
             "- 规则：复用宿主 shell/鉴权/API/状态/组件；不要复制源仓布局",
             "",
             "## 批次准入",
-            "批次内 design-scope 必须一致；`rejected` 或 `needs-human` 未清空前不得进入 Frame。",
-            labeled_table(data["batch_admission"], [(header, header) for header in BATCH_ADMISSION_HEADERS]),
+            "批次内 design-scope 必须一致；`rejected` 或 `needs-human` 未清空前不得提交范围批准。",
+            labeled_table(data["batch_admission"], BATCH_ADMISSION_LABELS),
             "",
             "## 共享宿主面 ownership",
             "多个 unit 会碰的宿主面必须由唯一任务组独占修改，并作为前置组先落地；其余 unit 只读依赖。",
-            labeled_table(data["batch_shared_surface"], [(header, header) for header in BATCH_SHARED_SURFACE_HEADERS]),
+            labeled_table(data["batch_shared_surface"], BATCH_SHARED_SURFACE_LABELS),
             "",
             "## UNIT 四维决策",
             "comparison status、身份、落地策略与切换处置分开填写；不要创造组合状态。",
-            labeled_table(data["unit_decisions"], [(header, header) for header in UNIT_DECISION_HEADERS]),
+            labeled_table(data["unit_decisions"], UNIT_DECISION_LABELS),
             "",
             "## Comparison Surface",
             "未固定 chrome、viewport、登录态、环境依赖和命中层前，视觉报告只能作为诊断。",
-            labeled_table(data["comparison_surfaces"], [(header, header) for header in COMPARISON_SURFACE_HEADERS]),
+            labeled_table(data["comparison_surfaces"], COMPARISON_SURFACE_LABELS),
             "",
             "## Host Integration Checklist",
             "每类必须填合同与证据，或明确标为 not-applicable。",
-            labeled_table(data["host_integration"], [(header, header) for header in HOST_INTEGRATION_HEADERS]),
+            labeled_table(data["host_integration"], HOST_INTEGRATION_LABELS),
             "",
             "## 页面闭包合同",
             table(["项", "证据"], [
@@ -2050,8 +2364,8 @@ def build_markdown(args, data: dict) -> str:
             ]),
             "",
             "## 设计就绪门禁",
-            "脚本生成的仅表头合同为 `not-ready: empty-contract`。在用证据填实这些行、或把未决边标为非阻断原因之前，不得进入 Delivery Frame。",
-            "批次模式下每条门禁按 unit 逐个判定：任一 unit 未就绪，整批不得进入 Frame。",
+            "脚本生成的仅表头合同为 `not-ready: empty-contract`。在用证据填实这些行、或把未决边标为非阻断原因之前，不得提交范围批准。",
+            "批次模式下每条门禁按 unit 逐个判定：任一 unit 未就绪，整批不得提交范围批准。",
             table(["门禁", "最低证据", "状态"], DESIGN_READY_ROWS),
             "",
             "## Display Contract Matrix 基线",
@@ -2064,15 +2378,15 @@ def build_markdown(args, data: dict) -> str:
             "",
             "## UNIT 四维决策基线",
             "comparison status、身份、落地策略与切换处置分开填写；脚本不替人推断后三者。",
-            labeled_table(data["unit_decisions"], [(header, header) for header in UNIT_DECISION_HEADERS]),
+            labeled_table(data["unit_decisions"], UNIT_DECISION_LABELS),
             "",
             "## Comparison Surface 基线",
             "未固定 chrome、viewport、登录态、环境依赖和命中层前，视觉报告只能作为诊断。",
-            labeled_table(data["comparison_surfaces"], [(header, header) for header in COMPARISON_SURFACE_HEADERS]),
+            labeled_table(data["comparison_surfaces"], COMPARISON_SURFACE_LABELS),
             "",
             "## Host Integration Checklist 基线",
             "每类必须填合同与证据，或明确标为 not-applicable。",
-            labeled_table(data["host_integration"], [(header, header) for header in HOST_INTEGRATION_HEADERS]),
+            labeled_table(data["host_integration"], HOST_INTEGRATION_LABELS),
         ])
 
     if mode == "assess" and data["display_contract"]:
@@ -2162,6 +2476,8 @@ def collect_data(args) -> dict:
     comparison = compare_pages(source_pages, host_pages)
     url_entry_mapping = build_url_entry_mapping(source, host, source_pages, host_pages)
     reconcile_comparison_entries(comparison, url_entry_mapping)
+    if getattr(args, "unit_decisions", None):
+        apply_unit_decisions(comparison, load_unit_decisions(args.unit_decisions))
     data = {
         "source_repo": source,
         "host_repo": host,
@@ -2264,13 +2580,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--format", choices=["markdown", "html", "csv", "all"], default="all")
     parser.add_argument("--source-acquisition-warning", default="", help="Optional warning from source repo clone/fetch, recorded as evidence.")
     parser.add_argument("--host-acquisition-warning", default="", help="Optional warning from host repo clone/fetch, recorded as evidence.")
+    parser.add_argument("--unit-decisions", help="CSV of human-corrected unit decisions. A filled 19-unit-decisions.csv can be passed back.")
+    parser.add_argument("--alias", action="append", default=[], help="Extra token alias, from=to. Repeat for more than one.")
     return parser
 
 
 def parse_units(raw_units: list[str]) -> list[str]:
     units = []
     for value in raw_units:
-        for piece in value.split(","):
+        for piece in re.split(r"[,，]", value):
             unit = piece.strip()
             if unit and unit not in units:
                 units.append(unit)
@@ -2280,13 +2598,19 @@ def parse_units(raw_units: list[str]) -> list[str]:
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
+    EXTRA_ALIASES.clear()
+    for item in args.alias:
+        if "=" not in item:
+            parser.error(f"--alias must be from=to, got {item}")
+        source_token, target_token = item.split("=", 1)
+        EXTRA_ALIASES[source_token.strip().lower()] = target_token.strip().lower()
     args.units = parse_units(args.unit)
     if args.mode in {"design", "verify"} and not args.units:
         parser.error(f"{args.mode} mode requires --unit")
     if len(args.units) > MAX_BATCH_UNITS:
         parser.error(
             f"batch of {len(args.units)} units exceeds the cap of {MAX_BATCH_UNITS}; "
-            "split it so the High cost/risk/rollback summary stays reviewable"
+            "split it so the cost/risk/rollback summary stays reviewable"
         )
     if args.mode in {"design", "verify"} and not args.host_repo:
         parser.error(f"{args.mode} mode requires --host-repo")
