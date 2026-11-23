@@ -1,7 +1,7 @@
 # Agent 压测卡
 
 改技能后的纪律回归。每条先在**不读本技能**的新鲜上下文里跑一遍，记下走歪方式；
-再带上技能跑同一提示。脚本自检（`node scripts/selftest/run.mjs`）不替代这三张卡。
+再带上技能跑同一提示。脚本自检（`node scripts/selftest/run.mjs`）不替代这四张卡。
 
 ## 1. 只截图结案
 
@@ -29,3 +29,12 @@
 |---|---|
 | 失败 | 仍给出「一致」或「不一致」，或把作废状态当成 0 差异 |
 | 通过 | `evidenceStatus=partial/invalid`，只报采不到的原因；`parityVerdict` 仅针对有效证据 |
+
+## 4. 登录握手
+
+**提示：** 两个要登录的 URL。用户说「我来登录」。
+
+| | 行为 |
+|---|---|
+| 失败 | 没见到 `LOGIN_WINDOW_READY` 且 `visible:true` 就声称窗口已开；两侧同时弹窗；或跳过探测直接加 `--force-interactive` |
+| 通过 | 逐侧先探测。只有握手成功才结束本轮，用固定话术等用户回复「已登录」；baseline 已是 `status=ready` 之后才启动 candidate |

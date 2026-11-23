@@ -71,11 +71,20 @@ node scripts/selftest/run.mjs     # 含 unit.mjs；也可单独跑 node scripts/
    用户没特别偏好时采用第 1 项（`auto-interactive`）。不要改写成「自动探测加我手动登录」，
    也不要砍成 3 项。交互组件自带的 `Other/其他` 保留。
 
-   配方（状态机见 `references/ask-template.md`）：
-   - 每侧先 `prepare-auth`，不加 `--skip-probe`；不要因为用户说「我来登录」就加
+   配方（状态机全文在 `references/ask-template.md`，开窗前按该节执行）：
+   - 固定顺序：已有 `storageState` → 无头验证 → 通过则静默结束 → 失败才开窗。
+     「我来登录」不跳过复用。不要加 `--skip-probe`；不要因为用户说「我来登录」就加
      `--force-interactive`。
-   - 只有脚本输出 `LOGIN_WINDOW_READY` 且 `visible:true`，才能说窗口已创建；然后立刻结束本轮，
-     等用户回复「已登录」。禁止说「不用回复」，禁止本轮死等 `timeoutMs`。
+   - 两侧不要同时开窗。baseline 已是 `status=ready` 之后，才启动 candidate。
+   - 「我已经在浏览器里登录了」不等于脚本已登录。说「免登录」也要先短探测；
+     内网静默跳 SSO 时，探测失败再开窗，不要自己点站排查。
+   - 只有脚本输出 `LOGIN_WINDOW_READY` 且 `visible:true`，才能说窗口已创建。
+     「准备创建」不是成功；进程先退出就回报启动错误，禁止让用户寻找不存在的窗口。
+   - 确认开窗后立刻结束本轮，原样告诉用户：
+
+     **已创建 `<side>` 登录窗口，目标为 `<targetUrl>`。请在该窗口登录；完成后回复「已登录」。不要把密码发给我。若窗口未置顶，请从任务栏或 Alt+Tab 打开。**
+
+     不要称「最新窗口」。禁止说「不用回复」，禁止本轮死等 `timeoutMs`。
    - 用户回复后立刻
      `node scripts/prepare-auth.mjs --config <file> --side <side> --confirm`。
      未就绪把脚本打印的原因原样告诉用户。
@@ -122,19 +131,26 @@ node scripts/selftest/run.mjs     # 含 unit.mjs；也可单独跑 node scripts/
 
 ### 第 3 步：双侧采集
 
-`auth.mode=auto-interactive` 时按 **baseline → candidate** 逐侧准备登录态：
+`auth.mode=auto-interactive` 时按 **baseline → candidate** 逐侧准备登录态。两条 `prepare-auth` 分开执行，不要一次复制运行。
+
+先只启动 baseline（后台运行）：
 
 ```bash
-node scripts/prepare-auth.mjs --config parity-config.json --side baseline   # 后台运行
-node scripts/prepare-auth.mjs --config parity-config.json --side candidate  # 上一侧 ready 后再开
+node scripts/prepare-auth.mjs --config parity-config.json --side baseline
 ```
 
-等待两类真实结果（开窗话术与 `--confirm` 见第 1 步配方；完整状态机见 `references/ask-template.md`）：
+等它给出两类真实结果之一（开窗话术与 `--confirm` 见第 1 步配方；完整状态机见 `references/ask-template.md`）：
 
-- JSON `status=ready`：本侧完成，继续下一侧；
-- `LOGIN_WINDOW_READY` 且 `visible:true`：窗口已创建，结束本轮等「已登录」。
+- JSON `status=ready`：本侧完成，再启动下一侧；
+- `LOGIN_WINDOW_READY` 且 `visible:true`：窗口已创建，结束本轮等「已登录」。本轮不要再启动 candidate。
 
-**禁止**用 WebSearch、浏览器工具或手动点页面来「搞清楚怎么登录」。
+baseline 已是 `status=ready` 之后，才启动 candidate，并按同样的两类结果处理：
+
+```bash
+node scripts/prepare-auth.mjs --config parity-config.json --side candidate
+```
+
+**禁止**同时打开两侧登录窗。**禁止**用 WebSearch、浏览器工具或手动点页面来「搞清楚怎么登录」。
 
 ```bash
 node scripts/capture.mjs --config parity-config.json --side baseline
@@ -202,7 +218,7 @@ node scripts/compare.mjs --config parity-config.json
 | `different-data` 把数据项当缺陷；或把固定功能入口标成数据 | `references/parity-ladder.md` |
 | 只跑截图、不跑 journey，就宣称「功能一致」 | 第 2 步；压测见 `references/agent-pressure.md` |
 | 把截图或整份报告贴进对话；修改被测站点源码 | 第 5 步 |
-| 登录握手违规（改 label、未握手称开窗、说不用回复、已有会话再弹窗、壳节点当 ready） | `references/ask-template.md` |
+| 登录握手违规（改 label、未握手称开窗、说不用回复、两侧同时弹窗、跳过探测、壳节点当 ready） | 第 1 步；压测见 `references/agent-pressure.md` |
 
 ## 参考文件
 
@@ -210,7 +226,7 @@ node scripts/compare.mjs --config parity-config.json
 - `references/parity-ladder.md`：六层判定标准与验收口径
 - `references/config-reference.md`：配置字段、动作词表、常见故障排查
 - `references/playwright-setup.md`：安装授权、企业浏览器兜底、登录态导出
-- `references/agent-pressure.md`：三条纪律压测卡（只截图结案 / 未授权安装 / 作废仍给 verdict）
+- `references/agent-pressure.md`：四条纪律压测卡（只截图结案 / 未授权安装 / 作废仍给 verdict / 登录握手）
 - `templates/parity-config.json`：列表/表单页配置样例
 - `templates/parity-config-hosted-iframe.json`：托管页 + iframe 配置样例
 - `scripts/prepare-auth.mjs`：先探测已有会话；未就绪才开窗；`--confirm` 立刻校验
