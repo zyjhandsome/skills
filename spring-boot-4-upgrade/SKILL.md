@@ -5,7 +5,7 @@ description: Use when assessing or migrating an existing Spring Boot 3.x reposit
 
 # Spring Boot 4 存量仓库升级
 
-把现有 3.x 应用升级到执行时核实的 4.x 正式版本，保留可观察业务行为，交付代码、验证证据和剩余阻塞。用用户的语言输出。版本知识核验基准为 2026-09-09；执行时按 [官方资料索引](references/sources.md) 重查，不把本文日期或示例当作最新版本保证。
+把现有 3.x 应用升级到执行时核实的 4.x 正式版本，保留可观察业务行为，交付代码、验证证据和剩余阻塞。用用户的语言输出。版本知识核验基准为 2026-11-23；执行时按 [官方资料索引](references/sources.md) 重查，不把本文日期或示例当作最新版本保证。
 
 ## 入口与边界
 

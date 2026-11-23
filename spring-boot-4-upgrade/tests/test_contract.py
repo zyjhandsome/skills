@@ -268,6 +268,59 @@ class EvidenceContractTests(unittest.TestCase):
         self.assertTrue(self.check())
         self.assertEqual(self.check("verified"), [])
 
+    def test_3x_verified_requires_35_checkpoint_or_controlled_skip(self):
+        self.data["baseline35"] = None
+        for gate in ("verified", "verified-with-bridges"):
+            with self.subTest(gate=gate):
+                errors = self.check(gate)
+                self.assertTrue(any("verbal skip" in e for e in errors), errors)
+        self.data["scope"]["excluded"] = [{"item": "3.5 checkpoint", "reason": "user asked to skip"}]
+        self.assertTrue(any("verbal skip" in e for e in self.check("verified")))
+
+    def test_35_checkpoint_snapshot_can_differ_from_final(self):
+        stage = self.data["baseline35"]
+        stage["snapshot"] = "checkpoint-35"
+        for item in stage["checks"].values():
+            item["snapshot"] = "checkpoint-35"
+        self.assertEqual(self.check("verified"), [])
+
+    def test_failed_35_checkpoint_is_not_replaced_by_skip(self):
+        self.data["baseline35"]["checks"]["runtime"].update(status="failed", exit_code=1)
+        self.controlled_skip(clear_baseline=False)
+        errors = self.check("verified")
+        self.assertTrue(any(e.startswith("baseline35:") for e in errors), errors)
+
+    def test_controlled_skip_record_is_required_for_verified(self):
+        self.controlled_skip()
+        self.assertEqual(self.check("verified"), [])
+        self.data["scope"]["excluded"][0]["confirmer"] = "agent"
+        self.assertTrue(any("confirmer" in e for e in self.check("verified")))
+        self.data["scope"]["excluded"][0]["confirmer"] = "platform-owner"
+        self.data["scope"]["excluded"][0]["unreachable"] = "401"
+        self.assertTrue(any("401" in e for e in self.check("verified")))
+        self.data["scope"]["excluded"][0]["unreachable"] = "404"
+        (self.root / "unreachable.txt").write_bytes(b"changed")
+        self.assertTrue(any("mismatched artifact" in e for e in self.check("verified")))
+
+    def controlled_skip(self, clear_baseline=True):
+        raw = b"HTTP/1.1 404 artifact not found\n"
+        evidence = self.root / "unreachable.txt"
+        evidence.write_bytes(raw)
+        baseline = {"snapshot": "origin-3x", "checks": copy.deepcopy(self.data["baseline35"]["checks"])}
+        for item in baseline["checks"].values():
+            item["snapshot"] = "origin-3x"
+        if clear_baseline:
+            self.data["baseline35"] = None
+        self.data["scope"]["excluded"] = [{
+            "item": "3.5 checkpoint",
+            "reason": "authorized repository returned 404 for the selected 3.5.x coordinate",
+            "kind": "baseline35-skip",
+            "unreachable": "404",
+            "confirmer": "platform-owner",
+            "evidence": [{"path": evidence.name, "sha256": hashlib.sha256(raw).hexdigest()}],
+            "baseline3x": baseline,
+        }]
+
     def test_reject_wrong_target_and_downgrade(self):
         for target in ("4.0.x", "4.0.8-SNAPSHOT", "3.5.16"):
             self.data["target_boot"] = target

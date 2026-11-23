@@ -6,7 +6,7 @@
 
 ## 数据约定
 
-- 顶层：`mode`、精确 `source_boot`/`target_boot`，`scope.included` 写模块、profile、JDK/runtime、数据库/功能范围；`excluded` 为 `{item, reason}` 数组。必需检查为 resolution/build/tests/runtime/contracts/dependency_security，可追加鉴权 security、postgres 等实际范围内的项，不能删除基本项。库模块 runtime 使用 consumer 证据。沿用 v2 结构，但旧记录缺少新增的 dependency_security 时须补真实证据，不能直接复用原通过结论。
+- 顶层：`mode`、精确 `source_boot`/`target_boot`，`scope.included` 写模块、profile、JDK/runtime、数据库/功能范围；`excluded` 为 `{item, reason}` 数组。受控跳过 3.5 时另有恰好一条 `kind: baseline35-skip`，并含 `unreachable`（`404` 或 `no-parent-3.5`）、`confirmer`（具名用户或责任人，不能是 agent）、`evidence: [{path, sha256}]`（已归档的 404 或 parent 证据）、`baseline3x: {snapshot, checks}`（原 3.x 快照上的必需检查，结构同检查项）。`baseline35` 在这条路径保持 null。必需检查为 resolution/build/tests/runtime/contracts/dependency_security，可追加鉴权 security、postgres 等实际范围内的项，不能删除基本项。库模块 runtime 使用 consumer 证据。沿用 v2 结构，但旧记录缺少新增的 dependency_security 时须补真实证据，不能直接复用原通过结论。
 - `baseline35` 与 `final`：各包含 `resolved_boot`、`snapshot`、`checks`。快照应覆盖 HEAD **和未提交/未跟踪源码、生成配置、外部测试配置版本**；由执行者/CI 核实并通过 `--snapshot` 提供，不能仅用固定字符串“current”，校验器会拒绝它。临时输出目录不属于源码快照。
 - `checks` 用检查名索引；每项包含 `status: passed`、`exit_code: 0`、`snapshot`、真实 `command`、`cwd`、`environment`，以及 `artifacts: [{path, sha256}]`。路径相对契约文件或绝对路径，SHA256 对原始字节计算。checks 是已执行记录，不是 shell 调度配置。
 - runtime 记录完整验收命令/测试驱动的结果，应用正常受控停止与启动失败分别说明。部分初始化或到达可归因失败点不能填 passed；程序检查状态/退出码一致性，不读取日志判定 readiness。命令中的凭证使用占位符；原始证据先脱敏再计算其归档文件哈希，交付前核查持久路径，不能用一致性通过承诺未来文件不丢失。
@@ -36,7 +36,7 @@ python <skill>/scripts/check_contract.py <report.json> --gate verified --snapsho
 python <skill>/scripts/check_contract.py <report.json> --gate verified-with-bridges --snapshot <最终核实快照>
 ```
 
-退出码 0 表示结构一致，1 表示缺记录/失败/快照或文件哈希不匹配。boot4 检查当前 3.5 检查点，拒绝 assess、2.x 和 4.x 补丁误用；按 verification 受控跳过 3.5 时不运行 boot4 门。最终检查只检查最终快照，历史 3.5 检查点保留不同快照是正常的；阶段顺序仍需工作日志核实，程序不从最终报告倒推“历史肯定执行过”。
+退出码 0 表示结构一致，1 表示缺记录/失败/快照或文件哈希不匹配。boot4 检查当前 3.5 检查点，拒绝 assess、2.x 和 4.x 补丁误用；按 verification 受控跳过 3.5 时不运行 boot4 门。源为 3.x 时，两种最终门还要求合格的 `baseline35`（快照可以不同于最终快照），或恰好一条字段齐全的 `baseline35-skip`。没有其一就不能报 verified。已记录的 3.5 检查点若未通过，排除记录不能代替它。4.x 源的补丁/minor 升级不要求 `baseline35`。程序不证明 3.5 检查点发生在 4.0 修改之前，也不把 401/403/超时认作 404。
 
 本契约不依靠“禁止命令字符串”防护：`test -DskipTests`、Gradle `-x test` 或绕过 shell 的工具均可能骗过黑名单。要求实际执行数、必需检查和证据文件；人工审查仍要禁止用跳测试、关闭鉴权、空补丁、单一 health 来满足验收。
 

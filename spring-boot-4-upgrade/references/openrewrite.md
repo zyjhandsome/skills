@@ -15,7 +15,7 @@ OpenRewrite 负责可解析范围内的结构化转换，不保证私有框架�
 | 3.x → 3.5 | `org.openrewrite.java.spring.boot3.UpgradeSpringBoot_3_5` |
 | 3.5 → 4.0 | `org.openrewrite.java.spring.boot4.UpgradeSpringBoot_4_0` |
 
-截至 2026-11-23，Central 最新的 `rewrite-spring:6.37.1` 只含上表两个升级配方；更高 minor 按 release notes 手工迁移或另核其他 Edition。
+2026-11-23 核到的 `rewrite-spring:6.37.1` 只含上表两个升级配方。执行时重查所选 recipe artifact 的实际配方清单，不把 6.37.1 当作当前最新或默认版本。更高 minor 按该版本的 release notes 手工迁移，或改用已核到含对应配方的其他版本/Edition。
 
 Community/Moderne Edition 的坐标、能力、许可与分发方式可能不同。**按精确 artifact 检查可用来源**：先沿用企业允许的已配置镜像/仓库，再核实 Maven Central 是否提供选定坐标；只有所需版本/Edition 确实需要 Code Genome 等来源时，才检查已有授权和凭证。2026-09-09 已确认 Central 的 `rewrite-spring:6.37.1` 和 Maven 插件 `6.46.1` POM 返回 HTTP 200；这是可用性实例，不保证整套传递依赖在每个企业环境可解析，也不固定为未来默认版本。
 
@@ -29,7 +29,7 @@ Community/Moderne Edition 的坐标、能力、许可与分发方式可能不同
 
 ### 阶段 A：先到 3.5
 
-这些是分段执行模板。assess 模式不执行 `run`；`discover`/`dryRun` 只在不改仓库文件时可执行（Maven 用下方命令行坐标，Gradle 用仓外 init script），先检查构建副作用，补丁只作评估证据。先在当前快照完成基线。将占位精确版本和环境参数填实；使用 `.cmd` 的命令块适用于 PowerShell。
+这些是分段执行模板。assess 模式不执行 `run`；`discover`/`dryRun` 只在不改仓库文件时可执行。Maven 用下方命令行坐标。Gradle 只有已存在的仓外 init script 时才跑 dryRun；没有现成脚本就不跑 dryRun，也不改构建文件。本文件不提供通用 init script。先检查构建副作用，补丁只作评估证据。先在当前快照完成基线。将占位精确版本和环境参数填实；使用 `.cmd` 的命令块适用于 PowerShell。
 
 ```powershell
 $rewritePluginVersion = '<已核实的 Maven 插件精确版本>'
@@ -41,14 +41,14 @@ $rewriteArgs = @("-Drewrite.recipeArtifactCoordinates=$recipeArtifact", "-Drewri
 & ./mvnw.cmd "${rewritePlugin}:discover" @rewriteArgs
 if ($LASTEXITCODE -ne 0) { throw 'Recipe discovery failed' }
 & ./mvnw.cmd "${rewritePlugin}:discover" "-Drewrite.recipeArtifactCoordinates=$recipeArtifact" "-Drecipe=$activeRecipe" '-Ddetail=true' '-Drecursion=2'
-if ($LASTEXITCODE -ne 0) { throw 'Recipe detail lookup failed' }
+if ($LASTEXITCODE -ne 0) { Write-Warning 'Recipe detail lookup failed; record it and continue with the recipe list from the first discover' }
 & ./mvnw.cmd "${rewritePlugin}:dryRun" @rewriteArgs
 if ($LASTEXITCODE -ne 0) { throw 'Inspect dry-run results before continuing' }
 ```
 
-第二条 `discover` 用 `-Drecipe` 展开该配方的子配方；`-Drecursion` 的层数按需要调整，参数名以所选插件版本的文档为准。
+第二条 `discover` 只用来展开子配方。`-Drecursion` 的层数按需要调整，参数名以所选插件版本的文档为准；退出码非 0 时记下失败，继续用第一条 `discover` 的配方清单做 dryRun，不把这次查找失败当成迁移失败。
 
-每个命令后检查 `$LASTEXITCODE`，失败先处理，不直接接着 run。沿用仓库必要的 `-P`、settings 和模块范围。多模块从正确 reactor 根执行；先检查测试夹具、生成源、聚合模块和 Kotlin 的解析覆盖。
+每个命令后检查 `$LASTEXITCODE`。明细查找失败只记录并继续；其余命令失败先处理，不直接接着 run。沿用仓库必要的 `-P`、settings 和模块范围。多模块从正确 reactor 根执行；先检查测试夹具、生成源、聚合模块和 Kotlin 的解析覆盖。
 
 读取命令输出给出的 patch 路径，常见为各模块 `target/rewrite/rewrite.patch`；同时检查 data tables 的 source parse/error 信息。补丁位置以实际日志为准。dry-run 后 `git diff` 可能只显示临时插件配置，**不能代替阅读 patch**。
 
@@ -61,23 +61,29 @@ if ($LASTEXITCODE -ne 0) { throw '3.5 migration failed' }
 
 检查实际 diff，完成 3.5 精确版本对齐、源码/配置补充和完整验证，并留存检查点。不要把裸 `verify` 当成每个仓库的完整验收；加实际 CI profile、集成测试和隔离启动/consumer。命令行调用可避免持久插件配置；如必须写 POM，保留原有配置，完成后清除本次临时配置。
 
-### 阶段 B：已有合格 3.5 检查点才应用 4.0
+### 阶段 B：合格 3.5 检查点或受控跳过后才应用 4.0
 
-沿用阶段 A 已核实的插件变量、实际 reactor/profile 参数。先按 [证据契约](evidence-contract.md) 填写阶段记录并检查当前代码快照；没有 Python 时按同一条件人工检查并留证，不把复制下列命令当作获得授权。走 [受控跳过](verification.md#进入-40-的实施条件) 路径时不运行 `--gate boot4`，改为核对该处的四个条件。
+沿用阶段 A 已核实的插件变量、实际 reactor/profile 参数。先按 [证据契约](evidence-contract.md) 填写阶段记录并检查当前代码快照；没有 Python 时按同一条件人工检查并留证，不把复制下列命令当作获得授权。走 [受控跳过](verification.md#进入-40-的实施条件) 路径时不运行 `--gate boot4`，改为核对四个条件，并把 `baseline35-skip` 排除记录留给最终门；`baseline35` 保持 null。
 
 ```powershell
 if (-not $rewritePlugin -or -not $recipeArtifact) { throw 'Re-declare the phase A plugin variables in this session' }
 $contractFile = '<已填写的证据契约 JSON 绝对路径>'
 $snapshotId = '<当前已核实的代码快照标识>'
 $contractChecker = '<Skill绝对路径>/scripts/check_contract.py'
-python $contractChecker $contractFile --gate boot4 --snapshot $snapshotId
-if ($LASTEXITCODE -ne 0) { throw '3.5 evidence gate not satisfied' }
+$controlledSkip = $false # 仅 verification 的四条件同时满足时改为 $true
+$baseline35SkipRecorded = $false # scope.excluded 已有唯一且字段齐全的 baseline35-skip 时改为 $true
+if ($controlledSkip) {
+  if (-not $baseline35SkipRecorded) { throw 'Controlled skip needs one baseline35-skip exclusion before Boot 4 run' }
+} else {
+  python $contractChecker $contractFile --gate boot4 --snapshot $snapshotId
+  if ($LASTEXITCODE -ne 0) { throw '3.5 evidence gate not satisfied' }
+}
 $activeRecipe = 'org.openrewrite.java.spring.boot4.UpgradeSpringBoot_4_0'
 $rewriteArgs = @("-Drewrite.recipeArtifactCoordinates=$recipeArtifact", "-Drewrite.activeRecipes=$activeRecipe", '-Drewrite.exportDatatables=true')
 & ./mvnw.cmd "${rewritePlugin}:discover" @rewriteArgs
 if ($LASTEXITCODE -ne 0) { throw 'Recipe discovery failed' }
 & ./mvnw.cmd "${rewritePlugin}:discover" "-Drewrite.recipeArtifactCoordinates=$recipeArtifact" "-Drecipe=$activeRecipe" '-Ddetail=true' '-Drecursion=2'
-if ($LASTEXITCODE -ne 0) { throw 'Recipe detail lookup failed' }
+if ($LASTEXITCODE -ne 0) { Write-Warning 'Recipe detail lookup failed; record it and continue with the recipe list from the first discover' }
 & ./mvnw.cmd "${rewritePlugin}:dryRun" @rewriteArgs
 if ($LASTEXITCODE -ne 0) { throw 'Inspect dry-run results before continuing' }
 ```
@@ -85,8 +91,12 @@ if ($LASTEXITCODE -ne 0) { throw 'Inspect dry-run results before continuing' }
 阅读 patch 与下方审查表后才运行下一段；两段之间发生源码/配置变化须刷新快照及证据，再审查新的 patch。
 
 ```powershell
-python $contractChecker $contractFile --gate boot4 --snapshot $snapshotId
-if ($LASTEXITCODE -ne 0) { throw '3.5 evidence gate not satisfied' }
+if ($controlledSkip) {
+  if (-not $baseline35SkipRecorded) { throw 'Controlled skip needs one baseline35-skip exclusion before Boot 4 run' }
+} else {
+  python $contractChecker $contractFile --gate boot4 --snapshot $snapshotId
+  if ($LASTEXITCODE -ne 0) { throw '3.5 evidence gate not satisfied' }
+}
 & ./mvnw.cmd "${rewritePlugin}:run" @rewriteArgs
 if ($LASTEXITCODE -ne 0) { throw '4.0 migration failed' }
 ```
@@ -105,7 +115,7 @@ if ($LASTEXITCODE -ne 0) { throw '4.0 migration failed' }
 
 ## Gradle（Groovy 与 Kotlin DSL）
 
-优先已有 rewrite 配置；否则依据所选插件的官方运行说明，使用临时 init script 或最小范围的 build 配置。不要对未知 Gradle 结构生成一个宣称通用的 init script：settings/pluginManagement、复合构建、子项目和仓库凭证都影响配置。
+优先已有 rewrite 配置；否则依据所选插件的官方运行说明，使用临时 init script 或最小范围的 build 配置。不要对未知 Gradle 结构生成一个宣称通用的 init script：settings/pluginManagement、复合构建、子项目和仓库凭证都影响配置。只评估时，没有现成的仓外 init script 就不跑 dryRun，也不把下面的 DSL 写进仓库。
 
 **先找 owner，再确定放置位置**：Boot 版本的 catalog/settings/convention/included build 与 rewrite 插件应用位置可能不同。下例只描述选定项目的 DSL 结构，不表示将它粘到根 build；先用 `projects` 和 `:<实际项目>:tasks --all` 确认目标，独立 included build 从自身构建根处理。3.5 阶段通过后才将 `migrationRecipe` 显式切换为 4.0，禁止默认回退到 4.0。
 
@@ -164,12 +174,16 @@ dependencies {
 审查后以同一属性运行 `:service:rewriteRun`，再按实际任务验证 3.5 并留存检查点。然后才运行阶段 B：
 
 ```powershell
-python $contractChecker $contractFile --gate boot4 --snapshot $snapshotId
-if ($LASTEXITCODE -ne 0) { throw '3.5 evidence gate not satisfied' }
+if ($controlledSkip) {
+  if (-not $baseline35SkipRecorded) { throw 'Controlled skip needs one baseline35-skip exclusion before Boot 4 run' }
+} else {
+  python $contractChecker $contractFile --gate boot4 --snapshot $snapshotId
+  if ($LASTEXITCODE -ne 0) { throw '3.5 evidence gate not satisfied' }
+}
 & ./gradlew.bat :service:rewriteDryRun '-PmigrationRecipe=org.openrewrite.java.spring.boot4.UpgradeSpringBoot_4_0'
 ```
 
-其中三个校验变量的含义同 Maven 阶段 B，需要自行填实。审查后重新核验条件，以同一属性运行 `:service:rewriteRun`；配方属性是上方 DSL 自定义绑定，不是假定插件原生支持它。每条命令检查退出码，失败归因后再推进。
+其中校验变量以及 `$controlledSkip`、`$baseline35SkipRecorded` 的含义同 Maven 阶段 B，需要自行填实。未声明这两个开关时按 false，仍会跑 boot4 门。审查后重新核验条件，以同一属性运行 `:service:rewriteRun`；配方属性是上方 DSL 自定义绑定，不是假定插件原生支持它。每条命令检查退出码，失败归因后再推进。
 
 更新实际 Boot 版本 owner（可能是 version catalog/settings/convention plugin），对齐 lockfiles 和已有 dependency verification metadata 时只做有依据的变化，不关闭验证。移除自己添加的临时配置后再完整构建。
 

@@ -121,10 +121,121 @@ def check_resolution(stage, scope, base, gate):
     return errors
 
 
+PLACEHOLDER_IDS = {"unknown", "pending", "current"}
+PLACEHOLDER_CONFIRMERS = PLACEHOLDER_IDS | {"agent", "assistant", "n/a", "na", "tbd"}
+
+
 def version(value):
     if not isinstance(value, str) or not re.fullmatch(r"\d+\.\d+\.\d+", value):
         return None
     return tuple(map(int, value.split(".")))
+
+
+def identifier_ok(value, banned):
+    return isinstance(value, str) and bool(value.strip()) and value.strip().lower() not in banned
+
+
+def check_recorded_checks(stage, required, base, snapshot):
+    errors = []
+    checks = stage.get("checks") if isinstance(stage, dict) else None
+    if not isinstance(checks, dict):
+        return ["stage.checks must be an object"]
+    for name in sorted(set(required) | BASE_CHECKS):
+        item = checks.get(name)
+        if not isinstance(item, dict):
+            errors.append(f"missing required check: {name}")
+            continue
+        if item.get("status") != "passed" or type(item.get("exit_code")) is not int or item["exit_code"] != 0:
+            errors.append(f"{name}: required check did not pass")
+        if item.get("snapshot") != snapshot:
+            errors.append(f"{name}: stale snapshot")
+        if not all(isinstance(item.get(k), str) and item[k].strip() for k in ("command", "cwd", "environment")):
+            errors.append(f"{name}: missing command/cwd/environment")
+        artifacts = item.get("artifacts")
+        if not isinstance(artifacts, list) or not artifacts:
+            errors.append(f"{name}: no evidence artifacts")
+            continue
+        for artifact in artifacts:
+            if not isinstance(artifact, dict) or not isinstance(artifact.get("path"), str) or not artifact["path"]:
+                errors.append(f"{name}: invalid artifact path")
+                continue
+            try:
+                raw = (base / artifact["path"]).read_bytes()
+                if not raw or hashlib.sha256(raw).hexdigest() != artifact.get("sha256"):
+                    errors.append(f"{name}: empty or mismatched artifact")
+            except (OSError, ValueError):
+                errors.append(f"{name}: evidence artifact unavailable")
+        if name == "tests":
+            counts = [item.get(k) for k in ("executed", "failures", "errors", "skipped")]
+            if any(type(v) is not int or v < 0 for v in counts):
+                errors.append("tests: invalid execution counts")
+            elif counts[0] < 1 or counts[1] or counts[2]:
+                errors.append("tests: no executed tests or tests failed")
+            if item.get("skipped") and not item.get("skip_coverage_reason"):
+                errors.append("tests: unexplained skipped tests")
+    return errors
+
+
+def historical_baseline35_errors(stage, scope, required, base):
+    errors = []
+    if not isinstance(stage, dict):
+        errors.append("checkpoint must be an object")
+    else:
+        resolved = version(stage.get("resolved_boot"))
+        if not resolved or resolved[:2] != (3, 5):
+            errors.append("checkpoint must resolve to exact Boot 3.5.x")
+        snap = stage.get("snapshot")
+        if not identifier_ok(snap, PLACEHOLDER_IDS):
+            errors.append("snapshot must be an independently checked identifier")
+        else:
+            errors.extend(check_resolution(stage, scope, base, "boot4"))
+            errors.extend(check_recorded_checks(stage, required, base, snap))
+    return [item if str(item).startswith("baseline35:") else f"baseline35: {item}" for item in errors]
+
+
+def controlled_skip_errors(scope, required, base):
+    exclusions = scope.get("excluded") if isinstance(scope, dict) else None
+    skips = [item for item in exclusions if isinstance(item, dict) and item.get("kind") == "baseline35-skip"] if isinstance(exclusions, list) else []
+    if len(skips) != 1:
+        return ["3.x source needs a passed baseline35 checkpoint or exactly one baseline35-skip exclusion; a verbal skip cannot verify"]
+    skip = skips[0]
+    errors = []
+    if skip.get("unreachable") not in {"404", "no-parent-3.5"}:
+        errors.append("baseline35-skip unreachable must be 404 or no-parent-3.5; 401, 403, and timeouts are not a skip")
+    if not identifier_ok(skip.get("confirmer"), PLACEHOLDER_CONFIRMERS):
+        errors.append("baseline35-skip needs a named user or owner confirmer")
+    evidence = skip.get("evidence")
+    if not isinstance(evidence, list) or not evidence:
+        errors.append("baseline35-skip: no evidence artifacts")
+    else:
+        for artifact in evidence:
+            if not isinstance(artifact, dict) or not isinstance(artifact.get("path"), str) or not artifact["path"]:
+                errors.append("baseline35-skip: invalid artifact path")
+                continue
+            try:
+                raw = (base / artifact["path"]).read_bytes()
+                if not raw or hashlib.sha256(raw).hexdigest() != artifact.get("sha256"):
+                    errors.append("baseline35-skip: empty or mismatched artifact")
+            except (OSError, ValueError):
+                errors.append("baseline35-skip: evidence artifact unavailable")
+    baseline = skip.get("baseline3x")
+    if not isinstance(baseline, dict):
+        errors.append("baseline35-skip needs original 3.x baseline checks")
+    else:
+        snap = baseline.get("snapshot")
+        if not identifier_ok(snap, PLACEHOLDER_IDS):
+            errors.append("baseline35-skip baseline snapshot must be independently checked")
+        else:
+            errors.extend(check_recorded_checks(baseline, required, base, snap))
+    return errors
+
+
+def source_35_requirement(data, scope, required, base):
+    """A 3.x migration cannot verify without a passed 3.5 checkpoint or a controlled skip."""
+    stage = data.get("baseline35")
+    if stage is not None:
+        return historical_baseline35_errors(stage, scope, required, base)
+    return controlled_skip_errors(scope, required, base)
 
 
 def check_contract(data, base, gate, snapshot):
@@ -195,42 +306,12 @@ def check_contract(data, base, gate, snapshot):
     if stage.get("snapshot") != snapshot:
         errors.append("checkpoint does not match supplied current snapshot")
     errors.extend(check_resolution(stage, scope, base, gate))
-    checks = stage.get("checks")
-    if not isinstance(checks, dict):
-        return errors + ["stage.checks must be an object"]
-    for name in sorted(set(required) | BASE_CHECKS):
-        item = checks.get(name)
-        if not isinstance(item, dict):
-            errors.append(f"missing required check: {name}")
-            continue
-        if item.get("status") != "passed" or type(item.get("exit_code")) is not int or item["exit_code"] != 0:
-            errors.append(f"{name}: required check did not pass")
-        if item.get("snapshot") != snapshot:
-            errors.append(f"{name}: stale snapshot")
-        if not all(isinstance(item.get(k), str) and item[k].strip() for k in ("command", "cwd", "environment")):
-            errors.append(f"{name}: missing command/cwd/environment")
-        artifacts = item.get("artifacts")
-        if not isinstance(artifacts, list) or not artifacts:
-            errors.append(f"{name}: no evidence artifacts")
-            continue
-        for artifact in artifacts:
-            if not isinstance(artifact, dict) or not isinstance(artifact.get("path"), str) or not artifact["path"]:
-                errors.append(f"{name}: invalid artifact path")
-                continue
-            try:
-                raw = (base / artifact["path"]).read_bytes()
-                if not raw or hashlib.sha256(raw).hexdigest() != artifact.get("sha256"):
-                    errors.append(f"{name}: empty or mismatched artifact")
-            except (OSError, ValueError):
-                errors.append(f"{name}: evidence artifact unavailable")
-        if name == "tests":
-            counts = [item.get(k) for k in ("executed", "failures", "errors", "skipped")]
-            if any(type(v) is not int or v < 0 for v in counts):
-                errors.append("tests: invalid execution counts")
-            elif counts[0] < 1 or counts[1] or counts[2]:
-                errors.append("tests: no executed tests or tests failed")
-            if item.get("skipped") and not item.get("skip_coverage_reason"):
-                errors.append("tests: unexplained skipped tests")
+    check_errors = check_recorded_checks(stage, required, base, snapshot)
+    if check_errors == ["stage.checks must be an object"]:
+        return errors + check_errors
+    errors.extend(check_errors)
+    if gate != "boot4" and source and source[0] == 3:
+        errors.extend(source_35_requirement(data, scope, required, base))
     return errors
 
 
