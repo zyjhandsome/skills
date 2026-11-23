@@ -2,7 +2,7 @@
 
 按实际依赖和调用证据选择下面的检查项；本表是风险导航，不是全仓替换表。API、包和 starter 坐标以目标版本官方文档/可解析 artifact 为准；过时文档与实际目标不符时记录差异。
 
-默认完成原生 4.x 适配。必要时可使用目标版本仍支持的 Jackson 2/classic 等兼容桥，但记录原因、影响、负责人/待分配、退出条件与复查日期。存在兼容桥的结果单独标识，不能称为“全部迁移完成”；不要猜未来移除版本。桥接也要证明自动配置和运行行为有效。
+默认完成原生 4.x 适配。必要时可使用目标版本仍支持的兼容桥（`spring-boot-jackson2`、`spring-boot-starter-classic`、`spring-boot-starter-test-classic` 等），但记录原因、影响、负责人/待分配、退出条件与复查日期。存在兼容桥的结果单独标识，不能称为“全部迁移完成”；不要猜未来移除版本。桥接也要证明自动配置和运行行为有效。
 
 桥是目标运行栈支持、刻意保留且已验证的兼容适配；**Boot 3/4 混栈、版本覆盖失败不是桥**。状态判定见 [verification.md](verification.md)。
 
@@ -14,7 +14,7 @@ Boot 4.0 改为按技术拆分模块。主代码、自动配置和测试 API 可
 
 自动配置类迁移必须核对目标类存在及必要依赖，同时检查 `@Import`、exclude 字符串、`AutoConfiguration.imports`、条件注解和私有 starter。不要对整个 `org.springframework.boot.autoconfigure` 前缀一刀切。
 
-防止 starter **静默失效**：核对实际 jar 的注册入口、条件评估结果、预期 bean 及核心调用，不能用“无异常”证明已生效。`spring.factories` 的 `EnableAutoConfiguration` 注册支持在 Boot 3.0 已移除，其他键不因此失效；不要删除整个文件或把它当作 Boot 4 新变化。[Boot 3.0 官方说明](https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-3.0-Migration-Guide#auto-configuration-files)。是否换用厂商的 Boot 4 starter 取决于具体版本证据；合法条件不满足或用户 bean 导致自动配置退让并非一律错误。
+防止 starter **静默失效**：核对实际 jar 的注册入口、条件评估结果、预期 bean 及核心调用，不能用“无异常”证明已生效。`spring.factories` 的 `EnableAutoConfiguration` 注册支持在 Boot 3.0 已移除，其他键不因此失效；不要删除整个文件或把它当作 Boot 4 新变化。但 Boot 4.0 把 `EnvironmentPostProcessor` 移到了 `org.springframework.boot`，旧 `org.springframework.boot.env.EnvironmentPostProcessor` 在 4.0、4.1 只以废弃形式保留，4.2.0 已不存在；目标为 4.2 及以上时逐个核对三方 jar 里该键及其实现类。[Boot 3.0 官方说明](https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-3.0-Migration-Guide#auto-configuration-files)。是否换用厂商的 Boot 4 starter 取决于具体版本证据；合法条件不满足或用户 bean 导致自动配置退让并非一律错误。
 
 目标中已迁移/删除的 Boot 3 API（如旧 `org.springframework.boot.web.embedded.tomcat` 下的类）仍能编译时，先反查提供该类的实际 jar 和 classpath，而不是据此认定迁移正确；是否移包以该具体类的目标版本为准，不把所有旧前缀一律判错。
 
@@ -96,6 +96,6 @@ Cloud 的 Config/Gateway/OpenFeign/服务发现与自有 RPC 按各组件的官�
 
 原项目已使用或用户指定时，验证目标 GraalVM/native build tools、反射/资源 hints、代理、容器基础镜像和 native 制品启动；JVM 测试成功不代表 native 成功。普通 JVM 升级不新增 native 任务。
 
-目标高于 4.0 时逐 minor 查 release notes，重新核实支持矩阵、兼容桥、配置变化和目标 BOM。4.0 迁移完成不能替代 4.1 或后续版本的验证。
+目标高于 4.0 时逐 minor 查 release notes，重新核实支持矩阵、兼容桥、配置变化和目标 BOM。4.0 迁移完成不能替代 4.1 或后续版本的验证。4.1、4.2 的 release notes 都声明删除了此前废弃的类、方法和属性；4.2 起 `RestTemplate`/`TestRestTemplate` 支持被废弃（核验于 2026-11-23）。
 
 模块、配置及桥接基准：[Boot 4.0 官方迁移指南](https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-4.0-Migration-Guide)。其他官方入口见 [sources.md](sources.md)，按命中项读取目标版本文档。

@@ -1,6 +1,6 @@
 ---
 name: spring-boot-4-upgrade
-description: Use when assessing or migrating an existing Spring Boot 3.x repository to a Spring Boot 4.x GA, or when asked for Spring Boot 4 升级、迁移、批量存量仓库改造或该迁移的评估. Not for new applications, Boot 2.x, pure Spring Framework projects, or unrelated Java dependency updates.
+description: Use when assessing or migrating an existing Spring Boot 3.x repository to a Spring Boot 4.x GA, or moving an existing 4.x repository to a later 4.x minor/patch, or when asked for Spring Boot 4 升级、迁移、批量存量仓库改造或该迁移的评估. Not for new applications, Boot 2.x, pure Spring Framework projects, or unrelated Java dependency updates.
 ---
 
 # Spring Boot 4 存量仓库升级
@@ -9,7 +9,7 @@ description: Use when assessing or migrating an existing Spring Boot 3.x reposit
 
 ## 入口与边界
 
-- 只要可行性或方案：做 `assess`，写证据与方案。不改业务源码、构建声明或部署配置；不为加载 recipe 写 POM/Gradle；不执行 rewrite run、wrapper/lockfile 更新。构建探测先检查副作用，记录业务/构建/部署文件前后差异。
+- 只要可行性或方案：做 `assess`，写证据与方案。不改业务源码、构建声明或部署配置；不为加载 recipe 写 POM/Gradle；不执行 rewrite run、wrapper/lockfile 更新。`discover`/`dryRun` 只在不改仓库文件时可执行，见 openrewrite。构建探测先检查副作用，记录业务/构建/部署文件前后差异。
 - UI 默认提示只是入口示例，不扩大授权。
 - 要求完成升级：做 `migrate`，先展示具体方案，再在已有授权内编辑与验证，不逐阶段重复索要同意。用户明确要求“方案确认后再改”时才等待。
 - 多仓：同一流程逐仓，另读 [批量推进](references/batch.md)。只处理用户指定的仓库。
@@ -27,14 +27,13 @@ description: Use when assessing or migrating an existing Spring Boot 3.x reposit
 | 命中的技术项 | [compatibility.md](references/compatibility.md)、[binary-compatibility.md](references/binary-compatibility.md) |
 | 多仓 | [batch.md](references/batch.md) |
 | 每仓记录 | [migration-report.md](assets/migration-report.md) |
-| 夹具实跑 / 维护回归 | [evidence-contract.md](references/evidence-contract.md) 维护回归、[scenarios.md](tests/scenarios.md) |
 
 ## 默认路线
 
 ```text
-现有 3.0–3.4 → 执行时核实的最新 3.5.x → 执行时核实的 4.0.x
-现有 3.5.x  → 最新 3.5.x 准备阶段       → 4.0.x
-用户目标为更高 4.x minor               → 再按各 minor 官方说明继续
+现有 3.0–3.4 → 可解析的最新 3.5.x → 执行时核实的 4.0.x
+现有 3.5.x  → 可解析的最新 3.5.x 准备阶段 → 4.0.x
+最终 minor：用户指定则按各 minor 官方说明继续；未指定则在方案中按支持周期给出建议并请用户确认
 ```
 
 同 minor 补丁、未指定 minor 时的 4.0 落点、精确 GA 锁定见 assessment。3.5 与 4.0 是独立验证点。

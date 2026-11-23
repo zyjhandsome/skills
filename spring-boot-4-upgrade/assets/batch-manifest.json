@@ -23,7 +23,7 @@
     "declared_boot": null,
     "resolved_boot": null,
     "version_owner": null,
-    "bridge_boot": null,
+    "intermediate_boot": null,
     "target_boot": null,
     "target_exception_reason": null,
     "depends_on": [],

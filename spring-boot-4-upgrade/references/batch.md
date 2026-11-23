@@ -19,7 +19,7 @@
 
 ## 状态与断点续跑
 
-逐仓保存 current_stage、status、checkpoints、blocked_by、report 和下一步。状态沿用 SKILL.md 的 assessed / blocked / implemented-unverified / verified-with-bridges / verified；另用 pending、in-progress 表示尚未开始/正在处理。
+逐仓保存 current_stage、status、checkpoints、blocked_by、report 和下一步。`intermediate_boot` 记 3.5 中间版本，它不是兼容桥；桥只登记在 `compatibility_bridges`。状态沿用 SKILL.md 的 assessed / blocked / implemented-unverified / verified-with-bridges / verified；另用 pending、in-progress 表示尚未开始/正在处理。
 
 单仓阻塞只阻塞其依赖的消费者；其他独立仓库继续。涉及公共 BOM 的失败影响范围要回填到批次清单。恢复时复核路径、HEAD、工作区变化、版本 owner 和证据时效，再决定从哪个阶段续跑，避免在旧状态基础上重复转换。
 

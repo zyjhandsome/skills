@@ -7,13 +7,13 @@
 | 目的 | 首选来源 |
 |---|---|
 | 3.5 准备与 4.0 重大迁移 | [Boot 4.0 Migration Guide](https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-4.0-Migration-Guide) |
-| 跨过的 3.x / 4.x release notes | [Boot Wiki](https://github.com/spring-projects/spring-boot/wiki)、[4.1 Release Notes](https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-4.1-Release-Notes) |
+| 跨过的 3.x / 4.x release notes | [Boot Wiki](https://github.com/spring-projects/spring-boot/wiki)、[4.1 Release Notes](https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-4.1-Release-Notes)、[4.2 Release Notes](https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-4.2-Release-Notes) |
 | GA 与补丁变更 | [Boot Releases](https://github.com/spring-projects/spring-boot/releases)；用户示例 [v4.0.8](https://github.com/spring-projects/spring-boot/releases/tag/v4.0.8) 已验证为正式发布，仅作示例不永久固定 |
 | 支持周期 | [Boot 项目支持信息](https://spring.io/projects/spring-boot#support)、[Supported Versions](https://github.com/spring-projects/spring-boot/wiki/Supported-Versions) |
 | 目标工具链与运行环境 | [Boot 4.0 系统要求](https://docs.spring.io/spring-boot/4.0/system-requirements.html)、[4.0 安装要求](https://docs.spring.io/spring-boot/4.0/installing.html)；其他 minor 改用对应页面 |
 | BOM 管理版本 | [3.5 dependency versions](https://docs.spring.io/spring-boot/3.5/appendix/dependency-versions/coordinates.html)、[4.0 dependency versions](https://docs.spring.io/spring-boot/4.0/appendix/dependency-versions/coordinates.html)，并以精确 artifact 的 POM 和实际解析树复核 |
 | 依赖安全 | [Spring Security Advisories](https://spring.io/security) 及各组件维护方公告；[扫描工具资料与比较规则](dependency-security.md)，记录数据库/规则日期，不能把扫描总数或 BOM 版本当安全保证 |
-| Cloud 兼容矩阵 | [Spring Cloud 项目页](https://spring.io/projects/spring-cloud/)、[Supported Versions](https://github.com/spring-cloud/spring-cloud-release/wiki/Supported-Versions) |
+| Cloud 兼容矩阵 | 首选 [Spring Cloud 项目页](https://spring.io/projects/spring-cloud/)；[Supported Versions](https://github.com/spring-cloud/spring-cloud-release/wiki/Supported-Versions) 的 Supported Releases 一节官方已标记废弃，只作交叉参考 |
 
 ## 命中相关技术时读取
 

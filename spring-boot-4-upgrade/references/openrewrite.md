@@ -15,6 +15,8 @@ OpenRewrite 负责可解析范围内的结构化转换，不保证私有框架�
 | 3.x → 3.5 | `org.openrewrite.java.spring.boot3.UpgradeSpringBoot_3_5` |
 | 3.5 → 4.0 | `org.openrewrite.java.spring.boot4.UpgradeSpringBoot_4_0` |
 
+截至 2026-11-23，Central 最新的 `rewrite-spring:6.37.1` 只含上表两个升级配方；更高 minor 按 release notes 手工迁移或另核其他 Edition。
+
 Community/Moderne Edition 的坐标、能力、许可与分发方式可能不同。**按精确 artifact 检查可用来源**：先沿用企业允许的已配置镜像/仓库，再核实 Maven Central 是否提供选定坐标；只有所需版本/Edition 确实需要 Code Genome 等来源时，才检查已有授权和凭证。2026-09-09 已确认 Central 的 `rewrite-spring:6.37.1` 和 Maven 插件 `6.46.1` POM 返回 HTTP 200；这是可用性实例，不保证整套传递依赖在每个企业环境可解析，也不固定为未来默认版本。
 
 不要求每次同时尝试两个远端，不绕过企业镜像限制，不因看到认证文档就放弃 Central 已有版本。无法解析时先分类 404/401/代理或网络问题；可用版本还必须通过 discover 确认覆盖。所有合适来源均不可用时只把 OpenRewrite 路径标为 unavailable，继续可行的手工路线，不把 OR 下载失败等同整个升级失败。不得直接写入新仓库/明文凭证或自动采用付费服务。
@@ -27,7 +29,7 @@ Community/Moderne Edition 的坐标、能力、许可与分发方式可能不同
 
 ### 阶段 A：先到 3.5
 
-这些是分段执行模板，assess 模式只展示不应用。先在当前快照完成基线。将占位精确版本和环境参数填实；使用 `.cmd` 的命令块适用于 PowerShell。
+这些是分段执行模板。assess 模式不执行 `run`；`discover`/`dryRun` 只在不改仓库文件时可执行（Maven 用下方命令行坐标，Gradle 用仓外 init script），先检查构建副作用，补丁只作评估证据。先在当前快照完成基线。将占位精确版本和环境参数填实；使用 `.cmd` 的命令块适用于 PowerShell。
 
 ```powershell
 $rewritePluginVersion = '<已核实的 Maven 插件精确版本>'
@@ -38,9 +40,13 @@ $recipeArtifact = "org.openrewrite.recipe:rewrite-spring:${rewriteSpringVersion}
 $rewriteArgs = @("-Drewrite.recipeArtifactCoordinates=$recipeArtifact", "-Drewrite.activeRecipes=$activeRecipe", '-Drewrite.exportDatatables=true')
 & ./mvnw.cmd "${rewritePlugin}:discover" @rewriteArgs
 if ($LASTEXITCODE -ne 0) { throw 'Recipe discovery failed' }
+& ./mvnw.cmd "${rewritePlugin}:discover" "-Drewrite.recipeArtifactCoordinates=$recipeArtifact" "-Drecipe=$activeRecipe" '-Ddetail=true' '-Drecursion=2'
+if ($LASTEXITCODE -ne 0) { throw 'Recipe detail lookup failed' }
 & ./mvnw.cmd "${rewritePlugin}:dryRun" @rewriteArgs
 if ($LASTEXITCODE -ne 0) { throw 'Inspect dry-run results before continuing' }
 ```
+
+第二条 `discover` 用 `-Drecipe` 展开该配方的子配方；`-Drecursion` 的层数按需要调整，参数名以所选插件版本的文档为准。
 
 每个命令后检查 `$LASTEXITCODE`，失败先处理，不直接接着 run。沿用仓库必要的 `-P`、settings 和模块范围。多模块从正确 reactor 根执行；先检查测试夹具、生成源、聚合模块和 Kotlin 的解析覆盖。
 
@@ -57,9 +63,10 @@ if ($LASTEXITCODE -ne 0) { throw '3.5 migration failed' }
 
 ### 阶段 B：已有合格 3.5 检查点才应用 4.0
 
-沿用阶段 A 已核实的插件变量、实际 reactor/profile 参数。先按 [证据契约](evidence-contract.md) 填写阶段记录并检查当前代码快照；没有 Python 时按同一条件人工检查并留证，不把复制下列命令当作获得授权。
+沿用阶段 A 已核实的插件变量、实际 reactor/profile 参数。先按 [证据契约](evidence-contract.md) 填写阶段记录并检查当前代码快照；没有 Python 时按同一条件人工检查并留证，不把复制下列命令当作获得授权。走 [受控跳过](verification.md#进入-40-的实施条件) 路径时不运行 `--gate boot4`，改为核对该处的四个条件。
 
 ```powershell
+if (-not $rewritePlugin -or -not $recipeArtifact) { throw 'Re-declare the phase A plugin variables in this session' }
 $contractFile = '<已填写的证据契约 JSON 绝对路径>'
 $snapshotId = '<当前已核实的代码快照标识>'
 $contractChecker = '<Skill绝对路径>/scripts/check_contract.py'
@@ -69,6 +76,8 @@ $activeRecipe = 'org.openrewrite.java.spring.boot4.UpgradeSpringBoot_4_0'
 $rewriteArgs = @("-Drewrite.recipeArtifactCoordinates=$recipeArtifact", "-Drewrite.activeRecipes=$activeRecipe", '-Drewrite.exportDatatables=true')
 & ./mvnw.cmd "${rewritePlugin}:discover" @rewriteArgs
 if ($LASTEXITCODE -ne 0) { throw 'Recipe discovery failed' }
+& ./mvnw.cmd "${rewritePlugin}:discover" "-Drewrite.recipeArtifactCoordinates=$recipeArtifact" "-Drecipe=$activeRecipe" '-Ddetail=true' '-Drecursion=2'
+if ($LASTEXITCODE -ne 0) { throw 'Recipe detail lookup failed' }
 & ./mvnw.cmd "${rewritePlugin}:dryRun" @rewriteArgs
 if ($LASTEXITCODE -ne 0) { throw 'Inspect dry-run results before continuing' }
 ```
@@ -106,9 +115,15 @@ Groovy DSL 最小结构示意（尖括号须替换；与现有 plugins/repositor
 plugins {
     id 'org.openrewrite.rewrite' version '<核实后的 Gradle 插件版本>'
 }
+def migrationRecipe = providers.gradleProperty('migrationRecipe')
 rewrite {
-    activeRecipe(providers.gradleProperty('migrationRecipe').get())
+    if (migrationRecipe.present) { activeRecipe(migrationRecipe.get()) }
     setExportDatatables(true)
+}
+tasks.matching { it.name in ['rewriteRun', 'rewriteDryRun'] }.configureEach {
+    doFirst {
+        if (!migrationRecipe.present) { throw new GradleException('Pass -PmigrationRecipe=<recipe id>') }
+    }
 }
 dependencies {
     rewrite 'org.openrewrite.recipe:rewrite-spring:<核实后的 recipe 版本>'
@@ -121,14 +136,22 @@ Kotlin DSL 对应结构：
 plugins {
     id("org.openrewrite.rewrite") version "<核实后的 Gradle 插件版本>"
 }
+val migrationRecipe = providers.gradleProperty("migrationRecipe")
 rewrite {
-    activeRecipe(providers.gradleProperty("migrationRecipe").get())
+    migrationRecipe.orNull?.let { activeRecipe(it) }
     setExportDatatables(true)
+}
+tasks.matching { it.name == "rewriteRun" || it.name == "rewriteDryRun" }.configureEach {
+    doFirst {
+        if (!migrationRecipe.isPresent) throw GradleException("Pass -PmigrationRecipe=<recipe id>")
+    }
 }
 dependencies {
     rewrite("org.openrewrite.recipe:rewrite-spring:<核实后的 recipe 版本>")
 }
 ```
+
+不带 `-PmigrationRecipe` 时其他任务（`tasks --all`、`build`）照常可用，`rewriteRun`/`rewriteDryRun` 直接失败，不会以零配方空跑。
 
 依赖仓库沿用已核实配置。Gradle wrapper 在 Windows 用 `./gradlew.bat`，POSIX 用 `./gradlew`。先运行 `tasks --all` 和 `rewriteDiscover` 确认插件已应用到正确项目；再运行 `rewriteDryRun`。查看日志给出的补丁，常见为 `build/reports/rewrite/rewrite.patch`，确认后运行 `rewriteRun`。多项目任务用实际 project path；不要把 Maven 的参数或未经验证的 `-Prewrite.activeRecipe` 直接套到 Gradle。此示例通过 DSL 显式指定 recipe。
 

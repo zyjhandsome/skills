@@ -7,13 +7,13 @@
 ## 数据约定
 
 - 顶层：`mode`、精确 `source_boot`/`target_boot`，`scope.included` 写模块、profile、JDK/runtime、数据库/功能范围；`excluded` 为 `{item, reason}` 数组。必需检查为 resolution/build/tests/runtime/contracts/dependency_security，可追加鉴权 security、postgres 等实际范围内的项，不能删除基本项。库模块 runtime 使用 consumer 证据。沿用 v2 结构，但旧记录缺少新增的 dependency_security 时须补真实证据，不能直接复用原通过结论。
-- `baseline35` 与 `final`：各包含 `resolved_boot`、`snapshot`、`checks`。快照应覆盖 HEAD **和未提交/未跟踪源码、生成配置、外部测试配置版本**；由执行者/CI 核实并通过 `--snapshot` 提供，不能仅用固定字符串“current”。临时输出目录不属于源码快照。
+- `baseline35` 与 `final`：各包含 `resolved_boot`、`snapshot`、`checks`。快照应覆盖 HEAD **和未提交/未跟踪源码、生成配置、外部测试配置版本**；由执行者/CI 核实并通过 `--snapshot` 提供，不能仅用固定字符串“current”，校验器会拒绝它。临时输出目录不属于源码快照。
 - `checks` 用检查名索引；每项包含 `status: passed`、`exit_code: 0`、`snapshot`、真实 `command`、`cwd`、`environment`，以及 `artifacts: [{path, sha256}]`。路径相对契约文件或绝对路径，SHA256 对原始字节计算。checks 是已执行记录，不是 shell 调度配置。
 - runtime 记录完整验收命令/测试驱动的结果，应用正常受控停止与启动失败分别说明。部分初始化或到达可归因失败点不能填 passed；程序检查状态/退出码一致性，不读取日志判定 readiness。命令中的凭证使用占位符；原始证据先脱敏再计算其归档文件哈希，交付前核查持久路径，不能用一致性通过承诺未来文件不丢失。
 - dependency_security 记录 [阶段安全门](dependency-security.md) 的整体检查结果，不是仅抄扫描退出码：3.5 为基线覆盖、风险及继续迁移处置，final 为源/目标差异、最终制品覆盖及准入判定。artifacts 包含原始扫描报告、组件清单、工具/数据库/规则与制品哈希、差异及处置依据；各子命令/退出码记录其中，整体 command 写实际检查入口（人工审查则如实标明，不能伪造扫描命令）。扫描失败/不可用、覆盖缺失或策略未通过均不得 passed，即使扫描进程退出 0。程序仅校验记录/文件一致性，不解析 CVE、验证例外授权或自动判断报告中的策略是否通过。
-- tests 另含非负整数 `executed`（实际执行数量，不含 skipped）、`failures`、`errors`、`skipped`；有跳过写 `skip_coverage_reason`。真实测试报告应作为 artifact，不要仅提供自己写的总结。
+- tests 另含非负整数 `executed`（实际执行数量，不含 skipped）、`failures`、`errors`、`skipped`；有跳过写 `skip_coverage_reason`。真实测试报告应作为 artifact，不要仅提供自己写的总结。零测试项目把本次补的契约/绑定测试计入 `executed`；确实补不了就不取程序通过，按 verification 人工判定并如实记录。
 - dependency_security 的 artifacts 还须归档该阶段新增/变更组件的发布状态清单及来源、High/Critical 逐项评审表；整体 passed 同时要求发布状态验收及阶段安全规则满足。沿用现有检查项和 JSON 结构；程序不查询第三方 GA、不校验这些表的逐行内容或扫描覆盖，不能把 consistent=true 当作“所有依赖均 GA 且无漏洞”。
-- final 另含布尔值 `properties_migrator_present`、`temporary_rewrite_present`（必须 false），`bridges` 数组。空桥允许 verified；保留桥的记录需 component/reason/exit_condition，用 verified-with-bridges。合法的第三方 Jackson 2 依赖不自动计为 Boot 兼容桥。
+- final 另含布尔值 `properties_migrator_present`、`temporary_rewrite_present`（必须 false），`bridges` 数组。空桥允许 verified；保留桥的记录需 component/reason/exit_condition，用 verified-with-bridges。合法的第三方 Jackson 2 依赖不自动计为 Boot 兼容桥。校验器会用依赖树交叉核对这些手填项：final 树里仍有 `spring-boot-properties-migrator` 时两种最终门都拒绝；出现 `spring-boot-jackson2` 或名字含 `-classic` 的 Boot 模块时 `verified` 门拒绝，须登记为桥并使用 verified-with-bridges。
 - `scope.resolution_units` 列出必须验证的应用/consumer 模块、profile/classpath 单元 ID，例如 `app@local:all`；不能用聚合 POM 替代应用。`baseline35` 和 `final` 的 `resolution.units` 须逐单元提供 `id`、`module`、`format`、`tree: {path, sha256}`、`core_artifacts`。后者以完整 GA 为键，记录 spring-boot 和 spring-boot-autoconfigure 版本；校验器从 tree 独立读取并交叉核对，不能只填两个字符串。所有 Boot 模块必须对齐该阶段精确版本。
 
 Maven 使用 `format=maven-json`，module 是 tree 根的 `groupId:artifactId`。从实际应用根、CI 对应 profiles 导出完整非 verbose JSON，不加 includes/excludes/scope 过滤，不复用上次输出；同时保存命令及退出码到 resolution 检查项。使用核实可用的 Maven Dependency Plugin 3.7+ 精确版本，例如：
@@ -24,7 +24,7 @@ Maven 使用 `format=maven-json`，module 是 tree 根的 `groupId:artifactId`�
 
 `3.8.1` 是示例版本，执行前检查可解析性；多模块每应用单独路径，防止同一文件被覆盖。校验器检查 selected nodes，不接受带 omitted 标记的 verbose 输出。人工审查仍需确认 profile、未过滤范围和打包后的实际 classpath。[官方 JSON 格式](https://maven.apache.org/plugins/maven-dependency-plugin/examples/tree-mojo.html)
 
-Gradle 支持 `format=gradle-text`，另写 `configuration` 为 compileClasspath/runtimeClasspath/testRuntimeClasspath；每个实际应用的这三个配置分别登记 resolution unit，使用 `:<实际模块>:dependencies --configuration <配置> --console=plain` 原始输出。校验器读取 `->` 后的选中版本，不把 `(c)` 约束当依赖，拒绝 FAILED/(n)。其他自定义配置、复合构建和无法识别的输出须按相同条件人工审查，不把未支持格式或仅手填的 core 摘要判成程序通过。特殊应用没有 autoconfigure 时走有依据的人工验证；程序不提供“跳过 core”开关。
+Gradle 支持 `format=gradle-text`，另写 `configuration` 为 compileClasspath/runtimeClasspath/testRuntimeClasspath；每个实际应用的这三个配置分别登记 resolution unit，使用 `:<实际模块>:dependencies --configuration <配置> --console=plain` 原始输出。校验器读取 `->` 后的选中版本，支持 `{strictly …}` 写法，不把 `(c)` 约束当依赖，拒绝 FAILED/(n)。其他自定义配置、复合构建和无法识别的输出须按相同条件人工审查，不把未支持格式或仅手填的 core 摘要判成程序通过。特殊应用没有 autoconfigure 时走有依据的人工验证；程序不提供“跳过 core”开关。
 
 ## 调用
 
@@ -36,7 +36,7 @@ python <skill>/scripts/check_contract.py <report.json> --gate verified --snapsho
 python <skill>/scripts/check_contract.py <report.json> --gate verified-with-bridges --snapshot <最终核实快照>
 ```
 
-退出码 0 表示结构一致，1 表示缺记录/失败/快照或文件哈希不匹配。boot4 检查当前 3.5 检查点，拒绝 assess、2.x 和 4.x 补丁误用。最终检查只检查最终快照，历史 3.5 检查点保留不同快照是正常的；阶段顺序仍需工作日志核实，程序不从最终报告倒推“历史肯定执行过”。
+退出码 0 表示结构一致，1 表示缺记录/失败/快照或文件哈希不匹配。boot4 检查当前 3.5 检查点，拒绝 assess、2.x 和 4.x 补丁误用；按 verification 受控跳过 3.5 时不运行 boot4 门。最终检查只检查最终快照，历史 3.5 检查点保留不同快照是正常的；阶段顺序仍需工作日志核实，程序不从最终报告倒推“历史肯定执行过”。
 
 本契约不依靠“禁止命令字符串”防护：`test -DskipTests`、Gradle `-x test` 或绕过 shell 的工具均可能骗过黑名单。要求实际执行数、必需检查和证据文件；人工审查仍要禁止用跳测试、关闭鉴权、空补丁、单一 health 来满足验收。
 
@@ -45,7 +45,7 @@ python <skill>/scripts/check_contract.py <report.json> --gate verified-with-brid
 离线运行：
 
 ```text
-python -m unittest discover -s <skill>/tests -p test_*.py -v
+python -B -m unittest discover -s <skill>/tests -p test_*.py -v
 ```
 
 回归使用临时合成证据验证拒绝/通过分支，不代表真实 Java 迁移。`tests/test_fixtures.py` 只锁定夹具教学不变量（起点版本、鉴权正负例、OSIV/懒加载、Gradle owner 位置），不编译 Java。复制整个夹具目录到独立工作树后再实跑；不要在 Skill 原目录升级夹具。已有 Maven/Gradle 或单独生成的 wrapper 可用 `mvn verify` / `gradle :service:test`；仓库实际无 wrapper 时不能假定存在。完整人工前向情景见 [scenarios.md](../tests/scenarios.md)。

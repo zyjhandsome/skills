@@ -9,6 +9,12 @@ import re
 BASE_CHECKS = {"resolution", "build", "tests", "runtime", "contracts", "dependency_security"}
 BOOT_GROUP = "org.springframework.boot"
 CORE = {f"{BOOT_GROUP}:spring-boot", f"{BOOT_GROUP}:spring-boot-autoconfigure"}
+MIGRATOR = "spring-boot-properties-migrator"
+
+
+def is_bridge_module(artifact):
+    """Boot-provided compatibility modules; third-party Jackson 2 jars are not matched."""
+    return artifact == "spring-boot-jackson2" or "-classic" in artifact
 
 
 def read_evidence(base, artifact):
@@ -53,7 +59,7 @@ def resolved_boot_nodes(text, unit):
         for line in text.splitlines():
             if "(c)" in line:
                 continue  # Constraints are not selected artifacts.
-            match = re.search(r"(?:\+---|\\---)\s+(org\.springframework\.boot):(spring-boot[\w-]*)(?::([^\s]+))?(?:\s+->\s+(\S+))?", line)
+            match = re.search(r"(?:\+---|\\---)\s+(org\.springframework\.boot):(spring-boot[\w-]*)(?::(\{[^}]*\}|[^\s]+))?(?:\s+->\s+(\S+))?", line)
             if match:
                 group, artifact, requested, selected = match.groups()
                 if not selected and not requested:
@@ -68,7 +74,7 @@ def resolved_boot_nodes(text, unit):
     return found
 
 
-def check_resolution(stage, scope, base):
+def check_resolution(stage, scope, base, gate):
     errors = []
     required = scope.get("resolution_units")
     resolution = stage.get("resolution")
@@ -92,12 +98,18 @@ def check_resolution(stage, scope, base):
         except (OSError, ValueError, TypeError, RecursionError) as exc:
             errors.append(f"{key}: cannot verify dependency tree: {exc}")
             continue
-        actual = {}
+        actual, residue = {}, set()
         for coordinate, selected, core_candidate in nodes:
             if coordinate.startswith(BOOT_GROUP + ":spring-boot") and selected != expected:
                 errors.append(f"{key}: selected {coordinate}:{selected}, expected {expected}; not a bridge")
             if coordinate in CORE and core_candidate:
                 actual.setdefault(coordinate, set()).add(selected)
+            artifact = coordinate.split(":", 1)[1]
+            if gate != "boot4" and artifact == MIGRATOR:
+                residue.add(f"{key}: {coordinate} is still resolved; remove it and re-verify")
+            elif gate == "verified" and is_bridge_module(artifact):
+                residue.add(f"{key}: bridge module {coordinate} is resolved; register it and use verified-with-bridges")
+        errors.extend(sorted(residue))
         recorded = unit.get("core_artifacts")
         for coordinate in sorted(CORE):
             if actual.get(coordinate) != {expected}:
@@ -131,7 +143,7 @@ def check_contract(data, base, gate, snapshot):
         errors.append("target must be an exact Boot 4.x GA version")
     if source and target and source > target:
         errors.append("downgrade is outside this upgrade contract")
-    if not snapshot or snapshot.strip().lower() in {"unknown", "pending"}:
+    if not snapshot or snapshot.strip().lower() in {"unknown", "pending", "current"}:
         errors.append("supply a current, independently checked code snapshot identifier")
     scope = data.get("scope")
     if not isinstance(scope, dict):
@@ -182,7 +194,7 @@ def check_contract(data, base, gate, snapshot):
                     errors.append("each bridge needs component/reason/exit_condition")
     if stage.get("snapshot") != snapshot:
         errors.append("checkpoint does not match supplied current snapshot")
-    errors.extend(check_resolution(stage, scope, base))
+    errors.extend(check_resolution(stage, scope, base, gate))
     checks = stage.get("checks")
     if not isinstance(checks, dict):
         return errors + ["stage.checks must be an object"]

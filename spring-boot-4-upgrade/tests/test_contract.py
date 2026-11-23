@@ -105,6 +105,50 @@ class EvidenceContractTests(unittest.TestCase):
         self.assertEqual(MODULE.resolved_boot_nodes(text, {"format": "gradle-text", "configuration": "runtimeClasspath"}),
                          [("org.springframework.boot:spring-boot", "4.0.8", True)])
 
+    def test_gradle_rich_version_constraint(self):
+        unit = {"format": "gradle-text", "configuration": "runtimeClasspath"}
+        for requested in ("{strictly 4.0.8}", "{strictly [4.0, 4.1[; prefer 4.0.8}"):
+            with self.subTest(requested=requested):
+                text = "runtimeClasspath - Runtime\n+--- org.springframework.boot:spring-boot:" + requested + " -> 4.0.8\n"
+                self.assertEqual(MODULE.resolved_boot_nodes(text, unit),
+                                 [("org.springframework.boot:spring-boot", "4.0.8", True)])
+        unresolved = "runtimeClasspath - Runtime\n+--- org.springframework.boot:spring-boot:{strictly 3.5.14}\n"
+        self.assertNotEqual(MODULE.resolved_boot_nodes(unresolved, unit)[0][1], "4.0.8")
+
+    def add_final_boot_module(self, artifact):
+        self.mutate_final_tree(lambda t: t["children"].append({"groupId": "org.springframework.boot",
+            "artifactId": artifact, "version": "4.0.8", "scope": "runtime", "type": "jar"}))
+
+    def test_migrator_in_tree_contradicts_clean_flag_at_both_final_gates(self):
+        self.add_final_boot_module("spring-boot-properties-migrator")
+        self.assertTrue(any("properties-migrator" in e for e in self.check("verified")))
+        self.data["final"]["bridges"] = [{"component": "jackson2", "reason": "sdk", "exit_condition": "sdk migrated"}]
+        self.assertTrue(any("properties-migrator" in e for e in self.check("verified-with-bridges")))
+
+    def test_bridge_module_in_tree_requires_with_bridges(self):
+        for artifact in ("spring-boot-jackson2", "spring-boot-starter-classic", "spring-boot-starter-test-classic",
+                         "spring-boot-autoconfigure-classic"):
+            with self.subTest(artifact=artifact):
+                self.setUp()
+                self.add_final_boot_module(artifact)
+                self.assertTrue(any("bridge module" in e for e in self.check("verified")))
+                self.data["final"]["bridges"] = [{"component": artifact, "reason": "blocked SDK", "exit_condition": "SDK migrated"}]
+                self.assertEqual(self.check("verified-with-bridges"), [])
+
+    def test_third_party_jackson2_is_not_a_boot_bridge(self):
+        self.mutate_final_tree(lambda t: t["children"].append({"groupId": "com.fasterxml.jackson.core",
+            "artifactId": "jackson-databind", "version": "2.20.0", "scope": "runtime", "type": "jar"}))
+        self.assertEqual(self.check("verified"), [])
+
+    def test_placeholder_snapshot_literal_rejected(self):
+        final = self.data["final"]
+        final["snapshot"] = "current"
+        for item in final["checks"].values():
+            item["snapshot"] = "current"
+        errors = self.check("verified", snapshot="current")
+        self.assertEqual(len(errors), 1, errors)
+        self.assertIn("independently checked", errors[0])
+
     def test_v1_no_longer_passes(self):
         self.data["schema_version"] = 1
         self.assertTrue(self.check("verified"))
