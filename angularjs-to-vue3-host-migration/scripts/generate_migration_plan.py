@@ -830,12 +830,13 @@ def signal_value(root: Path, signal: str) -> str:
 EXTRA_ALIASES: dict[str, str] = {}
 TOKEN_IGNORE = {"src", "main", "webapp", "views", "pages", "page", "components", "component", "index", "html", "htm", "vue", "js", "ts"}
 GENERIC_ALIASES = {"management": "manage", "managed": "manage", "manager": "manage"}
-STEM_SUFFIXES = {"ment", "ing", "er", "ed", "s"}
 
 
 def fold_plural(token: str) -> str:
-    if len(token) > 3 and token.endswith("s") and not token.endswith("ss"):
-        return token[:-1]
+    """Fold a regular plural. The stem must stay at least 4 characters, so "news" is not "new"."""
+    stem = token[:-1]
+    if len(stem) >= 4 and token.endswith("s") and not token.endswith("ss"):
+        return stem
     return token
 
 
@@ -901,13 +902,6 @@ def entry_name_compact(path: str) -> str:
     candidate = Path(path)
     name = candidate.parent.name if candidate.stem.lower() in {"index", "main"} and candidate.parent.name else candidate.stem
     return re.sub(r"[^a-z0-9]", "", name.lower())
-
-
-def stem_suffix_match(left: str, right: str) -> bool:
-    if not left or not right or left == right:
-        return False
-    short, long = (left, right) if len(left) <= len(right) else (right, left)
-    return long.startswith(short) and long[len(short):] in STEM_SUFFIXES
 
 
 def page_kind(root: Path, rel: Path, source: bool) -> str:
@@ -993,9 +987,6 @@ def score_page_match(source: dict[str, str], host: dict[str, str]) -> tuple[int,
     if "normalized-key" not in basis and source_compact and source_compact == host_compact:
         score += 60
         basis.append("compact-key")
-    elif "normalized-key" not in basis and stem_suffix_match(source_compact, host_compact):
-        score += 60
-        basis.append("stem-suffix")
     overlap = source_tokens & host_tokens
     if overlap:
         score += min(30, len(overlap) * 10)
@@ -1096,6 +1087,54 @@ JAVA_RETURN_RE = re.compile(r'return\s+"([^"]+)"')
 JAVA_MODEL_AND_VIEW_RE = re.compile(r'new\s+ModelAndView\(\s*"([^"]+)"')
 
 
+def mask_java_comments_and_strings(text: str) -> str:
+    """Blank comments and string literals while keeping every index aligned with the original."""
+    chars = list(text)
+    index = 0
+    limit = len(chars)
+    while index < limit:
+        char = chars[index]
+        nxt = chars[index + 1] if index + 1 < limit else ""
+        if char == "/" and nxt == "/":
+            while index < limit and chars[index] != "\n":
+                chars[index] = " "
+                index += 1
+            continue
+        if char == "/" and nxt == "*":
+            chars[index] = " "
+            chars[index + 1] = " "
+            index += 2
+            while index + 1 < limit and not (chars[index] == "*" and chars[index + 1] == "/"):
+                if chars[index] != "\n":
+                    chars[index] = " "
+                index += 1
+            if index < limit:
+                chars[index] = " "
+            if index + 1 < limit:
+                chars[index + 1] = " "
+                index += 2
+            else:
+                index = limit
+            continue
+        if char == '"':
+            chars[index] = " "
+            index += 1
+            while index < limit and chars[index] != '"':
+                if chars[index] == "\\" and index + 1 < limit:
+                    if chars[index] != "\n":
+                        chars[index] = " "
+                    index += 1
+                if index < limit and chars[index] != "\n":
+                    chars[index] = " "
+                index += 1
+            if index < limit:
+                chars[index] = " "
+                index += 1
+            continue
+        index += 1
+    return "".join(chars)
+
+
 def mapping_paths(args: str) -> list[str]:
     """Return the path values of a Spring mapping annotation's argument list."""
     if not args:
@@ -1115,7 +1154,7 @@ def extract_java_routes(source: Path) -> list[dict[str, str]]:
         if path.suffix.lower() != ".java":
             continue
         text = read_text(path)
-        class_decl = JAVA_TYPE_DECL_RE.search(text)
+        class_decl = JAVA_TYPE_DECL_RE.search(mask_java_comments_and_strings(text))
         preamble = text[: class_decl.start()] if class_decl else ""
         class_route = ""
         for match in MAPPING_ANNOTATION_RE.finditer(preamble):
@@ -1667,7 +1706,7 @@ def best_host_entry_for_page(
         page_compact = entry_name_compact(page["path"])
         entry_name = entry.get("host_entry_ts") or entry.get("host_entry_html") or ""
         entry_compact = entry_name_compact(entry_name)
-        if page_compact and entry_compact and (page_compact == entry_compact or stem_suffix_match(page_compact, entry_compact)):
+        if page_compact and entry_compact and page_compact == entry_compact:
             score += 80
         if entry_text and any(piece and piece in entry_text.lower() for piece in page_path.split("/")):
             score += 25
@@ -1791,10 +1830,10 @@ def apply_unit_decisions(comparison: list[dict[str, str]], decisions: dict[str, 
             continue
         row = matches[0]
         status = decision.get("comparison_status", "")
-        if meaningful_decision(status):
-            row["status"] = status
         host_entry = decision.get("host_entry", "")
         evidence = decision.get("decision_evidence", "")
+        if meaningful_decision(status) and (status != "already-migrated" or meaningful_decision(evidence)):
+            row["status"] = status
         if meaningful_decision(host_entry) and meaningful_decision(evidence):
             row["host_entry"] = host_entry
             row["host_entry_evidence"] = "human-confirmed entry"

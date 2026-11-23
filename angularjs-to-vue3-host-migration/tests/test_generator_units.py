@@ -189,6 +189,19 @@ public class PageController {
 }''')
         self.assertEqual({"/hiapm/workBench": "thymeleaf/workBench/index"}, routes)
 
+    def test_class_comment_does_not_drop_the_class_prefix(self):
+        routes = self.routes('''
+/**
+ * This class handles workbench pages.
+ */
+@Controller
+@RequestMapping("/hiapm")
+public class PageController {
+  @GetMapping("/workBench")
+  public String workBench() { return "thymeleaf/workBench/index"; }
+}''')
+        self.assertEqual({"/hiapm/workBench": "thymeleaf/workBench/index"}, routes)
+
     def test_redirect_is_not_a_template_and_model_and_view_is(self):
         routes = self.routes('''
 public class HomeController {
@@ -265,6 +278,22 @@ class EntryEvidenceTest(TempDirCase):
             },
         )
         self.assertEqual("repair", rows["app/phone-list.template.html"]["design_scope"])
+
+    def test_suffix_near_miss_is_not_a_repair(self):
+        pairs = [
+            ("views/order.jsp", "src/pages/ordering/ordering.html", "src/pages/ordering/ordering.ts"),
+            ("views/report.jsp", "src/pages/reporting/reporting.html", "src/pages/reporting/reporting.ts"),
+            ("views/news.jsp", "src/pages/new/new.html", "src/pages/new/new.ts"),
+        ]
+        for source_path, host_html, host_ts in pairs:
+            rows = self.gate(
+                {source_path: "<div ng-controller='X'></div>"},
+                {host_ts: "import './page.html'", host_html: "<div id='app'></div>"},
+            )
+            row = rows[source_path]
+            self.assertEqual("unmigrated", row["status"], source_path)
+            self.assertEqual("new-landing", row["design_scope"], source_path)
+            self.assertNotEqual("route/menu/MPA evidence", row["host_entry_evidence"], source_path)
 
 
 CLOSED = [{"DISP-ID": "DISP-taskmanage-a-1", "迁移单元": "taskManage", "B 现状": "verified"}]
@@ -451,6 +480,14 @@ class UnitDecisionTest(TempDirCase):
         gen.apply_unit_decisions(comparison, self.decisions("already-migrated"))
         self.assertEqual("pass", gen.verify_one_unit("taskManage", comparison, CLOSED)["status"])
 
+    def test_already_migrated_without_evidence_does_not_pass(self):
+        comparison = [dict(PARTIAL[0], status="unmigrated")]
+        gen.apply_unit_decisions(
+            comparison, self.decisions("already-migrated", evidence="[human evidence required]"))
+        self.assertEqual("unmigrated", comparison[0]["status"])
+        result = gen.verify_one_unit("taskManage", comparison, CLOSED)
+        self.assertEqual("fail", result["status"])
+
     def test_placeholder_values_are_ignored(self):
         comparison = [dict(PARTIAL[0])]
         gen.apply_unit_decisions(comparison, self.decisions("[unresolved]"))
@@ -491,6 +528,15 @@ class MatcherTest(unittest.TestCase):
         self.assertLess(self.score("views/taskManage.jsp", "src/pages/taskCenter/taskCenter.html"), 45)
         self.assertLess(self.score("views/userList.jsp", "src/pages/orderList/orderList.html"), 45)
         self.assertLess(self.score("views/taskManage.jsp", "src/views/TaskCenter.vue"), 45)
+
+    def test_suffix_and_short_plural_stay_below_threshold(self):
+        pairs = [
+            ("views/order.jsp", "src/pages/ordering/ordering.html"),
+            ("views/report.jsp", "src/pages/reporting/reporting.html"),
+            ("views/news.jsp", "src/pages/new/new.html"),
+        ]
+        for source_rel, host_rel in pairs:
+            self.assertLess(self.score(source_rel, host_rel), 45, f"{source_rel} -> {host_rel}")
 
     def test_source_has_no_project_vocabulary(self):
         text = (SKILL_ROOT / "scripts/generate_migration_plan.py").read_text(encoding="utf-8")
