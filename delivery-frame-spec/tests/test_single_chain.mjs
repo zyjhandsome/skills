@@ -27,6 +27,7 @@ import process from "node:process";
 
 import { buildHandoff, nowRfc3339 } from "../scripts/delivery_scaffold.mjs";
 import { hashChange } from "../scripts/hash_change_artifacts.mjs";
+import { emptyGateBlock } from "../scripts/gate_record.mjs";
 import { validate } from "../scripts/validate_handoff.mjs";
 
 const TESTS_DIR = dirname(fileURLToPath(import.meta.url));
@@ -66,7 +67,7 @@ function mustFail(name, handoff, needle) {
 
 /** @param {string} changeDir */
 function revisionOf(changeDir) {
-  return `sha256:${hashChange(changeDir).digest}`;
+  return hashChange(changeDir).revision;
 }
 
 /** @param {Record<string, any>} handoff @param {string} [approver] */
@@ -85,7 +86,8 @@ function approve(handoff, approver = "user") {
  * @param {{mark: string, n: number, title: string, dep: string, symbol: string}} t
  */
 const taskBlock = (t) => `- [${t.mark}] 任务 ${t.n}：${t.title}
-  - 对应需求/场景：export-notes / 基本行为
+  - 对应需求/场景：导出纯文本 / 基本行为
+  - 失败测试或已批准替代验证：tests/test_export.py::test_${t.symbol}
   - 前置依赖：${t.dep}
   - 目标文件/符号：src/export.py::${t.symbol}
   - 验证命令/动作：pytest tests/test_export.py::test_${t.symbol} -q
@@ -101,7 +103,9 @@ function writeChange(changeDir, { withDesign, tasks }) {
   writeFileSync(
     join(changeDir, "proposal.md"),
     "## Why\n导出笔记为纯文本。\n\n## What Changes\n新增导出入口。\n\n" +
-      "## Capabilities\n- export-notes\n\n## Impact\n- src/export.py\n",
+      "## Capabilities\n- export-notes\n\n## Impact\n- src/export.py\n\n" +
+      "### 状态源与工件位置\n" +
+      emptyGateBlock(),
     "utf-8"
   );
   const specDir = join(changeDir, "specs", "export-notes");
@@ -118,7 +122,7 @@ function writeChange(changeDir, { withDesign, tasks }) {
   const body = tasks
     .map(([mark, n, title, dep, symbol]) => taskBlock({ mark, n, title, dep, symbol }))
     .join("\n");
-  writeFileSync(join(changeDir, "tasks.md"), `# 实施任务清单\n\n## 任务\n\n${body}\n`, "utf-8");
+  writeFileSync(join(changeDir, "tasks.md"), `# 实施任务清单\n\n## 任务\n\n${body}\n\n## 最终验证\n| 命令/动作 | 覆盖范围 | 预期结果 |\n|---|---|---|\n| pytest tests/test_export.py -q | 整个导出模块 | exit 0 |\n`, "utf-8");
 }
 
 /** @param {string} changeDir */
@@ -206,6 +210,21 @@ function main() {
         `- 时间：${nowRfc3339()}\n- 结果：exit 0 / 2 passed / 通过\n`,
       "utf-8"
     );
+    const recorded = spawnSync(
+      process.execPath,
+      [
+        join(SCRIPTS_DIR, "delivery_scaffold.mjs"),
+        "record-gate",
+        "--change-dir",
+        change,
+        "--gate",
+        "impl",
+        "--approved-by",
+        "user",
+      ],
+      { encoding: "utf-8" }
+    );
+    check("execute: record-gate exits 0", recorded.status === 0, (recorded.stdout ?? "") + (recorded.stderr ?? ""));
     const close = spawnSync(
       process.execPath,
       [

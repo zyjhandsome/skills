@@ -32,7 +32,7 @@ visible_skills:
 
 **会话停点覆盖：** 当调用方在本会话明确要求阶段结束即停（固定信号：`会话停点覆盖`，或「本会话只执行一个 Wave / 不要加载下一个 Skill」），即使宿主能读取下一技能，也必须在 handoff 校验并落盘后停止，不得同会话打开或执行下一技能。这是调用方覆盖，不是降级模式，也不改 `delivery-handoff/v1`。未出现这些信号时，仍走上方默认链式接力。
 
-**建档停点覆盖（仅 Frame）：** 当调用方要求本会话只创建或恢复 change、禁止规格闸门（固定信号：`建档停点覆盖`，或「本波禁止规格闸门 / 只建 change」），Frame 可以创建 change、意图草稿和 evidence 目录，但不得询问范围批准、不得写入规格批准、不得把 `next_skill` 设为 plan 或 execute。handoff 的 `gate_status` 保持 `pending` 或 `n/a`，`next_skill: null`。这不是降级模式，也不改 schema。未出现这些信号时，Frame 仍走完整规格闸门。
+**建档停点覆盖（仅 Frame）：** 当调用方要求本会话只创建或恢复 change、禁止规格闸门（固定信号：`建档停点覆盖`，或「本波禁止规格闸门 / 只建 change」），Frame 可以创建 change、意图草稿和调用方点名的受管附件目录（附件不计入 `artifact_revision`），但不得询问范围批准、不得写入规格批准、不得把 `next_skill` 设为 plan 或 execute。handoff 的 `gate_status` 保持 `pending` 或 `n/a`，`next_skill: null`。这不是降级模式，也不改 schema。未出现这些信号时，Frame 仍走完整规格闸门。
 
 **版本权威源与兼容口径：** 本文件是 `family_version` 的唯一权威声明；其他文件中的版本字符串只是当前值的复制。兼容性按 **major** 判定：同 major 的 minor 递增是向后兼容的加法式变更（新增可选字段、`x_` 扩展键、软依赖放宽），不触发停机。`validate_handoff.mjs` 只校验 major（接受 `delivery-family/1.x`）。
 
@@ -135,7 +135,9 @@ visible_skills:
 node delivery-frame-spec/tests/run_all.mjs
 ```
 
-覆盖：引用存在性与版本一致性、模板机读锚点与有限同义词锁、handoff 正/负夹具、单链四阶段（含失效级联与 High 切片）。任何一项失败都不得交付；某个 `neg-*` 夹具开始通过意味着护栏被削弱，须先恢复或给出替代控制。
+覆盖：`test_family_integrity.mjs`（引用存在性与版本一致性）、`test_routing_and_session_overlay.mjs`（路由与会话停点）、`test_cli_entrypoints.mjs`、`test_external_artifacts.mjs`、`test_template_anchor_consistency.mjs`（模板机读锚点与有限同义词锁）、`test_visual_gate.mjs`、`run_fixture_tests.mjs`（handoff 正/负夹具）、`test_single_chain.mjs`（单链四阶段，含失效级联与 High 切片）、`test_run_all_scope.mjs`（默认只跑家族套件）。任何一项失败都不得交付；某个 `neg-*` 夹具开始通过意味着护栏被削弱，须先恢复或给出替代控制。
+
+改动会话停点/建档停点信号词、G9 证据结构或 `external_artifacts` 形状后，另跑 `node delivery-frame-spec/tests/run_all.mjs --with-consumers`，确认仓库内按名组合本家族的剧本没有悬空引用。
 
 **现行验收入口只有 `run_all.mjs`。** `delivery-execute-verify/tests/legacy/` 下的 prompt 对照文档是历史场景集，不是现行行为验收标准。
 

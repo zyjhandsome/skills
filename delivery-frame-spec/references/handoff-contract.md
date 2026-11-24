@@ -89,7 +89,7 @@
 
 - `handoff_id`：本次交付内唯一（建议 `<change-id>-<stage>-<序号>`）。`previous_handoff_id`（可选，可 `null`）：指向本次交付链中上一个 handoff，含回流；家族首个 handoff 为 `null`。
 - `state_source.kind`：Explore 恒为 `none`；正式 OpenSpec change 使用 `openspec_change` 并填写真实 `anchor`。
-- `source_revision`：记录生成时观测到的 repo HEAD、权威工件修订和时间。`artifact_revision` 优先使用 OpenSpec 原生 revision；否则运行 `../scripts/hash_change_artifacts.mjs`（按路径排序的规范化相对路径 + 原始字节的 SHA-256）。不得用时间戳或聊天轮次冒充修订。
+- `source_revision`：记录生成时观测到的 repo HEAD、权威工件修订和时间。`artifact_revision` 优先使用 OpenSpec 原生 revision；否则运行 `../scripts/hash_change_artifacts.mjs`（算法 v2 将规格、设计、任务、提案和 `.openspec.yaml` 纳入修订，规范化换行并忽略任务勾选及提案的闸门记录块）。不得用时间戳或聊天轮次冒充修订。
 - `capability_snapshot`：阶段转换时硬前提须标称（`memory: ok`、`openspec: initialized`；见 `family-contract.md` 第 2 节）。`superpowers` 为软依赖（`loaded`/`missing`/`inline`/`partial(...)`），单独不阻断转换。硬前提非标称时不得携带阶段转换。
 - `capability_bindings`：形状见 `family-contract.md`；记录实际解析结果。
 - `gate_status.status`：Explore 可用 `n/a`；未放行用 `pending`/`block`；有已公开且允许继续的警告用 `warn`；完全通过用 `pass`。
@@ -110,6 +110,18 @@ handoff 只存在于聊天时无法跨会话续跑。规则：
 - Explore 无 change 时不落盘（其 handoff 由 frame 在同会话消费；跨会话重启 explore 成本可接受）。
 - 落盘文件是**快照缓存**，不是第二状态源：消费端仍须先做 revision 比对；不一致以 OpenSpec 工件为准并重跑受影响 gate。
 - 新会话进入 plan/execute 且聊天中无 handoff 时：读 `handoff.json` → 校验 → revision 比对 → 通过则继续，否则按 stale 恢复流程。
+
+### 记录和恢复批准
+
+Frame 和 Plan 共用 `delivery_scaffold.mjs record-gate`。向用户展示范围或实施计划时用 `hash_change_artifacts.mjs <change>` 取得修订。收到明确批准后运行：
+
+```text
+node <frame>/scripts/delivery_scaffold.mjs record-gate --change-dir <change> --gate spec --approved-by <批准人> --expected-revision <展示时的修订>
+```
+
+Standard / High 的 Frame 写 `spec`，Plan 写 `impl`；Quick / Debug-Low 的契约 go 写 `impl`。有已接受警告时加 `--accepted-warnings <id,id>`，附加约束用 `--note <内容>`。命令记录批准时间和绑定修订，handoff 引用同一记录。只建档时保持待批准。
+
+续接在途 change 时先读 `proposal.md`、已落盘的 `handoff.json` 和当前修订。已有匹配的实现批准可直接使用。旧提案只有文字记录时，核对 change 路径、批准阶段、批准人、时间、修订、约束和已接受警告。运行 `record-gate --change-dir <change> --init` 创建空块；原批准可证明覆盖相同当前修订时，用上述命令加 `--approved-at <原 RFC3339 时间>` 恢复，保留原警告与约束。旧算法或原生修订无法与当前已批准工件核对时，展示差异并重新取得相应批准。空块本身只表示待批准。若恢复的是已标 `verified` 的快照，先用当前 `verification.md` 及适用的视觉报告重新运行收口校验，再移交归档；任务勾选和验证报告的更新不会改变范围修订。
 
 ## 5. 展示能力探测
 
@@ -137,10 +149,9 @@ handoff 只存在于聊天时无法跨会话续跑。规则：
 
 `external_artifacts` 只是可选的紧凑引用，最多 10 项；每项只保留
 `path`、`digest`、`claims_used`，其中 `digest` 使用 `sha256:<64-hex>`；落盘
-handoff 校验时路径必须存在且摘要匹配。不得复制完整报告、截图/base64，也不得声明
+handoff 校验时路径必须存在且摘要匹配，相对路径相对仓库根解析。不得复制完整报告、截图/base64，也不得声明
 `required_skill`/`consumer_skill`。接收阶段必须用本 family 的代码与 OpenSpec
-事实重算结论。Visual required 时，`claims_used` 还须落在
-`delivery-visual-evidence-template.md` 的外部引用白名单内；白名单字段不能替代 G9。
+事实重算结论。
 
 具体形状见共享 `handoff-template.md`。不得把含斜线的旧展示标签（`route/risk` 等）直接作为 JSON 键。
 

@@ -64,7 +64,7 @@ Default entry point for development requests. Route internally, establish the mi
 | Read-only | Explain/investigate; no change requested | end |
 | Quick | Bounded impact; **no** red-line domain; reversible | contract go → `delivery-execute-verify` |
 | Standard | Feature/cross-file/unclear fit; default risk Medium | spec gate → `delivery-plan-tasks` |
-| High | Auth/payment/privacy/migration (including cross-repo page host-port)/public API/core path, or multiple escalation signals | spec gate → `delivery-plan-tasks` (stronger gates) |
+| High | Auth/payment/privacy/migration (data, schema, or code moved across repository/runtime boundaries)/public API/core path, a caller-pinned High floor, or multiple escalation signals | spec gate → `delivery-plan-tasks` (stronger gates) |
 | Debug | Failure/regression/flake — then apply **actual** Low/Medium/High risk for mutation | Low fix → execute; Med/High mutation → Standard/High path |
 
 Unable to judge → bias higher. Red-line hit → **not** Quick. Negative cases and gate details: `references/routing-and-gates.md`.
@@ -103,7 +103,7 @@ When a `delivery-explore` handoff is present, consume fields per `references/exp
 | Route | Change artifacts | Next stage |
 |---|---|---|
 | Read-only | none (no change) | end |
-| Quick / Debug-Low | lightweight change: `proposal.md` carries the contract, minimal `tasks.md`; no `design.md`. If the active schema’s `validate` requires ≥1 delta, add a **minimal** `specs/<cap>/spec.md` (one Requirement + Scenario) — do not expand to Standard depth | `delivery-execute-verify` |
+| Quick / Debug-Low | lightweight change: `proposal.md` carries the contract, minimal `tasks.md`; no `design.md`. Behavior change → one **minimal** delta (one Requirement + Scenario); no spec-level behavior change → `skip_specs: true` in `.openspec.yaml`, no spec file | `delivery-execute-verify` |
 | Standard / High | full change: `proposal.md` (brief) + delta spec now; `design.md` + `tasks.md` in `delivery-plan-tasks` | `delivery-plan-tasks` |
 | Debug — Medium / High mutation | Standard / High artifacts respectively | `delivery-plan-tasks` |
 
@@ -117,7 +117,7 @@ Explanation or investigation without requested changes. Output: conclusion, evid
 
 ### Quick
 
-Only when impact is bounded and **no** red-line domain is involved (auth, payment, permission, privacy, migration, concurrency, public API/protocol, destructive behavior, core business paths are **never** Quick). Create the lightweight contract (`references/routing-and-gates.md` has the shape): goal/non-goals, affected files/symbols, observable behavior, minimum validation, forbidden scope, risk/unknowns, clarification completeness sweep result. Prefer scaffolding it: `scripts/delivery_scaffold.mjs quick-pack --change-dir openspec/changes/<id> --capability <cap> --goal … --impact …` emits proposal/minimal delta spec/tasks with the exact machine anchors `validate_delivery_change.mjs` reads — fill the placeholders, then run the schema's `validate`. Quick has no `design.md` **by design**: when `openspec status` shows design incomplete, tell the user that is expected for this lane; never write a filler design to satisfy status. Clarify blocking product questions via batch clarification. Present the contract, obtain an explicit go (e.g. “开始实施”), record approver/time/contract revision/accepted warning IDs, then hand off to `delivery-execute-verify`. A complete contract without a revision-bound go does not authorize implementation.
+Only when impact is bounded and **no** red-line domain is involved (auth, payment, permission, privacy, migration, concurrency, public API/protocol, destructive behavior, core business paths are **never** Quick). Create the lightweight contract (`references/routing-and-gates.md` has the shape): goal/non-goals, affected files/symbols, observable behavior, minimum validation, forbidden scope, risk/unknowns, clarification completeness sweep result. Prefer scaffolding it: `scripts/delivery_scaffold.mjs quick-pack --change-dir openspec/changes/<id> --capability <cap> --goal … --impact …` emits proposal/minimal delta spec/tasks with the exact machine anchors `validate_delivery_change.mjs` reads — fill the placeholders, then run the schema's `validate`. Quick has no `design.md` **by design**: when `openspec status` shows design incomplete, tell the user that is expected for this lane; never write a filler design to satisfy status. Clarify blocking product questions via batch clarification. Present the contract, obtain an explicit go (e.g. “开始实施”), persist the Quick go with `record-gate --gate impl` per `references/handoff-contract.md` section 4, then hand off to `delivery-execute-verify`. A complete contract without a revision-bound go does not authorize implementation.
 
 ### Standard
 
@@ -176,14 +176,14 @@ Agent checklist — not a user multi-quiz:
 - blocking Open Questions decided or explicitly deferred as non-blocking; no implementation-blocking TBD;
 - clarification completeness sweep recorded;
 - requirements have falsifiable scenarios and failure behavior; applicable non-functional constraints captured with acceptance criteria or explicitly out of scope;
-- quality profile is explicit; when visual is required, baseline/substitute, representative routes/states, acceptable differences, and forbidden differences are falsifiable;
+- quality profile is explicit; when visual is required, specify routes/states and falsifiable visual criteria. Choose baseline, approved substitute, or (new UI) `spec_assertion` with baseline `n/a`;
 - route and risk match evidence (Risk Rating complete);
 - Explore Handoff Consume block satisfied;
 - Medium/High scope approval persisted in State Source.
 
-If 建档停点覆盖 is active, stop after the change, intent draft, and evidence directories exist. Do not run this ask, do not persist a specification approval, and emit a handoff with `gate_status` `pending` or `n/a` and `next_skill: null`.
+If 建档停点覆盖 is active, stop after the change, intent draft, and any caller-named attachment directories exist. Do not run this ask, do not persist a specification approval, and emit a handoff with `gate_status` `pending` or `n/a` and `next_skill: null`.
 
-If any check fails, remain in this skill. When it passes and 建档停点覆盖 is not active, ask **one** scope-approval question (Gate ask shape in `batch-clarification.md`); persist answer, approver, time, artifact revision, and accepted warning IDs in State Source; then hand off.
+If any check fails, remain in this skill. When it passes and 建档停点覆盖 is not active, ask **one** scope-approval question (Gate ask shape in `batch-clarification.md`); persist the go with `record-gate --gate spec` per `references/handoff-contract.md` section 4, then hand off.
 
 ## Backflow re-entry
 

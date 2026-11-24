@@ -52,6 +52,8 @@
 
 ### Visual validation matrix（visual=required 时）
 
+`ID` 即 G9 证据行的 `id`；每行 `required_for_verified` 写 `yes` 或 `no`，收口时校验器自动读取所有 `yes` 行。无基线的新界面 `baseline/substitute` 写 `n/a（spec_assertion）`。
+
 | ID | baseline/substitute | route | state | browser/viewport | diff policy | evidence path | required_for_verified | failure proves |
 |---|---|---|---|---|---|---|---|---|
 

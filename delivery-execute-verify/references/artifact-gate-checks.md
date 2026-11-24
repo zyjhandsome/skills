@@ -20,7 +20,7 @@
 | G6 | 未在 Execute 内把 delta sync 进 canonical specs 或移动 change 到 archive | 停止并报告精确 diff；未经用户授权不得自动回滚，修复后改走已解析的 `archive_change` 操作 |
 | G7 | Medium/High 声称 verified 时：`code_review.mode=independent` 且 `independent_review` 为 `required_pass` 或 `required_warn_accepted`；禁止用 `self_fresh_context` 关闭 | 不得 `verified`；补独立审查或保持 blocked |
 | G8 | Plan/Execute 前：列出其他 active OpenSpec changes；若与本 change 任务允许路径/符号重叠，记为就绪 **阻塞项**（除非用户显式接受并写入闸门摘要） | 关实现闸门或停止并行实施 |
-| G9 | 当 `quality_profiles.visual=required`：Delivery 自有 `delivery-visual-evidence/v1` 存在且 validator 通过；state owner、真实 change 目录与已批准 source artifact revision 匹配；baseline 或批准 substitute 合法；至少五个唯一 route/state 行均绑定 baseline/current/diff 图片与 SHA-256，且全 pass（允许差异必须先归类后以 pass 收口）；`final_visual_result=pass` | 不得 `verified`；缺 acceptance 回 Frame，缺 strategy/task 回 Plan，缺执行证据留在 Execute |
+| G9 | 当 `quality_profiles.visual=required`：Delivery 自有 `delivery-visual-evidence/v1` 存在且校验通过；change 目录和实现闸门绑定的修订匹配；`assessment_mode` 与 baseline 写法一致；Plan 视觉矩阵里 `required_for_verified=yes` 的每个状态都有一行证据且全部 pass；`final_visual_result=pass` | 不得 `verified`；缺 acceptance 回 Frame，缺 strategy/task 回 Plan，缺执行证据留在 Execute |
 
 ## 可脚本化断言（试点）
 
@@ -30,11 +30,12 @@ Visual required 时使用：
 
 ```text
 node ../scripts/validate_delivery_change.mjs <change-dir> --claim-verified \
-  --visual-required --visual-report <report.md> \
-  --expected-visual-revision <approved-64-hex-revision>
+  --visual-report <report.md>
 ```
 
-该 evidence 按 `delivery-visual-evidence-template.md` 由本 family 生成。外部分析/视觉报告只能作为 `external_artifacts` 路径+digest 引用；不得要求其 Skill、schema 或完整正文进入上下文。`claims_used` 只允许引用白名单字段：`baseline_state_ids`、`identity_route`、`identity_marker`、`comparison_boundary`、`style_closure_status`、`color_metrics`、`typography_metrics`、`icon_identity`、`table_metrics`、`rollback_fixture`。引用这些字段不能替代 G9 自己的五态行或 `final_visual_result`。
+收口从 `proposal.md` 读取实现批准，从 `design.md` 的视觉矩阵读取 `required_for_verified=yes` 的状态；Quick 将同格式矩阵放在 `tasks.md`。可选的 `--required-state-ids` 只增补状态，`--expected-visual-revision` 用于核对调用方修订。
+
+该 evidence 按 `delivery-visual-evidence-template.md` 由本 family 生成。外部分析或视觉报告只能作为 handoff `external_artifacts` 的路径加 digest 引用，不要求其 Skill、schema 或正文进入上下文，也不能替代 G9 自己的证据行和 `final_visual_result`。
 
 剩余规则伪代码：
 

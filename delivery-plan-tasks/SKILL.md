@@ -108,7 +108,7 @@ Before any user-required ask, show the complete current inventory; batch all ind
 
 **Task minimum fields:** behavior-oriented title; mapped Requirement/Scenario; dependencies; exact files and symbols; allowed and forbidden scope; implementation steps; test-first or approved alternative validation; exact command/action and expected result; rollback/migration note when relevant; completion definition; ownership/conflict note for parallel work. No "implement backend", guessed paths, or unbounded cleanup. Templates: `references/plan-template.md`, `references/tasks-template.md`.
 
-**Validation matrix:** for each Requirement/Scenario record verification layer, test file/fixture, exact command, expected success, what a failure proves, and any approved coverage gap. Validation must be capable of failing for the missing behavior. When `quality_profiles.visual=required`, each visual row also records baseline/substitute, route, state, browser/viewport, diff policy, evidence path, and whether it is required for verified; functional E2E cannot satisfy it.
+**Validation matrix:** for each Requirement/Scenario record verification layer, test file/fixture, exact command, expected success, what a failure proves, and any approved coverage gap. Validation must be capable of failing for the missing behavior. When `quality_profiles.visual=required`, each visual row also records baseline/substitute, route, state, browser/viewport, diff policy, evidence path, and whether it is required for verified. For new UI use `spec_assertion`, `n/a` baseline, and a falsifiable assertion per required state.
 
 **Parallel planning:** parallelize only tasks with no shared mutable state, no overlapping files (or explicit ownership), stable prerequisite contracts, and independently runnable validation. Define integration order and post-merge validation. Do not parallelize merely to keep agents busy.
 
@@ -124,11 +124,12 @@ Findings use Chinese labels (`references/readiness-review.md`): **阻塞项** / 
 
 Check: approved spec coverage; current paths/symbols and blast radius; no scope creep; no unresolved user-required decision (agent-owned decisions have rationale, spec-affecting ones completed frame backflow); sweep recorded with no material blocker; failure/edge behavior; compatibility/migration/rollback/security/performance/observability as applicable; vertical task size and ordering; executable falsifiable validation; parallel ownership and integration conflicts; no unresolved overlap with other active changes; artifact backend structural validation.
 
-If visual is required, readiness also checks that baseline capture precedes the
-upgrade when still possible, every required sample/state maps to a task, global
-CSS/reset changes include a non-table collateral check, and G9 has a concrete
-visual report path. Missing visual acceptance returns to Frame; missing visual
-task/strategy remains in Plan.
+If visual is required, readiness also checks that any baseline capture is
+scheduled before the first mutating task, every required state maps to a task,
+changes to shared or global styles include a check on at least one surface
+outside the change, and G9 has a concrete report path plus the required state
+ids. Missing visual acceptance returns to Frame; a missing visual task or
+strategy remains in Plan.
 
 ## Implementation Gate
 
@@ -138,7 +139,7 @@ Every route requires an explicit user go before implementation; artifact complet
 - Medium: no blocking finding; warnings resolved or explicitly listed in the visible go summary; single go ask.
 - High: same single go ask, plus a short cost/risk/rollback summary; Agent **internally** verifies design/tasks/rollback/security/validation and records that checklist in the state source. Never a facet-by-facet user quiz.
 
-Ask shape and options (`建议：开始实施` / `先不实施` / `有修改（说明）`): `batch-clarification.md` **Gate ask shape**. Persist the gate with approver, time, artifact revision, accepted warning IDs, and (High) the internal five-facet result. Any artifact revision change invalidates the gate. A go accepts only warnings explicitly shown in the summary; hidden or newly discovered warnings invalidate it. If any internal High facet or user-required decision fails readiness, do not ask for go — fix artifacts first.
+Ask shape and options (`建议：开始实施` / `先不实施` / `有修改（说明）`): `batch-clarification.md` **Gate ask shape**. Persist the go with `record-gate --gate impl` per `handoff-contract.md` section 4, including accepted warnings and the High review note when applicable. Any artifact revision change invalidates the gate. A go accepts only warnings explicitly shown in the summary; hidden or newly discovered warnings invalidate it. If any internal High facet or user-required decision fails readiness, do not ask for go — fix artifacts first.
 
 ## Handoff
 

@@ -25,9 +25,9 @@ import {
   TASK_START,
   FIELD_PATTERNS,
   VERIFICATION_PATTERNS,
+  resultMatches,
   isPlaceholder,
   isRfc3339,
-  containsAny,
 } from "../scripts/validate_delivery_change.mjs";
 
 const TESTS_DIR = dirname(fileURLToPath(import.meta.url));
@@ -36,11 +36,13 @@ const TASKS_TEMPLATE = join(SKILL_DIR, "..", "delivery-plan-tasks", "references"
 const VERIFICATION_TEMPLATE = join(SKILL_DIR, "references", "verification-template.md");
 
 // The three anchors every task block must carry (must stay in sync with FIELD_PATTERNS).
-const REQUIRED_TASK_FIELDS = /** @type {const} */ (["target", "command", "expected"]);
+const REQUIRED_TASK_FIELDS = /** @type {const} */ (["target", "command", "expected", "scenario", "red"]);
 const SAMPLE_TASK_VALUES = {
   target: "src/example.py::do_thing",
   command: "pytest tests/test_example.py -q",
   expected: "exit 0，全部通过",
+  scenario: "导出纯文本 / 基本行为",
+  red: "tests/test_example.py::test_do_thing",
 };
 
 /** @param {string} p */
@@ -105,7 +107,9 @@ function checkTasksTemplate() {
   // And the fully-valid sample must satisfy the real per-task check end to end.
   const validBlock = [
     "- [x] 任务 1：模板锚点一致性样例",
+    `  - 对应需求/场景：${SAMPLE_TASK_VALUES.scenario}`,
     `  - 目标文件/符号：${SAMPLE_TASK_VALUES.target}`,
+    `  - 失败测试或已批准替代验证：${SAMPLE_TASK_VALUES.red}`,
     `  - 验证命令/动作：${SAMPLE_TASK_VALUES.command}`,
     `  - 预期结果：${SAMPLE_TASK_VALUES.expected}`,
   ].join("\n");
@@ -153,15 +157,7 @@ function checkVerificationTemplate() {
   }
   if (
     "result" in evidence &&
-    !containsAny(evidence.result, [
-      "\\bpass(?:ed)?\\b",
-      "\\bfail(?:ed)?\\b",
-      "exit\\s*code",
-      "退出码",
-      "通过",
-      "失败",
-      "exit\\s*\\d+",
-    ])
+    !resultMatches(evidence.result)
   ) {
     errors.push("canonical verification sample result failed the pass/fail shape check");
   }
@@ -174,9 +170,13 @@ const ACCEPTED_ALIASES = {
   target: ["目标文件/符号", "文件/符号", "Exact files/symbols", "Target files/symbols"],
   command: ["验证命令/动作", "验证命令", "验证动作", "验证", "Validation command/action", "Validation command"],
   expected: ["预期结果", "预期", "期望结果", "Expected result"],
+  scenario: ["对应需求/场景", "Requirement/Scenario"],
+  red: ["失败测试或已批准替代验证", "Failing test or approved alternative"],
 };
 const REJECTED_LABELS = {
   target: ["目标", "涉及文件", "改动文件"],
+  scenario: ["需求", "场景"],
+  red: ["测试", "失败测试"],
   command: ["最小验证", "命令", "测试命令", "失败测试或已批准替代验证"],
   expected: ["结果", "验收标准", "完成定义"],
 };

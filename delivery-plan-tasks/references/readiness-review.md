@@ -1,5 +1,7 @@
 # 实现就绪审查模板
 
+就绪审查正文写进 `design.md` 的 `## 实现就绪审查`，在发出实现闸门询问之前写完。实现批准不写在这份审查里：用 `delivery_scaffold.mjs record-gate --gate impl` 写入 `proposal.md`「状态源与工件位置」的闸门记录块。在途项目若只有旧的文字批准，先按 `handoff-contract.md` 第 4 节核对原批准，再恢复或重新取得批准。
+
 ```markdown
 # 实现就绪审查
 
@@ -46,10 +48,7 @@
 - 结果：
 
 ## 闸门记录
-- 决定：
-- 批准人/日期：
-- 附加约束：
-- 可选 `approval_mode`：`live`（真人闸门）/ `harness`（测试剧本代答，须在摘要标明）
+见 `proposal.md`「状态源与工件位置」的闸门记录块（`record-gate` 写入）。`approval_mode`（`live` / `harness`）只写在 handoff 的 `gate_status`。
 ```
 
 只有阻塞项和用户必决技术事项均为零才可判定“就绪”。结构校验不能替代这次语义审查；实现 go 只覆盖闸门摘要中明确展示的警告项。G8 路径重叠未处理前不得就绪。

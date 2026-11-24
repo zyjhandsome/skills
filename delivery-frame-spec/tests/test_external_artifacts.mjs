@@ -3,7 +3,7 @@
 
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { validate } from "../scripts/validate_handoff.mjs";
@@ -16,23 +16,34 @@ try {
   const digest = `sha256:${createHash("sha256").update(readFileSync(packet)).digest("hex")}`;
   const valid = structuredClone(base);
   valid.stage_payload.external_artifacts = [{ path: packet, digest, claims_used: ["runtime status"] }];
-  assert.deepEqual(validate(valid, "hard", { baseDir: sandbox }), []);
+  assert.deepEqual(validate(valid, "hard", { repoRoot: sandbox }), []);
 
   const missing = structuredClone(valid);
   missing.stage_payload.external_artifacts[0].path = join(sandbox, "missing.json");
-  assert.ok(validate(missing, "hard", { baseDir: sandbox }).some((error) => error.includes("path does not exist")));
+  assert.ok(validate(missing, "hard", { repoRoot: sandbox }).some((error) => error.includes("path does not exist")));
 
   const bogus = structuredClone(valid);
   bogus.stage_payload.external_artifacts[0].digest = "bogus";
-  assert.ok(validate(bogus, "hard", { baseDir: sandbox }).some((error) => error.includes("sha256")));
+  assert.ok(validate(bogus, "hard", { repoRoot: sandbox }).some((error) => error.includes("sha256")));
 
   const tooMany = structuredClone(valid);
   tooMany.stage_payload.external_artifacts = Array.from({ length: 11 }, () => ({ path: packet, digest, claims_used: ["x"] }));
-  assert.ok(validate(tooMany, "hard", { baseDir: sandbox }).some((error) => error.includes("at most 10")));
+  assert.ok(validate(tooMany, "hard", { repoRoot: sandbox }).some((error) => error.includes("at most 10")));
 
   const extra = structuredClone(valid);
   extra.stage_payload.external_artifacts[0].full_report = "forbidden";
-  assert.ok(validate(extra, "hard", { baseDir: sandbox }).some((error) => error.includes("unsupported keys")));
+  assert.ok(validate(extra, "hard", { repoRoot: sandbox }).some((error) => error.includes("unsupported keys")));
+
+  mkdirSync(join(sandbox, "notes"));
+  const notes = join(sandbox, "notes", "domain.json");
+  writeFileSync(notes, "{}\n", "utf8");
+  const notesDigest = `sha256:${createHash("sha256").update(readFileSync(notes)).digest("hex")}`;
+  const relative = structuredClone(valid);
+  relative.stage_payload.external_artifacts = [{ path: "notes/domain.json", digest: notesDigest, claims_used: ["runtime status"] }];
+  assert.deepEqual(validate(relative, "hard", { repoRoot: sandbox }), []);
+  assert.ok(
+    validate(relative, "hard", { repoRoot: join(sandbox, "openspec") }).some((error) => error.includes("path does not exist"))
+  );
 } finally {
   rmSync(sandbox, { recursive: true, force: true });
 }

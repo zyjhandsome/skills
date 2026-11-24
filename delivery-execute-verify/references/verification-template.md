@@ -13,10 +13,10 @@
 |---|---|---|---|---|
 
 ### 主验证证据（机器锚点，标签稳定勿改）
-（供 `scripts/validate_delivery_change.mjs --claim-verified` 读取；至少填主验证命令一条。标签「命令 / 时间 / 结果」是校验脚本锚点，改词会导致静默漏检。）
+每条最终验证命令在上表或下列锚点记录一次，命令原样对应 tasks.md。单项可只填下列三行。
 - 命令：<主验证命令或动作>
 - 时间：<RFC3339，如 2026-07-16T09:00:00Z>
-- 结果：<pass|fail 或退出码，如 exit 0 / 通过>
+- 结果：<如 exit 0 / 2 passed，或负例的实际 exit 2>
 
 ## 需求验证
 | 需求/场景 | 实现证据 | 验证方式 | 结果 |
@@ -24,8 +24,8 @@
 
 ## 视觉证据（`quality_profiles.visual=required` 时）
 - Visual report：<path>
-- Source artifact revision：<64-hex revision>
-- Assessment mode：<strict_parity|consistency_review>
+- Source artifact revision：sha256:<修订>
+- Assessment mode：<strict_parity|consistency_review|spec_assertion>
 - Baseline / substitute：<path/revision/approved standard>
 - Capture context：<browser + viewport + locale + timezone + theme>
 - Required states：<baseline/current/diff paths + results>
@@ -61,6 +61,8 @@
 - 已更新：
 - 无需回写，原因：
 ```
+
+机器结果写 `pass`、`通过`、`exit N` 或测试计数（如 `exit 0 / 2 passed / 0 failed`），解释放在覆盖范围。预期非零退出码须事先写在 `tasks.md` 对应命令的预期结果中；失败数记录未达到预期的检查数。
 
 规则补充：
 

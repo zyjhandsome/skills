@@ -29,6 +29,7 @@ const REQUIRED_SHARED = [
   "delivery-frame-spec/references/method-discipline-inline.md",
   "delivery-frame-spec/scripts/validate_handoff.mjs",
   "delivery-frame-spec/scripts/hash_change_artifacts.mjs",
+  "delivery-frame-spec/scripts/gate_record.mjs",
   "delivery-frame-spec/scripts/delivery_scaffold.mjs",
   "delivery-execute-verify/scripts/validate_delivery_change.mjs",
 ];
@@ -38,9 +39,12 @@ const PATH_RE = /`((?:\.\.\/)?(?:delivery-[a-z-]+\/)?(?:references|scripts|tests
 const VERSION_RE = /delivery-family\/(\d+\.\d+)/g;
 const AUTHORITY = join(SKILLS_ROOT, "delivery-frame-spec", "references", "family-contract.md");
 const FORBIDDEN_EXTERNAL_CONTRACTS = [
-  "frontend-ui-stack-visual-parity",
-  "vue2-to-vue3-upgrade-impact-analysis",
-  "upgrade-evidence/v1",
+  "frontend-ui-stack-visual-parity", "frontend-parity-check",
+  "vue2-to-vue3-upgrade-impact-analysis", "vue2-pages-to-vue3-host-migration",
+  "angularjs-to-vue3-host-migration", "frontend-dependency-upgrade-impact-analysis",
+  "java-dependency-upgrade-impact-analysis", "spring-boot-4-upgrade",
+  "upgrade-evidence/v1", "host-port", "table_metrics", "style_closure_status",
+  "remediation_status", "UI-stack", "UI Stack",
 ];
 
 /** @param {string} p */

@@ -62,7 +62,7 @@ Use this skill for open-ended ideation, opportunity mapping, “还想加啥功�
 ## Capability roles
 
 - **Codebase Memory MCP — primary evidence provider.** Discover tool schemas first. Typical sequence: confirm index readiness → `get_architecture` (overview/clusters/boundaries/hotspots) → `search_graph` / `query_graph` / `search_code` for user themes → `trace_path` / `get_code_snippet` for high-value candidates before recommending them. Index freshness rule: `family-contract.md` section 5. Never replace a graph query with an unbounded whole-repository dump.
-- **OpenSpec — read-only context only.** Read active changes and main specs (via the adapter's `inspect_change`) to avoid duplicate or conflicting suggestions. **Before the explore handoff is emitted and validated, it is forbidden to** call `create_change`, write `openspec/changes/<id>/` artifacts as delivery state, or invent a parallel Markdown state file. Creating the change belongs exclusively to `delivery-frame-spec` after direction selection.
+- **OpenSpec — read-only context only.** Read active changes and main specs (via the adapter's `inspect_change`, including `openspec list --specs --json`) to avoid duplicate or conflicting suggestions. **Before the explore handoff is emitted and validated, it is forbidden to** call `create_change`, write `openspec/changes/<id>/` artifacts as delivery state, or invent a parallel Markdown state file. Creating the change belongs exclusively to `delivery-frame-spec` after direction selection.
 - **Superpowers / inline — method reuse, not owner.** Prefer Superpowers `brainstorming` disciplines when loaded; otherwise follow `method-discipline-inline.md`. Never let method skills own artifacts or state.
 - **SubAgent — not used in explore.** Do not dispatch SubAgents for opportunity mapping.
 
@@ -93,7 +93,7 @@ Before handing a selected direction to `delivery-frame-spec`, verify:
 - `non_goals` captures known boundaries, or says which boundaries remain for framing;
 - evidence-findable gaps were investigated; remaining uncertainty is listed under `unknowns` without inventing decisions;
 - `direction_alignment` is `selected`. If a direction-changing fork remains → `needs_choice`, stay in explore and open the next wave; if the user only wanted advice → end without framing.
-- upgrade/UI directions pass evidence-backed `quality_signals` as hints; Explore never sets the final quality profile.
+- directions that touch user-visible UI, performance, or compatibility surfaces pass evidence-backed `quality_signals` as hints; Explore never sets the final quality profile.
 
 This is candidate-direction alignment, not specification approval. Do not ask frame-owned scope/acceptance/irreversible questions merely to look complete; pass them as `unknowns`.
 

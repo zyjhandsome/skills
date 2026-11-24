@@ -1,8 +1,8 @@
 interface:
   display_name: "Delivery Plan Tasks"
-  short_description: "Turn approved scope into executable evidence tasks"
+  short_description: "Turn approved scope into a design and vertical tasks"
   default_prompt: >
     Use $delivery-plan-tasks after Frame approval. Preserve the approved scope,
-    add task-level targets, commands, expected results, and when visual quality
-    is required include baseline, capture context, state matrix, report path,
-    and G9 evidence ownership. Return scope gaps to Frame rather than inventing.
+    write design.md and vertical tasks with requirement links, failing-test
+    entries, commands, and expected results, run readiness review, and ask for
+    the implementation go. Return scope gaps to Frame rather than inventing.

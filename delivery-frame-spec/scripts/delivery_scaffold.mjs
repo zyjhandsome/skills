@@ -28,23 +28,16 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve, basename, sep } from "node:path";
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { join, resolve, basename, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import process from "node:process";
 
-import { hashChange } from "./hash_change_artifacts.mjs";
-import { validate } from "./validate_handoff.mjs";
+import { hashChange, normalizeRevision } from "./hash_change_artifacts.mjs";
+import { CURRENT_FAMILY_VERSION, validate } from "./validate_handoff.mjs";
+import { emptyGateBlock, parseGateRecord, upsertGateLine, GATE_START } from "./gate_record.mjs";
 
-const SCRIPTS_DIR = dirname(fileURLToPath(import.meta.url));
-const VALIDATE_DELIVERY_CHANGE = join(
-  SCRIPTS_DIR,
-  "..",
-  "..",
-  "delivery-execute-verify",
-  "scripts",
-  "validate_delivery_change.mjs"
-);
+import { checkChange, isRfc3339 } from "../../delivery-execute-verify/scripts/validate_delivery_change.mjs";
 
 const STAGES = ["delivery-explore", "delivery-frame-spec", "delivery-plan-tasks", "delivery-execute-verify"];
 
@@ -140,14 +133,14 @@ function gitHead(cwd) {
 /** @param {string | null} changeDir @returns {string | null} */
 function computeRevision(changeDir) {
   if (changeDir === null) return null;
-  const { digest, entries } = hashChange(changeDir);
-  return entries.length ? `sha256:${digest}` : null;
+  const hashed = hashChange(changeDir);
+  return hashed.entries.length ? hashed.revision : null;
 }
 
 /** @param {string} changeDir */
 function changeAnchor(changeDir) {
   const parts = resolve(changeDir).split(sep);
-  const index = parts.indexOf("openspec");
+  const index = parts.lastIndexOf("openspec");
   if (index !== -1) return parts.slice(index).join("/");
   return changeDir.split(sep).join("/");
 }
@@ -189,9 +182,9 @@ export function buildHandoff(stage, changeDir, previous) {
   const [fromTask, toTask, continuePrompt] =
     STAGE_PRESENTATION[/** @type {keyof typeof STAGE_PRESENTATION} */ (stage)];
   const stamp = ts.replaceAll(":", "").replaceAll("-", "").slice(0, 15);
-  return {
+  const handoff = {
     schema_version: "delivery-handoff/v1",
-    family_version: "delivery-family/1.6",
+    family_version: CURRENT_FAMILY_VERSION,
     type: "delivery-handoff",
     handoff_id: `${changeId}-${stage.replace(/^delivery-/, "")}-${stamp}`,
     previous_handoff_id: previous,
@@ -200,6 +193,7 @@ export function buildHandoff(stage, changeDir, previous) {
     source_revision: {
       repo_head: gitHead(changeDir ?? process.cwd()),
       artifact_revision: computeRevision(changeDir),
+      revision_algo: 2,
       state_observed_at: ts,
     },
     state_source: stateSource,
@@ -232,6 +226,35 @@ export function buildHandoff(stage, changeDir, previous) {
       continue_prompt: continuePrompt,
     },
   };
+  if (stage === "delivery-execute-verify") {
+    handoff.stage_payload.implementation_gate = readImplementationGate(changeDir);
+  }
+  return handoff;
+}
+
+/** @param {string | null} changeDir */
+function readImplementationGate(changeDir) {
+  if (!changeDir) return null;
+  const path = join(changeDir, "proposal.md");
+  if (!existsSync(path)) return null;
+  const parsed = parseGateRecord(readFileSync(path, "utf8"));
+  const gate = parsed.impl;
+  if (!gate || gate.status !== "approved" || !gate.revision) return null;
+  return {
+    approved_by: gate.approvedBy,
+    approved_at: gate.approvedAt,
+    binds_to_revision: gate.revision,
+  };
+}
+
+/** @param {string} text */
+function ensureGateBlock(text) {
+  if (text.includes(GATE_START)) return text;
+  // Insert complete lines so stripping the block recovers the original approved bytes.
+  const heading = /^### 状态源与工件位置[^\n]*\n/m.exec(text);
+  const at = heading ? heading.index + heading[0].length : text.lastIndexOf("\n") + 1;
+  const block = text.includes("\r\n") ? emptyGateBlock().replaceAll("\n", "\r\n") : emptyGateBlock();
+  return text.slice(0, at) + block + text.slice(at);
 }
 
 /** @param {Record<string, any>} obj @param {string | null} out */
@@ -283,7 +306,11 @@ ${f.goal}
 
 ## Capabilities
 
-- ${f.capability}
+### New Capabilities
+
+${f.skipSpecs ? "无（.openspec.yaml 已设 skip_specs: true）" : `- ${f.capability}`}
+
+<!-- 修改既有 capability 时改用 ### Modified Capabilities，并在 delta spec 里用 ## MODIFIED Requirements（需整块复制原 Requirement） -->
 
 ## Impact
 
@@ -308,7 +335,14 @@ N/A — 无 explore handoff
 ### 状态源与工件位置
 - 后端：OpenSpec change
 - 路径：${f.anchor}
-- 闸门记录：实施批准：待批准
+${upsertGateLine(emptyGateBlock(), "spec", {
+  status: "n/a",
+  approvedBy: null,
+  approvedAt: null,
+  revision: null,
+  acceptedWarnings: [],
+  note: "Quick 车道",
+})}
 
 > Quick 车道无 \`design.md\` 属预期：\`openspec status\` 显示 design 未完成不代表变更不完整，
 > 向用户解释时引用本行即可；不要为凑 status 写假 design。
@@ -319,7 +353,7 @@ const quickSpec = (f) => `## ADDED Requirements
 
 ### Requirement: ${f.requirement}
 
-系统必须 ${f.goal}。
+系统 MUST ${f.goal}。
 
 #### Scenario: 基本行为
 
@@ -339,7 +373,7 @@ const quickTasks = (f) => `# ${f.changeId}：实施任务清单
 ## 任务
 
 - [ ] 任务 1：${f.goal}
-  - 对应需求/场景：${f.requirement} / 基本行为
+  - 对应需求/场景：${f.scenario}
   - 前置依赖：无
   - 目标文件/符号：${f.impact}
   - 允许修改：${f.impact}
@@ -363,37 +397,53 @@ const quickTasks = (f) => `# ${f.changeId}：实施任务清单
 `;
 
 /**
- * @param {{changeDir: string, capability: string, goal: string, impact: string, requirement: string | null}} args
+ * @param {{changeDir: string, capability: string, goal: string, impact: string, requirement: string | null, skipSpecs: boolean}} args
  */
 function cmdQuickPack(args) {
   const changeDir = resolve(args.changeDir);
-  if (existsSync(changeDir) && readdirSync(changeDir).length > 0) {
-    const existing = readdirSync(changeDir);
+  const existing = existsSync(changeDir) ? readdirSync(changeDir) : [];
+  const openspecOnly = existing.length === 0 || (existing.length === 1 && existing[0] === ".openspec.yaml");
+  if (!openspecOnly) {
     console.error(
       `ERROR: change dir not empty (${existing.slice(0, 5).join(", ")}…) — quick-pack never overwrites`
     );
     return 2;
   }
+  const yamlPath = join(changeDir, ".openspec.yaml");
+  if (args.skipSpecs && !existsSync(yamlPath)) {
+    console.error("ERROR: --skip-specs requires an existing .openspec.yaml — run `openspec new change <id>` first");
+    return 2;
+  }
   mkdirSync(changeDir, { recursive: true });
   const anchor = changeAnchor(changeDir);
+  const requirement = args.requirement ?? args.goal;
   const fields = {
     goal: args.goal,
     capability: args.capability,
     impact: args.impact,
     anchor,
     changeId: basename(changeDir),
-    requirement: args.requirement ?? args.goal,
+    requirement,
+    skipSpecs: args.skipSpecs,
+    scenario: args.skipSpecs ? "不适用（skip_specs）" : `${requirement} / 基本行为`,
   };
 
   writeFileSync(join(changeDir, "proposal.md"), quickProposal(fields), "utf-8");
-  const specDir = join(changeDir, "specs", args.capability);
-  mkdirSync(specDir, { recursive: true });
-  writeFileSync(join(specDir, "spec.md"), quickSpec(fields), "utf-8");
+  if (!args.skipSpecs) {
+    const specDir = join(changeDir, "specs", args.capability);
+    mkdirSync(specDir, { recursive: true });
+    writeFileSync(join(specDir, "spec.md"), quickSpec(fields), "utf-8");
+  } else {
+    const yaml = readFileSync(yamlPath, "utf8");
+    if (!/^skip_specs:\s*true\s*$/m.test(yaml)) {
+      writeFileSync(yamlPath, yaml.endsWith("\n") ? `${yaml}skip_specs: true\n` : `${yaml}\nskip_specs: true\n`, "utf-8");
+    }
+  }
   writeFileSync(join(changeDir, "tasks.md"), quickTasks(fields), "utf-8");
 
-  const { digest } = hashChange(changeDir);
+  const { revision } = hashChange(changeDir);
   console.log(`scaffolded Quick change at ${changeDir}`);
-  console.log(`artifact_revision (pre-edit): sha256:${digest}`);
+  console.log(`artifact_revision (pre-edit): ${revision}`);
   console.log(
     "next: fill the <placeholders>, run `openspec validate`, present the contract, and record " +
       "the user go bound to the post-edit artifact_revision (re-run hash_change_artifacts.mjs)."
@@ -402,10 +452,88 @@ function cmdQuickPack(args) {
 }
 
 /**
+ * @param {{changeDir: string, init: boolean, gate: string | null, approvedBy: string | null,
+ *          acceptedWarnings: string | null, note: string | null, notApplicable: string | null,
+ *          approvedAt: string | null, expectedRevision: string | null}} args
+ */
+function cmdRecordGate(args) {
+  const changeDir = resolve(args.changeDir);
+  if (!isDir(changeDir)) {
+    console.error(`ERROR: change dir does not exist: ${changeDir}`);
+    return 2;
+  }
+  const proposalPath = join(changeDir, "proposal.md");
+  if (!existsSync(proposalPath)) {
+    console.error("ERROR: proposal.md missing");
+    return 2;
+  }
+  const text = readFileSync(proposalPath, "utf8");
+  if (args.init) {
+    const next = ensureGateBlock(text);
+    if (next !== text) writeFileSync(proposalPath, next, "utf-8");
+    console.log(hashChange(changeDir).revision);
+    return 0;
+  }
+  if (!["spec", "impl"].includes(args.gate ?? "")) {
+    console.error("ERROR: record-gate requires --gate spec|impl");
+    return 2;
+  }
+  if (!text.includes(GATE_START)) {
+    console.error("gate-record: block missing — run record-gate --change-dir <dir> --init first");
+    return 3;
+  }
+  const kind = /** @type {"spec" | "impl"} */ (args.gate);
+  /** @type {{ status: "pending" | "n/a" | "approved", approvedBy: string | null, approvedAt: string | null, revision: string | null, acceptedWarnings: string[], note: string | null }} */
+  let gate;
+  if (args.notApplicable !== null) {
+    gate = {
+      status: "n/a",
+      approvedBy: null,
+      approvedAt: null,
+      revision: null,
+      acceptedWarnings: [],
+      note: args.notApplicable,
+    };
+  } else {
+    if (!args.approvedBy) {
+      console.error("ERROR: record-gate requires --approved-by");
+      return 2;
+    }
+    const revision = hashChange(changeDir).revision;
+    if (args.expectedRevision !== null && normalizeRevision(args.expectedRevision) !== revision) {
+      console.error("record-gate blocked: the approved revision differs from the current change");
+      return 1;
+    }
+    if (args.approvedAt !== null && (!args.expectedRevision || !isRfc3339(args.approvedAt) ||
+        !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/i.test(args.approvedAt))) {
+      console.error("record-gate: restoring an approval requires its RFC3339 time and --expected-revision");
+      return 2;
+    }
+    gate = {
+      status: "approved",
+      approvedBy: args.approvedBy,
+      approvedAt: args.approvedAt ?? nowRfc3339(),
+      revision,
+      acceptedWarnings: args.acceptedWarnings ? args.acceptedWarnings.split(",").filter((id) => id.length > 0) : [],
+      note: args.note,
+    };
+  }
+  writeFileSync(proposalPath, upsertGateLine(text, kind, gate), "utf-8");
+  const after = hashChange(changeDir).revision;
+  if (gate.status === "approved" && after !== gate.revision) {
+    console.error("ERROR: record-gate moved the artifact revision");
+    return 1;
+  }
+  console.log(`recorded ${kind} gate bound to ${gate.status === "approved" ? gate.revision : after}`);
+  return 0;
+}
+
+/**
  * @param {{changeDir: string, reviewStatus: string, reviewer: string | null, evidence: string[],
  *          specCoherence: string, approvedBy: string | null, previous: string | null,
  *          nextAction: string | null, out: string | null, visualRequired: boolean,
- *          visualReport: string | null, expectedVisualRevision: string | null}} args
+ *          visualReport: string | null, expectedVisualRevision: string | null,
+ *          requiredStateIds: string | null}} args
  */
 function cmdCloseOut(args) {
   const changeDir = resolve(args.changeDir);
@@ -413,23 +541,31 @@ function cmdCloseOut(args) {
     console.error(`ERROR: change dir does not exist: ${changeDir}`);
     return 2;
   }
+  const proposalPath = join(changeDir, "proposal.md");
+  let impl = null;
+  if (existsSync(proposalPath)) {
+    try {
+      impl = parseGateRecord(readFileSync(proposalPath, "utf8")).impl;
+    } catch (error) {
+      console.error(`close-out blocked: ${error instanceof Error ? error.message : error}`);
+      return 1;
+    }
+  }
+  const currentRevision = hashChange(changeDir).revision;
+  if (!impl || impl.status !== "approved" || normalizeRevision(impl.revision) !== normalizeRevision(currentRevision)) {
+    console.error("close-out blocked: implementation gate missing or stale — run record-gate after the user go");
+    return 1;
+  }
 
   // 1. Machine checks on tasks/verification (the R3 rework hotspot).
-  const claimArgs = [VALIDATE_DELIVERY_CHANGE, changeDir, "--claim-verified"];
-  if (args.visualRequired) {
-    claimArgs.push(
-      "--visual-required",
-      "--visual-report",
-      /** @type {string} */ (args.visualReport),
-      "--expected-visual-revision",
-      /** @type {string} */ (args.expectedVisualRevision)
-    );
-  }
-  const claim = spawnSync(process.execPath, claimArgs, { encoding: "utf-8" });
-  process.stderr.write(claim.stderr ?? "");
-  console.log((claim.stdout ?? "").trim());
-  if (claim.status !== 0) {
-    console.error("close-out blocked: fix tasks/verification anchors above, then re-run.");
+  const checked = checkChange(changeDir, {
+    claimVerified: true, visualRequired: args.visualRequired, visualReport: args.visualReport,
+    expectedVisualRevision: args.expectedVisualRevision,
+    requiredStateIds: (args.requiredStateIds ?? "").split(",").map((id) => id.trim()).filter(Boolean),
+    summaries: args.evidence,
+  });
+  if (checked.errors.length) {
+    for (const error of checked.errors) console.error("close-out blocked: " + error);
     return 1;
   }
 
@@ -438,15 +574,12 @@ function cmdCloseOut(args) {
   const revision = handoff.source_revision.artifact_revision;
   const payload = handoff.stage_payload;
   payload.overall_status = "verified";
-  payload.fresh_verification_evidence = args.evidence;
-  payload.visual_evidence = args.visualRequired
-    ? {
-        required: true,
-        report: resolve(/** @type {string} */ (args.visualReport)),
-        source_artifact_revision: args.expectedVisualRevision,
-        g9: "pass",
-      }
-    : { required: false, report: null, source_artifact_revision: null, g9: "not_required" };
+  if (revision !== currentRevision) {
+    console.error("close-out blocked: change artifacts moved during verification");
+    return 1;
+  }
+  payload.fresh_verification_evidence = [...new Set([...checked.evidence, ...args.evidence])];
+  payload.visual_evidence = checked.visualEvidence;
   payload.spec_coherence = args.specCoherence;
   Object.assign(payload.code_review, {
     status: args.reviewStatus,
@@ -455,7 +588,7 @@ function cmdCloseOut(args) {
   Object.assign(handoff.gate_status, {
     status: "pass",
     summary: `新鲜验证 + 独立审查（${args.reviewer ?? "independent reviewer"}）通过；归档移交 OpenSpec`,
-    evidence: [...args.evidence],
+    evidence: [...payload.fresh_verification_evidence],
     approved_by: args.approvedBy,
     approved_at: args.approvedBy ? nowRfc3339() : null,
     binds_to_revision: args.approvedBy ? revision : null,
@@ -491,9 +624,10 @@ function cmdCloseOut(args) {
  * @param {string[]} argv
  * @param {Record<string, string>} spec map of --flag to canonical key
  * @param {Set<string>} arrays canonical keys that accumulate
+ * @param {Set<string>} [booleans] canonical keys that take no value
  * @returns {{opts: Record<string, any>, positional: string[], error: string | null}}
  */
-function parseOptions(argv, spec, arrays = new Set()) {
+function parseOptions(argv, spec, arrays = new Set(), booleans = new Set()) {
   /** @type {Record<string, any>} */
   const opts = {};
   /** @type {string[]} */
@@ -503,6 +637,10 @@ function parseOptions(argv, spec, arrays = new Set()) {
     if (arg.startsWith("--")) {
       const key = spec[arg];
       if (!key) return { opts, positional, error: `unknown option: ${arg}` };
+      if (booleans.has(key)) {
+        opts[key] = true;
+        continue;
+      }
       const value = argv[++i];
       if (value === undefined) return { opts, positional, error: `option ${arg} requires a value` };
       if (arrays.has(key)) (opts[key] ??= []).push(value);
@@ -519,12 +657,14 @@ const USAGE = `usage: node delivery_scaffold.mjs <command> [options]
 commands:
   new-handoff <stage> [--change-dir <dir>] [--previous <id>] [--out <file>]
       generate a delivery-handoff/v1 skeleton (stage: ${STAGES.join(" | ")})
-  quick-pack --change-dir <dir> --capability <cap> --goal <text> --impact <text> [--requirement <text>]
+  quick-pack --change-dir <dir> --capability <cap> --goal <text> --impact <text> [--requirement <text>] [--skip-specs]
       scaffold a Quick/Debug-Low lightweight change
+  record-gate --change-dir <dir> (--init | --gate <spec|impl> (--approved-by <who> | --not-applicable <reason>) [--accepted-warnings <csv>] [--note <text>] [--expected-revision <revision>] [--approved-at <RFC3339>])
+      write the proposal gate-record block without moving artifact_revision
   close-out --change-dir <dir> --review-status <pass|warn> [--reviewer <id>] [--evidence <line>]...
             [--spec-coherence <pass|warn>] [--approved-by <who>] [--previous <id>]
             [--visual-required <yes|no>] [--visual-report <path>]
-            [--expected-visual-revision <64-hex>] [--next-action <op>] [--out <file>]
+            [--expected-visual-revision <assertion>] [--required-state-ids <additional-ids>] [--next-action <op>] [--out <file>]
       verified close-out wizard for execute`;
 
 function main() {
@@ -557,13 +697,19 @@ function main() {
   }
 
   if (command === "quick-pack") {
-    const { opts, error } = parseOptions(rest, {
-      "--change-dir": "changeDir",
-      "--capability": "capability",
-      "--goal": "goal",
-      "--impact": "impact",
-      "--requirement": "requirement",
-    });
+    const { opts, error } = parseOptions(
+      rest,
+      {
+        "--change-dir": "changeDir",
+        "--capability": "capability",
+        "--goal": "goal",
+        "--impact": "impact",
+        "--requirement": "requirement",
+        "--skip-specs": "skipSpecs",
+      },
+      new Set(),
+      new Set(["skipSpecs"])
+    );
     if (error) {
       console.error(`ERROR: ${error}`);
       return 2;
@@ -580,6 +726,45 @@ function main() {
       goal: opts.goal,
       impact: opts.impact,
       requirement: opts.requirement ?? null,
+      skipSpecs: opts.skipSpecs === true,
+    });
+  }
+
+  if (command === "record-gate") {
+    const { opts, error } = parseOptions(
+      rest,
+      {
+        "--change-dir": "changeDir",
+        "--gate": "gate",
+        "--approved-by": "approvedBy",
+        "--accepted-warnings": "acceptedWarnings",
+        "--note": "note",
+        "--not-applicable": "notApplicable",
+        "--expected-revision": "expectedRevision",
+        "--approved-at": "approvedAt",
+        "--init": "init",
+      },
+      new Set(),
+      new Set(["init"])
+    );
+    if (error) {
+      console.error(`ERROR: ${error}`);
+      return 2;
+    }
+    if (!opts.changeDir) {
+      console.error("ERROR: record-gate requires --change-dir");
+      return 2;
+    }
+    return cmdRecordGate({
+      changeDir: opts.changeDir,
+      init: opts.init === true,
+      gate: opts.gate ?? null,
+      approvedBy: opts.approvedBy ?? null,
+      acceptedWarnings: opts.acceptedWarnings ?? null,
+      note: opts.note ?? null,
+      notApplicable: opts.notApplicable ?? null,
+      expectedRevision: opts.expectedRevision ?? null,
+      approvedAt: opts.approvedAt ?? null,
     });
   }
 
@@ -599,6 +784,7 @@ function main() {
         "--visual-required": "visualRequired",
         "--visual-report": "visualReport",
         "--expected-visual-revision": "expectedVisualRevision",
+        "--required-state-ids": "requiredStateIds",
       },
       new Set(["evidence"])
     );
@@ -623,12 +809,6 @@ function main() {
       return 2;
     }
     const visualRequired = opts.visualRequired === "yes";
-    if (visualRequired && (!opts.visualReport || !/^[0-9a-f]{64}$/i.test(opts.expectedVisualRevision ?? ""))) {
-      console.error(
-        "ERROR: visual close-out requires --visual-report and --expected-visual-revision <64-hex>"
-      );
-      return 2;
-    }
     return cmdCloseOut({
       changeDir: opts.changeDir,
       reviewStatus: opts.reviewStatus,
@@ -642,6 +822,7 @@ function main() {
       visualRequired,
       visualReport: opts.visualReport ?? null,
       expectedVisualRevision: opts.expectedVisualRevision ?? null,
+      requiredStateIds: opts.requiredStateIds ?? null,
     });
   }
 

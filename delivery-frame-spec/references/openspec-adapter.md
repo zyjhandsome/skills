@@ -24,14 +24,20 @@
 
 | 语义操作 | 用途 | 常见候选（仅提示） |
 |---|---|---|
-| `initialize_repo` | 采用/初始化 OpenSpec 仓库 | `init`、`openspec init` |
-| `create_change` | 创建/提出 change | `new`、`propose`、`/opsx-new`、`/opsx-propose` |
-| `inspect_change` | status、active change、artifact readiness | `status`、`list`、宿主面板 |
-| `continue_artifacts` | 生成或更新 proposal/spec/design/tasks | `continue`、`update`、`/opsx-continue`、`/opsx-update` |
-| `apply_tasks` | 按权威 tasks 实施 | `apply`、`/opsx-apply` |
-| `validate_structure` | 校验工件结构/schema | `validate` |
-| `verify_coherence` | 规格—实现一致性 | `verify`、`/opsx-verify` |
-| `archive_change` | sync/archive 已验证 change | `archive`、`/opsx-archive`、`openspec-archive-change` |
+| `initialize_repo` | 采用/初始化 OpenSpec 仓库 | `openspec init` |
+| `create_change` | 创建/提出 change | `openspec new change "<id>"`（只建目录和 `.openspec.yaml`；不要用一步生成全部工件的入口，它会越过规格闸门和实现闸门） |
+| `inspect_change` | status、active change、artifact readiness | `openspec status --change "<id>" --json`、`openspec list --json`、`openspec list --specs --json`、`openspec show "<spec-id>" --type spec` |
+| `continue_artifacts` | 生成或更新 proposal/spec/design/tasks | `openspec instructions <artifact> --change "<id>" --json` 取模板与约束后写文件；修订已有工件可用 `openspec-update-change` |
+| `apply_tasks` | 按权威 tasks 实施 | `openspec instructions apply --change "<id>" --json`、`openspec-apply-change` |
+| `validate_structure` | 校验工件结构/schema | `openspec validate "<id>" --type change --json` |
+| `verify_coherence` | 规格—实现一致性 | 当前安装有 verify 类入口时用它；没有时由 Agent 逐条 Requirement/Scenario 对照实现并记录 |
+| `archive_change` | sync/archive 已验证 change | `openspec-archive-change`、`openspec archive "<id>"` |
+
+**结构校验的通过条件：** `openspec validate "<id>" --type change --json` 返回的 `items[].valid` 全为 `true`。默认不加 `--strict`；WARNING 逐条处理或在闸门摘要里列出。规格闸门、实现闸门和 `verified` 之前各跑一次。
+
+**`.openspec.yaml` 标记：** `skip_specs: true` 表示本 change 没有规格级行为变化，此时 `specs/` 下不得有文件；`retire_capabilities: true` 用于下线整个 capability。两者都会改变归档行为，已计入 `artifact_revision`。
+
+**`openspec instructions` 返回的 `context` 和 `rules`：** 是项目 `openspec/config.yaml` 给 Agent 的写作约束，照做但不要抄进工件正文。写 proposal 的 Capabilities 之前先用 `openspec list --specs --json` 看已有 capability，复用既有路径，不新造近义名。
 
 如果当前版本没有一一对应操作，记录实际组合和限制；不要编造命令。`archive_change` 永远由 Execute verified 后的下一动作触发，不在 Execute 内执行。
 
@@ -56,7 +62,7 @@
 
 1. OpenSpec 机器骨架：`## Why` → `## What Changes` → `## Capabilities` → `## Impact`（标题保持英文 schema 要求时的原样）。
 2. 分隔线后接 Delivery 中文简报全文（见 `brief-template.md`），含 Explore 交接消费与状态源。
-3. Quick / Debug-Low：OpenSpec Why/What 可极简；主体用轻量契约；仍不要另建 `brief.md`。若 `openspec validate` 报「must have at least one delta」，补最小 `specs/<cap>/spec.md`（一条 Requirement + Scenario），不要因此升到 Standard。
+3. Quick / Debug-Low：OpenSpec Why/What 可极简，主体用轻量契约，仍不要另建 `brief.md`。有可观察行为变化时写一条最小 delta（一条 Requirement + Scenario），不因此升到 Standard；没有规格级行为变化时设 `skip_specs: true`，不写 spec。
 
 **Quick 车道的 status 解读（防展示噪音）：** `inspect_change` / `openspec status` 在 Quick 下显示 design 槽未完成（如 3/4）**属预期**——Quick 按定义不产 `design.md`。判定完整性以「轻量契约 + 最小 delta + `validate` 通过」为准；向用户呈现 status 时附一句解释，不要为凑满槽位写假 design 或空占位文件。
 

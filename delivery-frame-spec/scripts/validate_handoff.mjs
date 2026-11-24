@@ -7,13 +7,15 @@
  *   node validate_handoff.mjs <handoff.json>        # file
  *   node validate_handoff.mjs -                     # stdin
  *   node validate_handoff.mjs <file> --profile legacy
+ *   node validate_handoff.mjs <file> --repo-root <dir>
  */
 
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { basename, dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import process from "node:process";
+import { normalizeRevision } from "./hash_change_artifacts.mjs";
 
 // Compatibility is major-based: any delivery-family/<SUPPORTED_FAMILY_MAJOR>.x is accepted
 // so additive minor bumps do not require editing this validator. CURRENT_FAMILY_VERSION is
@@ -163,6 +165,7 @@ function reprish(value) {
 /**
  * @param {unknown} data
  * @param {"hard" | "legacy"} [profile]
+ * @param {{ repoRoot?: string }} [options]
  * @returns {string[]}
  */
 export function validate(data, profile = "hard", options = {}) {
@@ -217,6 +220,11 @@ export function validate(data, profile = "hard", options = {}) {
   }
   if (!isRfc3339(revision.state_observed_at)) {
     errors.push("source_revision.state_observed_at must be RFC3339");
+  }
+  if ("revision_algo" in revision && revision.revision_algo !== undefined) {
+    if (!Number.isInteger(revision.revision_algo) || revision.revision_algo < 1) {
+      errors.push("source_revision.revision_algo must be an integer >= 1");
+    }
   }
 
   const state = requireObject(root.state_source, "state_source", errors);
@@ -293,7 +301,7 @@ export function validate(data, profile = "hard", options = {}) {
     if (!isRfc3339(gate.approved_at)) {
       errors.push("gate_status.approved_at must be RFC3339 when approval exists");
     }
-    if (gate.binds_to_revision !== revision.artifact_revision) {
+    if (!revisionsMatch(gate.binds_to_revision, revision.artifact_revision)) {
       errors.push("gate approval must bind source_revision.artifact_revision");
     }
   }
@@ -389,8 +397,8 @@ export function validate(data, profile = "hard", options = {}) {
           if (!Array.isArray(artifact.claims_used) || artifact.claims_used.length === 0 || artifact.claims_used.some((claim) => typeof claim !== "string" || !claim.trim())) {
             errors.push(`${label}.claims_used must be a non-empty string array`);
           }
-          if (options.baseDir && typeof artifact.path === "string" && artifact.path.trim()) {
-            const absolute = isAbsolute(artifact.path) ? artifact.path : resolve(options.baseDir, artifact.path);
+          if (options.repoRoot && typeof artifact.path === "string" && artifact.path.trim()) {
+            const absolute = isAbsolute(artifact.path) ? artifact.path : resolve(options.repoRoot, artifact.path);
             if (!existsSync(absolute)) errors.push(`${label}.path does not exist: ${absolute}`);
             else if (typeof artifact.digest === "string" && SHA256.test(artifact.digest)) {
               const actual = `sha256:${createHash("sha256").update(readFileSync(absolute)).digest("hex")}`;
@@ -432,6 +440,11 @@ export function validate(data, profile = "hard", options = {}) {
       if (!revision.artifact_revision) {
         errors.push("Plan execution transition requires artifact_revision");
       }
+      if (payload.quality_profiles?.visual === "required") {
+        if (!Array.isArray(payload.visual_validation_plan) || payload.visual_validation_plan.length === 0) {
+          errors.push("stage_payload.visual_validation_plan must be a non-empty array when visual is required");
+        }
+      }
     }
   } else if (stage === "delivery-execute-verify") {
     if (state.kind !== "openspec_change") errors.push("Execute must use openspec_change state");
@@ -466,15 +479,78 @@ export function validate(data, profile = "hard", options = {}) {
         errors.push("verified Execute handoff requires code_review.status pass or warn");
       }
     }
+    const implementationGate = payload.implementation_gate;
+    const gatePresent = implementationGate !== null && implementationGate !== undefined;
+    if (gatePresent) {
+      const bound =
+        isPlainObject(implementationGate) &&
+        typeof implementationGate.approved_by === "string" &&
+        implementationGate.approved_by.length > 0 &&
+        isRfc3339(implementationGate.approved_at) &&
+        implementationGate.binds_to_revision !== null &&
+        implementationGate.binds_to_revision !== undefined &&
+        revisionsMatch(implementationGate.binds_to_revision, revision.artifact_revision);
+      if (!bound) errors.push("implementation gate is stale for the current artifact_revision");
+    }
+    if (
+      payload.overall_status === "verified" &&
+      Number.isInteger(revision.revision_algo) &&
+      revision.revision_algo >= 2 &&
+      !gatePresent
+    ) {
+      errors.push("verified Execute handoff requires implementation_gate when revision_algo >= 2");
+    }
+    if (
+      payload.overall_status === "verified" &&
+      payload.visual_evidence?.required === true &&
+      payload.visual_evidence.g9 !== "pass"
+    ) {
+      errors.push("visual_evidence.g9 must be pass when visual evidence is required");
+    }
+    if (payload.overall_status === "verified" && payload.visual_evidence?.required === true &&
+        revision.revision_algo >= 2 && (!normalizeRevision(payload.visual_evidence.source_artifact_revision) ||
+        !revisionsMatch(payload.visual_evidence.source_artifact_revision, implementationGate?.binds_to_revision))) {
+      errors.push("visual evidence revision must match the approved implementation gate");
+    }
   }
 
   return errors;
+}
+
+/**
+ * `<root>/openspec/changes/<id>/handoff.json` resolves to `<root>`; otherwise cwd.
+ * @param {string | null} handoffPath
+ * @param {string} cwd
+ */
+export function deriveRepoRoot(handoffPath, cwd) {
+  if (!handoffPath) return cwd;
+  const resolved = resolve(handoffPath);
+  const changeDir = dirname(dirname(resolved));
+  const openspecDir = dirname(changeDir);
+  if (
+    basename(resolved) === "handoff.json" &&
+    basename(changeDir) === "changes" &&
+    basename(openspecDir) === "openspec"
+  ) {
+    return dirname(openspecDir);
+  }
+  return cwd;
+}
+
+/** @param {unknown} left @param {unknown} right */
+function revisionsMatch(left, right) {
+  const normalizedLeft = normalizeRevision(left);
+  const normalizedRight = normalizeRevision(right);
+  if (normalizedLeft && normalizedRight) return normalizedLeft === normalizedRight;
+  return left === right;
 }
 
 function main() {
   const args = process.argv.slice(2);
   /** @type {"hard" | "legacy"} */
   let profile = "hard";
+  /** @type {string | null} */
+  let repoRootFlag = null;
   /** @type {string[]} */
   const positional = [];
   for (let i = 0; i < args.length; i += 1) {
@@ -486,12 +562,20 @@ function main() {
       }
       profile = value;
       i += 1;
+    } else if (args[i] === "--repo-root") {
+      const value = args[i + 1];
+      if (!value) {
+        console.error("ERROR: --repo-root requires a directory");
+        return 2;
+      }
+      repoRootFlag = value;
+      i += 1;
     } else {
       positional.push(args[i]);
     }
   }
   if (positional.length !== 1) {
-    console.error("usage: node validate_handoff.mjs <handoff.json | -> [--profile hard|legacy]");
+    console.error("usage: node validate_handoff.mjs <handoff.json | -> [--profile hard|legacy] [--repo-root <dir>]");
     return 2;
   }
 
@@ -505,7 +589,7 @@ function main() {
   }
 
   const errors = validate(data, profile, {
-    baseDir: positional[0] === "-" ? process.cwd() : dirname(resolve(positional[0])),
+    repoRoot: repoRootFlag ?? deriveRepoRoot(positional[0] === "-" ? null : positional[0], process.cwd()),
   });
   if (errors.length) {
     for (const error of errors) console.error(`ERROR: ${error}`);
