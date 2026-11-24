@@ -196,6 +196,8 @@ function main() {
     plan.next_skill = "delivery-execute-verify";
     mustPass("plan: freshly re-bound implementation gate transitions", plan);
 
+    writeFileSync(join(change, "handoff.json"), JSON.stringify(plan));
+
     // ---- Stage 4: execute — verified close-out via the real wizard ------------
     writeChange(change, {
       withDesign: true,
@@ -204,12 +206,6 @@ function main() {
         ["x", 2, "接入导出菜单", "任务 1", "export_menu"],
       ],
     });
-    writeFileSync(
-      join(change, "verification.md"),
-      "# 验证记录\n\n### 主验证证据\n- 命令：pytest tests/test_export.py -q\n" +
-        `- 时间：${nowRfc3339()}\n- 结果：exit 0 / 2 passed / 通过\n`,
-      "utf-8"
-    );
     const recorded = spawnSync(
       process.execPath,
       [
@@ -225,6 +221,12 @@ function main() {
       { encoding: "utf-8" }
     );
     check("execute: record-gate exits 0", recorded.status === 0, (recorded.stdout ?? "") + (recorded.stderr ?? ""));
+    writeFileSync(
+      join(change, "verification.md"),
+      "# 验证记录\n\n### 主验证证据\n- 命令：pytest tests/test_export.py -q\n" +
+        `- 时间：${nowRfc3339()}\n- 结果：exit 0 / 2 passed / 通过\n`,
+      "utf-8"
+    );
     const close = spawnSync(
       process.execPath,
       [
@@ -240,8 +242,6 @@ function main() {
         "pytest tests/test_export.py -q: 2 passed",
         "--approved-by",
         "user",
-        "--previous",
-        plan.handoff_id,
       ],
       { encoding: "utf-8" }
     );

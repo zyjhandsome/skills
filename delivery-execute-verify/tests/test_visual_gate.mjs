@@ -207,19 +207,14 @@ try {
     "# Tasks\n\n- [x] 1.1 Visual fix\n  - 对应需求/场景：外观状态 / 默认\n  - 目标文件/符号：src/App.vue\n  - 验证命令/动作：npm test\n  - 预期结果：pass\n  - 失败测试或已批准替代验证：npm test\n",
     "utf8"
   );
-  writeFileSync(
-    join(changeDir, "verification.md"),
-    "# Verification\n\n- 命令：npm test\n- 时间：2026-08-04T10:00:00+08:00\n- 退出码/结果：exit code 0 / pass\n",
-    "utf8"
-  );
   writeFileSync(join(changeDir, "proposal.md"), `## Why\n视觉验收。\n\n### 状态源与工件位置\n${emptyGateBlock()}`, "utf8");
   writeFileSync(join(changeDir, "design.md"), [
     "### Visual validation matrix（visual=required 时）",
-    "| ID | required_for_verified |",
-    "|---|---|",
-    "| state-0 | yes |",
-    "| state-1 | yes |",
-    "| state-2 | no |",
+    "| ID | route | state | required_for_verified |",
+    "|---|---|---|---|",
+    "| state-0 | /export | state-0 | yes |",
+    "| state-1 | /export | state-1 | yes |",
+    "| state-2 | /export | state-2 | no |",
   ].join("\n"));
   const recorded = spawnSync(
     process.execPath,
@@ -236,6 +231,11 @@ try {
     { encoding: "utf8" }
   );
   assert.equal(recorded.status, 0, recorded.stderr);
+  writeFileSync(
+    join(changeDir, "verification.md"),
+    "# Verification\n\n- 命令：npm test\n- 时间：" + new Date().toISOString() + "\n- 退出码/结果：exit code 0 / pass\n",
+    "utf8"
+  );
   const revision = recorded.stdout.match(/sha256:[0-9a-f]{64}/)[0];
   function close(...extra) {
     return spawnSync(process.execPath, [
@@ -258,8 +258,16 @@ try {
   assert.match(close("--visual-report", visualReport).stderr, /state-1/);
   assert.match(close("--visual-report", visualReport, "--required-state-ids", "state-0").stderr, /state-1/);
   report(2, revision);
+  writeFileSync(visualReport, readFileSync(visualReport, "utf8").replace("| state-1 | /export | state-1 |", "| state-1 | /export | state-2 |"));
+  assert.match(close("--visual-report", visualReport).stderr, /approved route\/state/);
+  report(2, revision);
   const conflict = close("--visual-report", visualReport, "--evidence", "npm test: exit 1");
   assert.notEqual(conflict.status, 0, "contradictory handoff evidence must block");
+  const proof = join(changeDir, "verification.md");
+  const fresh = readFileSync(proof, "utf8");
+  writeFileSync(proof, fresh.replace(/时间：[^\n]+/, "时间：2001-01-01T00:00:00Z"));
+  assert.match(close("--visual-report", visualReport).stderr, /predates implementation approval/);
+  writeFileSync(proof, fresh);
   const done = close("--visual-report", visualReport);
   assert.equal(done.status, 0, done.stderr);
   const handoff = JSON.parse(readFileSync(join(changeDir, "handoff.json"), "utf8"));

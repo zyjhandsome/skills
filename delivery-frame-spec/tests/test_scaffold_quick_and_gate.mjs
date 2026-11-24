@@ -66,7 +66,7 @@ function tickAll(dir) {
 function writeVerification(dir) {
   write(
     join(dir, "verification.md"),
-    "# 验证\n\n- 命令：npm test\n- 时间：2026-11-24T10:00:00+08:00\n- 退出码/结果：pass\n"
+    "# 验证\n\n- 命令：npm test\n- 时间：" + new Date().toISOString() + "\n- 退出码/结果：pass\n"
   );
 }
 

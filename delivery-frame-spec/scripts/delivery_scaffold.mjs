@@ -28,6 +28,7 @@
  */
 
 import { spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve, basename, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -186,7 +187,7 @@ export function buildHandoff(stage, changeDir, previous) {
     schema_version: "delivery-handoff/v1",
     family_version: CURRENT_FAMILY_VERSION,
     type: "delivery-handoff",
-    handoff_id: `${changeId}-${stage.replace(/^delivery-/, "")}-${stamp}`,
+    handoff_id: `${changeId}-${stage.replace(/^delivery-/, "")}-${stamp}-${randomUUID()}`,
     previous_handoff_id: previous,
     generated_at: ts,
     stage,
@@ -570,7 +571,23 @@ function cmdCloseOut(args) {
   }
 
   // 2. Verified execute handoff draft.
-  const handoff = buildHandoff("delivery-execute-verify", changeDir, args.previous);
+  let previous = args.previous;
+  const persisted = join(changeDir, "handoff.json");
+  if (previous === null && existsSync(persisted)) {
+    try {
+      const last = JSON.parse(readFileSync(persisted, "utf8"));
+      const issues = validate(last, "hard");
+      if (issues.length || last.state_source.anchor !== changeAnchor(changeDir) ||
+          normalizeRevision(last.source_revision.artifact_revision) !== currentRevision) {
+        throw new Error(issues[0] ?? "the saved handoff points to a different change or revision");
+      }
+      previous = last.handoff_id;
+    } catch (error) {
+      console.error("close-out blocked: recover previous handoff: " + error.message);
+      return 1;
+    }
+  }
+  const handoff = buildHandoff("delivery-execute-verify", changeDir, previous);
   const revision = handoff.source_revision.artifact_revision;
   const payload = handoff.stage_payload;
   payload.overall_status = "verified";

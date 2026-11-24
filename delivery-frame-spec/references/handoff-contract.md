@@ -121,7 +121,7 @@ node <frame>/scripts/delivery_scaffold.mjs record-gate --change-dir <change> --g
 
 Standard / High 的 Frame 写 `spec`，Plan 写 `impl`；Quick / Debug-Low 的契约 go 写 `impl`。有已接受警告时加 `--accepted-warnings <id,id>`，附加约束用 `--note <内容>`。命令记录批准时间和绑定修订，handoff 引用同一记录。只建档时保持待批准。
 
-续接在途 change 时先读 `proposal.md`、已落盘的 `handoff.json` 和当前修订。已有匹配的实现批准可直接使用。旧提案只有文字记录时，核对 change 路径、批准阶段、批准人、时间、修订、约束和已接受警告。运行 `record-gate --change-dir <change> --init` 创建空块；原批准可证明覆盖相同当前修订时，用上述命令加 `--approved-at <原 RFC3339 时间>` 恢复，保留原警告与约束。旧算法或原生修订无法与当前已批准工件核对时，展示差异并重新取得相应批准。空块本身只表示待批准。若恢复的是已标 `verified` 的快照，先用当前 `verification.md` 及适用的视觉报告重新运行收口校验，再移交归档；任务勾选和验证报告的更新不会改变范围修订。
+续接在途 change 时先读 `proposal.md`、已落盘的 `handoff.json` 和当前修订。已有匹配的实现批准可直接使用。`close-out` 默认从本 change 的有效 `handoff.json` 继承上一份交接 ID。旧提案只有文字记录时，核对 change 路径、批准阶段、批准人、时间、修订、约束和已接受警告。运行 `record-gate --change-dir <change> --init` 创建空块；原批准可证明覆盖相同当前修订时，用上述命令加 `--approved-at <原 RFC3339 时间>` 恢复，保留原警告与约束。旧算法或原生修订无法与当前已批准工件核对时，展示差异并重新取得相应批准。空块本身只表示待批准。若恢复的是已标 `verified` 的快照，先用当前 `verification.md` 及适用的视觉报告重新运行收口校验，再移交归档；任务勾选和验证报告的更新不会改变范围修订。
 
 ## 5. 展示能力探测
 

@@ -232,7 +232,7 @@ const COMMAND_HEADERS = {
 };
 
 /** Read the approved final checks. Older changes can record an aggregate run in their final table. */
-function verificationChecks(tasks, verification, summaries, errors) {
+function verificationChecks(tasks, verification, summaries, errors, approvedAt) {
   tasks = markdownContent(tasks);
   verification = markdownContent(verification);
   const checks = new Map();
@@ -265,6 +265,9 @@ function verificationChecks(tasks, verification, summaries, errors) {
     const expected = checks.get(command) || taskExpected.get(command) || "";
     if (!command || isPlaceholder(command)) errors.push("verification artifact missing command evidence");
     if (!time || !isRfc3339(time)) errors.push("verification time evidence must be RFC3339");
+    else if (approvedAt && Date.parse(stripBackticks(time)) < Date.parse(approvedAt)) {
+      errors.push("verification predates implementation approval for " + command);
+    }
     if (!resultMatches(result ?? "", expected)) {
       errors.push("verification result for " + command + ": expected " + (expected || "pass / exit 0") +
         ", recorded " + (result || "(missing)"));
@@ -326,7 +329,7 @@ function approvedVisualScope(changeDir, errors) {
   const proposal = contents("proposal.md");
   const design = contents("design.md");
   const matrix = design || contents("tasks.md");
-  const ids = new Set();
+  const states = new Map();
   const rows = tableRows(matrix, "required_for_verified", errors);
   const seen = new Set();
   for (const row of rows) {
@@ -335,10 +338,15 @@ function approvedVisualScope(changeDir, errors) {
       errors.push("invalid or duplicate row in approved visual matrix: " + (row.id ?? "(missing id)"));
     }
     seen.add(row.id);
-    if (flag === "yes") ids.add(row.id);
+    if (flag === "yes") {
+      if (!row.route || isPlaceholder(row.route) || !row.state || isPlaceholder(row.state)) {
+        errors.push("G9 approved matrix requires route and state for " + row.id);
+      }
+      states.set(row.id, row);
+    }
   }
   const profile = /^\s*\|\s*`?visual`?\s*\|\s*`?required`?\s*\|/im;
-  return { ids, required: ids.size > 0 || profile.test(proposal) || profile.test(design) };
+  return { states, required: states.size > 0 || profile.test(proposal) || profile.test(design) };
 }
 
 /** @param {string} value */
@@ -418,7 +426,7 @@ function sha256(path) {
  * Validate the delivery-owned visual acceptance evidence used by G9.
  * @param {string} text
  * @param {string} expectedRevision
- * @param {{baseDir?: string, expectedChangeDir?: string, requiredStateIds?: string[]}} [options]
+ * @param {{baseDir?: string, expectedChangeDir?: string, requiredStateIds?: string[], approvedStates?: Map<string, Record<string,string>>}} [options]
  * @returns {string[]}
  */
 export function validateVisualEvidence(text, expectedRevision, options = {}) {
@@ -527,6 +535,10 @@ export function validateVisualEvidence(text, expectedRevision, options = {}) {
         for (const column of ["baseline_path", "baseline_digest", "diff_path", "diff_digest"]) {
           if (!isNotApplicable(row[column])) errors.push(`${label} ${column} must be n/a`);
         }
+      }
+      const planned = options.approvedStates?.get(row.id);
+      if (planned && (row.route !== planned.route || row.state !== planned.state)) {
+        errors.push("G9 " + row.id + " must match approved route/state " + planned.route + " / " + planned.state);
       }
       ids.push(row.id);
       stateKeys.push(`${row.route}::${row.state}`);
@@ -708,6 +720,8 @@ export function checkChange(changeDir, opts) {
     }
   }
 
+  const proposal = join(changeDir, "proposal.md");
+  const impl = opts.claimVerified && isFile(proposal) ? parseGateRecord(readFileSync(proposal, "utf8")).impl : null;
   if (opts.claimVerified) {
     const incomplete = blocks
       .map(({ status }, index) => ({ status, number: index + 1 }))
@@ -728,24 +742,22 @@ export function checkChange(changeDir, opts) {
       errors.push(`verification artifact missing: ${verificationPath}`);
     } else {
       const verification = readFileSync(verificationPath, "utf-8");
-      evidence = verificationChecks(tasksText, verification, opts.summaries ?? [], errors);
+      evidence = verificationChecks(tasksText, verification, opts.summaries ?? [], errors, impl?.approvedAt);
     }
   }
 
   const scope = (opts.claimVerified || opts.visualRequired || opts.visualReport)
-    ? approvedVisualScope(changeDir, errors) : { required: false, ids: new Set() };
+    ? approvedVisualScope(changeDir, errors) : { required: false, states: new Map() };
   const required = scope.required || !!opts.visualRequired || !!opts.visualReport;
   let visualEvidence = { required: false, report: null, source_artifact_revision: null, g9: "not_required" };
   if (required) {
-    if (!scope.ids.size && opts.claimVerified) errors.push("G9 requires state IDs in the approved visual matrix");
+    if (!scope.states.size && opts.claimVerified) errors.push("G9 requires state IDs in the approved visual matrix");
     if (!opts.visualReport) {
       errors.push("G9 visual report path is required when visual acceptance is required");
     } else {
       const path = resolve(opts.visualReport);
       let revision = normalizeRevision(opts.expectedVisualRevision);
       if (opts.claimVerified) {
-        const proposal = join(changeDir, "proposal.md");
-        const impl = isFile(proposal) ? parseGateRecord(readFileSync(proposal, "utf8")).impl : null;
         const approved = normalizeRevision(impl?.revision);
         if (impl?.status !== "approved" || approved !== hashChange(changeDir).revision) {
           errors.push("G9 implementation gate missing or stale");
@@ -758,7 +770,8 @@ export function checkChange(changeDir, opts) {
       if (!isFile(path)) errors.push("G9 visual report missing: " + path);
       else errors.push(...validateVisualEvidence(readFileSync(path, "utf8"), revision ?? "", {
         baseDir: dirname(path), expectedChangeDir: changeDir,
-        requiredStateIds: [...new Set([...scope.ids, ...(opts.requiredStateIds ?? [])])],
+        approvedStates: scope.states,
+        requiredStateIds: [...new Set([...scope.states.keys(), ...(opts.requiredStateIds ?? [])])],
       }));
       visualEvidence = { required: true, report: path, source_artifact_revision: revision, g9: "pass" };
     }
