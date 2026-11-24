@@ -191,7 +191,8 @@ function tableRows(text, key, errors, aliases = {}) {
     }
     if (cells.every((s) => /^:?-+:?$/.test(s))) continue;
     if (cells.length !== headers.length) {
-      errors.push("malformed table row (" + key + "): " + line);
+      const hint = cells.length > headers.length ? " A literal | inside a cell must be written \\|." : "";
+      errors.push("malformed table row (" + key + ")." + hint + " " + line);
       continue;
     }
     rows.push(Object.fromEntries(headers.map((name, i) => [name, cells[i]])));

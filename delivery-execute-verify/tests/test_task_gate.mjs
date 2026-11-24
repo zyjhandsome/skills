@@ -114,6 +114,25 @@ try {
   assert.notEqual(run(dir, "--claim-verified").status, 0, "secondary failure");
   restoreTasks();
   write("verification.md", positive);
+  const piped = 'node -e "if(1||0) process.exit(0)"';
+  write(
+    "tasks.md",
+    tasksText.replace("pytest tests/test_export.py::test_export -q", piped) +
+      "\n## 最终验证\n| 命令/动作 | 覆盖范围 | 预期结果 |\n|---|---|---|\n| " +
+      piped.replaceAll("|", "\\|") +
+      " | identity | exit 0 |\n"
+  );
+  write(
+    "verification.md",
+    "# 验证记录\n\n- 命令：" + piped + "\n- 时间：2026-11-24T10:00:00+08:00\n- 退出码/结果：exit 0\n"
+  );
+  assert.equal(run(dir, "--claim-verified").status, 0, "escaped pipes round-trip to the command");
+  write("tasks.md", read("tasks.md").replaceAll("\\|", "|"));
+  const rawPipes = run(dir, "--claim-verified");
+  assert.notEqual(rawPipes.status, 0, "raw || must not be read as extra columns");
+  assert.match(rawPipes.stderr ?? "", /must be written \\\|/);
+  restoreTasks();
+  write("verification.md", positive);
   for (const extra of ["  - [ ] 1.1 子项", "- [~] 任务 2：部分完成", "```\n- [ ] 示例\n```"]) {
     appendToTasks(extra);
     const result = run(dir, "--claim-verified");
