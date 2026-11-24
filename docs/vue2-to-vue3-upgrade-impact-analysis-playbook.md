@@ -164,7 +164,7 @@ Wave 1 会话里**两套同时在场**，各管各的：`override:change-id:` �
 | `diff_policy` | 弹层挂载点变化、空数据下分页隐藏等归 allowed native adjustment；未归类一律按 failure | `override:diff-policy:<逐类写明>` |
 | `structural_parity_metrics` | 只把与数据无关的结构计数列为 parity 判据 | `override:structural-parity:<白名单>` |
 | `capture_conditions` | 基线与升级后同运行面、同端口策略、同后端可用性、同 locale/timezone/theme | `override:capture-conditions:<写明>` |
-| `required_visual_states` | ≥5 个唯一状态（下游按证据行硬计数） | `override:visual-states:<列出>` |
+| `required_visual_states` | 视觉验收为 required 时，本升级剧本要求至少 5 个唯一状态，由 Frame 在规格批准前确认 | `override:visual-states:<列出>` |
 | `console_baseline_required` | 固定 `yes` | `override:console-baseline:no-baseline`（仅当升级前 app 任何 lane 都起不来） |
 | 验证可达性三层 | 固定区分 entry-reachable → component-shell → populated-data；只有最后一层可按已批准条件降级 | `override:data-dependent-layering:no`（仅关闭数据层降级，不得豁免 entry 最低线） |
 | G9 阶段划分 | 默认单阶段；仅当登录墙让部分 required 状态在 Wave 4 环境结构性拍不到时取两阶段（阶段 1 免登录状态进 Wave 4 权威区，阶段 2 全量已批准状态进 Wave 5 区） | `override:g9-phasing:two-phase`（须同时点名阶段 2 的 Wave 5 区任务）。两阶段只推后证据、不减少 required 状态；仓内 verified 以阶段 2 pass 为条件 |
@@ -468,9 +468,10 @@ compat 若选用须写移除日期或退出条件。
 quality_profiles.visual：分析 visual_acceptance_required=yes 或代码/配置出现
 UI-kit、Tailwind/reset、表格混用、scoped-style 风险时为 required；否则按证据写明不需要。
 required 时基线须在改 vue/依赖之前捕获；G9 目录 G9_ROOT。
-required 时 required_visual_states 必须至少 5 个唯一状态——下游 G9 校验器按
-证据行硬计数 ≥5；分析包不足 5 个时在规格批准前补足并写入已批准 spec，
-不得留到执行期（那时基线窗口已关闭）。
+视觉验收为 required 时，本升级剧本要求 required_visual_states 至少覆盖 5 个唯一状态。
+Frame 在规格批准前核对清单，补足分析包遗漏的状态并写入 spec。
+Plan 在视觉验证矩阵中将每个已批准状态标为 required_for_verified=yes。
+Delivery G9 按矩阵中的 ID、route 和 state 逐项核验证据。
 
 required 时已批准 spec 还须同时写明下列四项，缺一不得通过规格闸门。它们定义 G9
 的判据本身，留到执行期再定等于让 Wave 4 单方定义验收标准：
